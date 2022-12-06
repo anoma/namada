@@ -7,10 +7,12 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
-    let signed = SignedTxData::try_from_slice(&tx_data[..]).unwrap();
-    let transfer =
-        PendingTransfer::try_from_slice(&signed.data.unwrap()[..])
-            .map_err(|_| Error::SimpleMessage("Error deserializing PendingTransfer"))?;
+    let signed = SignedTxData::try_from_slice(&tx_data[..])
+        .map_err(|_| Error::SimpleMessage("Data not signed."))?;
+    let transfer = PendingTransfer::try_from_slice(&signed.data.unwrap()[..])
+        .map_err(|_| {
+        Error::SimpleMessage("Error deserializing PendingTransfer")
+    })?;
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;
@@ -57,17 +59,23 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
             &None,
         )?;
     }
+    log_string("Escrow succeeded");
     // add transfer into the pool
     let pending_key = bridge_pool::get_pending_key(&transfer);
     ctx.write_bytes(&pending_key, transfer.try_to_vec().unwrap())
-        .map_err(|_| Error::SimpleMessage("Could not write transfer to bridge pool"))?;
+        .map_err(|_| {
+            Error::SimpleMessage("Could not write transfer to bridge pool")
+        })?;
     Ok(())
 }
 
 fn native_erc20_address(ctx: &mut Ctx) -> EnvResult<EthAddress> {
     log_string("Trying to get wnam key");
-    let addr = ctx.read_bytes(&native_erc20_key())
-        .map_err(|_| Error::SimpleMessage("Could not read wNam key from storage"))?
+    let addr = ctx
+        .read_bytes(&native_erc20_key())
+        .map_err(|_| {
+            Error::SimpleMessage("Could not read wNam key from storage")
+        })?
         .unwrap();
     log_string("Got wnam key");
     Ok(BorshDeserialize::try_from_slice(addr.as_slice()).unwrap())
