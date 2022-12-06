@@ -81,6 +81,7 @@ pub async fn query_bridge_pool(args: args::Query) {
         .collect();
     if pool_contents.is_empty() {
         println!("Bridge pool is empty.");
+        return;
     } else {
         println!("Bridge pool contents: ");
     }
