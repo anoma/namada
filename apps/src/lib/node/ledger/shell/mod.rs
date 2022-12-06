@@ -695,6 +695,8 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    // TODO: move this to another file after 0.11 merges,
+    // since this method has become fairly large at this point
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
