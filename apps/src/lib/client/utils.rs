@@ -1067,11 +1067,19 @@ pub fn validate_genesis_templates(
 
     let mut is_valid = true;
     let balances_file = path.join(genesis_new::BALANCES_FILE_NAME);
+    let parameters_file = path.join(genesis_new::PARAMETERS_FILE_NAME);
     if !balances_file.exists() {
         is_valid = false;
         eprintln!(
             "Balances file is missing at {}",
             balances_file.to_string_lossy()
+        );
+    }
+    if !parameters_file.exists() {
+        is_valid = false;
+        eprintln!(
+            "Parameters file is missing at {}",
+            parameters_file.to_string_lossy()
         );
     }
 
@@ -1108,6 +1116,17 @@ pub fn validate_genesis_templates(
         Err(err) => {
             is_valid = false;
             eprintln!("Balances file is NOT valid. Failed to read with: {err}");
+        }
+    }
+
+    let parameters = genesis_new::read_parameters(&parameters_file);
+    match parameters {
+        Ok(_) => println!("Parameters file is valid."),
+        Err(err) => {
+            is_valid = false;
+            eprintln!(
+                "Parameters file is NOT valid. Failed to read with: {err}"
+            );
         }
     }
 
