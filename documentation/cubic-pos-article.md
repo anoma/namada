@@ -6,7 +6,7 @@ Namada uses proof-of-stake (PoS) to provide security against Sybil attacks on th
 
 Namada's PoS module is inspired in large part by the PoS system of the Cosmos Hub and by [prior discussions](https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs) on its future improvements, which have not yet been implemented. The ["nothing at stake" problem](https://blog.ethereum.org/2014/01/15/slasher-a-punitive-proof-of-stake-algorithm) is solved by slashing misbehaving validators, which amounts primarily to confiscating their bonded tokens.
 
-In the PoS system, both users and validators are incentivized with rewards to contribute to the security of the network by bonding tokens in the PoS module. Namada has a regular schedule for minting new tokens (inflation), many of which are paid out to accounts that have bonded tokens. Non-valdating accounts can participate by *delegating* their tokens to a particular validator: the tokens are locked in the PoS system and the target validator can then use those tokens as voting power in the consensus mechanism.
+In the PoS system, both users and validators are incentivized with rewards to contribute to the security of the network by bonding tokens in the PoS module. Namada has a regular schedule for minting new tokens (inflation), many of which are owed to accounts that have bonded tokens. Non-validating accounts can participate by *delegating* their tokens to a particular validator: the tokens are locked in the PoS system and the target validator can then use those tokens as voting power in the consensus mechanism and governance.
 
 This article is divided into three main sections. First, we describe the mechanics and configuration of the epoched PoS system. Then we describe Namada's novel approach to slashing for validator misbehavior. Finally, we describe the inflation and rewards system within the PoS module.
 
@@ -46,7 +46,7 @@ Namada validators are classified into one of three sets:
 - **Below capacity:** validators whose bonded stake is less than the *consensus* validators but above some small threshold `min_validator_stake`.
 - **Below threshold:** all other validators with stake below `min_validator_stake`.
 
-The *consensus* and *below capacity* validator sets are explicitly held in storage, ordered by their bonded stake, and are updated at every epoch boundary. However, no ordered set of *below threshold* validators is kept in storage. This validator set construction and the `min_validator_stake` threshold exist primarily to prevent the possibility of significant slowing of PoS system updates due to spam validator account creation. Thus, unbounded iteration when updating and validating PoS system state changes is avoided. Conversely, the *below capacity* validator set must be kept in storage, ordered by bonded stake, in order to properly process validator set changes in which validators may drop out or enter the *consensus* validator set.
+The *consensus* and *below capacity* validator sets are explicitly held in storage, ordered by their bonded stake, and are updated at every epoch boundary. However, no ordered set of *below threshold* validators is kept in storage. This validator set construction and the `min_validator_stake` threshold exist primarily to prevent the possibility of significant slowing of PoS system updates due to spam validator account creation. Thus, unbounded iteration when updating and validating PoS system state changes is avoided. Conversely, the *below capacity* validator set must be kept in storage, ordered by bonded stake, in order to properly process validator set changes in which validators may drop out or enter the *consensus* validator set. Note that this construction of the validator sets is only important for the consensus mechanism; all validators can participate with their voting power in governance.
 
 **Important validator set configuration values, mutable via governance (with default values):**
 - `max_validators` = 100
@@ -56,14 +56,13 @@ The *consensus* and *below capacity* validator sets are explicitly held in stora
 
 As in many other PoS blockchains, slashing is applied as a way to punish misbehaving validators. If a validator is detected to have misbehaved then portions of the validator's bonded stake will be slashed or seized. This propagates down to the stake of delegators associated to the misbehaving validator as well. Validator infractions that are subject to slashing include:
 
-- proposing an invalid block
 - signing an invalid block
-- proposing two different blocks at the same height
-- double-signing a block
+- signing two different blocks at the same height
+- amnesia attacks (once they are supported by tendermint, see [this issue](https://github.com/tendermint/tendermint/issues/5270))
 
 Ultimately, slashed tokens are sent to a slash pool fund, from which the funds can be spent by governance to refund slashed accounts in the event of accidental misbehavior.
 
-Typically, the slash amount for an infraction is proportional to a validator's voting power, however  Namada employs a slashing scheme that has more severe punishments for correlated validator misbehavior: so-called [*cubic slashing*](https://specs.namada.net/economics/proof-of-stake/cubic-slashing.html), wherein the slashed token amount can be proportional to the cube of a validator's voting power (the slash rate is quadratic). Cubic slashing employs more severe punishments to validators who commit infractions close to each other in time, making it riskier for an entity to operate larger or multiple similarly configured validators.
+Typically, the slash amount for an infraction is proportional to a validator's voting power, however  Namada employs a slashing scheme that has more severe punishments for correlated validator misbehavior: so-called [*cubic slashing*](https://specs.namada.net/economics/proof-of-stake/cubic-slashing.html), wherein the slashed token amount can be proportional to the cube of a validator's voting power (the slash rate is quadratic). Cubic slashing is designed to impose more severe punishments for deliberate, repeated validator attacks but much milder punishments for accidental or non-malicious misbehaviors.
 
 When a validator misbehavior is detected by the protocol, the misbehaving validator is immediately jailed (unable to participate in consensus or make PoS transactions). The slash for the infraction is queued up to be processed at the epoch `n + unbonding_len` for an infraction committed in epoch `n`, allowing the protocol a sufficiently long time period (~21 days) to detect infractions. The cubic slashing algorithm is applied when processing the slash at the epoch `n + unbonding_len` and works as follows:
 
