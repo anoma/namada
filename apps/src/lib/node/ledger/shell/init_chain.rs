@@ -225,7 +225,7 @@ where
     ) {
         // Initialize genesis implicit
         for genesis::ImplicitAccount { public_key } in accounts {
-            let address: address::Address = (&public_key).into();
+            let address: Address = (&public_key).into();
             let pk_storage_key = pk_key(&address);
             self.storage
                 .write(&pk_storage_key, public_key.try_to_vec().unwrap())

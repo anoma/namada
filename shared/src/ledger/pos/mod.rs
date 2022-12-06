@@ -2,7 +2,7 @@
 
 pub mod vp;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;

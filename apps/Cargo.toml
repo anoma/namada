@@ -43,7 +43,7 @@ path = "src/bin/namada-wallet/main.rs"
 [[bin]]
 doc = false
 name = "namadar"
-path = "src/bin/anoma-relayer/main.rs"
+path = "src/bin/namada-relayer/main.rs"
 
 [features]
 default = ["std", "abciplus"]

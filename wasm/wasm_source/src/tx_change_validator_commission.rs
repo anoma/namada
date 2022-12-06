@@ -65,10 +65,14 @@ mod tests {
         pos_params: PosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
         let genesis_validators = [GenesisValidator {
             address: commission_change.validator.clone(),
             tokens: token::Amount::from(1_000_000),
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
         }];

@@ -9,6 +9,7 @@ pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
 pub mod queries;
+pub mod queries_ext;
 pub mod storage;
 pub mod vp_host_fns;
 

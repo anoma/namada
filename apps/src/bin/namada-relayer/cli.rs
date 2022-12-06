@@ -1,4 +1,4 @@
-//! Anoma client CLI.
+//! Namada client CLI.
 
 use color_eyre::eyre::Result;
 use namada_apps::cli;
@@ -6,7 +6,7 @@ use namada_apps::cli::cmds;
 use namada_apps::client::eth_bridge_pool;
 
 pub async fn main() -> Result<()> {
-    let (cmd, _) = cli::anoma_relayer_cli()?;
+    let (cmd, _) = cli::namada_relayer_cli()?;
     use cmds::EthBridgePool as Sub;
     match cmd {
         Sub::ConstructProof(args) => {

@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use hex::FromHex;
+use data_encoding::HEXUPPER;
 use thiserror::Error;
 use tiny_keccak::{Hasher, Keccak};
 
@@ -20,7 +20,7 @@ pub enum TryFromError {
     #[error("Failed trying to convert slice to a hash: {0}")]
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
-    FromStringError(hex::FromHexError),
+    FromStringError(data_encoding::DecodeError),
 }
 
 /// Represents a Keccak hash.
@@ -84,8 +84,9 @@ impl TryFrom<&str> for KeccakHash {
     type Error = TryFromError;
 
     fn try_from(string: &str) -> Result<Self, TryFromError> {
-        let bytes: Vec<u8> =
-            Vec::from_hex(string).map_err(TryFromError::FromStringError)?;
+        let bytes: Vec<u8> = HEXUPPER
+            .decode(string.as_bytes())
+            .map_err(TryFromError::FromStringError)?;
         Self::try_from(bytes.as_slice())
     }
 }

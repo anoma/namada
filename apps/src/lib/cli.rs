@@ -1514,7 +1514,7 @@ pub mod cmds {
         }
     }
 
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
         /// Construct a proof that a set of transfers is in the pool.
@@ -1690,7 +1690,6 @@ pub mod args {
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     const FORCE: ArgFlag = flag("force");
-    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
         arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
     const GAS_LIMIT: ArgDefault<token::Amount> =
@@ -3029,7 +3028,7 @@ pub mod args {
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(GAS_TOKEN.def().about("The token for paying the gas"))
+            .arg(GAS_TOKEN.def().about("The token for paying the fee"))
             .arg(
                 GAS_LIMIT.def().about(
                     "The maximum amount of gas needed to run transaction",
@@ -3743,10 +3742,10 @@ fn namada_wallet_app() -> App {
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
 
-fn anoma_relayer_app() -> App {
+fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma Ethereum bridge pool command line interface.")
+        .version(namada_version())
+        .about("Namada Ethereum bridge pool command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::EthBridgePool::add_sub(args::Global::def(app))
 }

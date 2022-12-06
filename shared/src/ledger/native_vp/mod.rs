@@ -4,10 +4,11 @@
 pub mod governance;
 pub mod parameters;
 pub mod slash_fund;
-
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use borsh::BorshDeserialize;
+use eyre::WrapErr;
 pub use namada_core::ledger::vp_env::VpEnv;
 
 use super::storage_api::{self, ResultExt, StorageRead};
@@ -656,6 +657,8 @@ where
 #[cfg(any(test, feature = "testing"))]
 pub(super) mod testing {
     use std::collections::HashMap;
+
+    use borsh::BorshDeserialize;
 
     use super::*;
 

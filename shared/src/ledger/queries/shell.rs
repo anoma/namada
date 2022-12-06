@@ -2,32 +2,29 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+    get_key_from_hash, get_signed_root_key,
+};
+use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
 
-use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_key_from_hash, get_signed_root_key,
-};
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
+use crate::ledger::storage::{DBIter, MerkleTree, StoreType, DB};
 use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
 use crate::tendermint::merkle::proof::Proof;
-use crate::types::address::Address;
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
-use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::MembershipProof::BridgePool;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
-use crate::types::storage::TxIndex;
-use crate::types::storage::{self, BlockResults, Epoch, PrefixValue};
+use crate::types::storage::{self, Epoch, PrefixValue};
 #[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
@@ -73,9 +70,11 @@ router! {SHELL,
     ( "eth_bridge_pool" / "contents" )
         -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
 
-    // Generate a merkle proof for the inclusion of requested transfers in the Ethereum bridge pool
+    // Generate a merkle proof for the inclusion of requested
+    // transfers in the Ethereum bridge pool
     ( "eth_bridge_pool" / "proof" )
         -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
+
 }
 
 // Handlers:
@@ -94,7 +93,6 @@ where
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::{DecryptedTx, TxType};
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
@@ -227,7 +225,11 @@ where
             let proof = if request.prove {
                 let proof = ctx
                     .storage
-                    .get_existence_proof(&storage_key, &value, request.height)
+                    .get_existence_proof(
+                        &storage_key,
+                        value.clone(),
+                        request.height,
+                    )
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -282,7 +284,7 @@ where
         for PrefixValue { key, value } in &data {
             let mut proof: Proof = ctx
                 .storage
-                .get_existence_proof(key, value, request.height)
+                .get_existence_proof(key, value.clone(), request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
@@ -485,10 +487,10 @@ mod test {
     use std::collections::BTreeSet;
 
     use borsh::{BorshDeserialize, BorshSerialize};
-
-    use crate::ledger::eth_bridge::storage::bridge_pool::{
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};

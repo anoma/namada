@@ -5,6 +5,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 
 use borsh::BorshDeserialize;
 use itertools::Itertools;
+use namada_core::ledger::vp_env::VpEnv;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::types::{self, Slash, Slashes, ValidatorStates};
@@ -30,6 +31,7 @@ use crate::ledger::pos::{
     is_validator_address_raw_hash_key, is_validator_commission_rate_key,
     is_validator_consensus_key_key,
     is_validator_max_commission_rate_change_key, is_validator_state_key,
+    validator_eth_cold_key_key, validator_eth_hot_key_key,
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;

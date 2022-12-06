@@ -27,7 +27,6 @@ use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 pub use traits::{Sha256Hasher, StorageHasher};
 
-use self::merkle_tree::StorageBytes;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
@@ -46,7 +45,7 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
+    TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
@@ -628,19 +627,27 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: StorageBytes,
+        value: Vec<u8>,
         height: BlockHeight,
     ) -> Result<Proof> {
+        use std::array;
+
+        use crate::types::storage::MembershipProof;
+
         if height >= self.get_block_height().0 {
             if let MembershipProof::ICS23(proof) = self
                 .block
                 .tree
-                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
+                .get_sub_tree_existence_proof(
+                    array::from_ref(key),
+                    vec![&value],
+                )
                 .map_err(Error::MerkleTreeError)?
             {
                 self.block
                     .tree
-                    .get_tendermint_proof(key, proof)
+                    .get_sub_tree_proof(key, proof)
+                    .map(Into::into)
                     .map_err(Error::MerkleTreeError)
             } else {
                 Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
@@ -652,11 +659,12 @@ where
                     if let MembershipProof::ICS23(proof) = tree
                         .get_sub_tree_existence_proof(
                             array::from_ref(key),
-                            vec![value],
+                            vec![&value],
                         )
                         .map_err(Error::MerkleTreeError)?
                     {
-                        tree.get_tendermint_proof(key, proof)
+                        tree.get_sub_tree_proof(key, proof)
+                            .map(Into::into)
                             .map_err(Error::MerkleTreeError)
                     } else {
                         Err(Error::MerkleTreeError(
@@ -676,11 +684,17 @@ where
         height: BlockHeight,
     ) -> Result<Proof> {
         if height >= self.last_height {
-            Ok(self.block.tree.get_non_existence_proof(key)?)
+            self.block
+                .tree
+                .get_non_existence_proof(key)
+                .map(Into::into)
+                .map_err(Error::MerkleTreeError)
         } else {
             match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => Ok(MerkleTree::<H>::new(stores)
-                    .get_non_existence_proof(key)?),
+                Some(stores) => MerkleTree::<H>::new(stores)
+                    .get_non_existence_proof(key)
+                    .map(Into::into)
+                    .map_err(Error::MerkleTreeError),
                 None => Err(Error::NoMerkleTree { height }),
             }
         }

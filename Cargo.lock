@@ -4043,6 +4043,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "eyre",
+ "ferveo-common",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
@@ -4054,15 +4055,17 @@ dependencies = [
  "masp_proofs",
  "namada_core",
  "namada_proof_of_stake",
- "num-rational 0.4.1",
- "parity-wasm 0.45.0",
+ "parity-wasm",
  "paste",
  "pretty_assertions",
  "proptest",
  "prost",
  "pwasm-utils",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
  "rayon",
  "rust_decimal",
+ "serde 1.0.147",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -4074,7 +4077,6 @@ dependencies = [
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
- "tiny-keccak",
  "tokio",
  "toml",
  "tracing 0.1.37",
@@ -4201,6 +4203,8 @@ dependencies = [
  "data-encoding",
  "derivative",
  "ed25519-consensus",
+ "ethabi",
+ "eyre",
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
@@ -4212,6 +4216,7 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "num-rational 0.4.1",
  "pretty_assertions",
  "proptest",
  "prost",
@@ -4231,6 +4236,7 @@ dependencies = [
  "tendermint-proto 0.23.6",
  "test-log",
  "thiserror",
+ "tiny-keccak",
  "tonic-build",
  "tracing 0.1.37",
  "tracing-subscriber 0.3.16",
@@ -4830,12 +4836,6 @@ dependencies = [
 
 [[package]]
 name = "parity-wasm"
-version = "0.42.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be5e13c266502aadf83426d87d81a0f5d1ef45b8027f5a471c360abfe4bfae92"
-
-[[package]]
-name = "parity-wasm"
 version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1ad0aff30c1da14b1254fcb2af73e1fa9a28670e584a626f53a369d0e157304"
@@ -5309,13 +5309,12 @@ dependencies = [
 
 [[package]]
 name = "pwasm-utils"
-version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "880b3384fb00b8f6ecccd5d358b93bd2201900ae3daad213791d1864f6441f5c"
+version = "0.20.0"
+source = "git+https://github.com/heliaxdev/wasm-utils?tag=v0.20.0#782bfa7fb5e513b602e66af492cbc4cb1b06f2ba"
 dependencies = [
  "byteorder",
  "log 0.4.17",
- "parity-wasm 0.42.2",
+ "parity-wasm",
 ]
 
 [[package]]

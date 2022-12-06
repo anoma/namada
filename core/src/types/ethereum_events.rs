@@ -1,4 +1,4 @@
-//! Types representing data intended for Anoma via Ethereum events
+//! Types representing data intended for Namada via Ethereum events
 
 use std::fmt::Display;
 use std::str::FromStr;
@@ -14,7 +14,7 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::token::Amount;
 
-/// Anoma native type to replace the ethabi::Uint type
+/// Namada native type to replace the ethabi::Uint type
 #[derive(
     Clone,
     Debug,
@@ -127,7 +127,7 @@ impl KeySeg for EthAddress {
     }
 }
 
-/// An Ethereum event to be processed by the Anoma ledger
+/// An Ethereum event to be processed by the Namada ledger
 #[derive(
     PartialEq,
     Eq,
@@ -142,7 +142,7 @@ impl KeySeg for EthAddress {
 )]
 pub enum EthereumEvent {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
-    /// from Ethereum to wrapped assets on Anoma
+    /// from Ethereum to wrapped assets on Namada
     TransfersToNamada {
         /// Monotonically increasing nonce
         #[allow(dead_code)]
@@ -152,7 +152,7 @@ pub enum EthereumEvent {
         transfers: Vec<TransferToNamada>,
     },
     /// A confirmation event that a batch of transfers have been made
-    /// from Anoma to Ethereum
+    /// from Namada to Ethereum
     TransfersToEthereum {
         /// Monotonically increasing nonce
         #[allow(dead_code)]
@@ -209,11 +209,11 @@ impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
     pub fn hash(&self) -> Result<Hash, std::io::Error> {
         let bytes = self.try_to_vec()?;
-        Ok(Hash::sha256(&bytes))
+        Ok(Hash::sha256(bytes))
     }
 }
 
-/// An event transferring some kind of value from Ethereum to Anoma
+/// An event transferring some kind of value from Ethereum to Namada
 #[derive(
     Clone,
     Debug,
@@ -231,11 +231,11 @@ pub struct TransferToNamada {
     pub amount: Amount,
     /// Address of the smart contract issuing the token
     pub asset: EthAddress,
-    /// The address receiving wrapped assets on Anoma
+    /// The address receiving wrapped assets on Namada
     pub receiver: Address,
 }
 
-/// An event transferring some kind of value from Anoma to Ethereum
+/// An event transferring some kind of value from Namada to Ethereum
 #[derive(
     Clone,
     Debug,
@@ -340,10 +340,8 @@ pub mod tests {
 /// Test helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_proof_of_stake::types::VotingPower;
-
     use super::*;
-    use crate::types::token::Amount;
+    use crate::types::token::{self, Amount};
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";
@@ -374,8 +372,8 @@ pub mod testing {
         Amount::from(1_000)
     }
 
-    pub fn arbitrary_voting_power() -> VotingPower {
-        VotingPower::from(1_000)
+    pub fn arbitrary_bonded_stake() -> token::Amount {
+        token::Amount::from(1_000)
     }
 
     /// A [`EthereumEvent::TransfersToNamada`] containing a single transfer of

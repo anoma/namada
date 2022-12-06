@@ -1,11 +1,11 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+#[cfg(feature = "abcipp")]
+use namada::ledger::queries_ext::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::queries_ext::SendValsetUpd;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::QueriesExt;
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
@@ -179,12 +179,12 @@ where
     }
 
     /// Builds a batch of DKG decrypted transactions
-    // TODO: we won't have frontrunning protection until V2 of the Anoma
+    // TODO: we won't have frontrunning protection until V2 of the Namada
     // protocol; Namada runs V1, therefore this method is
     // essentially a NOOP, and ought to be removed
     //
     // sources:
-    // - https://specs.anoma.net/main/releases/v2.html
+    // - https://specs.namada.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(&mut self) -> Vec<TxBytes> {
         // TODO: This should not be hardcoded
@@ -221,13 +221,10 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::ledger::pos::namada_proof_of_stake::types::{
-        VotingPower, WeightedValidator,
-    };
+    use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::storage_api::queries::QueriesExt;
+    use namada::ledger::queries_ext::QueriesExt;
     use namada::proto::{Signed, SignedTxData};
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -400,7 +397,7 @@ mod test_prepare_proposal {
             assert_eq!(
                 filtered_votes,
                 vec![(
-                    test_utils::get_validator_voting_power(),
+                    test_utils::get_validator_bonded_stake(),
                     signed_vote_extension
                 )]
             )
@@ -690,7 +687,7 @@ mod test_prepare_proposal {
                 .iter()
                 .cloned()
                 .map(|v| WeightedValidator {
-                    voting_power: VotingPower::from(0u64),
+                    bonded_stake: 0,
                     ..v
                 })
                 .collect();

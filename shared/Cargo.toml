@@ -72,6 +72,8 @@ testing = [
   "namada_proof_of_stake/testing",
   "async-client",
   "proptest",
+  "rand_core",
+  "rand",
   "tempfile",
 ]
 
@@ -88,7 +90,7 @@ clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 eyre = "0.6.8"
-num-rational = "0.4.1"
+ferveo-common = {git = "https://github.com/anoma/ferveo"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
 ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
@@ -101,9 +103,12 @@ paste = "1.0.9"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 prost = "0.9.0"
-pwasm-utils = {version = "0.18.0", optional = true}
+pwasm-utils = {git = "https://github.com/heliaxdev/wasm-utils", tag = "v0.20.0", features = ["sign_ext"], optional = true}
+rand = {version = "0.8", optional = true}
+rand_core = {version = "0.6", optional = true}
 rayon = {version = "=1.5.3", optional = true}
 rust_decimal = "1.26.1"
+serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
@@ -115,7 +120,6 @@ tendermint = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 thiserror = "1.0.30"
-tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing = "0.1.30"
 wasmer = {version = "=2.2.0", optional = true}
 wasmer-cache = {version = "=2.2.0", optional = true}

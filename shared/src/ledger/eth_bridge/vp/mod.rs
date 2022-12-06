@@ -410,13 +410,14 @@ mod tests {
     use std::default::Default;
     use std::env::temp_dir;
 
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use namada_core::types::address;
     use rand::Rng;
 
     use super::*;
     use crate::ledger::eth_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
-    use crate::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
@@ -453,6 +454,7 @@ mod tests {
         let mut storage = Storage::<MockDB, Sha256Hasher>::open(
             std::path::Path::new(""),
             ChainId::default(),
+            address::nam(),
             None,
         );
 

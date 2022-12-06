@@ -491,7 +491,7 @@ where
 
     fn read_validator_eth_cold_key(
         &self,
-        key: &Self::Address,
+        key: &Address,
     ) -> Option<types::ValidatorEthKey> {
         let (value, _gas) =
             self.read(&validator_eth_cold_key_key(key)).unwrap();
@@ -500,7 +500,7 @@ where
 
     fn read_validator_eth_hot_key(
         &self,
-        key: &Self::Address,
+        key: &Address,
     ) -> Option<types::ValidatorEthKey> {
         let (value, _gas) = self.read(&validator_eth_hot_key_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
@@ -796,21 +796,21 @@ macro_rules! impl_pos_read_only {
             // TODO: return result
             fn read_validator_eth_cold_key(
                 &self,
-                key: &Self::Address,
+                key: &Address,
             ) -> Option<types::ValidatorEthKey> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key)).unwrap().unwrap();
-                Some($crate::ledger::storage::types::decode(value).unwrap())
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key)).unwrap().unwrap();
+                Some(namada_core::ledger::storage::types::decode(value).unwrap())
             }
 
             // TODO: return result
             fn read_validator_eth_hot_key(
                 &self,
-                key: &Self::Address,
+                key: &Address,
             ) -> Option<types::ValidatorEthKey> {
                 let value =
-                    $crate::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key)).unwrap().unwrap();
-                Some($crate::ledger::storage::types::decode(value).unwrap())
+                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key)).unwrap().unwrap();
+                Some(namada_core::ledger::storage::types::decode(value).unwrap())
             }
         }
     }

@@ -522,6 +522,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             wasm,
+            ethereum_bridge_params,
         } = config;
 
         let native_token = Address::decode(
@@ -656,7 +657,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            ethereum_bridge_params: config.ethereum_bridge_params,
+            ethereum_bridge_params,
         };
         genesis.init();
         genesis

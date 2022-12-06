@@ -6,8 +6,7 @@ use std::num::ParseIntError;
 use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{InternalKey, Key as TreeKey};
+use arse_merkle_tree::InternalKey;
 use bit_vec::BitVec;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
@@ -367,35 +366,6 @@ pub enum TreeKeyError {
     InvalidMerkleKey(String),
 }
 
-impl TreeKey<IBC_KEY_LIMIT> for StringKey {
-    type Error = TreeKeyError;
-
-    fn as_slice(&self) -> &[u8] {
-        &self.original.as_slice()[..self.length]
-    }
-
-    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
-        let mut tree_key = [0u8; IBC_KEY_LIMIT];
-        let mut original = [0u8; IBC_KEY_LIMIT];
-        let mut length = 0;
-        for (i, byte) in bytes.iter().enumerate() {
-            if i >= IBC_KEY_LIMIT {
-                return Err(TreeKeyError::InvalidMerkleKey(
-                    "Input IBC key is too large".into(),
-                ));
-            }
-            original[i] = *byte;
-            tree_key[i] = byte.wrapping_add(1);
-            length += 1;
-        }
-        Ok(Self {
-            original,
-            tree_key: tree_key.into(),
-            length,
-        })
-    }
-}
-
 impl Deref for StringKey {
     type Target = InternalKey<IBC_KEY_LIMIT>;
 
@@ -474,16 +444,6 @@ pub enum MembershipProof {
 impl From<CommitmentProof> for MembershipProof {
     fn from(proof: CommitmentProof) -> Self {
         Self::ICS23(proof)
-    }
-}
-
-impl Value for TreeBytes {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    fn zero() -> Self {
-        TreeBytes::zero()
     }
 }
 
@@ -788,7 +748,7 @@ impl KeySeg for Epoch {
     fn parse(string: String) -> Result<Self> {
         string
             .split_once('=')
-            .and_then(|(prefix, epoch)| (prefix == "E").then(|| epoch))
+            .and_then(|(prefix, epoch)| (prefix == "E").then_some(epoch))
             .ok_or_else(|| {
                 Error::ParseKeySeg(format!(
                     "Invalid epoch prefix on key: {string}"

@@ -45,6 +45,7 @@ pub struct AbcippShim {
 impl AbcippShim {
     /// Create a shell with a ABCI service that passes messages to and from the
     /// shell.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: config::Ledger,
         wasm_dir: PathBuf,

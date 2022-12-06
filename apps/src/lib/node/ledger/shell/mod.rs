@@ -224,7 +224,7 @@ impl EthereumReceiver {
 
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
-    pub fn get_validator_address(&self) -> Option<&address::Address> {
+    pub fn get_validator_address(&self) -> Option<&Address> {
         match &self {
             ShellMode::Validator { data, .. } => Some(&data.address),
             _ => None,
@@ -346,6 +346,7 @@ where
 {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: config::Ledger,
         wasm_dir: PathBuf,
@@ -826,11 +827,9 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
-    #[cfg(not(feature = "abcipp"))]
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::EstablishedAddressGen;
+    use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -1051,8 +1050,8 @@ mod test_utils {
     /// Get the only validator's voting power.
     #[inline]
     #[cfg(not(feature = "abcipp"))]
-    pub fn get_validator_voting_power() -> VotingPower {
-        200.into()
+    pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
+        200_000_000_000.into()
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with

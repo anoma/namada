@@ -7,7 +7,6 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use num_rational::Ratio;
 
-use crate::ledger::pos::types::VotingPower;
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::eth_abi::{AbiEncode, Encode, Token};
@@ -17,6 +16,7 @@ use crate::types::key::common::{self, Signature};
 use crate::types::storage::BlockHeight;
 #[allow(unused_imports)]
 use crate::types::storage::Epoch;
+use crate::types::token;
 
 // the namespace strings plugged into validator set hashes
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
@@ -168,8 +168,8 @@ pub struct EthAddrBook {
     pub cold_key_addr: EthAddress,
 }
 
-/// Provides a mapping between [`EthAddress`] and [`VotingPower`] instances.
-pub type VotingPowersMap = HashMap<EthAddrBook, VotingPower>;
+/// Provides a mapping between [`EthAddress`] and [`token::Amount`] instances.
+pub type VotingPowersMap = HashMap<EthAddrBook, token::Amount>;
 
 /// This trait contains additional methods for a [`VotingPowersMap`], related
 /// with validator set update vote extensions logic.
@@ -213,8 +213,8 @@ pub trait VotingPowersMapExt {
 /// Compare two items of [`VotingPowersMap`]. This comparison operation must
 /// match the equivalent comparison operation in Ethereum bridge code.
 fn compare_voting_powers_map_items(
-    first: &(&EthAddrBook, &VotingPower),
-    second: &(&EthAddrBook, &VotingPower),
+    first: &(&EthAddrBook, &token::Amount),
+    second: &(&EthAddrBook, &token::Amount),
 ) -> Ordering {
     let (first_power, second_power) = (first.1, second.1);
     let (first_addr, second_addr) = (first.0, second.0);
@@ -367,6 +367,8 @@ pub use tag::SerializeWithAbiEncode;
 
 #[cfg(test)]
 mod tests {
+    use data_encoding::HEXLOWER;
+
     use super::*;
 
     /// Test the keccak hash of a validator set update
@@ -397,7 +399,7 @@ mod tests {
             vec![],
         );
 
-        assert_eq!(&hex::encode(got), EXPECTED);
+        assert_eq!(&HEXLOWER.encode(&got[..]), EXPECTED);
     }
 
     /// Checks that comparing two [`VotingPowersMap`] items which have the same

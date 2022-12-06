@@ -612,16 +612,16 @@ mod test {
         let expected_pk_hex = "a225bf565ff4ea039bccba3e26456e910cd74e4616d67ee0a166e26da6e5e55a08d0fa1659b4b547ba7139ca531f62907b9c2e72b80712f1c81ece43c33f4b8b";
         let expected_eth_addr_hex = "6ea27154616a29708dce7650b475dd6b82eba6a3";
 
-        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let pk: PublicKey = sk.ref_to();
         // We're removing the first byte with
         // `libsecp256k1::util::TAG_PUBKEY_FULL`
-        let pk_hex = hex::encode(&pk.0.serialize()[1..]);
+        let pk_hex = HEXLOWER.encode(&pk.0.serialize()[1..]);
         assert_eq!(expected_pk_hex, pk_hex);
 
         let eth_addr: EthAddress = (&pk).into();
-        let eth_addr_hex = hex::encode(eth_addr.0);
+        let eth_addr_hex = HEXLOWER.encode(&eth_addr.0[..]);
         assert_eq!(expected_eth_addr_hex, eth_addr_hex);
     }
 
@@ -629,7 +629,7 @@ mod test {
     /// with Serde is idempotent.
     #[test]
     fn test_roundtrip_serde() {
-        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let to_sign = "test".as_bytes();
         let mut signature = SigScheme::sign(&sk, to_sign);
@@ -644,7 +644,7 @@ mod test {
     /// with Borsh is idempotent.
     #[test]
     fn test_roundtrip_borsh() {
-        let sk_bytes = hex::decode(SECRET_KEY_HEX).unwrap();
+        let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let to_sign = "test".as_bytes();
         let mut signature = SigScheme::sign(&sk, to_sign);

@@ -103,6 +103,7 @@ impl<const N: usize> Encode<N> for AbiEncode<N> {
 mod tests {
     use std::convert::TryInto;
 
+    use data_encoding::HEXLOWER;
     use ethabi::ethereum_types::U256;
 
     use super::*;
@@ -112,7 +113,9 @@ mod tests {
     #[test]
     fn test_abi_encode() {
         let expected = "0x000000000000000000000000000000000000000000000000000000000000002a000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000047465737400000000000000000000000000000000000000000000000000000000";
-        let expected = hex::decode(&expected[2..]).expect("Test failed");
+        let expected = HEXLOWER
+            .decode(&expected.as_bytes()[2..])
+            .expect("Test failed");
         let got = AbiEncode::encode(&[
             Token::Uint(U256::from(42u64)),
             Token::String("test".into()),
@@ -127,13 +130,15 @@ mod tests {
             "1c8aff950685c2ed4bc3174f3472287b56d9517b9c948127319a09a7a36deac8";
         assert_eq!(
             expected,
-            &hex::encode({
-                let mut st = Keccak::v256();
-                let mut output = [0; 32];
-                st.update(b"hello");
-                st.finalize(&mut output);
-                output
-            })
+            &HEXLOWER.encode(
+                &{
+                    let mut st = Keccak::v256();
+                    let mut output = [0; 32];
+                    st.update(b"hello");
+                    st.finalize(&mut output);
+                    output
+                }[..]
+            )
         );
     }
 

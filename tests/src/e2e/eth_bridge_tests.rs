@@ -118,7 +118,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     ledger.exp_string(
         "Starting to listen for Borsh-serialized Ethereum events",
     )?;
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     ledger.send_control('c')?;
     ledger.exp_string(

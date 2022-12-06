@@ -423,6 +423,32 @@ pub mod testing {
             .unwrap()
     }
 
+    /// An Ethereum keypair for tests
+    pub fn keypair_3() -> <common::SigScheme as SigScheme>::SecretKey {
+        let bytes = [
+            0xf3, 0x78, 0x78, 0x80, 0xba, 0x85, 0x0b, 0xa4, 0xc5, 0x74, 0x50,
+            0x5a, 0x23, 0x54, 0x6d, 0x46, 0x74, 0xa1, 0x3f, 0x09, 0x75, 0x0c,
+            0xf4, 0xb5, 0xb8, 0x17, 0x69, 0x64, 0xf4, 0x08, 0xd4, 0x80,
+        ];
+        secp256k1::SecretKey::try_from_slice(bytes.as_ref())
+            .unwrap()
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// An Ethereum keypair for tests
+    pub fn keypair_4() -> <common::SigScheme as SigScheme>::SecretKey {
+        let bytes = [
+            0x68, 0xab, 0xce, 0x64, 0x54, 0x07, 0x7e, 0xf5, 0x1a, 0xb4, 0x31,
+            0x7a, 0xb8, 0x8b, 0x98, 0x30, 0x27, 0x11, 0x4e, 0x58, 0x69, 0xd6,
+            0x45, 0x94, 0xdc, 0x90, 0x8d, 0x94, 0xee, 0x58, 0x46, 0x91,
+        ];
+        secp256k1::SecretKey::try_from_slice(bytes.as_ref())
+            .unwrap()
+            .try_to_sk()
+            .unwrap()
+    }
+
     /// Generate an arbitrary [`super::SecretKey`].
     pub fn arb_keypair<S: SigScheme>() -> impl Strategy<Value = S::SecretKey> {
         any::<[u8; 32]>().prop_map(move |seed| {

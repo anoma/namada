@@ -37,7 +37,7 @@ pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
 };
 use namada_core::types::time::Rfc3339String;
-pub use namada_core::types::*;
+pub use namada_core::types::{eth_bridge_pool, *};
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};

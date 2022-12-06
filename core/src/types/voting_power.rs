@@ -56,7 +56,7 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: &FractionalVotingPower) -> Self::Output {
-        Self(self.0 + (*rhs).0)
+        Self(self.0 + rhs.0)
     }
 }
 
@@ -68,7 +68,7 @@ impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
 
 impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: &FractionalVotingPower) {
-        *self = Self(self.0 + (*rhs).0)
+        *self = Self(self.0 + rhs.0)
     }
 }
 

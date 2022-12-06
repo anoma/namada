@@ -4,8 +4,6 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{Hash as TreeHash, H256};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
@@ -100,17 +98,9 @@ impl TryFrom<&str> for Hash {
 
     fn try_from(string: &str) -> HashResult<Self> {
         let vec = HEXUPPER
-            .decode(string.as_ref())
+            .decode(string.to_uppercase().as_ref())
             .map_err(Error::FromStringError)?;
         Self::try_from(&vec[..])
-    }
-}
-
-impl FromStr for Hash {
-    type Err = self::Error;
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        Self::try_from(str)
     }
 }
 
@@ -170,34 +160,5 @@ mod tests {
         fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
             let _: Hash = hex_hash.try_into().unwrap();
         }
-    }
-}
-
-impl Value for Hash {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-
-    fn zero() -> Self {
-        Hash([0u8; HASH_LENGTH])
-    }
-}
-
-impl From<Hash> for H256 {
-    fn from(hash: Hash) -> Self {
-        hash.0.into()
-    }
-}
-
-impl From<H256> for Hash {
-    fn from(hash: H256) -> Self {
-        Self(hash.into())
-    }
-}
-
-impl From<&H256> for Hash {
-    fn from(hash: &H256) -> Self {
-        let hash = hash.to_owned();
-        Self(hash.into())
     }
 }

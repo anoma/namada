@@ -377,7 +377,6 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};

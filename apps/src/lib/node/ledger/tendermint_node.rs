@@ -49,7 +49,7 @@ async fn get_version(tendermint_path: &str) -> eyre::Result<Version> {
 
 /// Runs `tendermint version` and returns the output as a string
 async fn run_version_command(tendermint_path: &str) -> eyre::Result<String> {
-    let output = Command::new(&tendermint_path)
+    let output = Command::new(tendermint_path)
         .arg("version")
         .output()
         .await?;

@@ -66,6 +66,8 @@ chrono = {version = "0.4.22", default-features = false, features = ["clock", "st
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
+ethabi = "17.0.0"
+eyre = "0.6.8"
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
 ferveo-common = {git = "https://github.com/anoma/ferveo"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
@@ -78,6 +80,7 @@ ics23 = "0.7.0"
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+num-rational = "0.4.1"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 prost = "0.9.0"
 prost-types = "0.9.0"
@@ -94,6 +97,7 @@ tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 thiserror = "1.0.30"
+tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing = "0.1.30"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 

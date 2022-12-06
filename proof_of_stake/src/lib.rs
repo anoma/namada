@@ -36,10 +36,10 @@ pub use parameters::PosParams;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use types::{
-    ActiveValidator, Bonds, CommissionRates, EthAddress, GenesisValidator,
-    Slash, SlashType, Slashes, TotalDeltas, Unbond, Unbonds,
-    ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthKey, ValidatorSet,
-    ValidatorSetUpdate, ValidatorSets, ValidatorState, ValidatorStates,
+    ActiveValidator, Bonds, CommissionRates, GenesisValidator, Slash,
+    SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
+    ValidatorDeltas, ValidatorEthKey, ValidatorSet, ValidatorSetUpdate,
+    ValidatorSets, ValidatorState, ValidatorStates,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -118,10 +118,6 @@ pub trait PosReadOnly {
     /// Read PoS total deltas for all validators (active and inactive)
     fn read_total_deltas(&self) -> Result<TotalDeltas, storage_api::Error>;
 
-    /// Check if the given address is a validator by checking that it has some
-    /// state.
-    fn is_validator(&self) -> Result<bool, storage_api::Error>;
-
     /// Read PoS validator's Eth bridge governance key
     fn read_validator_eth_cold_key(
         &self,
@@ -133,6 +129,16 @@ pub trait PosReadOnly {
         &self,
         key: &Address,
     ) -> Option<ValidatorEthKey>;
+
+    /// Check if the given address is a validator by checking that it has some
+    /// state.
+    fn is_validator(
+        &self,
+        address: &Address,
+    ) -> Result<bool, storage_api::Error> {
+        let state = self.read_validator_state(address)?;
+        Ok(state.is_some())
+    }
 
     /// Get the total bond amount for the given bond ID at the given epoch.
     fn bond_amount(
@@ -239,6 +245,7 @@ pub trait PosActions: PosReadOnly {
         key: &Address,
         value: ValidatorConsensusKeys,
     ) -> Result<(), storage_api::Error>;
+    /// Write PoS validator's Eth bridge governance key
     fn write_validator_eth_cold_key(
         &mut self,
         address: &Address,
@@ -316,6 +323,7 @@ pub trait PosActions: PosReadOnly {
     ) -> Result<(), storage_api::Error>;
 
     /// Attempt to update the given account to become a validator.
+    #[allow(clippy::too_many_arguments)]
     fn become_validator(
         &mut self,
         address: &Address,
@@ -1287,6 +1295,7 @@ struct BecomeValidatorData {
 }
 
 /// A function that initialized data for a new validator.
+#[allow(clippy::too_many_arguments)]
 fn become_validator(
     params: &PosParams,
     address: &Address,
@@ -1333,15 +1342,15 @@ fn become_validator(
         params,
     );
 
-    Ok(BecomeValidatorData {
+    BecomeValidatorData {
         consensus_key,
-        state,
         eth_cold_key,
         eth_hot_key,
+        state,
         deltas,
         commission_rate,
         max_commission_rate_change,
-    })
+    }
 }
 
 struct BondData {
