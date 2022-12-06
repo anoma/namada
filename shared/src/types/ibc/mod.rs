@@ -1,6 +1,4 @@
 //! Types that are used in IBC.
 
-pub mod data;
-pub mod event;
-
-pub use event::*;
+pub use namada_core::ledger::ibc::data;
+pub use namada_core::types::ibc::*;

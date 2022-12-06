@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada::types::address::Address;
 use namada::types::ethereum_events::EthereumEvent;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
@@ -52,6 +53,7 @@ impl AbcippShim {
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        native_token: Address,
     ) -> (Self, AbciService) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
@@ -66,6 +68,7 @@ impl AbcippShim {
                     Some(db_cache),
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
+                    native_token,
                 ),
                 #[cfg(not(feature = "abcipp"))]
                 begin_block_request: None,

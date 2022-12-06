@@ -21,8 +21,8 @@ mod tests {
     use std::panic;
 
     use itertools::Itertools;
+    use namada::core::ledger::ibc::actions::IbcActions;
     use namada::ibc::tx_msg::Msg;
-    use namada::ledger::ibc::handler::IbcActions;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::ibc::vp::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
@@ -260,6 +260,10 @@ mod tests {
         assert_eq!(
             tx::ctx().get_block_epoch().unwrap(),
             tx_host_env::with(|env| env.storage.get_current_epoch().0)
+        );
+        assert_eq!(
+            tx::ctx().get_native_token().unwrap(),
+            tx_host_env::with(|env| env.storage.native_token.clone())
         );
     }
 
@@ -510,6 +514,10 @@ mod tests {
         assert_eq!(
             vp::CTX.get_block_epoch().unwrap(),
             vp_host_env::with(|env| env.storage.get_current_epoch().0)
+        );
+        assert_eq!(
+            vp::CTX.get_native_token().unwrap(),
+            vp_host_env::with(|env| env.storage.native_token.clone())
         );
     }
 
@@ -1272,7 +1280,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
+        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &sender);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());
@@ -1330,7 +1338,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
+        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &receiver);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());

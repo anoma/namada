@@ -4,16 +4,18 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_tx_prelude"
 resolver = "2"
-version = "0.10.1"
+version = "0.11.0"
 
 [features]
 default = []
 
 [dependencies]
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
-namada = {path = "../shared"}
-namada_vm_env = {path = "../vm_env"}
+namada_core = {path = "../core", features = ["abciplus"]}
 namada_macros = {path = "../macros"}
+namada_proof_of_stake = {path = "../proof_of_stake"}
+namada_vm_env = {path = "../vm_env"}
 borsh = "0.9.0"
 sha2 = "0.10.1"
 thiserror = "1.0.30"
+rust_decimal = "1.26.1"

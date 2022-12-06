@@ -5,8 +5,8 @@ use core::marker::PhantomData;
 use core::{cmp, fmt, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::storage::Epoch;
 
-use crate::types::Epoch;
 use crate::PosParams;
 
 /// Data that may have values set for future epochs, up to an epoch at offset as
@@ -128,6 +128,8 @@ pub enum DynEpochOffset {
     PipelineLen,
     /// Offset at unbonding length.
     UnbondingLen,
+    /// Offset at pipeline length - 1.
+    PipelineLenMinusOne,
 }
 impl DynEpochOffset {
     /// Find the value of a given offset from PoS parameters.
@@ -135,6 +137,7 @@ impl DynEpochOffset {
         match self {
             DynEpochOffset::PipelineLen => params.pipeline_len,
             DynEpochOffset::UnbondingLen => params.unbonding_len,
+            DynEpochOffset::PipelineLenMinusOne => params.pipeline_len - 1,
         }
     }
 }
@@ -635,11 +638,15 @@ mod tests {
         Set { value: Data, epoch: Epoch },
         UpdateFromOffset(UpdateFromOffset<Data>),
     }
+
+    /// Function for updating epoched data from an offset
+    pub type UpdateFn<Data> = Rc<dyn Fn(&mut Data, Epoch)>;
+
     /// These are the arguments of one of the constructors in
     /// [`EpochedTransition`]. It's not inlined because we need to manually
     /// implement `Debug`.
     struct UpdateFromOffset<Data> {
-        update_value: Rc<dyn Fn(&mut Data, Epoch)>,
+        update_value: UpdateFn<Data>,
         epoch: Epoch,
         offset: DynEpochOffset,
     }
@@ -886,12 +893,12 @@ mod tests {
                     // Post-conditions
                     assert_eq!(data.last_update, epoch);
                     assert_eq!(
-                        data.data[offset as usize],
+                        data.data[offset],
                         Some(value),
                         "The value at offset must be updated"
                     );
                     assert!(
-                        data.data.len() > offset as usize,
+                        data.data.len() > offset,
                         "The length of the data must be greater than the \
                          offset"
                     );
@@ -1188,7 +1195,7 @@ mod tests {
                          change"
                     );
                     assert!(
-                        data.data.len() > offset as usize,
+                        data.data.len() > offset,
                         "The length of the data must be greater than the \
                          offset"
                     );
@@ -1223,7 +1230,9 @@ mod tests {
             Some(DynEpochOffset::PipelineLen) => {
                 Just(DynEpochOffset::PipelineLen).boxed()
             }
-            Some(DynEpochOffset::UnbondingLen) | None => prop_oneof![
+            Some(DynEpochOffset::UnbondingLen)
+            | Some(DynEpochOffset::PipelineLenMinusOne)
+            | None => prop_oneof![
                 Just(DynEpochOffset::PipelineLen),
                 Just(DynEpochOffset::UnbondingLen),
             ]

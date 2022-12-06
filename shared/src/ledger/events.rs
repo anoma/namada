@@ -9,7 +9,7 @@ use std::ops::{Index, IndexMut};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::ledger::governance::utils::ProposalEvent;
+use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]

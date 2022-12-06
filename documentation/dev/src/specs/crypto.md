@@ -2,7 +2,7 @@
 
 Namada currently supports both Ed25519 and Secp256k1 (currently in [development](https://github.com/anoma/namada/pulls/278)) for signing transactions or any other arbitrary data, with support for more signature schemes to be added:
 
-- [`Sr25519`](https://github.com/anoma/anoma/issues/646)
+- [`Sr25519`](https://github.com/anoma/namada/issues/646)
 
 The implementation of the Ed25519 scheme makes use of the `ed25519_consensus` crate, while the `libsecp256k1` crate is used for Secp256k1 keys.
 

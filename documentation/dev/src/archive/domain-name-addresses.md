@@ -14,7 +14,7 @@ These addresses can be chosen by users who wish to [initialize a new account](#i
 - the top-level names under certain length (to be specified) cannot be initialized directly, they may be [auctioned like in ENS registrar as described in EIP-162](https://eips.ethereum.org/EIPS/eip-162).
   - some top-level names may be reserved
 
-For convenience, the `anoma` top-level address is initially setup to allow initialization of any previously unused second-level address, e.g. `bob.anoma` (we may want to revise this before launch to e.g. auction the short ones, like with top-level names to make the process fairer).
+For convenience, the `namada` top-level address is initially setup to allow initialization of any previously unused second-level address, e.g. `bob.namada` (we may want to revise this before launch to e.g. auction the short ones, like with top-level names to make the process fairer).
 
 Like in ENS, the addresses are stored on chain by their hash, encoded with [bech32m](https://github.com/bitcoin/bips/blob/master/bip-0350.mediawiki) ([not yet adopted in Zcash](https://github.com/zcash/zips/issues/484)), which is an improved version of [bech32](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki). Likewise, this is for two reasons:
 - help preserve privacy of addresses that were not revealed publicly and to prevent trivial enumeration of registered names (of course, you can still try to enumerate by hashes)

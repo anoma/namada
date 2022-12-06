@@ -33,16 +33,14 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         });
     addresses.extend(validator_addresses);
     // Genesis tokens
-    if let Some(accounts) = genesis.token {
-        let token_addresses = accounts.into_iter().map(|(alias, token)| {
-            // The address must be set in the genesis config file
-            (
-                alias.into(),
-                Address::decode(token.address.unwrap()).unwrap(),
-            )
-        });
-        addresses.extend(token_addresses);
-    }
+    let token_addresses = genesis.token.into_iter().map(|(alias, token)| {
+        // The address must be set in the genesis config file
+        (
+            alias.into(),
+            Address::decode(token.address.unwrap()).unwrap(),
+        )
+    });
+    addresses.extend(token_addresses);
     // Genesis established accounts
     if let Some(accounts) = genesis.established {
         let est_addresses = accounts.into_iter().map(|(alias, established)| {
@@ -127,7 +125,7 @@ mod dev {
         let mut addresses: Vec<(Alias, Address)> = vec![
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
-            ("governance".into(), governance::vp::ADDRESS),
+            ("governance".into(), governance::ADDRESS),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),

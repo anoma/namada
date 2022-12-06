@@ -2,21 +2,27 @@
 
 use core::time::Duration;
 
-use sha2::Digest;
-use thiserror::Error;
-
-use super::super::handler::{
+use namada_core::ledger::ibc::actions::{
     make_close_confirm_channel_event, make_close_init_channel_event,
     make_open_ack_channel_event, make_open_confirm_channel_event,
     make_open_init_channel_event, make_open_try_channel_event,
     make_timeout_event,
 };
-use super::super::storage::{
+use namada_core::ledger::ibc::data::{
+    Error as IbcDataError, IbcMessage, PacketReceipt,
+};
+use namada_core::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_update_height_key,
     client_update_timestamp_key, commitment_key, is_channel_counter_key,
     next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
     port_channel_id, receipt_key, Error as IbcStorageError,
 };
+use namada_core::ledger::parameters;
+use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_core::types::storage::Key;
+use sha2::Digest;
+use thiserror::Error;
+
 use super::{Ibc, StateChange};
 use crate::ibc::core::ics02_client::client_consensus::AnyConsensusState;
 use crate::ibc::core::ics02_client::client_state::AnyClientState;
@@ -52,15 +58,8 @@ use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ibc::proofs::Proofs;
 use crate::ibc::timestamp::Timestamp;
 use crate::ledger::native_vp::{Error as NativeVpError, VpEnv};
-use crate::ledger::parameters;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{self as ledger_storage};
 use crate::tendermint::Time;
 use crate::tendermint_proto::Protobuf;
-use crate::types::ibc::data::{
-    Error as IbcDataError, IbcMessage, PacketReceipt,
-};
-use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -749,7 +748,7 @@ where
                     .map_err(|_| Ics04Error::implementation_specific())?;
                 if let Some(id) = channel.connection_hops().get(0) {
                     if id == conn_id {
-                        let key = Key::parse(&key).map_err(|_| {
+                        let key = Key::parse(key).map_err(|_| {
                             Ics04Error::implementation_specific()
                         })?;
                         let port_channel_id =

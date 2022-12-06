@@ -1,10 +1,10 @@
-//! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
+//! The ledger shell connects the ABCI++ interface with the Namada ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
 //! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
-//! More info in <https://github.com/anoma/anoma/issues/362>.
+//! More info in <https://github.com/anoma/namada/issues/362>.
 mod finalize_block;
 mod governance;
 mod init_chain;
@@ -34,8 +34,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
-use namada::types::address;
-use namada::types::address::{masp, masp_tx_key};
+use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
@@ -154,7 +153,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn reset(config: config::Ledger) -> Result<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
-    match std::fs::remove_dir_all(&db_path) {
+    match std::fs::remove_dir_all(db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
     };
@@ -355,6 +354,7 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -364,10 +364,11 @@ where
             config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
-                .expect("Creating directory for Anoma should not fail");
+                .expect("Creating directory for Namada should not fail");
         }
         // load last state from storage
-        let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);
+        let mut storage =
+            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
         storage
             .load_last_state()
             .map_err(|e| {
@@ -828,9 +829,8 @@ mod test_utils {
     #[cfg(not(feature = "abcipp"))]
     use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::traits::Sha256Hasher;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree};
-    use namada::types::address::{nam, EstablishedAddressGen};
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::types::address::EstablishedAddressGen;
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -981,6 +981,7 @@ mod test_utils {
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
+                address::nam(),
             );
             shell.storage.last_height = height.into();
             (Self { shell }, receiver, eth_sender)
@@ -1108,6 +1109,7 @@ mod test_utils {
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let native_token = address::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -1120,6 +1122,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            native_token.clone(),
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
@@ -1130,7 +1133,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: native_token,
             },
             &keypair,
             Epoch(0),
@@ -1181,6 +1184,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            address::nam(),
         );
         assert!(!shell.storage.tx_queue.is_empty());
     }

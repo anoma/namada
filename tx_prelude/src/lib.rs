@@ -1,13 +1,14 @@
 //! This crate contains library code for transaction WASM. Most of the code is
 //! re-exported from the `namada_vm_env` crate.
 
-#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
-#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod governance;
 pub mod ibc;
+pub mod key;
 pub mod proof_of_stake;
 pub mod token;
 
@@ -15,27 +16,28 @@ use core::slice;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use namada::ledger::eth_bridge;
-pub use namada::ledger::governance::storage as gov_storage;
-pub use namada::ledger::parameters::storage as parameters_storage;
-pub use namada::ledger::slash_fund::storage as slash_fund_storage;
-pub use namada::ledger::storage::types::encode;
-pub use namada::ledger::storage_api::{
+pub use namada_core::ledger::eth_bridge;
+pub use namada_core::ledger::governance::storage as gov_storage;
+pub use namada_core::ledger::parameters::storage as parameters_storage;
+pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
+pub use namada_core::ledger::storage::types::encode;
+pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
     rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
     StorageWrite,
 };
-pub use namada::ledger::tx_env::TxEnv;
-pub use namada::proto::{Signed, SignedTxData};
-pub use namada::types::address::Address;
-use namada::types::chain::CHAIN_ID_LENGTH;
-pub use namada::types::ethereum_events::EthAddress;
-use namada::types::internal::HostEnvResult;
-use namada::types::storage::{
-    BlockHash, BlockHeight, Epoch, TxIndex, BLOCK_HASH_LENGTH,
+pub use namada_core::ledger::tx_env::TxEnv;
+pub use namada_core::proto::{Signed, SignedTxData};
+pub use namada_core::types::address::Address;
+use namada_core::types::chain::CHAIN_ID_LENGTH;
+pub use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::internal::HostEnvResult;
+use namada_core::types::storage::TxIndex;
+pub use namada_core::types::storage::{
+    self, BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
 };
-use namada::types::time::Rfc3339String;
-pub use namada::types::*;
+use namada_core::types::time::Rfc3339String;
+pub use namada_core::types::*;
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
@@ -47,7 +49,7 @@ pub use crate::proof_of_stake::{PosRead, PosWrite};
 pub fn log_string<T: AsRef<str>>(msg: T) {
     let msg = msg.as_ref();
     unsafe {
-        anoma_tx_log_string(msg.as_ptr() as _, msg.len() as _);
+        namada_tx_log_string(msg.as_ptr() as _, msg.len() as _);
     }
 }
 
@@ -87,7 +89,7 @@ impl Ctx {
     ///
     /// # Safety
     ///
-    /// When using `#[transaction]` macro from `anoma_macros`,
+    /// When using `#[transaction]` macro from `namada_macros`,
     /// the constructor should not be called from transactions and validity
     /// predicates implementation directly - they receive `&Self` as
     /// an argument provided by the macro that wrap the low-level WASM
@@ -115,30 +117,24 @@ pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 impl StorageRead<'_> for Ctx {
     type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read_bytes(
-        &self,
-        key: &namada::types::storage::Key,
-    ) -> Result<Option<Vec<u8>>, Error> {
+    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
         let read_result =
-            unsafe { anoma_tx_read(key.as_ptr() as _, key.len() as _) };
-        Ok(read_from_buffer(read_result, anoma_tx_result_buffer))
+            unsafe { namada_tx_read(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
-    fn has_key(
-        &self,
-        key: &namada::types::storage::Key,
-    ) -> Result<bool, Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
         let key = key.to_string();
         let found =
-            unsafe { anoma_tx_has_key(key.as_ptr() as _, key.len() as _) };
+            unsafe { namada_tx_has_key(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
     fn get_chain_id(&self) -> Result<String, Error> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
-            anoma_tx_get_chain_id(result.as_ptr() as _);
+            namada_tx_get_chain_id(result.as_ptr() as _);
         }
         let slice =
             unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
@@ -148,16 +144,16 @@ impl StorageRead<'_> for Ctx {
 
     fn get_block_height(
         &self,
-    ) -> Result<namada::types::storage::BlockHeight, Error> {
-        Ok(BlockHeight(unsafe { anoma_tx_get_block_height() }))
+    ) -> Result<namada_core::types::storage::BlockHeight, Error> {
+        Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
     }
 
     fn get_block_hash(
         &self,
-    ) -> Result<namada::types::storage::BlockHash, Error> {
+    ) -> Result<namada_core::types::storage::BlockHash, Error> {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
-            anoma_tx_get_block_hash(result.as_ptr() as _);
+            namada_tx_get_block_hash(result.as_ptr() as _);
         }
         let slice = unsafe {
             slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
@@ -165,17 +161,33 @@ impl StorageRead<'_> for Ctx {
         Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
     }
 
-    fn get_block_epoch(&self) -> Result<namada::types::storage::Epoch, Error> {
-        Ok(Epoch(unsafe { anoma_tx_get_block_epoch() }))
+    fn get_block_epoch(
+        &self,
+    ) -> Result<namada_core::types::storage::Epoch, Error> {
+        Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
+    }
+
+    /// Get the native token address
+    fn get_native_token(&self) -> Result<Address, Error> {
+        let result = Vec::with_capacity(address::ADDRESS_LEN);
+        unsafe {
+            namada_tx_get_native_token(result.as_ptr() as _);
+        }
+        let slice = unsafe {
+            slice::from_raw_parts(result.as_ptr(), address::ADDRESS_LEN)
+        };
+        let address_str =
+            std::str::from_utf8(slice).expect("Cannot decode native address");
+        Ok(Address::decode(address_str).expect("Cannot decode native address"))
     }
 
     fn iter_prefix(
         &self,
-        prefix: &namada::types::storage::Key,
+        prefix: &storage::Key,
     ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
-            anoma_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+            namada_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }
@@ -186,7 +198,7 @@ impl StorageRead<'_> for Ctx {
     ) -> Result<Self::PrefixIter, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
-            anoma_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
+            namada_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }
@@ -195,17 +207,15 @@ impl StorageRead<'_> for Ctx {
         &self,
         iter: &mut Self::PrefixIter,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
-        let read_result = unsafe { anoma_tx_iter_next(iter.0) };
+        let read_result = unsafe { namada_tx_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
-            anoma_tx_result_buffer,
+            namada_tx_result_buffer,
         ))
     }
 
-    fn get_tx_index(
-        &self,
-    ) -> Result<namada::types::storage::TxIndex, storage_api::Error> {
-        let tx_index = unsafe { anoma_tx_get_tx_index() };
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
     }
 }
@@ -213,12 +223,12 @@ impl StorageRead<'_> for Ctx {
 impl StorageWrite for Ctx {
     fn write_bytes(
         &mut self,
-        key: &namada::types::storage::Key,
+        key: &storage::Key,
         val: impl AsRef<[u8]>,
     ) -> storage_api::Result<()> {
         let key = key.to_string();
         unsafe {
-            anoma_tx_write(
+            namada_tx_write(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
@@ -228,20 +238,17 @@ impl StorageWrite for Ctx {
         Ok(())
     }
 
-    fn delete(
-        &mut self,
-        key: &namada::types::storage::Key,
-    ) -> storage_api::Result<()> {
+    fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
         let key = key.to_string();
-        unsafe { anoma_tx_delete(key.as_ptr() as _, key.len() as _) };
+        unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
     }
 }
 
 impl TxEnv<'_> for Ctx {
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
-        let read_result = unsafe { anoma_tx_get_block_time() };
-        let time_value = read_from_buffer(read_result, anoma_tx_result_buffer)
+        let read_result = unsafe { namada_tx_get_block_time() };
+        let time_value = read_from_buffer(read_result, namada_tx_result_buffer)
             .expect("The block time should exist");
         Ok(Rfc3339String(
             String::try_from_slice(&time_value[..])
@@ -251,7 +258,7 @@ impl TxEnv<'_> for Ctx {
 
     fn write_temp<T: BorshSerialize>(
         &mut self,
-        key: &namada::types::storage::Key,
+        key: &storage::Key,
         val: T,
     ) -> Result<(), Error> {
         let buf = val.try_to_vec().unwrap();
@@ -260,12 +267,12 @@ impl TxEnv<'_> for Ctx {
 
     fn write_bytes_temp(
         &mut self,
-        key: &namada::types::storage::Key,
+        key: &storage::Key,
         val: impl AsRef<[u8]>,
     ) -> Result<(), Error> {
         let key = key.to_string();
         unsafe {
-            anoma_tx_write_temp(
+            namada_tx_write_temp(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
@@ -277,7 +284,9 @@ impl TxEnv<'_> for Ctx {
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
         let addr = addr.encode();
-        unsafe { anoma_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _) }
+        unsafe {
+            namada_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _)
+        }
         Ok(())
     }
 
@@ -288,7 +297,7 @@ impl TxEnv<'_> for Ctx {
         let code = code.as_ref();
         let result = Vec::with_capacity(address::ESTABLISHED_ADDRESS_BYTES_LEN);
         unsafe {
-            anoma_tx_init_account(
+            namada_tx_init_account(
                 code.as_ptr() as _,
                 code.len() as _,
                 result.as_ptr() as _,
@@ -312,7 +321,7 @@ impl TxEnv<'_> for Ctx {
         let addr = addr.encode();
         let code = code.as_ref();
         unsafe {
-            anoma_tx_update_validity_predicate(
+            namada_tx_update_validity_predicate(
                 addr.as_ptr() as _,
                 addr.len() as _,
                 code.as_ptr() as _,
@@ -325,7 +334,7 @@ impl TxEnv<'_> for Ctx {
     fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
         let event = BorshSerialize::try_to_vec(event).unwrap();
         unsafe {
-            anoma_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
+            namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
         };
         Ok(())
     }

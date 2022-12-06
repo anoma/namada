@@ -7,6 +7,7 @@ pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
+use vp::{Vp, VP};
 
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
@@ -17,11 +18,15 @@ use crate::types::storage::BlockHeight;
 mod router;
 mod shell;
 mod types;
+mod vp;
 
 // Most commonly expected patterns should be declared first
 router! {RPC,
     // Shell provides storage read access, block metadata and can dry-run a tx
     ( "shell" ) = (sub SHELL),
+
+    // Validity-predicate's specific storage queries
+    ( "vp" ) = (sub VP),
 }
 
 /// Handle RPC query request in the ledger. On success, returns response with
@@ -83,7 +88,7 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
     Ok(())
 }
 
-#[cfg(any(test, feature = "tendermint-rpc"))]
+#[cfg(any(feature = "tendermint-rpc", feature = "tendermint-rpc-abcipp",))]
 /// Provides [`Client`] implementation for Tendermint RPC client
 pub mod tm {
     use thiserror::Error;
@@ -95,7 +100,7 @@ pub mod tm {
     #[derive(Error, Debug)]
     pub enum Error {
         #[error("{0}")]
-        Tendermint(#[from] tendermint_rpc::Error),
+        Tendermint(#[from] crate::tendermint_rpc::Error),
         #[error("Decoding error: {0}")]
         Decoding(#[from] std::io::Error),
         #[error("Info log: {0}, error code: {1}")]
@@ -105,7 +110,7 @@ pub mod tm {
     }
 
     #[async_trait::async_trait]
-    impl Client for tendermint_rpc::HttpClient {
+    impl Client for crate::tendermint_rpc::HttpClient {
         type Error = Error;
 
         async fn request(
@@ -118,11 +123,11 @@ pub mod tm {
             let data = data.unwrap_or_default();
             let height = height
                 .map(|height| {
-                    tendermint::block::Height::try_from(height.0)
+                    crate::tendermint::block::Height::try_from(height.0)
                         .map_err(|_err| Error::InvalidHeight(height))
                 })
                 .transpose()?;
-            let response = tendermint_rpc::Client::abci_query(
+            let response = crate::tendermint_rpc::Client::abci_query(
                 self,
                 // TODO open the private Path constructor in tendermint-rpc
                 Some(std::str::FromStr::from_str(&path).unwrap()),
@@ -131,15 +136,14 @@ pub mod tm {
                 prove,
             )
             .await?;
+            use crate::tendermint::abci::Code;
             match response.code {
-                tendermint::abci::Code::Ok => Ok(EncodedResponseQuery {
+                Code::Ok => Ok(EncodedResponseQuery {
                     data: response.value,
                     info: response.info,
                     proof: response.proof,
                 }),
-                tendermint::abci::Code::Err(code) => {
-                    Err(Error::Query(response.info, code))
-                }
+                Code::Err(code) => Err(Error::Query(response.info, code)),
             }
         }
     }
