@@ -724,8 +724,9 @@ where
                             response.log = String::from(VALID_MSG);
                         } else {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid Ethereum events vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid Ethereum events vote \
+                                 extension",
                             );
                         }
                     }
@@ -744,16 +745,17 @@ where
                             response.priority = i64::MAX;
                         } else {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid validator set update vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid validator set update \
+                                 vote extension",
                             );
                         }
                     }
                     Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
                         response.code = 1;
                         response.log = format!(
-                            "The following protocol tx cannot be added to the \
-                             mempool: {tx:?}"
+                            "{INVALID_MSG}: The following protocol tx cannot \
+                             be added to the mempool: {tx:?}"
                         );
                     }
                     Ok(TxType::Wrapper(_) | TxType::Raw(_)) => {
@@ -774,7 +776,7 @@ where
             }
             Err(msg) => {
                 response.code = 1;
-                response.log = msg.to_string();
+                response.log = format!("{INVALID_MSG}: {msg}");
             }
         }
 
