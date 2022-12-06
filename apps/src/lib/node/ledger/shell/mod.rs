@@ -705,7 +705,9 @@ where
         };
 
         let mut response = response::CheckTx::default();
+
         const VALID_MSG: &str = "Mempool validation passed";
+        const INVALID_MSG: &str = "Mempool validation failed";
 
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(tx) => {
@@ -754,9 +756,20 @@ where
                              mempool: {tx:?}"
                         );
                     }
-                    // `process_tx` errors are handled by
-                    // `Shell::finalize_block`
-                    _ => response.log = String::from(VALID_MSG),
+                    Ok(TxType::Wrapper(_) | TxType::Raw(_)) => {
+                        response.log = String::from(VALID_MSG);
+                    }
+                    Ok(TxType::Decrypted(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Decrypted txs cannot be sent by \
+                             clients"
+                        );
+                    }
+                    Err(err) => {
+                        response.code = 1;
+                        response.log = format!("{INVALID_MSG}: {err}");
+                    }
                 }
             }
             Err(msg) => {
