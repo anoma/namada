@@ -719,17 +719,19 @@ where
                         tx: ProtocolTxType::EthEventsVext(ext),
                         ..
                     })) => {
-                        if self.validate_eth_events_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
-                            response.log = String::from(VALID_MSG);
-                        } else {
+                        if let Err(err) = self
+                            .validate_eth_events_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
                             response.code = 1;
                             response.log = format!(
                                 "{INVALID_MSG}: Invalid Ethereum events vote \
-                                 extension",
+                                 extension: {err}",
                             );
+                        } else {
+                            response.log = String::from(VALID_MSG);
                         }
                     }
                     #[cfg(not(feature = "abcipp"))]
@@ -737,27 +739,29 @@ where
                         tx: ProtocolTxType::ValSetUpdateVext(ext),
                         ..
                     })) => {
-                        if self.validate_valset_upd_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
+                        if let Err(err) = self
+                            .validate_valset_upd_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
+                            response.code = 1;
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid validator set update \
+                                 vote extension: {err}",
+                            );
+                        } else {
                             response.log = String::from(VALID_MSG);
                             // validator set update votes should be decided
                             // as soon as possible
                             response.priority = i64::MAX;
-                        } else {
-                            response.code = 1;
-                            response.log = format!(
-                                "{INVALID_MSG}: Invalid validator set update \
-                                 vote extension",
-                            );
                         }
                     }
-                    Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
+                    Ok(TxType::Protocol(ProtocolTx { .. })) => {
                         response.code = 1;
                         response.log = format!(
-                            "{INVALID_MSG}: The following protocol tx cannot \
-                             be added to the mempool: {tx:?}"
+                            "{INVALID_MSG}: The given protocol tx cannot be \
+                             added to the mempool"
                         );
                     }
                     Ok(TxType::Wrapper(_)) => {
