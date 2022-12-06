@@ -3,7 +3,6 @@ use namada::ledger::eth_bridge::parameters::{
     Contracts, EthereumBridgeConfig, UpgradeableContract,
 };
 use namada::types::address::wnam;
-use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS_CHECKSUMMED;
 use namada::types::ethereum_events::EthAddress;
 use namada_apps::config::ethereum_bridge;
 
@@ -141,6 +140,7 @@ fn test_add_to_bridge_pool() {
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
     const QUERY_TIMEOUT_SECONDS: u64 = 40;
     const SOLE_VALIDATOR: Who = Who::Validator(0);
+    const RECEIVER: &str = "0x6B175474E89094C55Da98b954EedeAC495271d0F";
     let wnam_address = wnam().to_canonical();
     let test = setup::network(
         |mut genesis| {
@@ -199,7 +199,7 @@ fn test_add_to_bridge_pool() {
         "--erc20",
         &wnam_address,
         "--ethereum-address",
-        DAI_ERC20_ETH_ADDRESS_CHECKSUMMED,
+        RECEIVER,
         "--fee-amount",
         "10",
         "--fee-payer",
