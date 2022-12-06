@@ -807,7 +807,7 @@ pub mod eth_events {
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the
         /// protocol-specified minimum confirmations is attempted to be used,
-        /// then the protcol-specified minimum confirmations is used instead.
+        /// then the protocol-specified minimum confirmations is used instead.
         #[test]
         fn test_min_confirmations_enforced() -> Result<()> {
             let arbitrary_block_height: Uint256 = 123u64.into();
