@@ -511,7 +511,7 @@ where
         storage.read(&key)
     }
 
-    fn get_data_handler(&self) -> LazyMap<Epoch, Data> {
+    pub fn get_data_handler(&self) -> LazyMap<Epoch, Data> {
         let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
         LazyMap::open(key)
     }

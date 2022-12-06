@@ -29,6 +29,7 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
+use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::ledger::storage_api::{
     self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
@@ -43,7 +44,7 @@ use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, Bonds_NEW, CommissionRates, CommissionRates_NEW,
     GenesisValidator, Position, Slash, SlashType, Slashes, TotalDeltas,
-    TotalDeltas_NEW, Unbond, Unbonds, ValidatorConsensusKeys,
+    TotalDeltas_NEW, Unbond, Unbond_NEW, Unbonds, ValidatorConsensusKeys,
     ValidatorConsensusKeys_NEW, ValidatorDeltas, ValidatorDeltas_NEW,
     ValidatorPositionAddresses_NEW, ValidatorSet, ValidatorSetPositions_NEW,
     ValidatorSetUpdate, ValidatorSet_NEW, ValidatorSets, ValidatorSets_NEW,
@@ -1642,6 +1643,7 @@ fn withdraw_unbonds(
 // ------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------
+
 impl From<BecomeValidatorError> for storage_api::Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
@@ -1719,7 +1721,7 @@ pub fn validator_commission_rate_handle(
     CommissionRates_NEW::open(key)
 }
 
-/// Get the storage handle to a bonds
+/// Get the storage handle to a bond
 pub fn bond_handle(
     source: &Address,
     validator: &Address,
@@ -1735,6 +1737,16 @@ pub fn bond_handle(
         storage::bond_amount_key(&bond_id)
     };
     Bonds_NEW::open(key)
+}
+
+/// Get the storage handle to an unbond
+pub fn unbond_handle(source: &Address, validator: &Address) -> Unbond_NEW {
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
+    let key = storage::unbond_key(&bond_id);
+    Unbond_NEW::open(key)
 }
 
 /// Get the storage handle to a PoS validator's deltas
@@ -1769,6 +1781,8 @@ where
         },
     ) in validators.enumerate()
     {
+        total_bonded += tokens;
+
         let active_val_handle =
             active_validator_set_handle().at(&current_epoch).at(&tokens);
         if (num_val as u64) < params.max_validator_slots {
@@ -1815,6 +1829,7 @@ where
                     &address,
                 )?;
             } else {
+                // Insert the current genesis validator into the inactive set
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
@@ -1825,14 +1840,12 @@ where
                 )?;
             }
         }
-
+        // Write validator data to storage
         storage.write_validator_address_raw_hash(&address, &consensus_key);
         storage.write_validator_max_commission_rate_change(
             &address,
             &max_commission_rate_change,
         );
-        total_bonded += tokens;
-
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
@@ -1866,12 +1879,13 @@ where
             current_epoch,
         )?;
     }
-
+    // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
         storage,
         token::Change::from(total_bonded),
         current_epoch,
     )?;
+    // Credit bonded token amount to the PoS account
     storage.credit_tokens(
         &storage.staking_token_address(),
         &<S as PosBase>::POS_ADDRESS,
@@ -2127,9 +2141,6 @@ where
     let source = source.unwrap_or(validator);
     let bond_amount_handle = bond_handle(source, validator, false);
     let bond_remain_handle = bond_handle(source, validator, true);
-    // let validator_deltas_handle = validator_deltas_handle(validator);
-    // let total_deltas_handle = total_deltas_handle();
-    // let validator_set_handle = validator_sets_handle();
 
     // Check that validator is not inactive at anywhere between the current
     // epoch and pipeline offset
@@ -2147,7 +2158,7 @@ where
         validator: validator.clone(),
     };
     let offset = params.pipeline_len;
-    if storage.has_key(&storage::bond_key(&bond_id))? {
+    if storage.has_key(&storage::bond_amount_key(&bond_id))? {
         let cur_amount = bond_amount_handle
             .get_delta_val(storage, current_epoch, &params)?
             .unwrap_or_default();
@@ -2412,5 +2423,146 @@ where
         address.clone(),
         next_position,
     )?;
+    Ok(())
+}
+
+/// NEW: Unbond.
+pub fn unbond_tokens_new<S>(
+    storage: &mut S,
+    source: Option<&Address>,
+    validator: &Address,
+    amount: token::Change,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+{
+    let params = storage.read_pos_params();
+    if let Some(source) = source {
+        if source != validator
+            && is_validator(storage, source, &params, current_epoch)?
+        {
+            return Err(
+                BondError::SourceMustNotBeAValidator(source.clone()).into()
+            );
+        }
+    }
+    if !storage.has_key(&validator_state_key(validator))? {
+        return Err(BondError::NotAValidator(validator.clone()).into());
+    }
+
+    // Check that validator is not inactive at anywhere between the current
+    // epoch and pipeline offset
+    let validator_state_handle = validator_state_handle(validator);
+    for epoch in current_epoch.iter_range(params.pipeline_len) {
+        if let Some(ValidatorState::Inactive) =
+            validator_state_handle.get(storage, epoch, &params)?
+        {
+            return Err(BondError::InactiveValidator(validator.clone()).into());
+        }
+    }
+
+    let source = source.unwrap_or(validator);
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_amount_handle = bond_handle(source, validator, false);
+    let bond_remain_handle = bond_handle(source, validator, true);
+
+    // Make sure there are enough tokens left in the bond at the pipeline offset
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let remaining_at_pipeline = bond_remain_handle
+        .get_sum(storage, pipeline_epoch, &params)?
+        .unwrap_or_default();
+    if amount > remaining_at_pipeline {
+        return Err(UnbondError::UnbondAmountGreaterThanBond(
+            token::Amount::from_change(amount),
+            token::Amount::from_change(remaining_at_pipeline),
+        )
+        .into());
+    }
+
+    // Decrement the remaining bond amount by the unbond amount at the pipeline
+    // offset WRONG
+    // TODO: this needs to be done methodically
+    // Iterate thru this, find non-zero delta entries starting from most recent,
+    // then just start decrementing those values For every delta val that
+    // gets decremented down to 0, need a unique unbond object to have a clear
+    // start epoch
+
+    // Brainstorming:
+    // storage key ../unbond/delegator/validator/end/start -> amount
+
+    let unbond_handle = unbond_handle(source, validator);
+    let withdrawable_epoch =
+        current_epoch + params.pipeline_len + params.unbonding_len;
+    let mut to_decrement = token::Amount::from_change(amount);
+    let mut bond_iter =
+        bond_remain_handle.get_data_handler().rev_iter(storage)?;
+
+    // Map: {bond_epoch, (new bond value, unbond value)}
+    let mut new_bond_values_map =
+        HashMap::<Epoch, (token::Amount, token::Amount)>::new();
+
+    while to_decrement > token::Amount::default() {
+        let bond = bond_iter.next().transpose()?;
+        if bond.is_none() {
+            continue;
+        }
+        let (bond_epoch, bond_amnt) = bond.unwrap();
+        let bond_amnt = token::Amount::from_change(bond_amnt);
+
+        if to_decrement < bond_amnt {
+            // Decrement the amount in this bond and create the unbond object
+            // with amount `to_decrement` and starting epoch `bond_epoch`
+            let new_bond_amnt = bond_amnt - to_decrement;
+            new_bond_values_map
+                .insert(bond_epoch, (new_bond_amnt, to_decrement));
+            to_decrement = token::Amount::default();
+        } else {
+            // Set the bond remaining delta to 0 then continue decrementing
+            new_bond_values_map
+                .insert(bond_epoch, (token::Amount::default(), bond_amnt));
+            to_decrement -= bond_amnt;
+        }
+    }
+    drop(bond_iter);
+
+    // Write the in-memory bond and unbond values back to storage
+    // TODO: need to add upsert of unbond values in case an unbond already
+    // exists (since insert is overwriting)
+    for (bond_epoch, (new_bond_amnt, unbond_amnt)) in
+        new_bond_values_map.into_iter()
+    {
+        bond_remain_handle.set(storage, new_bond_amnt.into(), bond_epoch, 0)?;
+        unbond_handle.at(&withdrawable_epoch).insert(
+            storage,
+            bond_epoch,
+            unbond_amnt,
+        )?;
+    }
+
+    // Update the validator set at the pipeline offset
+    update_validator_set_new(
+        storage,
+        &params,
+        validator,
+        -amount,
+        &active_validator_set_handle(),
+        &inactive_validator_set_handle(),
+        current_epoch,
+    )?;
+
+    // Update the validator and total deltas at the pipeline offset
+    update_validator_deltas(
+        storage,
+        &params,
+        validator,
+        -amount,
+        current_epoch,
+    )?;
+    update_total_deltas(storage, &params, -amount, current_epoch)?;
+
     Ok(())
 }

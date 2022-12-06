@@ -84,6 +84,11 @@ pub type Bonds_NEW = crate::epoched_new::EpochedDelta<
     21,
 >;
 
+/// Epochs validator's unbonds
+/// TODO: should we make a NestedEpochedDelta for this where outer epoch is end
+/// and inner is begin???
+pub type Unbond_NEW = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
+
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
 /// Epoched validator's state.

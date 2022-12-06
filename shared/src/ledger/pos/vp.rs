@@ -33,7 +33,6 @@ use crate::ledger::pos::{
 };
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::StorageRead;
-use crate::ledger::vp_env::VpEnv;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
