@@ -541,6 +541,94 @@ mod tests {
     }
 
     #[test]
+    fn test_ibc_create_client_tx_fail() {
+        // Fail cases for IBC CreateClient transaction
+
+        tx_host_env::init();
+        ibc::init_storage();
+
+        // get and increment the connection counter
+        let msg = ibc::msg_create_client();
+        let counter_key = ibc::client_counter_key();
+        let counter = tx::ctx()
+            .get_and_inc_counter(&counter_key)
+            .expect("getting the counter failed");
+        let client_id = ibc::client_id(msg.client_state.client_type(), counter)
+            .expect("invalid client ID");
+        // println!("client id {}", client_id);
+
+        let client_type_key = ibc::client_type_key(&client_id);
+        let client_state_key = ibc::client_state_key(&client_id);
+        // let client_state_value: Vec<u8> = vec![];
+
+        // let header = tm_dummy_header();
+        // let height = Height::zero();
+        let height = msg.client_state.latest_height();
+        // println!("height {}", height);
+
+        let consensus_state_key = ibc::consensus_state_key(&client_id, height);
+        // println!("* POINT 0");
+        // let client_state = MockClientState::new(header).wrap_any();
+        // let consensus_state = MockConsensusState::new(header).wrap_any();
+        // let consensus_state_value: Vec<u8> = vec![];
+
+        // 1) missing client type value - fail
+        // println!("client type {}", msg.client_state.client_type().as_str());
+        tx::ctx()
+            .write_bytes(
+                &client_type_key,
+                msg.client_state.client_type().as_str().as_bytes(),
+            )
+            .unwrap();
+        // println!("client state {:x?}", msg.client_state.clone().encode_vec().unwrap());
+        tx::ctx()
+            .write_bytes(&client_state_key, msg.client_state.clone().encode_vec().unwrap())
+            .unwrap();
+        // println!("consensus state {:x?}", msg.consensus_state.clone().encode_vec().unwrap());
+        tx::ctx()
+            .write(
+                &consensus_state_key,
+                msg.consensus_state.clone().encode_vec().unwrap(),
+            )
+            .unwrap();
+
+        let event = ibc::make_create_client_event(&client_id, &msg);
+        TxEnv::emit_ibc_event(tx::ctx(), &event.try_into().unwrap()).unwrap();
+        // println!("* POINT 1");
+
+        let mut tx_data = vec![];
+        msg.clone()
+            .to_any()
+            .encode(&mut tx_data)
+            .expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        }
+        .sign(&key::testing::keypair_1());
+
+        let mut env = tx_host_env::take();
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(
+            result.expect("validation failed unexpectedly")
+        );
+        // print!("* FINISHED");
+
+        // drop the transaction
+        env.write_log.drop_tx();
+
+        // 2) missing client state value - fail
+        // assert!(matches!(
+        //     result.expect_err("validation succeeded unexpectedly"),
+        //     IbcError::ClientError(_)
+        // ));
+
+
+        // 3) missing consensus state value - fail
+    }
+
+    #[test]
     fn test_ibc_client() {
         // The environment must be initialized first
         tx_host_env::init();

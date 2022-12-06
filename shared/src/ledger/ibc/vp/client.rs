@@ -197,6 +197,10 @@ where
                 ))
             })?;
         let height = client_state.latest_height();
+        let consensus_state_test = self.consensus_state(client_id, height);
+        if let Err(e) = consensus_state_test {
+            println!("{}", e);
+        }
         let consensus_state =
             self.consensus_state(client_id, height).map_err(|_| {
                 Error::InvalidClient(format!(
