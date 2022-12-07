@@ -124,7 +124,7 @@ impl ProposalBytes {
     };
     /// The (raw) default value for a [`ProposalBytes`].
     ///
-    /// This value must be within the range `[1 B, 21 MiB]`.
+    /// This value must be within the range `[1 B, 90 MiB]`.
     const RAW_DEFAULT: NonZeroU64 = unsafe {
         // SAFETY: We are constructing a greater than zero
         // value, so the API contract is never violated.
