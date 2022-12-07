@@ -17,7 +17,8 @@ pub const CHAIN_ID_PREFIX_MAX_LEN: usize = 19;
 /// Separator between chain ID prefix and the generated hash
 pub const CHAIN_ID_PREFIX_SEP: char = '.';
 
-/// The value of the Tendermint maximum block size.
+/// Configuration parameter for the upper limit on the number
+/// of bytes transactions can occupy in a block proposal.
 #[derive(
     Copy,
     Clone,
@@ -30,11 +31,11 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct TendermintBytesPerBlock {
+pub struct ProposalSize {
     inner: NonZeroU64,
 }
 
-impl Serialize for TendermintBytesPerBlock {
+impl Serialize for ProposalSize {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -43,7 +44,7 @@ impl Serialize for TendermintBytesPerBlock {
     }
 }
 
-impl<'de> Deserialize<'de> for TendermintBytesPerBlock {
+impl<'de> Deserialize<'de> for ProposalSize {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -51,7 +52,7 @@ impl<'de> Deserialize<'de> for TendermintBytesPerBlock {
         struct Visitor;
 
         impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = TendermintBytesPerBlock;
+            type Value = ProposalSize;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(f, "a u64 in the range 1 - 104857600")
@@ -61,7 +62,7 @@ impl<'de> Deserialize<'de> for TendermintBytesPerBlock {
             where
                 E: serde::de::Error,
             {
-                TendermintBytesPerBlock::new(size).ok_or_else(|| {
+                ProposalSize::new(size).ok_or_else(|| {
                     serde::de::Error::invalid_value(
                         serde::de::Unexpected::Unsigned(size),
                         &self,
@@ -74,7 +75,7 @@ impl<'de> Deserialize<'de> for TendermintBytesPerBlock {
     }
 }
 
-impl BorshSchema for TendermintBytesPerBlock {
+impl BorshSchema for ProposalSize {
     fn add_definitions_recursively(
         definitions: &mut std::collections::HashMap<
             borsh::schema::Declaration,
@@ -94,50 +95,61 @@ impl BorshSchema for TendermintBytesPerBlock {
     }
 }
 
-impl Default for TendermintBytesPerBlock {
+impl Default for ProposalSize {
     #[inline]
     fn default() -> Self {
-        // default value derived from tendermint genesis init
-        // = 21 MB
-        let inner = unsafe {
-            // SAFETY: The value is greater than zero.
-            NonZeroU64::new_unchecked(21 << 20)
-        };
-        Self { inner }
+        Self {
+            inner: Self::RAW_DEFAULT,
+        }
     }
 }
 
-impl TendermintBytesPerBlock {
-    /// The upper bound of a [`TendermintBytesPerBlock`] value.
-    ///
-    /// This value is equal to 100 MiB.
-    pub const MAX: TendermintBytesPerBlock = {
-        const INNER: NonZeroU64 = unsafe {
-            // SAFETY: We are constructing a greater than zero
-            // value, so the API contract is never violated.
-            // The value itself is derived from the ABCI specs (100 MB).
-            NonZeroU64::new_unchecked(100 << 20)
-        };
-        TendermintBytesPerBlock { inner: INNER }
+// constants
+impl ProposalSize {
+    /// The upper bound of a [`ProposalSize`] value.
+    pub const MAX: ProposalSize = ProposalSize {
+        inner: Self::RAW_MAX,
     };
+    /// The (raw) default value for a [`ProposalSize`].
+    ///
+    /// This value must be within the range `[1 B, 21 MiB]`.
+    const RAW_DEFAULT: NonZeroU64 = unsafe {
+        // SAFETY: We are constructing a greater than zero
+        // value, so the API contract is never violated.
+        // Moreover, 21 MiB <= 90 MiB.
+        NonZeroU64::new_unchecked(21 << 20)
+    };
+    /// The (raw) upper bound of a [`ProposalSize`] value.
+    ///
+    /// The maximum space a serialized Tendermint block can
+    /// occupy is 100 MiB. We reserve 10 MiB for serialization
+    /// overhead, evidence and header data, and 90 MiB for
+    /// tx data.
+    const RAW_MAX: NonZeroU64 = unsafe {
+        // SAFETY: We are constructing a greater than zero
+        // value, so the API contract is never violated.
+        NonZeroU64::new_unchecked(90 << 20)
+    };
+}
 
+impl ProposalSize {
     /// Return the number of bytes as a [`u64`] value.
     #[inline]
-    pub fn get(self) -> u64 {
+    pub const fn get(self) -> u64 {
         self.inner.get()
     }
 
-    /// Try to construct a new [`TendermintBytesPerBlock`] instance,
+    /// Try to construct a new [`ProposalSize`] instance,
     /// from the given `max_bytes` value.
     ///
     /// This function will return [`None`] if `max_bytes` is not within
-    /// the inclusive range of 1 to [`TendermintBytesPerBlock::MAX`].
+    /// the inclusive range of 1 to [`ProposalSize::MAX`].
     #[inline]
     pub fn new(max_bytes: u64) -> Option<Self> {
         NonZeroU64::new(max_bytes)
             .map(|inner| Self { inner })
             .and_then(|value| {
-                if value.get() > (100 << 20) {
+                if value.get() > Self::RAW_MAX.get() {
                     None
                 } else {
                     Some(value)
@@ -365,14 +377,13 @@ mod tests {
             assert!(errors.is_empty(), "There should be no validation errors {:#?}", errors);
         }
 
-        /// Test if [`TendermintBytesPerBlock`] serde serialization
-        /// is correct.
+        /// Test if [`ProposalSize`] serde serialization is correct.
         #[test]
-        fn test_tm_blk_size_serialize_roundtrip(s in 1u64..=(1 << 20)) {
-            let size = TendermintBytesPerBlock::new(s).expect("Test failed");
+        fn test_proposal_size_serialize_roundtrip(s in 1u64..=ProposalSize::MAX.get()) {
+            let size = ProposalSize::new(s).expect("Test failed");
             assert_eq!(size.get(), s);
             let json = serde_json::to_string(&size).expect("Test failed");
-            let deserialized: TendermintBytesPerBlock =
+            let deserialized: ProposalSize =
                 serde_json::from_str(&json).expect("Test failed");
             assert_eq!(size, deserialized);
         }
