@@ -702,9 +702,9 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        use namada::types::transaction::protocol::{
-            ProtocolTx, ProtocolTxType,
-        };
+        use namada::types::transaction::protocol::ProtocolTx;
+        #[cfg(not(feature = "abcipp"))]
+        use namada::types::transaction::protocol::ProtocolTxType;
 
         let mut response = response::CheckTx::default();
         const VALID_MSG: &str = "Mempool validation passed";
@@ -840,7 +840,6 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
-    #[cfg(feature = "abciplus")]
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };

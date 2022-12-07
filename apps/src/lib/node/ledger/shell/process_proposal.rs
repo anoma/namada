@@ -2,8 +2,6 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-#[cfg(feature = "abcipp")]
-use namada::ledger::pos::types::VotingPower;
 use namada::ledger::queries_ext::QueriesExt;
 #[cfg(feature = "abcipp")]
 use namada::ledger::queries_ext::SendValsetUpd;
@@ -226,7 +224,7 @@ where
     #[cfg(feature = "abcipp")]
     fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
     where
-        I: Iterator<Item = Option<VotingPower>>,
+        I: Iterator<Item = Option<namada::types::token::Amount>>,
     {
         #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
@@ -550,7 +548,7 @@ mod test_process_proposal {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
-    use namada::types::token::Amount;
+    use namada::types::token;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
@@ -1113,7 +1111,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: token::Amount::whole(1_000_100),
                 token: shell.storage.native_token.clone(),
             },
             &keypair,

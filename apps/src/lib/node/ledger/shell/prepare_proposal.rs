@@ -15,11 +15,9 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
-use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{
-    tx_record::TxAction, ExtendedCommitInfo,
-};
+use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
+use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
