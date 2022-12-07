@@ -9,10 +9,13 @@ resolver = "2"
 version = "0.11.0"
 
 [features]
-default = []
+default = ["abciplus"]
+abciplus = [
+  "namada/abciplus"
+]
 
 [dependencies]
-namada = {path = "../shared"}
+namada = {path = "../shared", default-features = false}
 borsh = "0.9.0"
 itertools = "0.10.3"
 lazy_static = "1.4.0"
