@@ -29,6 +29,7 @@ const UNBOND_STORAGE_KEY: &str = "unbond_NEW";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set_NEW";
 const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_set_NEW";
 const ACTIVE_VALIDATOR_SET_STORAGE_KEY: &str = "active";
+const NUM_ACTIVE_VALIDATORS_STORAGE_KEY: &str = "num_active";
 const INACTIVE_VALIDATOR_SET_STORAGE_KEY: &str = "inactive";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas_NEW";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions_NEW";
@@ -351,6 +352,13 @@ pub fn active_validator_set_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Storage key for the number of active validators
+pub fn num_active_validators_key() -> Key {
+    validator_sets_prefix()
+        .push(&NUM_ACTIVE_VALIDATORS_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage key for inactive validator set
 pub fn inactive_validator_set_key() -> Key {
     validator_sets_prefix()
@@ -486,6 +494,11 @@ where
         decode(value.unwrap()).unwrap()
     }
 
+    fn read_num_active_validators(&self) -> u64 {
+        let (value, _gas) = self.read(&num_active_validators_key()).unwrap();
+        decode(value.unwrap()).unwrap()
+    }
+
     fn write_pos_params(&mut self, params: &PosParams) {
         self.write(&params_key(), encode(params)).unwrap();
     }
@@ -569,6 +582,11 @@ where
 
     fn write_total_deltas(&mut self, value: &TotalDeltas) {
         self.write(&total_deltas_key(), encode(value)).unwrap();
+    }
+
+    fn write_num_active_validators(&mut self, value: &u64) {
+        self.write(&num_active_validators_key(), encode(value))
+            .unwrap();
     }
 
     fn credit_tokens(

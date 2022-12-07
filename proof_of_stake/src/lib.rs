@@ -39,7 +39,10 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use parameters::PosParams;
 use rust_decimal::Decimal;
-use storage::{validator_max_commission_rate_change_key, validator_state_key};
+use storage::{
+    num_active_validators_key, validator_max_commission_rate_change_key,
+    validator_state_key,
+};
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, Bonds_NEW, CommissionRates, CommissionRates_NEW,
@@ -656,6 +659,8 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets;
     /// Read PoS total deltas of all validators (active and inactive).
     fn read_total_deltas(&self) -> TotalDeltas;
+    /// Read the number of active validators.
+    fn read_num_active_validators(&self) -> u64;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
@@ -700,6 +705,9 @@ pub trait PosBase {
     fn write_validator_set(&mut self, value: &ValidatorSets);
     /// Write total deltas in PoS for all validators (active and inactive)
     fn write_total_deltas(&mut self, value: &TotalDeltas);
+    /// Write number of active validators.
+    fn write_num_active_validators(&mut self, value: &u64);
+
     /// Credit tokens to the `target` account. This should only be used at
     /// genesis.
     fn credit_tokens(
@@ -2564,5 +2572,78 @@ where
     )?;
     update_total_deltas(storage, &params, -amount, current_epoch)?;
 
+    Ok(())
+}
+/// NEW: Initialize data for a new validator.
+/// TODO: should this still happen at pipeline if it is occurring with 0 bonded
+/// stake
+fn become_validator_new<S>(
+    storage: &mut S,
+    params: &PosParams,
+    address: &Address,
+    consensus_key: &common::PublicKey,
+    current_epoch: Epoch,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+{
+    // Non-epoched validator data
+    storage.write_validator_address_raw_hash(address, consensus_key);
+    storage.write_validator_max_commission_rate_change(
+        &address,
+        &max_commission_rate_change,
+    );
+    // Epoched validator data
+    validator_consensus_key_handle(address).init(
+        storage,
+        consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_state_handle(address).init(
+        storage,
+        ValidatorState::Candidate, /* TODO: maybe shouldn't be candidate
+                                    * immediately */
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_commission_rate_handle(address).init(
+        storage,
+        commission_rate,
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_deltas_handle(address).init(
+        storage,
+        token::Change::default(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+
+    let num_active_validators = storage.read_num_active_validators();
+    if num_active_validators < params.max_validator_slots {
+        let active_val_handle = active_validator_set_handle()
+            .at(&current_epoch)
+            .at(&token::Amount::default());
+        insert_validator_into_set(
+            &active_val_handle,
+            storage,
+            &current_epoch,
+            &address,
+        )?;
+    } else {
+        // It belongs in the inactive set since it initially has 0 bonded stake
+        let inactive_val_handle = inactive_validator_set_handle()
+            .at(&current_epoch)
+            .at(&token::Amount::default());
+        insert_validator_into_set(
+            &inactive_val_handle,
+            storage,
+            &current_epoch,
+            &address,
+        )?;
+    }
     Ok(())
 }
