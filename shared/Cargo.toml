@@ -53,6 +53,7 @@ abcipp = [
 ]
 abciplus = [
   "namada_core/abciplus",
+  "namada_proof_of_stake/abciplus",
   "ibc",
   "ibc-proto",
   "tendermint",
@@ -76,8 +77,8 @@ testing = [
 ]
 
 [dependencies]
-namada_core = {path = "../core", features = ["secp256k1-sign-verify"]}
-namada_proof_of_stake = {path = "../proof_of_stake"}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
+namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
 bellman = "0.11.2"
 bls12_381 = "0.6.1"
