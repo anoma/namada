@@ -558,7 +558,7 @@ pub mod cmds {
 
     /// List all known payment addresses
     #[derive(Clone, Debug)]
-    pub struct MaspListPayAddrs;
+    pub struct MaspListPayAddrs(pub args::MaspListPayAddrs);
 
     impl SubCmd for MaspListPayAddrs {
         const CMD: &'static str = "list-addrs";
@@ -566,12 +566,13 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|_matches| MaspListPayAddrs)
+                .map(|matches| Self(args::MaspListPayAddrs::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Lists all payment addresses in the wallet")
+                .add_args::<args::MaspListPayAddrs>()
         }
     }
 
@@ -720,7 +721,7 @@ pub mod cmds {
 
     /// List known addresses
     #[derive(Clone, Debug)]
-    pub struct AddressList;
+    pub struct AddressList(pub args::AddressList);
 
     impl SubCmd for AddressList {
         const CMD: &'static str = "list";
@@ -728,11 +729,13 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|_matches| AddressList)
+                .map(|matches| Self(args::AddressList::parse(matches)))
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("List all known addresses.")
+            App::new(Self::CMD)
+                .about("List all known addresses.")
+                .add_args::<args::AddressList>()
         }
     }
 
@@ -1657,6 +1660,7 @@ pub mod args {
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
+    const PRE_GENESIS: ArgFlag = flag("pre-genesis");
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -1879,7 +1883,7 @@ pub mod args {
     impl TxTransfer {
         pub fn parse_from_context(
             &self,
-            ctx: &mut Context,
+            ctx: &mut ChainContext,
         ) -> ParsedTxTransferArgs {
             ParsedTxTransferArgs {
                 tx: self.tx.parse_from_context(ctx),
@@ -2870,7 +2874,10 @@ pub mod args {
     }
 
     impl Tx {
-        pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
+        pub fn parse_from_context(
+            &self,
+            ctx: &mut ChainContext,
+        ) -> ParsedTxArgs {
             ParsedTxArgs {
                 dry_run: self.dry_run,
                 dump_tx: self.dump_tx,
@@ -2998,6 +3005,7 @@ pub mod args {
         pub alias: String,
         /// Any MASP value
         pub value: MaspValue,
+        pub is_pre_genesis: bool,
         /// Don't encrypt the keypair
         pub unsafe_dont_encrypt: bool,
     }
@@ -3006,10 +3014,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let value = MASP_VALUE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 value,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -3025,6 +3035,10 @@ pub mod args {
                     .def()
                     .about("A spending key, viewing key, or payment address."),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -3037,6 +3051,7 @@ pub mod args {
     pub struct MaspSpendKeyGen {
         /// Key alias
         pub alias: String,
+        pub is_pre_genesis: bool,
         /// Don't encrypt the keypair
         pub unsafe_dont_encrypt: bool,
     }
@@ -3044,9 +3059,11 @@ pub mod args {
     impl Args for MaspSpendKeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -3057,6 +3074,10 @@ pub mod args {
                     .def()
                     .about("An alias to be associated with the spending key."),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -3073,6 +3094,7 @@ pub mod args {
         pub viewing_key: WalletViewingKey,
         /// Pin
         pub pin: bool,
+        pub is_pre_genesis: bool,
     }
 
     impl Args for MaspPayAddrGen {
@@ -3080,10 +3102,12 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
             let pin = PIN.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 viewing_key,
                 pin,
+                is_pre_genesis,
             }
         }
 
@@ -3098,6 +3122,10 @@ pub mod args {
                 "Require that the single transaction to this address be \
                  pinned.",
             ))
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
         }
     }
 
@@ -3108,6 +3136,8 @@ pub mod args {
         pub scheme: SchemeType,
         /// Key alias
         pub alias: Option<String>,
+        /// Generate a key for pre-genesis, instead of a current chain
+        pub is_pre_genesis: bool,
         /// Don't encrypt the keypair
         pub unsafe_dont_encrypt: bool,
     }
@@ -3116,10 +3146,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 scheme,
                 alias,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -3134,6 +3166,10 @@ pub mod args {
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
+            .arg(PRE_GENESIS.def().about(
+                "Generate a key for pre-genesis, instead of for the current \
+                 chain, if any.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -3147,6 +3183,7 @@ pub mod args {
         pub public_key: Option<common::PublicKey>,
         pub alias: Option<String>,
         pub value: Option<String>,
+        pub is_pre_genesis: bool,
         pub unsafe_show_secret: bool,
     }
 
@@ -3155,12 +3192,14 @@ pub mod args {
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let value = VALUE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
             Self {
                 public_key,
                 alias,
                 value,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
@@ -3183,6 +3222,10 @@ pub mod args {
                     "A public key or alias associated with the keypair.",
                 ),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
@@ -3196,15 +3239,18 @@ pub mod args {
     pub struct AddrKeyFind {
         pub alias: String,
         pub unsafe_show_secret: bool,
+        pub is_pre_genesis: bool,
     }
 
     impl Args for AddrKeyFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 unsafe_show_secret,
+                is_pre_genesis,
             }
         }
 
@@ -3215,6 +3261,10 @@ pub mod args {
                         .def()
                         .about("UNSAFE: Print the spending key values."),
                 )
+                .arg(PRE_GENESIS.def().about(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
         }
     }
 
@@ -3222,21 +3272,28 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct MaspKeysList {
         pub decrypt: bool,
+        pub is_pre_genesis: bool,
         pub unsafe_show_secret: bool,
     }
 
     impl Args for MaspKeysList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
+                .arg(PRE_GENESIS.def().about(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -3245,25 +3302,52 @@ pub mod args {
         }
     }
 
+    /// Wallet list shielded payment addresses arguments
+    #[derive(Clone, Debug)]
+    pub struct MaspListPayAddrs {
+        pub is_pre_genesis: bool,
+    }
+
+    impl Args for MaspListPayAddrs {
+        fn parse(matches: &ArgMatches) -> Self {
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self { is_pre_genesis }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+        }
+    }
+
     /// Wallet list keys arguments
     #[derive(Clone, Debug)]
     pub struct KeyList {
         pub decrypt: bool,
+        pub is_pre_genesis: bool,
         pub unsafe_show_secret: bool,
     }
 
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().about("Decrypt keys that are encrypted."))
+                .arg(PRE_GENESIS.def().about(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -3276,13 +3360,17 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct KeyExport {
         pub alias: String,
+        pub is_pre_genesis: bool,
     }
 
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
-
-            Self { alias }
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                is_pre_genesis,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3291,6 +3379,10 @@ pub mod args {
                     .def()
                     .about("The alias of the key you wish to export."),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
         }
     }
 
@@ -3299,13 +3391,19 @@ pub mod args {
     pub struct AddressOrAliasFind {
         pub alias: Option<String>,
         pub address: Option<Address>,
+        pub is_pre_genesis: bool,
     }
 
     impl Args for AddressOrAliasFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
-            Self { alias, address }
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                address,
+                is_pre_genesis,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3319,6 +3417,10 @@ pub mod args {
                     .def()
                     .about("The bech32m encoded address string."),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .group(
                 ArgGroup::new("find_flags")
                     .args(&[ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
@@ -3327,18 +3429,44 @@ pub mod args {
         }
     }
 
+    /// List wallet address
+    #[derive(Clone, Debug)]
+    pub struct AddressList {
+        pub is_pre_genesis: bool,
+    }
+
+    impl Args for AddressList {
+        fn parse(matches: &ArgMatches) -> Self {
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self { is_pre_genesis }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+        }
+    }
+
     /// Wallet address add arguments
     #[derive(Clone, Debug)]
     pub struct AddressAdd {
         pub alias: String,
         pub address: Address,
+        pub is_pre_genesis: bool,
     }
 
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            Self { alias, address }
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                address,
+                is_pre_genesis,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3352,6 +3480,10 @@ pub mod args {
                     .def()
                     .about("The bech32m encoded address string."),
             )
+            .arg(PRE_GENESIS.def().about(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
         }
     }
 

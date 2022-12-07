@@ -12,6 +12,7 @@ use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
+use crate::cli::utils;
 use crate::client::tx::ShieldedContext;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
@@ -65,10 +66,17 @@ pub type WalletBalanceOwner = FromContext<BalanceOwner>;
 pub struct Context {
     /// Global arguments
     pub global_args: args::Global,
-    /// The wallet
-    pub wallet: Wallet,
     /// The global configuration
     pub global_config: GlobalConfig,
+    /// Chain-specific context, if any chain is configured in `global_config`
+    pub chain: Option<ChainContext>,
+}
+
+/// Command execution context with chain-specific data
+#[derive(Debug)]
+pub struct ChainContext {
+    /// The wallet
+    pub wallet: Wallet,
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
@@ -80,49 +88,92 @@ pub struct Context {
 impl Context {
     pub fn new(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
-        tracing::info!("Chain ID: {}", global_config.default_chain_id);
 
-        let mut config = Config::load(
-            &global_args.base_dir,
-            &global_config.default_chain_id,
-            global_args.mode.clone(),
-        );
+        let chain = match global_config.default_chain_id.as_ref() {
+            Some(default_chain_id) => {
+                tracing::info!("Default chain ID: {default_chain_id}");
+                let mut config = Config::load(
+                    &global_args.base_dir,
+                    default_chain_id,
+                    global_args.mode.clone(),
+                );
+                let chain_dir =
+                    global_args.base_dir.join(default_chain_id.as_str());
+                let genesis_file_path = global_args
+                    .base_dir
+                    .join(format!("{}.toml", default_chain_id.as_str()));
+                let genesis =
+                    genesis_config::read_genesis_config(&genesis_file_path);
+                let native_token = genesis.native_token;
+                let default_genesis =
+                    genesis_config::open_genesis_config(genesis_file_path)?;
+                let wallet = Wallet::load_or_new_from_genesis(
+                    &chain_dir,
+                    default_genesis,
+                );
 
-        let chain_dir = global_args
-            .base_dir
-            .join(global_config.default_chain_id.as_str());
-        let genesis_file_path = global_args
-            .base_dir
-            .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
-        let native_token = genesis.native_token;
-        let default_genesis =
-            genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet =
-            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
-
-        // If the WASM dir specified, put it in the config
-        match global_args.wasm_dir.as_ref() {
-            Some(wasm_dir) => {
-                config.wasm_dir = wasm_dir.clone();
-            }
-            None => {
-                if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                    let wasm_dir: PathBuf = wasm_dir.into();
-                    config.wasm_dir = wasm_dir;
+                // If the WASM dir specified, put it in the config
+                match global_args.wasm_dir.as_ref() {
+                    Some(wasm_dir) => {
+                        config.wasm_dir = wasm_dir.clone();
+                    }
+                    None => {
+                        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
+                            let wasm_dir: PathBuf = wasm_dir.into();
+                            config.wasm_dir = wasm_dir;
+                        }
+                    }
                 }
+                Some(ChainContext {
+                    wallet,
+                    config,
+                    shielded: ShieldedContext::new(chain_dir),
+                    native_token,
+                })
             }
-        }
+            None => None,
+        };
+
         Ok(Self {
             global_args,
-            wallet,
             global_config,
-            config,
-            shielded: ShieldedContext::new(chain_dir),
-            native_token,
+            chain,
         })
     }
 
+    /// Try to take the chain context, or exit the process with an error if no
+    /// chain is configured.
+    pub fn take_chain_or_exit(self) -> ChainContext {
+        self.chain
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+    }
+
+    /// Try to borrow chain context, or exit the process with an error if no
+    /// chain is configured.
+    pub fn borrow_chain_or_exit(&self) -> &ChainContext {
+        self.chain
+            .as_ref()
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+    }
+
+    /// Try to borrow mutably chain context, or exit the process with an error
+    /// if no chain is configured.
+    pub fn borrow_mut_chain_or_exit(&mut self) -> &mut ChainContext {
+        self.chain
+            .as_mut()
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+    }
+}
+
+fn safe_exit_on_missing_chain_context() -> ! {
+    eprintln!(
+        "No chain is configured. You may need to run `namada client utils \
+         join-network` command."
+    );
+    utils::safe_exit(1)
+}
+
+impl ChainContext {
     /// Parse and/or look-up the value from the context.
     pub fn get<T>(&self, from_context: &FromContext<T>) -> T
     where
@@ -165,22 +216,9 @@ impl Context {
 
     /// Get the wasm directory configured for the chain.
     ///
-    /// Note that in "dev" build, this may be the root `wasm` dir.
+    /// TODO(Tomas): Note that in "dev" build, this may be the root `wasm` dir.
     pub fn wasm_dir(&self) -> PathBuf {
-        let wasm_dir =
-            self.config.ledger.chain_dir().join(&self.config.wasm_dir);
-
-        // In dev-mode with dev chain (the default), load wasm directly from the
-        // root wasm dir instead of the chain dir
-        #[cfg(feature = "dev")]
-        let wasm_dir =
-            if self.global_config.default_chain_id == ChainId::default() {
-                "wasm".into()
-            } else {
-                wasm_dir
-            };
-
-        wasm_dir
+        self.config.ledger.chain_dir().join(&self.config.wasm_dir)
     }
 
     /// Read the given WASM file from the WASM directory or an absolute path.
@@ -224,7 +262,7 @@ pub fn read_or_try_new_global_config(
 /// Argument that can be given raw or found in the [`Context`].
 #[derive(Debug, Clone)]
 pub struct FromContext<T> {
-    raw: String,
+    pub raw: String,
     phantom: PhantomData<T>,
 }
 
@@ -282,8 +320,8 @@ impl<T> FromContext<T>
 where
     T: ArgFromContext,
 {
-    /// Parse and/or look-up the value from the context.
-    fn arg_from_ctx(&self, ctx: &Context) -> Result<T, String> {
+    /// Parse and/or look-up the value from the chain context.
+    fn arg_from_ctx(&self, ctx: &ChainContext) -> Result<T, String> {
         T::arg_from_ctx(ctx, &self.raw)
     }
 }
@@ -292,32 +330,32 @@ impl<T> FromContext<T>
 where
     T: ArgFromMutContext,
 {
-    /// Parse and/or look-up the value from the mutable context.
-    fn arg_from_mut_ctx(&self, ctx: &mut Context) -> Result<T, String> {
+    /// Parse and/or look-up the value from the mutable chain context.
+    fn arg_from_mut_ctx(&self, ctx: &mut ChainContext) -> Result<T, String> {
         T::arg_from_mut_ctx(ctx, &self.raw)
     }
 }
 
-/// CLI argument that found via the [`Context`].
+/// CLI argument that found via the [`ChainContext`].
 pub trait ArgFromContext: Sized {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String>;
 }
 
-/// CLI argument that found via the [`Context`] and cached (as in case of an
-/// encrypted keypair that has been decrypted), hence using mutable context.
+/// CLI argument that found via the [`ChainContext`] and cached (as in case of
+/// an encrypted keypair that has been decrypted), hence using mutable context.
 pub trait ArgFromMutContext: Sized {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String>;
 }
 
 impl ArgFromContext for Address {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -335,7 +373,7 @@ impl ArgFromContext for Address {
 
 impl ArgFromMutContext for common::SecretKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -351,7 +389,7 @@ impl ArgFromMutContext for common::SecretKey {
 
 impl ArgFromMutContext for common::PublicKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -376,7 +414,7 @@ impl ArgFromMutContext for common::PublicKey {
 
 impl ArgFromMutContext for ExtendedSpendingKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -392,7 +430,7 @@ impl ArgFromMutContext for ExtendedSpendingKey {
 
 impl ArgFromMutContext for ExtendedViewingKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -409,7 +447,7 @@ impl ArgFromMutContext for ExtendedViewingKey {
 
 impl ArgFromContext for PaymentAddress {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -426,7 +464,7 @@ impl ArgFromContext for PaymentAddress {
 
 impl ArgFromMutContext for TransferSource {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -442,7 +480,7 @@ impl ArgFromMutContext for TransferSource {
 
 impl ArgFromContext for TransferTarget {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -457,7 +495,7 @@ impl ArgFromContext for TransferTarget {
 
 impl ArgFromMutContext for BalanceOwner {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();

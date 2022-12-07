@@ -10,7 +10,8 @@ use namada::types::transaction::GasLimit;
 use namada::types::{key, token};
 
 use super::rpc;
-use crate::cli::{args, Context};
+use crate::cli::args;
+use crate::cli::context::ChainContext;
 use crate::client::tx::Conversions;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -73,7 +74,7 @@ pub trait ShieldedTransferContext {
 }
 
 #[async_trait(?Send)]
-impl ShieldedTransferContext for Context {
+impl ShieldedTransferContext for ChainContext {
     async fn collect_unspent_notes(
         &mut self,
         ledger_address: TendermintAddress,

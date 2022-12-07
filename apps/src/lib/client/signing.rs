@@ -13,8 +13,8 @@ use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
 use super::rpc;
-use crate::cli::context::{WalletAddress, WalletKeypair};
-use crate::cli::{self, args, Context};
+use crate::cli::context::{ChainContext, WalletAddress, WalletKeypair};
+use crate::cli::{self, args};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::HttpClient;
@@ -91,7 +91,7 @@ pub enum TxSigningKey {
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
 pub async fn tx_signer(
-    ctx: &mut Context,
+    ctx: &mut ChainContext,
     args: &args::Tx,
     mut default: TxSigningKey,
 ) -> common::SecretKey {
@@ -146,20 +146,20 @@ pub async fn tx_signer(
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
-    mut ctx: Context,
+    ctx: &mut ChainContext,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (Context, TxBroadcastData) {
+) -> TxBroadcastData {
     if args.dump_tx {
-        dump_tx_helper(&ctx, &tx, "unsigned", None);
+        dump_tx_helper(ctx, &tx, "unsigned", None);
     }
 
-    let keypair = tx_signer(&mut ctx, args, default).await;
+    let keypair = tx_signer(ctx, args, default).await;
     let tx = tx.sign(&keypair);
     if args.dump_tx {
-        dump_tx_helper(&ctx, &tx, "signed", None);
+        dump_tx_helper(ctx, &tx, "signed", None);
     }
 
     let epoch = rpc::query_and_print_epoch(args::Query {
@@ -170,7 +170,7 @@ pub async fn sign_tx(
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
-            &ctx,
+            ctx,
             args,
             epoch,
             tx,
@@ -193,14 +193,14 @@ pub async fn sign_tx(
             } => (tx, wrapper_hash),
         };
 
-        dump_tx_helper(&ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
+        dump_tx_helper(ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
     }
 
-    (ctx, broadcast_data)
+    broadcast_data
 }
 
 pub fn dump_tx_helper(
-    ctx: &Context,
+    ctx: &ChainContext,
     tx: &Tx,
     extension: &str,
     precomputed_hash: Option<&String>,
@@ -228,7 +228,7 @@ pub fn dump_tx_helper(
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper(
-    ctx: &Context,
+    ctx: &ChainContext,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,

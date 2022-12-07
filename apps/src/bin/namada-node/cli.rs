@@ -8,12 +8,15 @@ use namada_apps::node::ledger;
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
     if let Some(mode) = ctx.global_args.mode.clone() {
-        ctx.config.ledger.tendermint.tendermint_mode = mode;
+        if let Some(chain) = ctx.chain.as_mut() {
+            chain.config.ledger.tendermint.tendermint_mode = mode;
+        }
     }
     match cmd {
         cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
-                let wasm_dir = ctx.wasm_dir();
+                let chain_ctx = ctx.take_chain_or_exit();
+                let wasm_dir = chain_ctx.wasm_dir();
 
                 // Sleep until start time if needed
                 if let Some(time) = args.0 {
@@ -31,14 +34,16 @@ pub fn main() -> Result<()> {
                         }
                     }
                 }
-                ledger::run(ctx.config.ledger, wasm_dir);
+                ledger::run(chain_ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
-                ledger::reset(ctx.config.ledger)
+                let chain_ctx = ctx.take_chain_or_exit();
+                ledger::reset(chain_ctx.config.ledger)
                     .wrap_err("Failed to reset Namada node")?;
             }
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
-                ledger::dump_db(ctx.config.ledger, args);
+                let chain_ctx = ctx.take_chain_or_exit();
+                ledger::dump_db(chain_ctx.config.ledger, args);
             }
         },
         cmds::NamadaNode::Config(sub) => match sub {
@@ -47,18 +52,18 @@ pub fn main() -> Result<()> {
                 // In here, we just need to overwrite the default chain ID, in
                 // case it's been already set to a different value
                 if let Some(chain_id) = ctx.global_args.chain_id.as_ref() {
-                    ctx.global_config.default_chain_id = chain_id.clone();
+                    ctx.global_config.default_chain_id = Some(chain_id.clone());
                     ctx.global_config
                         .write(&ctx.global_args.base_dir)
                         .unwrap_or_else(|err| {
-                            eprintln!("Error writing global config: {}", err);
+                            eprintln!("Error writing global config: {err}");
                             cli::safe_exit(1)
                         });
+                    tracing::debug!(
+                        "Generated config and set default chain ID to \
+                         {chain_id}"
+                    );
                 }
-                tracing::debug!(
-                    "Generated config and set default chain ID to {}",
-                    &ctx.global_config.default_chain_id
-                );
             }
         },
     }
