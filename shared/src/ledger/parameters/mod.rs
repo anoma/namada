@@ -120,7 +120,7 @@ pub struct Parameters {
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
     pub max_expected_time_per_block: DurationSecs,
-    /// Max Tendermint block size in bytes.
+    /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
     /// Whitelisted validity predicate hashes
     pub vp_whitelist: Vec<String>,

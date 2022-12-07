@@ -227,7 +227,7 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
-        // Max size, in bytes, for the txs to be included in a block.
+        // Max payload size, in bytes, for a tx batch proposal.
         pub max_proposal_bytes: ProposalBytes,
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
