@@ -71,9 +71,7 @@ fn native_erc20_address(ctx: &mut Ctx) -> EnvResult<EthAddress> {
     log_string("Trying to get wnam key");
     let addr = ctx
         .read_bytes(&native_erc20_key())
-        .map_err(|_| {
-            Error::SimpleMessage("Could not read wNam key from storage")
-        })?
+        .map_err(|e| Error::wrap("Could not read wNam key from storage", e))?
         .unwrap();
     log_string("Got wnam key");
     Ok(BorshDeserialize::try_from_slice(addr.as_slice()).unwrap())
