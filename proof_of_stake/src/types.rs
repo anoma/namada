@@ -9,7 +9,7 @@ use std::ops::{Add, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
-use namada_core::ledger::storage_api::collections::LazyMap;
+use namada_core::ledger::storage_api::collections::{LazyMap, LazyVec};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
@@ -345,6 +345,22 @@ pub struct Slash {
 /// Slashes applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
 pub type Slashes = Vec<Slash>;
+
+/// A slash applied to validator, to punish byzantine behavior by removing
+/// their staked tokens at and before the epoch of the slash.
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct Slash_NEW {
+    /// Epoch at which the slashable event occurred.
+    pub epoch: Epoch,
+    /// Block height at which the slashable event occurred.
+    pub block_height: u64,
+    /// A type of slashsable event.
+    pub r#type: SlashType,
+}
+
+/// Slashes applied to validator, to punish byzantine behavior by removing
+/// their staked tokens at and before the epoch of the slash.
+pub type Slashes_NEW = LazyVec<Slash_NEW>;
 
 /// A type of slashsable event.
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]

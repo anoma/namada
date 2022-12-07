@@ -28,8 +28,10 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
-use namada_core::ledger::storage_api::collections::LazyCollection;
+use namada_core::ledger::storage_api::collections::lazy_map::{
+    NestedSubKey, SubKey,
+};
+use namada_core::ledger::storage_api::collections::{LazyCollection, Nested};
 use namada_core::ledger::storage_api::{
     self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
@@ -46,12 +48,13 @@ use storage::{
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, Bonds_NEW, CommissionRates, CommissionRates_NEW,
-    GenesisValidator, Position, Slash, SlashType, Slashes, TotalDeltas,
-    TotalDeltas_NEW, Unbond, Unbond_NEW, Unbonds, ValidatorConsensusKeys,
-    ValidatorConsensusKeys_NEW, ValidatorDeltas, ValidatorDeltas_NEW,
-    ValidatorPositionAddresses_NEW, ValidatorSet, ValidatorSetPositions_NEW,
-    ValidatorSetUpdate, ValidatorSet_NEW, ValidatorSets, ValidatorSets_NEW,
-    ValidatorState, ValidatorStates, ValidatorStates_NEW,
+    GenesisValidator, Position, Slash, SlashType, Slash_NEW, Slashes,
+    Slashes_NEW, TotalDeltas, TotalDeltas_NEW, Unbond, Unbond_NEW, Unbonds,
+    ValidatorConsensusKeys, ValidatorConsensusKeys_NEW, ValidatorDeltas,
+    ValidatorDeltas_NEW, ValidatorPositionAddresses_NEW, ValidatorSet,
+    ValidatorSetPositions_NEW, ValidatorSetUpdate, ValidatorSet_NEW,
+    ValidatorSets, ValidatorSets_NEW, ValidatorState, ValidatorStates,
+    ValidatorStates_NEW,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -1763,6 +1766,12 @@ pub fn validator_set_positions_handle() -> ValidatorSetPositions_NEW {
     ValidatorSetPositions_NEW::open(key)
 }
 
+/// Get the storage handle to a PoS validator's slashes
+pub fn validator_slashes_handle(validator: &Address) -> Slashes_NEW {
+    let key = storage::validator_slashes_key(validator);
+    Slashes_NEW::open(key)
+}
+
 /// new init genesis
 pub fn init_genesis_new<S>(
     storage: &mut S,
@@ -2646,4 +2655,86 @@ where
         )?;
     }
     Ok(())
+}
+
+/// NEW: Withdraw.
+fn withdraw_tokens_new<S>(
+    storage: &mut S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+{
+    let params = storage.read_pos_params();
+    let source = source.unwrap_or(validator);
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
+
+    let slashes = validator_slashes_handle(validator);
+    // TODO: need some error handling to determine if this unbond even exists?
+    let unbond_handle = unbond_handle(source, validator);
+
+    let mut slashed = token::Amount::default();
+    let mut withdrawable_amount = token::Amount::default();
+    let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
+    let mut unbond_iter = unbond_handle.iter(storage)?;
+    loop {
+        let unbond = unbond_iter.next().transpose()?;
+        if unbond.is_none() {
+            continue;
+        }
+        let unbond_info = unbond.map(|(a, b)| match a {
+            NestedSubKey::Data {
+                key,
+                nested_sub_key,
+            } => match nested_sub_key {
+                SubKey::Data(val) => ((key, val), b),
+            },
+        });
+        let ((end_epoch, start_epoch), amount) = unbond_info.unwrap();
+
+        // TODO: worry about updating this later after PR 740 perhaps
+        // 1. cubic slashing
+        // 2. adding slash rates in same epoch, applying cumulatively in dif
+        // epochs
+        if end_epoch > current_epoch {
+            break;
+        }
+        for slash in slashes.iter(storage)? {
+            let slash = slash?;
+            if slash.epoch > start_epoch && slash.epoch < end_epoch {
+                let slash_rate = get_slash_rate(&params, &slash);
+                let to_slash = token::Amount::from(decimal_mult_u64(
+                    slash_rate,
+                    u64::from(amount),
+                ));
+                slashed += to_slash;
+                withdrawable_amount += amount - to_slash;
+                unbonds_to_remove.push((end_epoch, start_epoch));
+            }
+        }
+    }
+    drop(unbond_iter);
+
+    // Remove the unbond data from storage
+    for (end_epoch, start_epoch) in unbonds_to_remove {
+        unbond_handle.at(&end_epoch).remove(storage, &start_epoch)?;
+        // TODO: check if the `end_epoch` layer is now empty and remove it if
+        // so, may need to implement remove for nested map
+    }
+
+    Ok(())
+}
+
+fn get_slash_rate(params: &PosParams, slash: &Slash_NEW) -> Decimal {
+    match slash.r#type {
+        SlashType::DuplicateVote => params.duplicate_vote_min_slash_rate,
+        SlashType::LightClientAttack => {
+            params.light_client_attack_min_slash_rate
+        }
+    }
 }
