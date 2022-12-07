@@ -81,16 +81,12 @@ mod protocol_txs {
         NewDkgKeypair(Tx),
         /// Ethereum events contained in vote extensions that
         /// are compressed before being included on chain
-        #[cfg(feature = "abcipp")]
         EthereumEvents(ethereum_events::VextDigest),
         /// Validator set updates contained in vote extensions
-        #[cfg(feature = "abcipp")]
         ValidatorSetUpdate(validator_set_update::VextDigest),
         /// Ethereum events seen by some validator
-        #[cfg(not(feature = "abcipp"))]
         EthEventsVext(ethereum_events::SignedVext),
         /// Validator set update signed by some validator
-        #[cfg(not(feature = "abcipp"))]
         ValSetUpdateVext(validator_set_update::SignedVext),
     }
 

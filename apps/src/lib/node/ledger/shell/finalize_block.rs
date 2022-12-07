@@ -4,6 +4,7 @@ use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -152,7 +153,6 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    #[cfg(not(feature = "abcipp"))]
                     ProtocolTxType::EthEventsVext(ref ext) => {
                         if self
                             .mode
@@ -168,29 +168,25 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(not(feature = "abcipp"))]
                     ProtocolTxType::ValSetUpdateVext(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::EthereumEvents(ref digest) => {
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
                         {
-                            for event in
-                                digest.events.iter().map(|signed| &signed.event)
+                            let this_signer =
+                                &(address, self.storage.last_height);
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
                             {
-                                self.mode.dequeue_eth_event(event);
+                                if signers.contains(this_signer) {
+                                    self.mode.dequeue_eth_event(event);
+                                }
                             }
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
@@ -775,14 +771,10 @@ mod test_finalize_block {
             validator_addr: address.clone(),
         }
         .sign(&protocol_key);
-
         #[cfg(feature = "abcipp")]
         let processed_tx = {
             let signed = MultiSignedEthEvent {
                 event,
-                #[cfg(feature = "abcipp")]
-                signers: BTreeSet::from([address.clone()]),
-                #[cfg(not(feature = "abcipp"))]
                 signers: BTreeSet::from([(
                     address.clone(),
                     shell.storage.last_height,

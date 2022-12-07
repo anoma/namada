@@ -65,11 +65,7 @@ pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
     /// List of addresses of validators who signed this event
-    #[cfg(feature = "abcipp")]
-    pub signers: BTreeSet<Address>,
-    /// List of addresses of validators who signed this event
     /// and block height at which they signed it
-    #[cfg(not(feature = "abcipp"))]
     pub signers: BTreeSet<(Address, BlockHeight)>,
 }
 
