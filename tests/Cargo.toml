@@ -8,13 +8,18 @@ resolver = "2"
 version = "0.11.0"
 
 [features]
-default = ["wasm-runtime"]
-wasm-runtime = ["namada/wasm-runtime"]
+default = ["abciplus"]
+abciplus = [
+  "namada/abciplus",
+  "namada/ibc-mocks",
+  "namada_vp_prelude/abciplus",
+  "namada_tx_prelude/abciplus",
+]
 
 [dependencies]
-namada = {path = "../shared", features = ["testing", "ibc-mocks"]}
-namada_vp_prelude = {path = "../vp_prelude"}
-namada_tx_prelude = {path = "../tx_prelude"}
+namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
+namada_vp_prelude = {path = "../vp_prelude", default-features = false}
+namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 concat-idents = "1.1.2"
 ibc = {version = "0.14.0", default-features = false}

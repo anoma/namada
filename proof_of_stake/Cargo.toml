@@ -9,12 +9,15 @@ resolver = "2"
 version = "0.11.0"
 
 [features]
-default = []
+default = ["abciplus"]
+abciplus = [
+  "namada_core/abciplus",
+]
 # testing helpers
 testing = ["proptest"]
 
 [dependencies]
-namada_core = {path = "../core"}
+namada_core = {path = "../core", default-features = false}
 borsh = "0.9.1"
 derivative = "2.2.0"
 # A fork with state machine testing
