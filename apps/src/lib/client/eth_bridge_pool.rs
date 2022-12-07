@@ -91,6 +91,8 @@ pub async fn query_bridge_pool(args: args::Query) {
         println!("Bridge pool is empty.");
         return;
     }
-    let contents = BridgePoolResponse{ bridge_pool_contents: pool_contents};
+    let contents = BridgePoolResponse {
+        bridge_pool_contents: pool_contents,
+    };
     println!("{}", serde_json::to_string_pretty(&contents).unwrap());
 }
