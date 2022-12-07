@@ -33,7 +33,7 @@ pub mod genesis_config {
     use namada::ledger::pos::types::BasisPoints;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
-    use namada::types::chain::TendermintBytesPerBlock;
+    use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
@@ -227,8 +227,8 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
-        // Max Tendermint block size in bytes.
-        pub max_bytes_per_block: TendermintBytesPerBlock,
+        // Max size, in bytes, for the txs to be included in a block.
+        pub max_proposal_bytes: ProposalBytes,
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
@@ -548,7 +548,7 @@ pub mod genesis_config {
                     config.parameters.max_expected_time_per_block,
                 )
                 .into(),
-            max_bytes_per_block: config.parameters.max_bytes_per_block,
+            max_proposal_bytes: config.parameters.max_proposal_bytes,
             vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
         };
@@ -809,7 +809,7 @@ pub fn genesis() -> Genesis {
             min_duration: namada::types::time::Duration::seconds(600).into(),
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
-        max_bytes_per_block: Default::default(),
+        max_proposal_bytes: Default::default(),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
     };

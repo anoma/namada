@@ -31,11 +31,11 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct ProposalSize {
+pub struct ProposalBytes {
     inner: NonZeroU64,
 }
 
-impl Serialize for ProposalSize {
+impl Serialize for ProposalBytes {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -44,7 +44,7 @@ impl Serialize for ProposalSize {
     }
 }
 
-impl<'de> Deserialize<'de> for ProposalSize {
+impl<'de> Deserialize<'de> for ProposalBytes {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -52,7 +52,7 @@ impl<'de> Deserialize<'de> for ProposalSize {
         struct Visitor;
 
         impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = ProposalSize;
+            type Value = ProposalBytes;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 write!(f, "a u64 in the range 1 - 104857600")
@@ -62,7 +62,7 @@ impl<'de> Deserialize<'de> for ProposalSize {
             where
                 E: serde::de::Error,
             {
-                ProposalSize::new(size).ok_or_else(|| {
+                ProposalBytes::new(size).ok_or_else(|| {
                     serde::de::Error::invalid_value(
                         serde::de::Unexpected::Unsigned(size),
                         &self,
@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for ProposalSize {
     }
 }
 
-impl BorshSchema for ProposalSize {
+impl BorshSchema for ProposalBytes {
     fn add_definitions_recursively(
         definitions: &mut std::collections::HashMap<
             borsh::schema::Declaration,
@@ -95,7 +95,7 @@ impl BorshSchema for ProposalSize {
     }
 }
 
-impl Default for ProposalSize {
+impl Default for ProposalBytes {
     #[inline]
     fn default() -> Self {
         Self {
@@ -105,12 +105,12 @@ impl Default for ProposalSize {
 }
 
 // constants
-impl ProposalSize {
-    /// The upper bound of a [`ProposalSize`] value.
-    pub const MAX: ProposalSize = ProposalSize {
+impl ProposalBytes {
+    /// The upper bound of a [`ProposalBytes`] value.
+    pub const MAX: ProposalBytes = ProposalBytes {
         inner: Self::RAW_MAX,
     };
-    /// The (raw) default value for a [`ProposalSize`].
+    /// The (raw) default value for a [`ProposalBytes`].
     ///
     /// This value must be within the range `[1 B, 21 MiB]`.
     const RAW_DEFAULT: NonZeroU64 = unsafe {
@@ -119,7 +119,7 @@ impl ProposalSize {
         // Moreover, 21 MiB <= 90 MiB.
         NonZeroU64::new_unchecked(21 << 20)
     };
-    /// The (raw) upper bound of a [`ProposalSize`] value.
+    /// The (raw) upper bound of a [`ProposalBytes`] value.
     ///
     /// The maximum space a serialized Tendermint block can
     /// occupy is 100 MiB. We reserve 10 MiB for serialization
@@ -132,18 +132,18 @@ impl ProposalSize {
     };
 }
 
-impl ProposalSize {
+impl ProposalBytes {
     /// Return the number of bytes as a [`u64`] value.
     #[inline]
     pub const fn get(self) -> u64 {
         self.inner.get()
     }
 
-    /// Try to construct a new [`ProposalSize`] instance,
+    /// Try to construct a new [`ProposalBytes`] instance,
     /// from the given `max_bytes` value.
     ///
     /// This function will return [`None`] if `max_bytes` is not within
-    /// the inclusive range of 1 to [`ProposalSize::MAX`].
+    /// the inclusive range of 1 to [`ProposalBytes::MAX`].
     #[inline]
     pub fn new(max_bytes: u64) -> Option<Self> {
         NonZeroU64::new(max_bytes)
@@ -377,13 +377,13 @@ mod tests {
             assert!(errors.is_empty(), "There should be no validation errors {:#?}", errors);
         }
 
-        /// Test if [`ProposalSize`] serde serialization is correct.
+        /// Test if [`ProposalBytes`] serde serialization is correct.
         #[test]
-        fn test_proposal_size_serialize_roundtrip(s in 1u64..=ProposalSize::MAX.get()) {
-            let size = ProposalSize::new(s).expect("Test failed");
+        fn test_proposal_size_serialize_roundtrip(s in 1u64..=ProposalBytes::MAX.get()) {
+            let size = ProposalBytes::new(s).expect("Test failed");
             assert_eq!(size.get(), s);
             let json = serde_json::to_string(&size).expect("Test failed");
-            let deserialized: ProposalSize =
+            let deserialized: ProposalBytes =
                 serde_json::from_str(&json).expect("Test failed");
             assert_eq!(size, deserialized);
         }
