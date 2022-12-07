@@ -111,7 +111,7 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let new_votes = NewVotes::new(seen_by.clone(), &voting_powers)?;
+        let new_votes = NewVotes::new(seen_by, &voting_powers)?;
         let (tally, changed) =
             votes::update::calculate(storage, &valset_upd_keys, new_votes)?;
         if changed.is_empty() {
