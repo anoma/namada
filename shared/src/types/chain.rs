@@ -55,7 +55,7 @@ impl<'de> Deserialize<'de> for ProposalBytes {
             type Value = ProposalBytes;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "a u64 in the range 1 - 104857600")
+                write!(f, "a u64 in the range 1 - 94371840")
             }
 
             fn visit_u64<E>(self, size: u64) -> Result<Self::Value, E>
