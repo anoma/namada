@@ -42,14 +42,14 @@ Below, we will review the rules around important PoS actions
 **Validator Sets**
 
 Namada validators are classified into one of three sets:
-- **Consensus:** validators that are active in the consensus voting mechanism, chosen to be the `max_validators` largest validators weighted by their voting power. They are the only validators who can earn block rewards from the PoS inflation.
+- **Consensus:** validators that are active in the consensus voting mechanism, chosen to be the `max_consensus_validators` largest validators weighted by their voting power. They are the only validators who can earn block rewards from the PoS inflation.
 - **Below capacity:** validators whose bonded stake is less than the *consensus* validators but above some small threshold `min_validator_stake`.
 - **Below threshold:** all other validators with stake below `min_validator_stake`.
 
 The *consensus* and *below capacity* validator sets are explicitly held in storage, ordered by their bonded stake, and are updated at every epoch boundary. However, no ordered set of *below threshold* validators is kept in storage. This validator set construction and the `min_validator_stake` threshold exist primarily to prevent the possibility of significant slowing of PoS system updates due to spam validator account creation. Thus, unbounded iteration when updating and validating PoS system state changes is avoided. Conversely, the *below capacity* validator set must be kept in storage, ordered by bonded stake, in order to properly process validator set changes in which validators may drop out or enter the *consensus* validator set. Note that this construction of the validator sets is only important for the consensus mechanism; all validators can participate with their voting power in governance.
 
 **Important validator set configuration values, mutable via governance (with default values):**
-- `max_validators` = 100
+- `max_consensus_validators` = 100
 - `min_validator_stake` = 1 NAM
 
 # Cubic Slashing
