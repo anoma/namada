@@ -28,18 +28,18 @@ impl NewVotes {
         voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
     ) -> Result<Self> {
         let mut inner = HashMap::default();
-        for (address, block_height) in votes {
-            let fract_voting_power = match voting_powers
-                .get(&(address.clone(), block_height))
-            {
+        for vote in votes {
+            let fract_voting_power = match voting_powers.get(&vote) {
                 Some(fract_voting_power) => fract_voting_power,
                 None => {
+                    let (address, block_height) = vote;
                     return Err(eyre!(
                         "No fractional voting power provided for vote by \
                          validator {address} at block height {block_height}"
                     ));
                 }
             };
+            let (address, block_height) = vote;
             _ = inner
                 .insert(address, (block_height, fract_voting_power.to_owned()));
         }
