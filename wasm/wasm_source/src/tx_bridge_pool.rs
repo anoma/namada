@@ -63,9 +63,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     // add transfer into the pool
     let pending_key = bridge_pool::get_pending_key(&transfer);
     ctx.write_bytes(&pending_key, transfer.try_to_vec().unwrap())
-        .map_err(|_| {
-            Error::SimpleMessage("Could not write transfer to bridge pool")
-        })?;
+        .wrap_err("Could not write transfer to bridge pool")?;
     Ok(())
 }
 
