@@ -69,6 +69,18 @@ impl<'de> Deserialize<'de> for ProposalBytes {
                     )
                 })
             }
+
+            fn visit_i64<E>(self, size: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ProposalBytes::new(size as u64).ok_or_else(|| {
+                    serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Signed(size),
+                        &self,
+                    )
+                })
+            }
         }
 
         deserializer.deserialize_u64(Visitor)
