@@ -33,6 +33,7 @@ where
     ///  * There are no duplicate Ethereum events in this vote extension, and
     ///    the events are sorted in ascending order.
     #[inline]
+    #[allow(dead_code)]
     pub fn validate_eth_events_vext(
         &self,
         ext: Signed<ethereum_events::Vext>,

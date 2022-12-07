@@ -695,6 +695,8 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    // TODO: move this to another file after 0.11 merges,
+    // since this method has become fairly large at this point
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -705,7 +707,9 @@ where
         };
 
         let mut response = response::CheckTx::default();
+
         const VALID_MSG: &str = "Mempool validation passed";
+        const INVALID_MSG: &str = "Mempool validation failed";
 
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(tx) => {
@@ -715,16 +719,19 @@ where
                         tx: ProtocolTxType::EthEventsVext(ext),
                         ..
                     })) => {
-                        if self.validate_eth_events_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
-                            response.log = String::from(VALID_MSG);
-                        } else {
+                        if let Err(err) = self
+                            .validate_eth_events_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid Ethereum events vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid Ethereum events vote \
+                                 extension: {err}",
                             );
+                        } else {
+                            response.log = String::from(VALID_MSG);
                         }
                     }
                     #[cfg(not(feature = "abcipp"))]
@@ -732,33 +739,57 @@ where
                         tx: ProtocolTxType::ValSetUpdateVext(ext),
                         ..
                     })) => {
-                        if self.validate_valset_upd_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
-                            response.log = String::from(VALID_MSG);
-                        } else {
+                        if let Err(err) = self
+                            .validate_valset_upd_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid validator set update vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid validator set update \
+                                 vote extension: {err}",
                             );
+                        } else {
+                            response.log = String::from(VALID_MSG);
+                            // validator set update votes should be decided
+                            // as soon as possible
+                            response.priority = i64::MAX;
                         }
                     }
-                    Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
+                    Ok(TxType::Protocol(ProtocolTx { .. })) => {
                         response.code = 1;
                         response.log = format!(
-                            "The following protocol tx cannot be added to the \
-                             mempool: {tx:?}"
+                            "{INVALID_MSG}: The given protocol tx cannot be \
+                             added to the mempool"
                         );
                     }
-                    // `process_tx` errors are handled by
-                    // `Shell::finalize_block`
-                    _ => response.log = String::from(VALID_MSG),
+                    Ok(TxType::Wrapper(_)) => {
+                        response.log = String::from(VALID_MSG);
+                    }
+                    Ok(TxType::Raw(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Raw transactions cannot be \
+                             accepted into the mempool"
+                        );
+                    }
+                    Ok(TxType::Decrypted(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Decrypted txs cannot be sent by \
+                             clients"
+                        );
+                    }
+                    Err(err) => {
+                        response.code = 1;
+                        response.log = format!("{INVALID_MSG}: {err}");
+                    }
                 }
             }
             Err(msg) => {
                 response.code = 1;
-                response.log = msg.to_string();
+                response.log = format!("{INVALID_MSG}: {msg}");
             }
         }
 
