@@ -314,7 +314,7 @@ where
         .expect("Couldn't read epoch duration parameters");
 
     // read max proposal bytes
-    let (max_proposal_bytes, gas_block_bytes) = {
+    let (max_proposal_bytes, gas_proposal_bytes) = {
         let key = storage::get_max_proposal_bytes_key();
         let (value, gas) =
             storage.read(&key).map_err(ReadError::StorageError)?;
@@ -351,13 +351,14 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
-    let total_gas_cost = [gas_epoch, gas_tx, gas_vp, gas_time, gas_block_bytes]
-        .into_iter()
-        .fold(0u64, |accum, gas| {
-            accum
-                .checked_add(gas)
-                .expect("u64 overflow occurred while doing gas arithmetic")
-        });
+    let total_gas_cost =
+        [gas_epoch, gas_tx, gas_vp, gas_time, gas_proposal_bytes]
+            .into_iter()
+            .fold(0u64, |accum, gas| {
+                accum
+                    .checked_add(gas)
+                    .expect("u64 overflow occurred while doing gas arithmetic")
+            });
 
     Ok((
         Parameters {
