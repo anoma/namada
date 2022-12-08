@@ -7,6 +7,7 @@ use eyre::Result;
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
+use crate::ledger::protocol::transactions::votes::update::NewVotes;
 use crate::ledger::protocol::transactions::votes::{self, Votes};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
@@ -110,24 +111,12 @@ where
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
         );
-        let mut votes = HashMap::default();
-        seen_by.into_iter().for_each(|(address, block_height)| {
-            let fract_voting_power =
-                voting_powers.get(&(address.clone(), block_height)).unwrap();
-            if let Some(already_present_fract_voting_power) =
-                votes.insert(address.clone(), fract_voting_power.to_owned())
-            {
-                tracing::warn!(
-                    ?address,
-                    ?already_present_fract_voting_power,
-                    new_fract_voting_power = ?fract_voting_power,
-                    "Validator voted more than once on validator set update, \
-                     arbitrarily using later value"
-                )
-            }
-        });
+        let new_votes = NewVotes::new(seen_by, &voting_powers)?;
         let (tally, changed) =
-            votes::calculate_updated(storage, &valset_upd_keys, &votes)?;
+            votes::update::calculate(storage, &valset_upd_keys, new_votes)?;
+        if changed.is_empty() {
+            return Ok(changed);
+        }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
         (tally, changed, confirmed)
     };

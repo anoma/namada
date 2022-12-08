@@ -5,15 +5,14 @@ mod events;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use eth_msgs::{EthMsg, EthMsgUpdate};
+use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 
 use super::ChangedKeys;
 use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils;
-use crate::ledger::protocol::transactions::votes::{
-    self, calculate_new, calculate_updated,
-};
+use crate::ledger::protocol::transactions::utils::{self};
+use crate::ledger::protocol::transactions::votes::update::NewVotes;
+use crate::ledger::protocol::transactions::votes::{self, calculate_new};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
@@ -68,7 +67,11 @@ where
     })
 }
 
-/// Apply an Ethereum state update + act on any events which are confirmed
+/// Apply votes to Ethereum events in storage and act on any events which are
+/// confirmed.
+///
+/// The `voting_powers` map must contain a voting power for all
+/// `(Address, BlockHeight)`s that occur in any of the `updates`.
 pub(super) fn apply_updates<D, H>(
     storage: &mut Storage<D, H>,
     updates: HashSet<EthMsgUpdate>,
@@ -113,6 +116,9 @@ where
 
 /// Apply an [`EthMsgUpdate`] to storage. Returns any keys changed and whether
 /// the event was newly seen.
+///
+/// The `voting_powers` map must contain a voting power for all
+/// `(Address, BlockHeight)`s that occur in `update`.
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     update: EthMsgUpdate,
@@ -140,39 +146,24 @@ where
             %eth_msg_keys.prefix,
             "Ethereum event already exists in storage",
         );
-        let mut votes = HashMap::default();
-        update.seen_by.iter().for_each(|(address, block_height)| {
-            let voting_power = voting_powers
-                .get(&(address.to_owned(), block_height.to_owned()))
-                .unwrap();
-            if let Some(already_present_voting_power) =
-                votes.insert(address.to_owned(), voting_power.to_owned())
-            {
-                tracing::warn!(
-                    ?address,
-                    ?already_present_voting_power,
-                    new_voting_power = ?voting_power,
-                    "Validator voted more than once, arbitrarily using later value",
-                )
-            }
-        });
+        let new_votes = NewVotes::new(update.seen_by.clone(), voting_powers)?;
         let (vote_tracking, changed) =
-            calculate_updated(storage, &eth_msg_keys, &votes)?;
+            votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
+        if changed.is_empty() {
+            return Ok((changed, false));
+        }
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
         (vote_tracking, changed, confirmed)
     };
-    let eth_msg_post = EthMsg {
-        body: update.body,
-        votes: vote_tracking,
-    };
-    tracing::debug!("writing EthMsg - {:#?}", &eth_msg_post);
+
     votes::storage::write(
         storage,
         &eth_msg_keys,
-        &eth_msg_post.body,
-        &eth_msg_post.votes,
+        &update.body,
+        &vote_tracking,
     )?;
+
     Ok((changed, confirmed))
 }
 

@@ -1,5 +1,6 @@
 //! This module contains types related with validator voting power calculations.
 
+use std::iter::Sum;
 use std::ops::{Add, AddAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -8,7 +9,7 @@ use num_rational::Ratio;
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct FractionalVotingPower(Ratio<u64>);
 
 impl FractionalVotingPower {
@@ -41,6 +42,12 @@ impl Default for FractionalVotingPower {
 impl From<&FractionalVotingPower> for (u64, u64) {
     fn from(ratio: &FractionalVotingPower) -> Self {
         (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
+    }
+}
+
+impl Sum for FractionalVotingPower {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::default(), Add::add)
     }
 }
 
