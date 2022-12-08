@@ -315,7 +315,7 @@ where
     fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
         // TODO: implement this method for ABCI++; should only be able to send
         // a validator set update at the second block of an epoch
-        true
+        false
     }
 
     #[cfg(not(feature = "abcipp"))]

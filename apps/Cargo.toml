@@ -59,6 +59,7 @@ abcipp = [
     "tendermint-proto-abcipp",
     "tendermint-rpc-abcipp",
     "tower-abci-abcipp",
+    "namada/tendermint-abcipp"
 ]
 
 abciplus = [

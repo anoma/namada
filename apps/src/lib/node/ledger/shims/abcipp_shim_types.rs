@@ -15,8 +15,7 @@ pub mod shim {
         RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
         ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush,
         ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot,
-        ResponsePrepareProposal, ResponseQuery,
+        ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
     };
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
@@ -120,7 +119,7 @@ pub mod shim {
         InitChain(ResponseInitChain),
         Info(ResponseInfo),
         Query(ResponseQuery),
-        PrepareProposal(ResponsePrepareProposal),
+        PrepareProposal(response::PrepareProposal),
         VerifyHeader(response::VerifyHeader),
         ProcessProposal(response::ProcessProposal),
         RevertProposal(response::RevertProposal),
@@ -167,7 +166,7 @@ pub mod shim {
                     Ok(Resp::ApplySnapshotChunk(inner))
                 }
                 Response::PrepareProposal(inner) => {
-                    Ok(Resp::PrepareProposal(inner))
+                    Ok(Resp::PrepareProposal(inner.into()))
                 }
                 #[cfg(feature = "abcipp")]
                 Response::ExtendVote(inner) => Ok(Resp::ExtendVote(inner)),
@@ -263,7 +262,8 @@ pub mod shim {
         use namada::ledger::events::EventLevel;
 
         use crate::facade::tendermint_proto::abci::{
-            Event as TmEvent, ResponseProcessProposal, ValidatorUpdate,
+            Event as TmEvent, ResponsePrepareProposal, ResponseProcessProposal,
+            ValidatorUpdate,
         };
         #[cfg(not(feature = "abcipp"))]
         use crate::facade::tendermint_proto::types::ConsensusParams;
@@ -273,6 +273,24 @@ pub mod shim {
             types::ConsensusParams,
         };
 
+        #[derive(Debug, Default)]
+        pub struct PrepareProposal {
+            pub txs: Vec<super::TxBytes>,
+        }
+
+        #[cfg(feature = "abcipp")]
+        impl From<PrepareProposal> for ResponsePrepareProposal {
+            fn from(_: PrepareProposal) -> Self {
+                Self::default()
+            }
+        }
+
+        #[cfg(not(feature = "abcipp"))]
+        impl From<PrepareProposal> for ResponsePrepareProposal {
+            fn from(resp: PrepareProposal) -> Self {
+                Self { txs: resp.txs }
+            }
+        }
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
 

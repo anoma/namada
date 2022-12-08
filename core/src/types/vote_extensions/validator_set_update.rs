@@ -31,10 +31,6 @@ pub type VextDigest = ValidatorSetUpdateVextDigest;
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct ValidatorSetUpdateVextDigest {
-    #[cfg(feature = "abcipp")]
-    /// A mapping from a validator address to a [`Signature`].
-    pub signatures: HashMap<Address, Signature>,
-    #[cfg(not(feature = "abcipp"))]
     /// A mapping from a validator address to a [`Signature`].
     ///
     /// The key includes the block height at which a validator
@@ -48,7 +44,6 @@ pub struct ValidatorSetUpdateVextDigest {
 impl VextDigest {
     /// Build a singleton [`VextDigest`], from the provided [`Vext`].
     #[inline]
-    #[cfg(not(feature = "abcipp"))]
     pub fn singleton(ext: SignedVext) -> VextDigest {
         VextDigest {
             signatures: HashMap::from([(
@@ -75,8 +70,7 @@ impl VextDigest {
         let mut extensions = vec![];
 
         for (validator_addr, signature) in signatures.into_iter() {
-            #[cfg(not(feature = "abcipp"))]
-            let (validator_addr, block_height) = validator_addr;
+            let (validator_addr, _block_height) = validator_addr;
             let voting_powers = voting_powers.clone();
             let data = Vext {
                 validator_addr,

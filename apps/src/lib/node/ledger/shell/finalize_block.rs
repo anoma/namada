@@ -377,7 +377,6 @@ mod test_finalize_block {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
-    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
@@ -699,26 +698,10 @@ mod test_finalize_block {
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 
-        #[cfg(feature = "abcipp")]
         let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             signatures: Default::default(),
             events: vec![],
         })
-        .sign(&protocol_key)
-        .to_bytes();
-
-        #[cfg(not(feature = "abcipp"))]
-        let tx = ProtocolTxType::EthEventsVext(
-            ethereum_events::Vext::empty(
-                LAST_HEIGHT,
-                shell
-                    .mode
-                    .get_validator_address()
-                    .expect("Test failed")
-                    .clone(),
-            )
-            .sign(&protocol_key),
-        )
         .sign(&protocol_key)
         .to_bytes();
 
@@ -741,9 +724,10 @@ mod test_finalize_block {
     }
 
     /// Test that once a validator's vote for an Ethereum event lands
-    /// on-chain, it dequeues from the list of events to vote on.
+    /// on-chain from a vote extension digest, it dequeues from the
+    /// list of events to vote on.
     #[test]
-    fn test_eth_events_dequeued() {
+    fn test_eth_events_dequeued_digest() {
         let (mut shell, _, oracle) = setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
@@ -764,14 +748,13 @@ mod test_finalize_block {
         assert_eq!(queued_event, event);
 
         // ---- The protocol tx that includes this event on-chain
-        #[allow(clippy::redundant_clone)]
         let ext = ethereum_events::Vext {
             block_height: shell.storage.last_height,
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
         }
         .sign(&protocol_key);
-        #[cfg(feature = "abcipp")]
+
         let processed_tx = {
             let signed = MultiSignedEthEvent {
                 event,
@@ -782,9 +765,6 @@ mod test_finalize_block {
             };
 
             let digest = ethereum_events::VextDigest {
-                #[cfg(feature = "abcipp")]
-                signatures: vec![(address, ext.sig)].into_iter().collect(),
-                #[cfg(not(feature = "abcipp"))]
                 signatures: vec![(
                     (address, shell.storage.last_height),
                     ext.sig,
@@ -804,7 +784,54 @@ mod test_finalize_block {
             }
         };
 
-        #[cfg(not(feature = "abcipp"))]
+        // ---- This protocol tx is accepted
+        let [result]: [Event; 1] = shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        let code = result.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // --- The event is removed from the queue
+        assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Test that once a validator's vote for an Ethereum event lands
+    /// on-chain from a protocol tx, it dequeues from the
+    /// list of events to vote on.
+    #[test]
+    fn test_eth_events_dequeued_protocol_tx() {
+        let (mut shell, _, oracle) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        // ---- the ledger receives a new Ethereum event
+        let event = EthereumEvent::NewContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
+        let [queued_event]: [EthereumEvent; 1] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        assert_eq!(queued_event, event);
+
+        // ---- The protocol tx that includes this event on-chain
+        let ext = ethereum_events::Vext {
+            block_height: shell.storage.last_height,
+            ethereum_events: vec![event],
+            validator_addr: address,
+        }
+        .sign(&protocol_key);
         let processed_tx = ProcessedTx {
             tx: ProtocolTxType::EthEventsVext(ext)
                 .sign(&protocol_key)

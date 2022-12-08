@@ -78,12 +78,8 @@ pub type VextDigest = EthereumEventsVextDigest;
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct EthereumEventsVextDigest {
-    /// The signatures and signing address of each [`Vext`]
-    #[cfg(feature = "abcipp")]
-    pub signatures: HashMap<Address, Signature>,
     /// The signatures, signing address, and signing block height
     /// of each [`Vext`]
-    #[cfg(not(feature = "abcipp"))]
     pub signatures: HashMap<(Address, BlockHeight), Signature>,
     /// The events that were reported
     pub events: Vec<MultiSignedEthEvent>,
@@ -92,7 +88,6 @@ pub struct EthereumEventsVextDigest {
 impl VextDigest {
     /// Build a singleton [`VextDigest`], from the provided [`Vext`].
     #[inline]
-    #[cfg(not(feature = "abcipp"))]
     pub fn singleton(ext: Signed<Vext>) -> VextDigest {
         VextDigest {
             signatures: HashMap::from([(
@@ -116,7 +111,6 @@ impl VextDigest {
 
     /// Decompresses a set of signed [`Vext`] instances.
     pub fn decompress(self, last_height: BlockHeight) -> Vec<Signed<Vext>> {
-        #[cfg(not(feature = "abcipp"))]
         {
             #[allow(clippy::drop_copy)]
             drop(last_height);
@@ -127,9 +121,6 @@ impl VextDigest {
         let mut extensions = vec![];
 
         for (validator, sig) in signatures.into_iter() {
-            #[cfg(feature = "abcipp")]
-            let mut ext = Vext::empty(last_height, validator.clone());
-            #[cfg(not(feature = "abcipp"))]
             let mut ext = Vext::empty(validator.1, validator.0.clone());
 
             for event in events.iter() {

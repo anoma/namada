@@ -119,6 +119,7 @@ where
 // which is not possible from `namada` since we do not have
 // access to the `Shell` there
 #[cfg(test)]
+#[cfg(not(feature = "abcipp"))]
 mod test_queries {
     use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
     use namada::types::storage::Epoch;

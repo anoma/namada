@@ -225,7 +225,7 @@ where
             ext,
             self.storage.get_current_decision_height(),
         )
-        .then(|| true)
+        .then_some(true)
         .unwrap_or_else(|| {
             tracing::warn!(
                 ?req.validator_address,
@@ -244,17 +244,16 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<validator_set_update::SignedVext>,
     ) -> bool {
-        self.storage
-            .can_send_validator_set_update(SendValsetUpd::Now)
-            .then(|| {
-                ext.and_then(|ext| {
+        ext.map(|ext| {
+            self.storage
+                .can_send_validator_set_update(SendValsetUpd::Now)
+                .then(|| {
                     // we have a valset update vext when we're expecting one,
                     // cool, let's validate it
                     self.validate_valset_upd_vext(
                         ext,
                         self.storage.get_current_decision_height(),
                     )
-                    .then(|| true)
                 })
                 .unwrap_or_else(|| {
                     // either validation failed, or we were expecting a valset
@@ -267,13 +266,8 @@ where
                     );
                     false
                 })
-            })
-            .unwrap_or({
-                // NOTE: if we're not supposed to send a validator set update
-                // vote extension at a particular block height, we will
-                // just return true as the validation result
-                true
-            })
+        })
+        .unwrap_or(true)
     }
 }
 

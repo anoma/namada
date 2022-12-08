@@ -47,6 +47,7 @@ abcipp = [
   "ibc-proto-abcipp",
   "ibc-abcipp",
   "tendermint-abcipp",
+  "namada_core/tendermint-abcipp",
   "tendermint-proto-abcipp",
   # it's OK to include the tendermint-rpc feature here, as we aren't currently building wasms with `abcipp`
   "tendermint-rpc-abcipp",

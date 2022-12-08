@@ -221,7 +221,6 @@ where
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
-            #[cfg(not(feature = "abcipp"))]
             let block_height = vote_extension.data.block_height;
 
             // update voting power
@@ -242,25 +241,12 @@ where
             for ev in vote_extension.data.ethereum_events {
                 let signers =
                     event_observers.entry(ev).or_insert_with(BTreeSet::new);
-                #[cfg(feature = "abcipp")]
-                signers.insert(validator_addr.clone());
-                #[cfg(not(feature = "abcipp"))]
                 signers.insert((validator_addr.clone(), block_height));
             }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
-
-            #[cfg(feature = "abcipp")]
-            if let Some(sig) = signatures.insert(addr, sig) {
-                tracing::warn!(
-                    ?sig,
-                    ?validator_addr,
-                    "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
-                );
-            }
 
             let key = (addr, block_height);
             tracing::debug!(
@@ -269,7 +255,6 @@ where
                 ?validator_addr,
                 "Inserting signature into ethereum_events::VextDigest"
             );
-            #[cfg(not(feature = "abcipp"))]
             if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,

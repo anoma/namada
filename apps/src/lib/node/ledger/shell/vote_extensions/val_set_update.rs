@@ -234,7 +234,6 @@ where
             }
 
             let validator_addr = vote_extension.data.validator_addr;
-            #[cfg(not(feature = "abcipp"))]
             let block_height = vote_extension.data.block_height;
 
             // update voting power
@@ -255,15 +254,6 @@ where
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
 
-            #[cfg(feature = "abcipp")]
-            if let Some(sig) = signatures.insert(addr, sig) {
-                tracing::warn!(
-                    ?sig,
-                    ?validator_addr,
-                    "Overwrote old signature from validator while \
-                     constructing validator_set_update::VextDigest"
-                );
-            }
             let key = (addr, block_height);
             tracing::debug!(
                 ?key,
@@ -271,7 +261,6 @@ where
                 ?validator_addr,
                 "Inserting signature into validator_set_update::VextDigest"
             );
-            #[cfg(not(feature = "abcipp"))]
             if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,

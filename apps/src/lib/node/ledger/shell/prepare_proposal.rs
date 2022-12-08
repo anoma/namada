@@ -13,6 +13,7 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
+use shims::abcipp_shim_types::shim::response;
 
 use super::super::*;
 #[cfg(feature = "abcipp")]
@@ -54,7 +55,7 @@ where
 
             // add ethereum events and validator set updates as protocol txs
             #[cfg(feature = "abcipp")]
-            let txs = self.build_vote_extension_txs(req.local_last_commit);
+            let mut txs = self.build_vote_extension_txs(req.local_last_commit);
             #[cfg(not(feature = "abcipp"))]
             let mut txs = self.build_vote_extension_txs(&req.txs);
 
@@ -77,17 +78,7 @@ where
             "Proposing block"
         );
 
-        #[cfg(feature = "abcipp")]
-        {
-            response::PrepareProposal {
-                tx_records: txs,
-                ..Default::default()
-            }
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            response::PrepareProposal { txs }
-        }
+        response::PrepareProposal { txs }
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
@@ -237,7 +228,7 @@ mod test_prepare_proposal {
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
-        tx_record::TxAction, ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+        ExtendedCommitInfo, ExtendedVoteInfo,
     };
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
@@ -304,11 +295,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(
-            // NOTE: we process mempool txs after protocol txs
-            shell.prepare_proposal(req).tx_records.remove(1),
-            record::remove(non_wrapper_tx.to_bytes())
-        );
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -496,13 +483,16 @@ mod test_prepare_proposal {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
                 let mut s = BTreeSet::new();
-                s.insert(ext.data.validator_addr.clone());
+                s.insert((ext.data.validator_addr.clone(), last_height));
                 s
             },
         }];
         let signatures = {
             let mut s = HashMap::new();
-            s.insert(ext.data.validator_addr, ext.sig.clone());
+            s.insert(
+                (ext.data.validator_addr.clone(), last_height),
+                ext.sig.clone(),
+            );
             s
         };
 
@@ -563,12 +553,9 @@ mod test_prepare_proposal {
             ..Default::default()
         });
         let rsp_digest = {
-            assert_eq!(rsp.tx_records.len(), 1);
-            let tx_record = rsp.tx_records.pop().unwrap();
-
-            assert_eq!(tx_record.action(), TxAction::Added);
-
-            let got = Tx::try_from(&tx_record.tx[..]).unwrap();
+            assert_eq!(rsp.txs.len(), 1);
+            let tx_bytes = rsp.txs.remove(0);
+            let got = Tx::try_from(tx_bytes.as_slice()).expect("Test failed");
             let got_signed_tx =
                 SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
             let protocol_tx =
@@ -729,7 +716,7 @@ mod test_prepare_proposal {
         #[cfg(feature = "abcipp")]
         {
             let vote_extension = VoteExtension {
-                ethereum_events: signed_eth_ev_vote_extension.clone(),
+                ethereum_events: signed_eth_ev_vote_extension,
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
@@ -819,11 +806,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(
-            // NOTE: we process mempool txs after protocol txs
-            shell.prepare_proposal(req).tx_records.remove(1),
-            record::remove(wrapper)
-        );
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -876,50 +859,19 @@ mod test_prepare_proposal {
             .iter()
             .map(|tx| tx.data.clone().expect("Test failed"))
             .collect();
-        #[cfg(feature = "abcipp")]
-        {
-            let received: Vec<Vec<u8>> = shell
-                .prepare_proposal(req)
-                .tx_records
-                .iter()
-                .filter_map(
-                    |TxRecord {
-                         tx: tx_bytes,
-                         action,
-                     }| {
-                        if *action == (TxAction::Unmodified as i32)
-                            || *action == (TxAction::Added as i32)
-                        {
-                            Some(
-                                Tx::try_from(tx_bytes.as_slice())
-                                    .expect("Test failed")
-                                    .data
-                                    .expect("Test failed"),
-                            )
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let received: Vec<Vec<u8>> = shell
-                .prepare_proposal(req)
-                .txs
-                .into_iter()
-                .map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice())
-                        .expect("Test failed")
-                        .data
-                        .expect("Test failed")
-                })
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
+
+        let received: Vec<Vec<u8>> = shell
+            .prepare_proposal(req)
+            .txs
+            .into_iter()
+            .map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            })
+            .collect();
+        // check that the order of the txs is correct
+        assert_eq!(received, expected_txs);
     }
 }
