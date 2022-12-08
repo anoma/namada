@@ -71,6 +71,7 @@ use namada_core::types::transaction::AffineCurve;
 use tendermint_rpc::Client;
 use crate::types::masp::ExtendedViewingKey;
 use itertools::Either;
+use crate::ledger::queries::RPC;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -258,20 +259,60 @@ pub fn get_params_dir() -> PathBuf {
 /// Abstracts platform specific details away from the logic of shielded pool
 /// operations.
 #[async_trait]
-pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone {
+pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone + Sync {
     /// The type of the Tendermint client to make queries with
-    type C: tendermint_rpc::Client + std::marker::Sync;
+    type C: crate::ledger::queries::types::Client + Client + std::marker::Sync + Send;
 
-    /// Query the storage value at the given key
+    /// Query the current epoch
+    async fn query_epoch(&self) -> Epoch {
+        unwrap_client_response(RPC.shell().epoch(&self.client()).await)
+    }
+
+    /// Query for all the accepted transactions that have occured to date
+    async fn query_results(&self) -> Vec<BlockResults> {
+        unwrap_client_response(RPC.shell().read_results(&self.client()).await)
+    }
+
+    async fn storage_has_key(&self, storage_key: &storage::Key) -> bool {
+        unwrap_client_response(
+            RPC.shell().storage_has_key(&self.client(), storage_key).await,
+        )
+    }
+
+    /// Query a storage value and decode it with [`BorshDeserialize`].
     async fn query_storage_value<T: Send>(
         &self,
         key: &storage::Key,
     ) -> Option<T>
     where
-        T: BorshDeserialize;
+        T: BorshDeserialize,
+    {
+        // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
+        // use `storage_has_key` instead of `storage_value`, because `storage_value`
+        // returns 0 bytes when the key is not found.
+        let maybe_unit = T::try_from_slice(&[]);
+        if let Ok(unit) = maybe_unit {
+            return if self.storage_has_key(key).await {
+                Some(unit)
+            } else {
+                None
+            };
+        }
 
-    /// Query the current epoch
-    async fn query_epoch(&self) -> Epoch;
+        let response = unwrap_client_response(
+            RPC.shell()
+                .storage_value(&self.client(), None, None, false, key)
+                .await,
+        );
+        if response.data.is_empty() {
+            return None;
+        }
+        T::try_from_slice(&response.data[..])
+            .map(Some)
+            .unwrap_or_else(|err| {
+                panic!("Error decoding the value: {}", err);
+            })
+    }
 
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -291,10 +332,11 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
         Epoch,
         masp_primitives::transaction::components::Amount,
         MerklePath<Node>,
-    )>;
-
-    /// Query for all the accepted transactions that have occured to date
-    async fn query_results(&self) -> Vec<BlockResults>;
+    )> {
+        Some(unwrap_client_response(
+            RPC.shell().read_conversion(&self.client(), &asset_type).await,
+        ))
+    }
 
     /// Get a client object with which to effect Tendermint queries
     fn client(&self) -> Self::C;
@@ -1458,4 +1500,11 @@ fn convert_amount(
     let amount = Amount::from_nonnegative(asset_type, u64::from(val))
         .expect("invalid value for amount");
     (asset_type, amount)
+}
+
+/// A helper to unwrap client's response. Will shut down process on error.
+fn unwrap_client_response<T, U>(response: Result<T, U>) -> T {
+    response.unwrap_or_else(|err| {
+        panic!("Error in the query");
+    })
 }

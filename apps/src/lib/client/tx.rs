@@ -416,21 +416,6 @@ impl Default for CLIShieldedUtils {
 #[async_trait]
 impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = HttpClient;
-    
-    async fn query_storage_value<T: Send>(
-        &self,
-        key: &storage::Key,
-    ) -> Option<T>
-    where T: BorshDeserialize {
-        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
-        query_storage_value::<T>(&client, &key).await
-    }
-
-    async fn query_epoch(&self) -> Epoch {
-        rpc::query_epoch(args::Query {
-            ledger_address: self.ledger_address.clone().unwrap()
-        }).await
-    }
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
@@ -489,32 +474,12 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         Ok(())
     }
 
-    /// Query a conversion.
-    async fn query_conversion(
-        &self,
-        asset_type: AssetType,
-    ) -> Option<(
-        Address,
-        Epoch,
-        masp_primitives::transaction::components::Amount,
-        MerklePath<Node>,
-    )> {
-        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
-        query_conversion(client, asset_type).await
-    }
-
     fn client(&self) -> Self::C {
         let ledger_address = self
             .ledger_address
             .clone()
             .expect("ledger address must be set");
         HttpClient::new(ledger_address).unwrap()
-    }
-
-    async fn query_results(&self) -> Vec<BlockResults> {
-        rpc::query_results(args::Query {
-            ledger_address: self.ledger_address.clone().unwrap()
-        }).await
     }
 }
 

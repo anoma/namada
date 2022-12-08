@@ -16,7 +16,7 @@ use crate::types::storage::BlockHeight;
 #[macro_use]
 mod router;
 mod shell;
-mod types;
+pub mod types;
 mod vp;
 
 // Most commonly expected patterns should be declared first
