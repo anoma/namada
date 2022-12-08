@@ -50,7 +50,7 @@ pub fn init_genesis_storage<'a, DB, H>(
 }
 
 /// Initialize storage in the genesis block.
-pub fn init_genesis_storage_NEW<DB, H>(
+pub fn init_genesis_storage_new<DB, H>(
     storage: &mut Storage<DB, H>,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,

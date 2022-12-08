@@ -29,7 +29,7 @@ pub struct Epoched<
     phantom_son: PhantomData<SON>,
 }
 
-// Discrete epoched data handle with nested lazy structure
+/// Discrete epoched data handle with nested lazy structure
 pub type NestedEpoched<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64 = 0> =
     Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>;
 
@@ -105,7 +105,7 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
-            None => return Ok(None),
+            None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
                 let future_most_epoch =
@@ -240,10 +240,12 @@ where
     FutureEpochs: EpochOffset,
     Data: LazyCollection + Debug,
 {
+    /// Get the inner LazyCollection value by the outer key
     pub fn at(&self, key: &Epoch) -> Data {
         Data::open(self.get_data_handler().get_data_key(key))
     }
 
+    /// Get handle to the NestedMap data itself
     pub fn get_data_handler(&self) -> NestedMap<Epoch, Data> {
         let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
         NestedMap::open(key)
@@ -331,7 +333,7 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
-            None => return Ok(None),
+            None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
                 let future_most_epoch =
@@ -371,7 +373,7 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
-            None => return Ok(None),
+            None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
                 let future_most_epoch =
@@ -467,12 +469,12 @@ where
                         storage,
                         &Epoch(expected_oldest_epoch.0 - offset),
                     )?;
-                    if old.is_some() {
+                    if let Some(old) = old {
                         match new_oldest_value {
                             Some(latest) => {
-                                new_oldest_value = Some(latest + old.unwrap())
+                                new_oldest_value = Some(latest + old)
                             }
-                            None => new_oldest_value = old,
+                            None => new_oldest_value = Some(old),
                         }
                     }
                 }
@@ -511,6 +513,7 @@ where
         storage.read(&key)
     }
 
+    /// Get handle to the raw LazyMap data
     pub fn get_data_handler(&self) -> LazyMap<Epoch, Data> {
         let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
         LazyMap::open(key)

@@ -396,6 +396,7 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     }
 }
 
+/// Storage key for validator set positions
 pub fn validator_set_positions_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())

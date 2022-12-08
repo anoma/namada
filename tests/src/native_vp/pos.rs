@@ -572,11 +572,11 @@ pub mod testing {
         DynEpochOffset, Epoched, EpochedDelta,
     };
     use namada::proof_of_stake::parameters::testing::arb_rate;
+    use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::{BondId, Bonds, Unbonds};
     use namada::proof_of_stake::types::{
         Bond, Unbond, ValidatorState, WeightedValidator,
     };
-    use namada::proof_of_stake::PosParams;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;

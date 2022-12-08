@@ -23,37 +23,38 @@ use crate::parameters::PosParams;
 
 // TODO: add this to the spec
 /// Stored positions of validators in active and inactive validator sets
-pub type ValidatorSetPositions_NEW = crate::epoched_new::NestedEpoched<
+pub type ValidatorSetPositionsNew = crate::epoched_new::NestedEpoched<
     LazyMap<Address, Position>,
     crate::epoched_new::OffsetPipelineLen,
 >;
 
 /// Epoched validator's consensus key.
-pub type ValidatorConsensusKeys_NEW = crate::epoched_new::Epoched<
+pub type ValidatorConsensusKeysNew = crate::epoched_new::Epoched<
     common::PublicKey,
     crate::epoched_new::OffsetPipelineLen,
 >;
 
 /// Epoched validator's state.
-pub type ValidatorStates_NEW = crate::epoched_new::Epoched<
+pub type ValidatorStatesNew = crate::epoched_new::Epoched<
     ValidatorState,
     crate::epoched_new::OffsetPipelineLen,
 >;
 
-pub type ValidatorPositionAddresses_NEW = LazyMap<Position, Address>;
+/// A map from a position to and address in a Validator Set
+pub type ValidatorPositionAddressesNew = LazyMap<Position, Address>;
 
 /// New validator set construction, keyed by staked token amount
-pub type ValidatorSet_NEW =
-    NestedMap<token::Amount, ValidatorPositionAddresses_NEW>;
+pub type ValidatorSetNew =
+    NestedMap<token::Amount, ValidatorPositionAddressesNew>;
 
 /// Epoched validator sets.
-pub type ValidatorSets_NEW = crate::epoched_new::NestedEpoched<
-    ValidatorSet_NEW,
+pub type ValidatorSetsNew = crate::epoched_new::NestedEpoched<
+    ValidatorSetNew,
     crate::epoched_new::OffsetPipelineLen,
 >;
 
 /// Epoched validator's deltas.
-pub type ValidatorDeltas_NEW = crate::epoched_new::EpochedDelta<
+pub type ValidatorDeltasNew = crate::epoched_new::EpochedDelta<
     token::Change,
     // TODO: check the offsets
     crate::epoched_new::OffsetUnbondingLen,
@@ -61,24 +62,24 @@ pub type ValidatorDeltas_NEW = crate::epoched_new::EpochedDelta<
 >;
 
 /// Epoched total deltas.
-pub type TotalDeltas_NEW = crate::epoched_new::EpochedDelta<
+pub type TotalDeltasNew = crate::epoched_new::EpochedDelta<
     token::Change,
     // TODO: check the offsets
     crate::epoched_new::OffsetPipelineLen,
     21,
 >;
 
-const u64_max: u64 = u64::MAX;
+const U64_MAX: u64 = u64::MAX;
 
 /// Epoched validator commission rate
-pub type CommissionRates_NEW = crate::epoched_new::Epoched<
+pub type CommissionRatesNew = crate::epoched_new::Epoched<
     Decimal,
     crate::epoched_new::OffsetPipelineLen,
-    u64_max,
+    U64_MAX,
 >;
 
 /// Epoched validator's bonds
-pub type Bonds_NEW = crate::epoched_new::EpochedDelta<
+pub type BondsNew = crate::epoched_new::EpochedDelta<
     token::Change,
     crate::epoched_new::OffsetPipelineLen,
     21,
@@ -87,7 +88,7 @@ pub type Bonds_NEW = crate::epoched_new::EpochedDelta<
 /// Epochs validator's unbonds
 /// TODO: should we make a NestedEpochedDelta for this where outer epoch is end
 /// and inner is begin???
-pub type Unbond_NEW = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
+pub type UnbondNew = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
@@ -222,6 +223,7 @@ pub struct ValidatorSet {
     pub inactive: BTreeSet<WeightedValidator>,
 }
 
+/// A position in a validator set
 #[derive(
     PartialEq,
     PartialOrd,
@@ -265,8 +267,10 @@ impl Sub<Position> for Position {
 }
 
 impl Position {
+    /// Position value of 1
     pub const ONE: Position = Position(1_u64);
 
+    /// Get the next Position (+1)
     pub fn next(&self) -> Self {
         Self(self.0.wrapping_add(1))
     }
@@ -349,7 +353,7 @@ pub type Slashes = Vec<Slash>;
 /// A slash applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub struct Slash_NEW {
+pub struct SlashNew {
     /// Epoch at which the slashable event occurred.
     pub epoch: Epoch,
     /// Block height at which the slashable event occurred.
@@ -360,7 +364,7 @@ pub struct Slash_NEW {
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
-pub type Slashes_NEW = LazyVec<Slash_NEW>;
+pub type SlashesNew = LazyVec<SlashNew>;
 
 /// A type of slashsable event.
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]

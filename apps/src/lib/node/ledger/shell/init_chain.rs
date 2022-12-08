@@ -310,7 +310,7 @@ where
                 .map(|validator| &validator.pos_data),
             current_epoch,
         );
-        pos::init_genesis_storage_NEW(
+        pos::init_genesis_storage_new(
             &mut self.storage,
             &genesis.pos_params,
             genesis
