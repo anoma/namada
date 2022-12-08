@@ -230,8 +230,8 @@ mod tests {
         // let us now compress them into a single `VextDigest`
         #[cfg(feature = "abcipp")]
         let signatures: HashMap<_, _> = [
-            (validator_1.clone(), ext[0].sig.clone()),
-            (validator_2.clone(), ext[1].sig.clone()),
+            ((validator_1.clone(), last_block_height), ext[0].sig.clone()),
+            ((validator_2.clone(), last_block_height), ext[1].sig.clone()),
         ]
         .into_iter()
         .collect();
@@ -249,8 +249,8 @@ mod tests {
         #[cfg(feature = "abcipp")]
         let signers = {
             let mut s = BTreeSet::new();
-            s.insert(validator_1.clone());
-            s.insert(validator_2);
+            s.insert((validator_1.clone(), last_block_height));
+            s.insert((validator_2, last_block_height));
             s
         };
 
