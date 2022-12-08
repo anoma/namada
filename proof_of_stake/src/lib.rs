@@ -2094,6 +2094,58 @@ where
     handle.get_sum(storage, epoch, params)
 }
 
+/// Read all addresses from one validator set.
+pub fn read_validator_set_addresses<S>(
+    storage: &S,
+    validator_set_handle: &ValidatorSetsNew,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let mut addresses: HashSet<Address> = HashSet::new();
+
+    validator_set_handle
+        .get_data_handler()
+        .at(&epoch)
+        .iter(storage)?
+        .for_each(|res| {
+            if let Ok((
+                NestedSubKey::Data {
+                    key: _,
+                    nested_sub_key: _,
+                },
+                address,
+            )) = res
+            {
+                addresses.insert(address);
+            }
+        });
+    Ok(addresses)
+}
+
+/// Read all validator addresses.
+pub fn read_all_validator_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let mut addresses = read_validator_set_addresses(
+        storage,
+        &active_validator_set_handle(),
+        epoch,
+    )?;
+    let inactive_addresses = read_validator_set_addresses(
+        storage,
+        &inactive_validator_set_handle(),
+        epoch,
+    )?;
+    addresses.extend(inactive_addresses.into_iter());
+    Ok(addresses)
+}
+
 /// Write PoS total deltas.
 /// Note: for EpochedDelta, write the value to change storage by
 pub fn update_total_deltas<S>(
@@ -2730,11 +2782,125 @@ where
     Ok(())
 }
 
-fn get_slash_rate(params: &PosParams, slash: &Slash_NEW) -> Decimal {
-    match slash.r#type {
-        SlashType::DuplicateVote => params.duplicate_vote_min_slash_rate,
-        SlashType::LightClientAttack => {
-            params.light_client_attack_min_slash_rate
-        }
+/// Change the commission rate of a validator
+pub fn change_validator_commission_rate<S>(
+    storage: &mut S,
+    validator: &Address,
+    new_rate: Decimal,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+{
+    if new_rate < Decimal::ZERO {
+        return Err(CommissionRateChangeError::NegativeRate(
+            new_rate,
+            validator.clone(),
+        )
+        .into());
     }
+
+    let max_change = storage
+        // Fix error handling
+        .read_validator_max_commission_rate_change(validator)
+        // .map_err(|_| {
+        //     CommissionRateChangeError::NoMaxSetInStorage(validator.clone())
+        // })?
+        // .ok_or_else(|| {
+        //     CommissionRateChangeError::CannotRead(validator.clone())
+        // })?
+        ;
+
+    // match self.read_validator_commission_rate(validator) {
+    //     Ok(Some(rates)) => rates,
+    //     _ => {
+    //         return Err(CommissionRateChangeError::CannotRead(
+    //             validator.clone(),
+    //         )
+    //         .into());
+    //     }
+    // };
+    let params = storage.read_pos_params();
+    let commission_handle = validator_commission_rate_handle(validator);
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    let rate_at_pipeline = commission_handle
+        .get(storage, pipeline_epoch, &params)?
+        .expect("Could not find a rate in given epoch");
+    if new_rate == rate_at_pipeline {
+        return Err(
+            CommissionRateChangeError::ChangeIsZero(validator.clone()).into()
+        );
+    }
+    let rate_before_pipeline = commission_handle
+        .get(storage, pipeline_epoch - 1, &params)?
+        .expect("Could not find a rate in given epoch");
+    let change_from_prev = new_rate - rate_before_pipeline;
+    if change_from_prev.abs() > max_change {
+        return Err(CommissionRateChangeError::RateChangeTooLarge(
+            change_from_prev,
+            validator.clone(),
+        )
+        .into());
+    }
+
+    commission_handle.set(storage, new_rate, current_epoch, params.pipeline_len)
+}
+
+/// NEW: apply a slash and write it to storage
+pub fn slash_new<S>(
+    storage: &mut S,
+    params: &PosParams,
+    current_epoch: Epoch,
+    evidence_epoch: Epoch,
+    evidence_block_height: impl Into<u64>,
+    slash_type: SlashType,
+    validator: &Address,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+{
+    let rate = slash_type.get_slash_rate(params);
+    let slash = SlashNew {
+        epoch: evidence_epoch,
+        block_height: evidence_block_height.into(),
+        r#type: slash_type,
+    };
+
+    let current_stake =
+        read_validator_stake(storage, params, validator, current_epoch)?;
+    let slashed_amount = decimal_mult_u64(rate, u64::from(current_stake));
+    let token_change = -token::Change::from(slashed_amount);
+
+    // Update validator sets and deltas at the pipeline length
+    update_validator_set_new(
+        storage,
+        params,
+        validator,
+        token_change,
+        &active_validator_set_handle(),
+        &inactive_validator_set_handle(),
+        current_epoch,
+    )?;
+    update_validator_deltas(
+        storage,
+        params,
+        validator,
+        token_change,
+        current_epoch,
+    )?;
+    update_total_deltas(storage, params, token_change, current_epoch)?;
+
+    // Write the validator slash to storage
+    validator_slashes_handle(validator).push(storage, slash)?;
+
+    // Transfer the slashed tokens from PoS account to Slash Fund address
+    storage.transfer(
+        &staking_token_address(),
+        token::Amount::from(slashed_amount),
+        &<S as PosBase>::POS_ADDRESS,
+        &<S as PosBase>::POS_SLASH_POOL_ADDRESS,
+    );
+
+    Ok(())
 }

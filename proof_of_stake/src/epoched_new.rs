@@ -244,7 +244,7 @@ where
         Data::open(self.get_data_handler().get_data_key(key))
     }
 
-    fn get_data_handler(&self) -> NestedMap<Epoch, Data> {
+    pub fn get_data_handler(&self) -> NestedMap<Epoch, Data> {
         let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
         NestedMap::open(key)
     }
