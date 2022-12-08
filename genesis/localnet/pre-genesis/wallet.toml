@@ -1,0 +1,26 @@
+[view_keys]
+
+[spend_keys]
+
+[payment_addrs]
+
+[keys]
+validator_key = "unencrypted:000b9c8cb8f3ad6b8a387b064a11c0e98189814e9733aa7bb1e802425f6356f98a"
+daewon = "unencrypted:00d19e226c0e7d123d79f5908b5948d4c461b66a5f8aa95600c28b55ab6f5dc772"
+christel_key = "unencrypted:003625b939a58ef60402d7cf8fc04250026cc1ba90cc3028af1ce6b22be857ffc7"
+albert_key = "unencrypted:0083318ccceac6c08a0177667840b4b93f0e455e45d4c38c28b73b8f8462fbf548"
+bertha_key = "unencrypted:0073ed61817720d27784e7a9bca4a60668d763a6f7ecac2d45ed1f241aa5c59e99"
+
+[addresses]
+daewon = "atest1d9khqw36xuc5gsfegsen2sfsx4q5yvz9xq6yv3psgcunj334g9prvdzzxucnyv2zxqm5xve44x97gg"
+albert_key = "atest1d9khqw36x56rgvphx5erjwp48y6y2s6y89qnwdzygce5xsfkx9rrsd35xerrjdp3gsunz33n3zytee"
+christel_key = "atest1d9khqw36gccrsv348qurzvpcx3p52ve3xu6rys3kxc6yxsjrgymyg32xggmnxvj9g5erzv2rn6pwv6"
+validator_key = "atest1d9khqw36geqnxw29x9q5xvj98qmnj3fjgscygs6pg4p52s6z89qnzd3exgmnsv34gfqnj33elp2296"
+bertha_key = "atest1d9khqw36xvm5zwpjxqm5zwz9x56rydp5gscnwsf4geznjdpegvmrwv29xcmnxvp4x5u5vdjp4wcjdf"
+
+[pkhs]
+544075298594ECD9A74DF3CA61F8646F941D91F3 = "albert_key"
+71DA9D35A05AB0E04FD0F99F5AB64B7121B07C35 = "daewon"
+37A8207A8E54244D17A5FE949C671E6730559F6A = "bertha_key"
+F0825881084CE31742B664CBCA6DEFB732EE211C = "christel_key"
+FA39E1AC2E879E2D0DCAECECB9A16927825BA9F9 = "validator_key"

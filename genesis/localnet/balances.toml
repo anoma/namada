@@ -1,0 +1,60 @@
+# Genesis balances.
+# 
+# This files contains the genesis balances of any tokens present at genesis 
+# associated with public keys.
+#
+# For example:
+# ```
+# [NAM]
+# some_pk_bech32m_encoding = 10 # genesis tokens, the amount can have up to 6 decimal places
+# ```
+#
+# The public keys present in here are taken from `pre-genesis/wallet.toml`
+
+[NAM]
+# albert_key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = 1_000_000
+# bertha_key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = 1_000_000
+# christel_key
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = 1_000_000
+# daewon_key
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = 1_000_000
+# validator_key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = 1_000_000_000
+
+[BTC]
+# albert_key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = 1_000_000
+# bertha_key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = 1_000_000
+# christel_key
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = 1_000_000
+# daewon_key
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = 1_000_000
+# validator_key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = 1_000_000
+
+[ETH]
+# albert_key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = 1_000_000
+# bertha_key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = 1_000_000
+# christel_key
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = 1_000_000
+# daewon_key
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = 1_000_000
+# validator_key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = 1_000_000
+
+[DOT]
+# albert_key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = 1_000_000
+# bertha_key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = 1_000_000
+# christel_key
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = 1_000_000
+# daewon_key
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = 1_000_000
+# validator_key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = 1_000_000

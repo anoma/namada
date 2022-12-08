@@ -1063,11 +1063,18 @@ pub fn validate_genesis_templates(
     _global_args: args::Global,
     args::ValidateGenesisTemplates { path }: args::ValidateGenesisTemplates,
 ) {
+    let is_valid = validate_genesis_templates_aux(&path);
+    if !is_valid {
+        cli::safe_exit(1)
+    }
+}
+
+pub fn validate_genesis_templates_aux(templates_dir: &Path) -> bool {
     const MAX_TOKEN_BALANCE_SUM: u64 = u64::MAX / 2;
 
     let mut is_valid = true;
-    let balances_file = path.join(genesis_new::BALANCES_FILE_NAME);
-    let parameters_file = path.join(genesis_new::PARAMETERS_FILE_NAME);
+    let balances_file = templates_dir.join(genesis_new::BALANCES_FILE_NAME);
+    let parameters_file = templates_dir.join(genesis_new::PARAMETERS_FILE_NAME);
     if !balances_file.exists() {
         is_valid = false;
         eprintln!(
@@ -1129,8 +1136,22 @@ pub fn validate_genesis_templates(
             );
         }
     }
+    is_valid
+}
 
-    if !is_valid {
-        cli::safe_exit(1)
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    /// Validate the `genesis/localnet` genesis templates.
+    #[test]
+    fn test_localnet_genesis_templates() {
+        let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("genesis/localnet");
+        assert!(validate_genesis_templates_aux(&templates_dir));
     }
 }
