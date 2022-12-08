@@ -223,6 +223,20 @@ pub enum Signature {
     Secp256k1(secp256k1::Signature),
 }
 
+impl string_encoding::Format for Signature {
+    const HRP: &'static str = string_encoding::COMMON_SIG_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        BorshSerialize::try_to_vec(self).unwrap()
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+        BorshDeserialize::try_from_slice(bytes)
+    }
+}
+
+impl_display_and_from_str_via_format!(Signature);
+
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
 

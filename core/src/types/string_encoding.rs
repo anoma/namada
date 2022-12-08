@@ -32,6 +32,8 @@ pub const MASP_EXT_SPENDING_KEY_HRP: &str = "xsktest";
 pub const COMMON_PK_HRP: &str = "pktest";
 /// `DkgPublicKey` human-readable part
 pub const DKG_PK_HRP: &str = "dpktest";
+/// `common::Signature` human-readable part
+pub const COMMON_SIG_HRP: &str = "sigtest";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
