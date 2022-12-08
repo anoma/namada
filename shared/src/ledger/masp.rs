@@ -255,10 +255,14 @@ pub fn get_params_dir() -> PathBuf {
     }
 }
 
+/// Abstracts platform specific details away from the logic of shielded pool
+/// operations.
 #[async_trait]
 pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone {
+    /// The type of the Tendermint client to make queries with
     type C: tendermint_rpc::Client + std::marker::Sync;
-    
+
+    /// Query the storage value at the given key
     async fn query_storage_value<T: Send>(
         &self,
         key: &storage::Key,
@@ -266,14 +270,19 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
     where
         T: BorshDeserialize;
 
+    /// Query the current epoch
     async fn query_epoch(&self) -> Epoch;
 
+    /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
 
+    /// Load up the currently saved ShieldedContext
     fn load(self) -> std::io::Result<ShieldedContext<Self>>;
 
+    /// Sace the given ShieldedContext for future loads
     fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
 
+    /// Query the designated conversion for the given AssetType
     async fn query_conversion(
         &self,
         asset_type: AssetType,
@@ -284,8 +293,10 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
         MerklePath<Node>,
     )>;
 
+    /// Query for all the accepted transactions that have occured to date
     async fn query_results(&self) -> Vec<BlockResults>;
 
+    /// Get a client object with which to effect Tendermint queries
     fn client(&self) -> Self::C;
 }
 
