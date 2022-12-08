@@ -1786,23 +1786,21 @@ where
     active_validator_set_handle().init(storage, current_epoch)?;
     // Do I necessarily want to do this one here since we may not fill it?
     inactive_validator_set_handle().init(storage, current_epoch)?;
+    let mut n_validators: u64 = 0;
 
-    for (
-        num_val,
-        GenesisValidator {
-            address,
-            tokens,
-            consensus_key,
-            commission_rate,
-            max_commission_rate_change,
-        },
-    ) in validators.enumerate()
+    for GenesisValidator {
+        address,
+        tokens,
+        consensus_key,
+        commission_rate,
+        max_commission_rate_change,
+    } in validators.into_iter()
     {
         total_bonded += tokens;
 
         let active_val_handle =
             active_validator_set_handle().at(&current_epoch).at(&tokens);
-        if (num_val as u64) < params.max_validator_slots {
+        if n_validators < params.max_validator_slots {
             insert_validator_into_set(
                 &active_val_handle,
                 storage,
@@ -1895,7 +1893,15 @@ where
             commission_rate,
             current_epoch,
         )?;
+        n_validators += 1;
     }
+    // Write the number of active validators
+    let n_active_validators = if n_validators > params.max_validator_slots {
+        params.max_validator_slots
+    } else {
+        n_validators
+    };
+    storage.write(&num_active_validators_key(), n_active_validators)?;
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
         storage,
@@ -2552,16 +2558,12 @@ where
         .into());
     }
 
-    // Decrement the remaining bond amount by the unbond amount at the pipeline
-    // offset WRONG
-    // TODO: this needs to be done methodically
     // Iterate thru this, find non-zero delta entries starting from most recent,
     // then just start decrementing those values For every delta val that
     // gets decremented down to 0, need a unique unbond object to have a clear
     // start epoch
 
-    // Brainstorming:
-    // storage key ../unbond/delegator/validator/end/start -> amount
+    // TODO: do we want to apply slashing here? (It is done here previously)
 
     let unbond_handle = unbond_handle(source, validator);
     let withdrawable_epoch =
@@ -2570,7 +2572,7 @@ where
     let mut bond_iter =
         bond_remain_handle.get_data_handler().rev_iter(storage)?;
 
-    // Map: {bond_epoch, (new bond value, unbond value)}
+    // Map: { bond start epoch, (new bond value, unbond value) }
     let mut new_bond_values_map =
         HashMap::<Epoch, (token::Amount, token::Amount)>::new();
 
@@ -2599,15 +2601,15 @@ where
     drop(bond_iter);
 
     // Write the in-memory bond and unbond values back to storage
-    // TODO: need to add upsert of unbond values in case an unbond already
-    // exists (since insert is overwriting)
     for (bond_epoch, (new_bond_amnt, unbond_amnt)) in
         new_bond_values_map.into_iter()
     {
         bond_remain_handle.set(storage, new_bond_amnt.into(), bond_epoch, 0)?;
-        unbond_handle.at(&withdrawable_epoch).insert(
+        update_unbond(
+            &unbond_handle,
             storage,
-            bond_epoch,
+            &withdrawable_epoch,
+            &bond_epoch,
             unbond_amnt,
         )?;
     }
@@ -2635,10 +2637,33 @@ where
 
     Ok(())
 }
+
+fn update_unbond<S>(
+    handle: &UnbondNew,
+    storage: &mut S,
+    withdraw_epoch: &Epoch,
+    start_epoch: &Epoch,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let current = handle
+        .at(withdraw_epoch)
+        .get(storage, start_epoch)?
+        .unwrap_or_default();
+    handle.at(withdraw_epoch).insert(
+        storage,
+        start_epoch.clone(),
+        current + amount,
+    )?;
+    Ok(())
+}
+
 /// NEW: Initialize data for a new validator.
 /// TODO: should this still happen at pipeline if it is occurring with 0 bonded
 /// stake
-fn become_validator_new<S>(
+pub fn become_validator_new<S>(
     storage: &mut S,
     params: &PosParams,
     address: &Address,
@@ -2710,12 +2735,12 @@ where
 }
 
 /// NEW: Withdraw.
-fn withdraw_tokens_new<S>(
+pub fn withdraw_tokens_new<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> storage_api::Result<token::Amount>
 where
     S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
 {
@@ -2757,9 +2782,13 @@ where
             break;
         }
         for slash in slashes.iter(storage)? {
-            let slash = slash?;
-            if slash.epoch > start_epoch && slash.epoch < end_epoch {
-                let slash_rate = get_slash_rate(&params, &slash);
+            let SlashNew {
+                epoch,
+                block_height: _,
+                r#type: slash_type,
+            } = slash?;
+            if epoch > start_epoch && epoch < end_epoch {
+                let slash_rate = slash_type.get_slash_rate(&params);
                 let to_slash = token::Amount::from(decimal_mult_u64(
                     slash_rate,
                     u64::from(amount),
@@ -2779,11 +2808,19 @@ where
         // so, may need to implement remove for nested map
     }
 
-    Ok(())
+    // Transfer the tokens from the PoS address back to the source
+    storage.transfer(
+        &staking_token_address(),
+        withdrawable_amount,
+        &<S as PosBase>::POS_ADDRESS,
+        source,
+    );
+
+    Ok(withdrawable_amount)
 }
 
 /// Change the commission rate of a validator
-pub fn change_validator_commission_rate<S>(
+pub fn change_validator_commission_rate_new<S>(
     storage: &mut S,
     validator: &Address,
     new_rate: Decimal,
