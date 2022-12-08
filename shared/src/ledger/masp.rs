@@ -21,8 +21,6 @@ use masp_proofs::sapling::SaplingVerificationContext;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
-#[cfg(feature = "masp-tx-gen")]
-use std::io::Read;
 
 //use async_std::io::prelude::WriteExt;
 //use async_std::io::{self};
@@ -273,6 +271,7 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
         unwrap_client_response(RPC.shell().read_results(&self.client()).await)
     }
 
+    /// Query to check if the given storage key exists.
     async fn storage_has_key(&self, storage_key: &storage::Key) -> bool {
         unwrap_client_response(
             RPC.shell().storage_has_key(&self.client(), storage_key).await,
@@ -1504,7 +1503,7 @@ fn convert_amount(
 
 /// A helper to unwrap client's response. Will shut down process on error.
 fn unwrap_client_response<T, U>(response: Result<T, U>) -> T {
-    response.unwrap_or_else(|err| {
+    response.unwrap_or_else(|_err| {
         panic!("Error in the query");
     })
 }

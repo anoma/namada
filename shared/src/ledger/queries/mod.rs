@@ -16,6 +16,7 @@ use crate::types::storage::BlockHeight;
 #[macro_use]
 mod router;
 mod shell;
+/// Ledger read-only queries can be handled and dispatched via the [`RPC`]
 pub mod types;
 mod vp;
 

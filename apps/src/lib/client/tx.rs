@@ -10,9 +10,6 @@ use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either::*;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::Node;
 use masp_primitives::transaction::builder;
 use masp_proofs::prover::LocalTxProver;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
@@ -32,7 +29,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::TransferTarget;
 use namada::types::storage::{
-    Epoch, BlockResults, RESERVED_ADDRESS_PREFIX,
+    Epoch, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
@@ -48,7 +45,6 @@ use async_trait::async_trait;
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{query_conversion, query_storage_value};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
