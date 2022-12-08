@@ -1248,7 +1248,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")
-                .add_args::<args::QueryConversions>()
+                .add_args::<args::QueryTransfers>()
         }
     }
 
