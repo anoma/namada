@@ -32,7 +32,7 @@ use namada::types::governance::{
 use namada::types::key::*;
 use namada::types::masp::TransferTarget;
 use namada::types::storage::{
-    Epoch, RESERVED_ADDRESS_PREFIX,
+    Epoch, BlockResults, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
@@ -415,6 +415,8 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait]
 impl masp::ShieldedUtils for CLIShieldedUtils {
+    type C = HttpClient;
+    
     async fn query_storage_value<T: Send>(
         &self,
         key: &storage::Key,
@@ -499,6 +501,20 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     )> {
         let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
         query_conversion(client, asset_type).await
+    }
+
+    fn client(&self) -> Self::C {
+        let ledger_address = self
+            .ledger_address
+            .clone()
+            .expect("ledger address must be set");
+        HttpClient::new(ledger_address).unwrap()
+    }
+
+    async fn query_results(&self) -> Vec<BlockResults> {
+        rpc::query_results(args::Query {
+            ledger_address: self.ledger_address.clone().unwrap()
+        }).await
     }
 }
 
