@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, Write};
@@ -33,7 +33,6 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
-use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
@@ -43,22 +42,16 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
+    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue,
 };
-use namada::types::token::{balance_key, Transfer};
-use namada::types::transaction::{
-    process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
-    WrapperTx,
-};
+use namada::types::token::balance_key;
 use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
-use namada::ledger::masp::{
-    Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
-};
+use namada::ledger::masp::{Conversions, PinnedBalanceError};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
