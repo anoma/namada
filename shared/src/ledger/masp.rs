@@ -48,11 +48,11 @@ use masp_primitives::transaction::components::{OutPoint, TxOut};
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use crate::types::address::{masp, Address};
-use crate::types::masp::PaymentAddress;
+use crate::types::masp::{PaymentAddress, BalanceOwner};
 #[cfg(feature = "masp-tx-gen")]
 use crate::types::masp::{TransferSource, TransferTarget};
 use crate::types::storage::{
-    BlockHeight, Epoch, Key, KeySeg, TxIndex,
+    BlockHeight, Epoch, Key, KeySeg, TxIndex, BlockResults,
 };
 use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
@@ -63,6 +63,14 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 #[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
 use async_trait::async_trait;
+use crate::proto::{Tx, SignedTxData};
+use crate::types::transaction::{DecryptedTx, EllipticCurve, WrapperTx, TxType, PairingEngine, process_tx};
+use crate::tendermint_rpc::query::Query;
+use crate::tendermint_rpc::Order;
+use namada_core::types::transaction::AffineCurve;
+use tendermint_rpc::Client;
+use crate::types::masp::ExtendedViewingKey;
+use itertools::Either;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -249,6 +257,8 @@ pub fn get_params_dir() -> PathBuf {
 
 #[async_trait]
 pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone {
+    type C: tendermint_rpc::Client + std::marker::Sync;
+    
     async fn query_storage_value<T: Send>(
         &self,
         key: &storage::Key,
@@ -273,6 +283,10 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
         masp_primitives::transaction::components::Amount,
         MerklePath<Node>,
     )>;
+
+    async fn query_results(&self) -> Vec<BlockResults>;
+
+    fn client(&self) -> Self::C;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -1262,6 +1276,153 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         }
 
         tx.map(Some)
+    }
+
+    /// Obtain the known effects of all accepted shielded and transparent
+    /// transactions. If an owner is specified, then restrict the set to only
+    /// transactions crediting/debiting the given owner. If token is specified, then
+    /// restrict set to only transactions involving the given token.
+    pub async fn query_tx_deltas(
+        &mut self,
+        query_owner: &Either<BalanceOwner, Vec<Address>>,
+        query_token: &Option<Address>,
+        viewing_keys: &HashMap<String, ExtendedViewingKey>,
+    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
+    {
+        const TXS_PER_PAGE: u8 = 100;
+        // Connect to the Tendermint server holding the transactions
+        //let client = HttpClient::new(ledger_address.clone()).unwrap();
+        // Build up the context that will be queried for transactions
+        //ctx.shielded.utils.ledger_address = Some(ledger_address.clone());
+        let _ = self.load();
+        let vks = viewing_keys;
+        let fvks: Vec<_> = vks
+            .values()
+            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
+            .collect();
+        self.fetch(&[], &fvks).await;
+        // Save the update state so that future fetches can be short-circuited
+        let _ = self.save();
+        // Required for filtering out rejected transactions from Tendermint
+        // responses
+        let block_results = self.utils.query_results().await;
+        let mut transfers = self.get_tx_deltas().clone();
+        // Construct the set of addresses relevant to user's query
+        let relevant_addrs = match &query_owner {
+            Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
+            // MASP objects are dealt with outside of tx_search
+            Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
+            Either::Left(BalanceOwner::PaymentAddress(_owner)) => vec![],
+            // Unspecified owner means all known addresses are considered relevant
+            Either::Right(addrs) => addrs.clone(),
+        };
+        // Find all transactions to or from the relevant address set
+        for addr in relevant_addrs {
+            for prop in ["transfer.source", "transfer.target"] {
+                // Query transactions involving the current address
+                let mut tx_query = Query::eq(prop, addr.encode());
+                // Elaborate the query if requested by the user
+                if let Some(token) = &query_token {
+                    tx_query = tx_query.and_eq("transfer.token", token.encode());
+                }
+                for page in 1.. {
+                    let txs = &self.utils.client()
+                        .tx_search(
+                            tx_query.clone(),
+                            true,
+                            page,
+                            TXS_PER_PAGE,
+                            Order::Ascending,
+                        )
+                        .await
+                        .expect("Unable to query for transactions")
+                        .txs;
+                    for response_tx in txs {
+                        let height = BlockHeight(response_tx.height.value());
+                        let idx = TxIndex(response_tx.index);
+                        // Only process yet unprocessed transactions which have been
+                        // accepted by node VPs
+                        let should_process = !transfers
+                            .contains_key(&(height, idx))
+                            && block_results[u64::from(height) as usize]
+                            .is_accepted(idx.0 as usize);
+                        if !should_process {
+                            continue;
+                        }
+                        let tx = Tx::try_from(response_tx.tx.as_ref())
+                            .expect("Ill-formed Tx");
+                        let mut wrapper = None;
+                        let mut transfer = None;
+                        extract_payload(tx, &mut wrapper, &mut transfer);
+                        // Epoch data is not needed for transparent transactions
+                        let epoch = wrapper.map(|x| x.epoch).unwrap_or_default();
+                        if let Some(transfer) = transfer {
+                            // Skip MASP addresses as they are already handled by
+                            // ShieldedContext
+                            if transfer.source == masp()
+                                || transfer.target == masp()
+                            {
+                                continue;
+                            }
+                            // Describe how a Transfer simply subtracts from one
+                            // account and adds the same to another
+                            let mut delta = TransferDelta::default();
+                            let tfer_delta = Amount::from_nonnegative(
+                                transfer.token.clone(),
+                                u64::from(transfer.amount),
+                            )
+                                .expect("invalid value for amount");
+                            delta.insert(
+                                transfer.source,
+                                Amount::zero() - &tfer_delta,
+                            );
+                            delta.insert(transfer.target, tfer_delta);
+                            // No shielded accounts are affected by this Transfer
+                            transfers.insert(
+                                (height, idx),
+                                (epoch, delta, TransactionDelta::new()),
+                            );
+                        }
+                    }
+                    // An incomplete page signifies no more transactions
+                    if (txs.len() as u8) < TXS_PER_PAGE {
+                        break;
+                    }
+                }
+            }
+        }
+        transfers
+    }
+}
+
+/// Extract the payload from the given Tx object
+fn extract_payload(
+    tx: Tx,
+    wrapper: &mut Option<WrapperTx>,
+    transfer: &mut Option<Transfer>,
+) {
+    match process_tx(tx) {
+        Ok(TxType::Wrapper(wrapper_tx)) => {
+            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            extract_payload(
+                Tx::from(match wrapper_tx.decrypt(privkey) {
+                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    _ => DecryptedTx::Undecryptable(wrapper_tx.clone()),
+                }),
+                wrapper,
+                transfer,
+            );
+            *wrapper = Some(wrapper_tx);
+        }
+        Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
+            let empty_vec = vec![];
+            let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
+            let _ = SignedTxData::try_from_slice(tx_data).map(|signed| {
+                Transfer::try_from_slice(&signed.data.unwrap()[..])
+                    .map(|tfer| *transfer = Some(tfer))
+            });
+        }
+        _ => {}
     }
 }
 
