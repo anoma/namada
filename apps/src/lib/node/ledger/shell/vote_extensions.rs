@@ -6,7 +6,7 @@ pub mod val_set_update;
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
 use index_set::vec::VecIndexSet;
-use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -226,7 +226,7 @@ where
             ext,
             self.storage.get_current_decision_height(),
         )
-        .then(|| true)
+        .then_some(true)
         .unwrap_or_else(|| {
             tracing::warn!(
                 ?req.validator_address,
@@ -245,17 +245,16 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<validator_set_update::SignedVext>,
     ) -> bool {
-        self.storage
-            .can_send_validator_set_update(SendValsetUpd::Now)
-            .then(|| {
-                ext.and_then(|ext| {
+        if let Some(ext) = ext {
+            self.storage
+                .can_send_validator_set_update(SendValsetUpd::Now)
+                .then(|| {
                     // we have a valset update vext when we're expecting one,
                     // cool, let's validate it
                     self.validate_valset_upd_vext(
                         ext,
                         self.storage.get_current_decision_height(),
                     )
-                    .then(|| true)
                 })
                 .unwrap_or_else(|| {
                     // either validation failed, or we were expecting a valset
@@ -268,13 +267,12 @@ where
                     );
                     false
                 })
-            })
-            .unwrap_or({
-                // NOTE: if we're not supposed to send a validator set update
-                // vote extension at a particular block height, we will
-                // just return true as the validation result
-                true
-            })
+        } else {
+            // NOTE: if we're not supposed to send a validator set update
+            // vote extension at a particular block height, we will
+            // just return true as the validation result
+            true
+        }
     }
 }
 

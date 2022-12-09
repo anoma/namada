@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a bug report for Anoma.
+about: Create a bug report for Namada.
 labels: bug
 ---
 

@@ -6,17 +6,21 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::ledger::eth_bridge::parameters::EthereumBridgeConfig;
+use namada::ledger::eth_bridge::parameters::{
+    Contracts, EthereumBridgeConfig, UpgradeableContract,
+};
 use namada::ledger::governance::parameters::GovParams;
-use namada::ledger::parameters::Parameters;
+use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
-use namada::types::address::Address;
+use namada::types::address::{wnam, Address};
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
-use namada::types::time::DateTimeUtc;
+use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::{storage, token};
+use rust_decimal::Decimal;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -29,20 +33,20 @@ pub mod genesis_config {
     use data_encoding::HEXLOWER;
     use eyre::Context;
     use namada::ledger::governance::parameters::GovParams;
-    use namada::ledger::parameters::{EpochDuration, Parameters};
-    use namada::ledger::pos::types::BasisPoints;
+    use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::{storage, token};
+    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
     use super::{
         EstablishedAccount, EthereumBridgeConfig, Genesis, ImplicitAccount,
-        TokenAccount, Validator,
+        Parameters, TokenAccount, Validator,
     };
     use crate::cli;
 
@@ -106,10 +110,13 @@ pub mod genesis_config {
     pub struct GenesisConfig {
         // Genesis timestamp
         pub genesis_time: Rfc3339String,
+        // Name of the native token - this must one of the tokens included in
+        // the `token` field
+        pub native_token: String,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
-        pub token: Option<HashMap<String, TokenAccountConfig>>,
+        pub token: HashMap<String, TokenAccountConfig>,
         // Established accounts present at genesis
         pub established: Option<HashMap<String, EstablishedAccountConfig>>,
         // Implicit accounts present at genesis
@@ -167,8 +174,6 @@ pub mod genesis_config {
         pub eth_hot_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
-        // Public key for staking reward account. (default: generate)
-        pub staking_reward_public_key: Option<HexString>,
         // Public protocol signing key for validator account. (default:
         // generate)
         pub protocol_public_key: Option<HexString>,
@@ -176,18 +181,19 @@ pub mod genesis_config {
         pub dkg_public_key: Option<HexString>,
         // Validator address (default: generate).
         pub address: Option<String>,
-        // Staking reward account address (default: generate).
-        pub staking_reward_address: Option<String>,
         // Total number of tokens held at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub tokens: Option<u64>,
         // Unstaked balance at genesis.
         // XXX: u64 doesn't work with toml-rs!
         pub non_staked_balance: Option<u64>,
+        /// Commission rate charged on rewards for delegators (bounded inside
+        /// 0-1)
+        pub commission_rate: Option<Decimal>,
+        /// Maximum change in commission rate permitted per epoch
+        pub max_commission_rate_change: Option<Decimal>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
-        // Filename of staking reward account VP. (default: user VP)
-        pub staking_reward_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
         pub net_address: Option<String>,
         /// Tendermint node key is used to derive Tendermint node ID for node
@@ -229,9 +235,6 @@ pub mod genesis_config {
         // Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Minimum duration of an epoch (in seconds).
-        // TODO: this is i64 because datetime wants it
-        pub min_duration: i64,
         // Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
@@ -241,6 +244,14 @@ pub mod genesis_config {
         // Hashes of whitelisted txs array. `None` value or an empty array
         // disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
+        /// Filename of implicit accounts validity predicate WASM code
+        pub implicit_vp: String,
+        /// Expected number of epochs per year
+        pub epochs_per_year: u64,
+        /// PoS gain p
+        pub pos_gain_p: Decimal,
+        /// PoS gain d
+        pub pos_gain_d: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -254,23 +265,28 @@ pub mod genesis_config {
         // Unbonding length (in epochs).
         // XXX: u64 doesn't work with toml-rs!
         pub unbonding_len: u64,
-        // Votes per token (in basis points).
+        // Votes per token.
         // XXX: u64 doesn't work with toml-rs!
-        pub votes_per_token: u64,
+        pub tm_votes_per_token: Decimal,
         // Reward for proposing a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: u64,
+        pub block_proposer_reward: Decimal,
         // Reward for voting on a block.
         // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: u64,
-        // Portion of a validator's stake that should be slashed on a
-        // duplicate vote (in basis points).
+        pub block_vote_reward: Decimal,
+        // Maximum staking APY
         // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_slash_rate: u64,
+        pub max_inflation_rate: Decimal,
+        // Target ratio of staked NAM tokens to total NAM tokens
+        pub target_staked_ratio: Decimal,
         // Portion of a validator's stake that should be slashed on a
-        // light client attack (in basis points).
+        // duplicate vote.
         // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_slash_rate: u64,
+        pub duplicate_vote_min_slash_rate: Decimal,
+        // Portion of a validator's stake that should be slashed on a
+        // light client attack.
+        // XXX: u64 doesn't work with toml-rs!
+        pub light_client_attack_min_slash_rate: Decimal,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -285,26 +301,14 @@ pub mod genesis_config {
     ) -> Validator {
         let validator_vp_name = config.validator_vp.as_ref().unwrap();
         let validator_vp_config = wasm.get(validator_vp_name).unwrap();
-        let reward_vp_name = config.staking_reward_vp.as_ref().unwrap();
-        let reward_vp_config = wasm.get(reward_vp_name).unwrap();
 
         Validator {
             pos_data: GenesisValidator {
-                address: Address::decode(&config.address.as_ref().unwrap())
+                address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
-                staking_reward_address: Address::decode(
-                    &config.staking_reward_address.as_ref().unwrap(),
-                )
-                .unwrap(),
                 tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
                 consensus_key: config
                     .consensus_public_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                staking_reward_key: config
-                    .staking_reward_public_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
@@ -321,6 +325,29 @@ pub mod genesis_config {
                     .unwrap()
                     .to_public_key()
                     .unwrap(),
+                commission_rate: config
+                    .commission_rate
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("Commission rate must be between 0.0 and 1.0"),
+                max_commission_rate_change: config
+                    .max_commission_rate_change
+                    .and_then(|rate| {
+                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
+                            Some(rate)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect(
+                        "Max commission rate change must be between 0.0 and \
+                         1.0",
+                    ),
             },
             account_key: config
                 .account_public_key
@@ -350,16 +377,6 @@ pub mod genesis_config {
                 .unwrap()
                 .to_sha256_bytes()
                 .unwrap(),
-            reward_vp_code_path: reward_vp_config.filename.to_owned(),
-            reward_vp_sha256: reward_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown validator VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
         }
     }
 
@@ -374,8 +391,7 @@ pub mod genesis_config {
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
-            address: Address::decode(&config.address.as_ref().unwrap())
-                .unwrap(),
+            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
                 .sha256
@@ -393,7 +409,7 @@ pub mod genesis_config {
                 .iter()
                 .map(|(alias_or_address, amount)| {
                     (
-                        match Address::decode(&alias_or_address) {
+                        match Address::decode(alias_or_address) {
                             Ok(address) => address,
                             Err(decode_err) => {
                                 if let Some(alias) =
@@ -456,8 +472,7 @@ pub mod genesis_config {
         let account_vp_config = wasm.get(account_vp_name).unwrap();
 
         EstablishedAccount {
-            address: Address::decode(&config.address.as_ref().unwrap())
-                .unwrap(),
+            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: account_vp_config.filename.to_owned(),
             vp_sha256: account_vp_config
                 .sha256
@@ -479,7 +494,7 @@ pub mod genesis_config {
                 .iter()
                 .map(|(address, hex)| {
                     (
-                        storage::Key::parse(&address).unwrap(),
+                        storage::Key::parse(address).unwrap(),
                         hex.to_bytes().unwrap(),
                     )
                 })
@@ -499,32 +514,55 @@ pub mod genesis_config {
     }
 
     pub fn load_genesis_config(config: GenesisConfig) -> Genesis {
-        let wasms = config.wasm;
-        let validators: HashMap<String, Validator> = config
-            .validator
+        let GenesisConfig {
+            genesis_time,
+            native_token,
+            validator,
+            token,
+            established,
+            implicit,
+            parameters,
+            pos_params,
+            gov_params,
+            wasm,
+            ethereum_bridge_params,
+        } = config;
+
+        let native_token = Address::decode(
+            token
+                .get(&native_token)
+                .expect(
+                    "Native token's alias must be present in the declared \
+                     tokens",
+                )
+                .address
+                .as_ref()
+                .expect("Missing native token address"),
+        )
+        .expect("Invalid address");
+
+        let validators: HashMap<String, Validator> = validator
             .iter()
-            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasms)))
+            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
             .collect();
-        let established_accounts: HashMap<String, EstablishedAccount> = config
-            .established
-            .unwrap_or_default()
-            .iter()
-            .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasms)))
-            .collect();
-        let implicit_accounts: HashMap<String, ImplicitAccount> = config
-            .implicit
+        let established_accounts: HashMap<String, EstablishedAccount> =
+            established
+                .unwrap_or_default()
+                .iter()
+                .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasm)))
+                .collect();
+        let implicit_accounts: HashMap<String, ImplicitAccount> = implicit
             .unwrap_or_default()
             .iter()
             .map(|(name, cfg)| (name.clone(), load_implicit(cfg)))
             .collect();
-        let token_accounts = config
-            .token
-            .unwrap_or_default()
+        #[allow(clippy::iter_kv_map)]
+        let token_accounts = token
             .iter()
             .map(|(_name, cfg)| {
                 load_token(
                     cfg,
-                    &wasms,
+                    &wasm,
                     &validators,
                     &established_accounts,
                     &implicit_accounts,
@@ -532,55 +570,89 @@ pub mod genesis_config {
             })
             .collect();
 
+        let implicit_vp_config = wasm.get(&parameters.implicit_vp).unwrap();
+        let implicit_vp_code_path = implicit_vp_config.filename.to_owned();
+        let implicit_vp_sha256 = implicit_vp_config
+            .sha256
+            .clone()
+            .unwrap_or_else(|| {
+                eprintln!("Unknown implicit VP WASM sha256");
+                cli::safe_exit(1);
+            })
+            .to_sha256_bytes()
+            .unwrap();
+
+        let min_duration: i64 =
+            60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
         let parameters = Parameters {
             epoch_duration: EpochDuration {
-                min_num_of_blocks: config.parameters.min_num_of_blocks,
+                min_num_of_blocks: parameters.min_num_of_blocks,
                 min_duration: namada::types::time::Duration::seconds(
-                    config.parameters.min_duration,
+                    min_duration,
                 )
                 .into(),
             },
             max_expected_time_per_block:
                 namada::types::time::Duration::seconds(
-                    config.parameters.max_expected_time_per_block,
+                    parameters.max_expected_time_per_block,
                 )
                 .into(),
-            vp_whitelist: config.parameters.vp_whitelist.unwrap_or_default(),
-            tx_whitelist: config.parameters.tx_whitelist.unwrap_or_default(),
+            vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
+            tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
+            implicit_vp_code_path,
+            implicit_vp_sha256,
+            epochs_per_year: parameters.epochs_per_year,
+            pos_gain_p: parameters.pos_gain_p,
+            pos_gain_d: parameters.pos_gain_d,
+            staked_ratio: Decimal::ZERO,
+            pos_inflation_amount: 0,
         };
 
+        let GovernanceParamsConfig {
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+            max_proposal_period,
+        } = gov_params;
         let gov_params = GovParams {
-            min_proposal_fund: config.gov_params.min_proposal_fund,
-            max_proposal_code_size: config.gov_params.max_proposal_code_size,
-            min_proposal_period: config.gov_params.min_proposal_period,
-            max_proposal_period: config.gov_params.max_proposal_period,
-            max_proposal_content_size: config
-                .gov_params
-                .max_proposal_content_size,
-            min_proposal_grace_epochs: config
-                .gov_params
-                .min_proposal_grace_epochs,
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+            max_proposal_period,
         };
 
+        let PosParamsConfig {
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            tm_votes_per_token,
+            block_proposer_reward,
+            block_vote_reward,
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
+        } = pos_params;
         let pos_params = PosParams {
-            max_validator_slots: config.pos_params.max_validator_slots,
-            pipeline_len: config.pos_params.pipeline_len,
-            unbonding_len: config.pos_params.unbonding_len,
-            votes_per_token: BasisPoints::new(
-                config.pos_params.votes_per_token,
-            ),
-            block_proposer_reward: config.pos_params.block_proposer_reward,
-            block_vote_reward: config.pos_params.block_vote_reward,
-            duplicate_vote_slash_rate: BasisPoints::new(
-                config.pos_params.duplicate_vote_slash_rate,
-            ),
-            light_client_attack_slash_rate: BasisPoints::new(
-                config.pos_params.light_client_attack_slash_rate,
-            ),
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            tm_votes_per_token,
+            block_proposer_reward,
+            block_vote_reward,
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
         };
 
         let mut genesis = Genesis {
-            genesis_time: config.genesis_time.try_into().unwrap(),
+            genesis_time: genesis_time.try_into().unwrap(),
+            native_token,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -588,7 +660,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            ethereum_bridge_params: config.ethereum_bridge_params,
+            ethereum_bridge_params,
         };
         genesis.init();
         genesis
@@ -629,6 +701,7 @@ pub mod genesis_config {
 #[borsh_init(init)]
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
+    pub native_token: Address,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -674,17 +747,13 @@ pub struct Validator {
     pub protocol_key: common::PublicKey,
     /// The public DKG session key used during the DKG protocol
     pub dkg_public_key: DkgPublicKey,
-    /// These tokens are no staked and hence do not contribute to the
+    /// These tokens are not staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
     /// Validity predicate code WASM
     pub validator_vp_code_path: String,
     /// Expected SHA-256 hash of the validator VP
     pub validator_vp_sha256: [u8; 32],
-    /// Staking reward account code WASM
-    pub reward_vp_code_path: String,
-    /// Expected SHA-256 hash of the staking reward VP
-    pub reward_vp_sha256: [u8; 32],
 }
 
 #[derive(
@@ -737,6 +806,46 @@ pub struct ImplicitAccount {
     pub public_key: common::PublicKey,
 }
 
+/// Protocol parameters. This is almost the same as
+/// `ledger::parameters::Parameters`, but instead of having the `implicit_vp`
+/// WASM code bytes, it only has the name and sha as the actual code is loaded
+/// on `init_chain`
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct Parameters {
+    /// Epoch duration
+    pub epoch_duration: EpochDuration,
+    /// Maximum expected time per block
+    pub max_expected_time_per_block: DurationSecs,
+    /// Whitelisted validity predicate hashes
+    pub vp_whitelist: Vec<String>,
+    /// Whitelisted tx hashes
+    pub tx_whitelist: Vec<String>,
+    /// Implicit accounts validity predicate code WASM
+    pub implicit_vp_code_path: String,
+    /// Expected SHA-256 hash of the implicit VP
+    pub implicit_vp_sha256: [u8; 32],
+    /// Expected number of epochs per year (read only)
+    pub epochs_per_year: u64,
+    /// PoS gain p (read only)
+    pub pos_gain_p: Decimal,
+    /// PoS gain d (read only)
+    pub pos_gain_d: Decimal,
+    /// PoS staked ratio (read + write for every epoch)
+    pub staked_ratio: Decimal,
+    /// PoS inflation amount from the last epoch (read + write for every epoch)
+    pub pos_inflation_amount: u64,
+}
+
 #[cfg(not(feature = "dev"))]
 pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
     let path = base_dir
@@ -746,58 +855,48 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    use namada::ledger::parameters::EpochDuration;
     use namada::types::address;
+    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
+    let vp_implicit_path = "vp_implicit.wasm";
     let vp_token_path = "vp_token.wasm";
     let vp_user_path = "vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
-    // `anoma reset` command. To generate a new validator, use the
+    // `namada reset` command. To generate a new validator, use the
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let ed_staking_reward_keypair = ed25519::SecretKey::try_from_slice(&[
-        61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
-        24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
-    ])
-    .unwrap();
-
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
         90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
         65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
     ])
     .unwrap();
 
-    let staking_reward_keypair =
-        common::SecretKey::try_from_sk(&ed_staking_reward_keypair).unwrap();
     let eth_cold_keypair =
         common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
     let address = wallet::defaults::validator_address();
-    let staking_reward_address = Address::decode("atest1v4ehgw36xcersvee8qerxd35x9prsw2xg5erxv6pxfpygd2x89z5xsf5xvmnysejgv6rwd2rnj2avt").unwrap();
     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
         wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            staking_reward_address,
             tokens: token::Amount::whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            staking_reward_key: staking_reward_keypair.ref_to(),
             eth_cold_key: eth_cold_keypair.ref_to(),
             eth_hot_key: eth_bridge_keypair.ref_to(),
+            commission_rate: dec!(0.05),
+            max_commission_rate_change: dec!(0.01),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
         non_staked_balance: token::Amount::whole(100_000),
-        // TODO replace with https://github.com/anoma/anoma/issues/25)
+        // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
-        reward_vp_code_path: vp_user_path.into(),
-        reward_vp_sha256: Default::default(),
     };
     let parameters = Parameters {
         epoch_duration: EpochDuration {
@@ -807,6 +906,14 @@ pub fn genesis() -> Genesis {
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
+        implicit_vp_code_path: vp_implicit_path.into(),
+        implicit_vp_sha256: Default::default(),
+        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
+                                   * per epoch (60 = min_duration) */
+        pos_gain_p: dec!(0.1),
+        pos_gain_d: dec!(0.1),
+        staked_ratio: dec!(0.0),
+        pos_inflation_amount: 0,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -864,8 +971,8 @@ pub fn genesis() -> Genesis {
         ((&validator.account_key).into(), default_key_tokens),
     ]);
     let token_accounts = address::tokens()
-        .into_iter()
-        .map(|(address, _)| TokenAccount {
+        .into_keys()
+        .map(|address| TokenAccount {
             address,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
@@ -881,7 +988,21 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        ethereum_bridge_params: None,
+        ethereum_bridge_params: Some(EthereumBridgeConfig {
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([0; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([1; 20]),
+                    version: Default::default(),
+                },
+            },
+        }),
+        native_token: address::nam(),
     }
 }
 
@@ -896,18 +1017,14 @@ pub mod tests {
     use crate::wallet;
 
     /// Run `cargo test gen_genesis_validator -- --nocapture` to generate a
-    /// new genesis validator address, staking reward address and keypair.
+    /// new genesis validator address and keypair.
     #[test]
     fn gen_genesis_validator() {
         let address = gen_established_address();
-        let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let staking_reward_keypair: common::SecretKey =
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
-        let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
 
@@ -922,9 +1039,7 @@ pub mod tests {
                 .unwrap();
 
         println!("address: {}", address);
-        println!("staking_reward_address: {}", staking_reward_address);
         println!("keypair: {:?}", kp_arr);
-        println!("staking_reward_keypair: {:?}", srkp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
         println!(

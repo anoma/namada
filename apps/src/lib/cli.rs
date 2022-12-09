@@ -1,9 +1,9 @@
-//! The CLI commands that are re-used between the executables `anoma`,
-//! `anoma-node` and `anoma-client`.
+//! The CLI commands that are re-used between the executables `namada`,
+//! `namada-node` and `namada-client`.
 //!
-//! The `anoma` executable groups together the most commonly used commands
+//! The `namada` executable groups together the most commonly used commands
 //! inlined from the node and the client. The other commands for the node or the
-//! client can be dispatched via `anoma node ...` or `anoma client ...`,
+//! client can be dispatched via `namada node ...` or `namada client ...`,
 //! respectively.
 
 pub mod context;
@@ -20,7 +20,7 @@ include!("../../version.rs");
 
 const APP_NAME: &str = "Namada";
 
-// Main Anoma sub-commands
+// Main Namada sub-commands
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
@@ -33,14 +33,14 @@ pub mod cmds {
     use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
     use crate::cli::BRIDGE_POOL_CMD;
 
-    /// Commands for `anoma` binary.
+    /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
-    pub enum Anoma {
+    pub enum Namada {
         // Sub-binary-commands
-        Node(AnomaNode),
-        Client(AnomaClient),
-        Wallet(AnomaWallet),
+        Node(NamadaNode),
+        Client(NamadaClient),
+        Wallet(NamadaWallet),
 
         // Inlined commands from the node.
         EthBridgePool(EthBridgePool),
@@ -53,13 +53,14 @@ pub mod cmds {
         TxUpdateVp(TxUpdateVp),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
     }
 
-    impl Cmd for Anoma {
+    impl Cmd for Namada {
         fn add_sub(app: App) -> App {
-            app.subcommand(AnomaNode::def())
-                .subcommand(AnomaClient::def())
-                .subcommand(AnomaWallet::def())
+            app.subcommand(NamadaNode::def())
+                .subcommand(NamadaClient::def())
+                .subcommand(NamadaWallet::def())
                 .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
@@ -68,6 +69,7 @@ pub mod cmds {
                 .subcommand(TxUpdateVp::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
+                .subcommand(TxRevealPk::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -84,6 +86,7 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
+            let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
                 .or(wallet)
                 .or(ledger)
@@ -93,19 +96,20 @@ pub mod cmds {
                 .or(tx_update_vp)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_reveal_pk)
         }
     }
 
-    /// Used as top-level commands (`Cmd` instance) in `anoman` binary.
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `namadan` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
-    pub enum AnomaNode {
+    pub enum NamadaNode {
         Ledger(Ledger),
         Config(Config),
     }
 
-    impl Cmd for AnomaNode {
+    impl Cmd for NamadaNode {
         fn add_sub(app: App) -> App {
             app.subcommand(Ledger::def()).subcommand(Config::def())
         }
@@ -116,7 +120,7 @@ pub mod cmds {
             ledger.or(config)
         }
     }
-    impl SubCmd for AnomaNode {
+    impl SubCmd for NamadaNode {
         const CMD: &'static str = NODE_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -134,20 +138,20 @@ pub mod cmds {
         }
     }
 
-    /// Used as top-level commands (`Cmd` instance) in `anomac` binary.
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as top-level commands (`Cmd` instance) in `namadac` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
-    pub enum AnomaClient {
+    pub enum NamadaClient {
         /// The [`super::Context`] provides access to the wallet and the
         /// config. It will generate a new wallet and config, if they
         /// don't exist.
-        WithContext(AnomaClientWithContext),
+        WithContext(NamadaClientWithContext),
         /// Utils don't have [`super::Context`], only the global arguments.
         WithoutContext(Utils),
     }
 
-    impl Cmd for AnomaClient {
+    impl Cmd for NamadaClient {
         fn add_sub(app: App) -> App {
             app
                 // Simple transactions
@@ -156,11 +160,12 @@ pub mod cmds {
                 .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
-                .subcommand(TxInitValidator::def().display_order(1))
+                .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
+                .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -173,7 +178,7 @@ pub mod cmds {
                 .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
                 .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryVotingPower::def().display_order(3))
+                .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
@@ -185,7 +190,7 @@ pub mod cmds {
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            use AnomaClientWithContext::*;
+            use NamadaClientWithContext::*;
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
@@ -193,6 +198,7 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
@@ -207,8 +213,8 @@ pub mod cmds {
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
-            let query_voting_power =
-                Self::parse_with_ctx(matches, QueryVotingPower);
+            let query_bonded_stake =
+                Self::parse_with_ctx(matches, QueryBondedStake);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
@@ -225,9 +231,10 @@ pub mod cmds {
                 .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
-                .or(tx_init_validator)
+                .or(tx_reveal_pk)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_init_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -238,7 +245,7 @@ pub mod cmds {
                 .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
-                .or(query_voting_power)
+                .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_result)
                 .or(query_raw_bytes)
@@ -249,18 +256,18 @@ pub mod cmds {
         }
     }
 
-    impl AnomaClient {
+    impl NamadaClient {
         /// A helper method to parse sub cmds with context
         fn parse_with_ctx<T: SubCmd>(
             matches: &ArgMatches,
-            sub_to_self: impl Fn(T) -> AnomaClientWithContext,
+            sub_to_self: impl Fn(T) -> NamadaClientWithContext,
         ) -> Option<Self> {
             SubCmd::parse(matches)
                 .map(|sub| Self::WithContext(sub_to_self(sub)))
         }
     }
 
-    impl SubCmd for AnomaClient {
+    impl SubCmd for NamadaClient {
         const CMD: &'static str = CLIENT_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -279,7 +286,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub enum AnomaClientWithContext {
+    pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
@@ -290,6 +297,7 @@ pub mod cmds {
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
@@ -300,7 +308,8 @@ pub mod cmds {
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
-        QueryVotingPower(QueryVotingPower),
+        QueryBondedStake(QueryBondedStake),
+        QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -310,7 +319,7 @@ pub mod cmds {
 
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
-    pub enum AnomaWallet {
+    pub enum NamadaWallet {
         /// Key management commands
         Key(WalletKey),
         /// Address management commands
@@ -319,7 +328,7 @@ pub mod cmds {
         Masp(WalletMasp),
     }
 
-    impl Cmd for AnomaWallet {
+    impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
             app.subcommand(WalletKey::def())
                 .subcommand(WalletAddress::def())
@@ -334,7 +343,7 @@ pub mod cmds {
         }
     }
 
-    impl SubCmd for AnomaWallet {
+    impl SubCmd for NamadaWallet {
         const CMD: &'static str = WALLET_CMD;
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -793,7 +802,7 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Run Anoma ledger node.")
+            App::new(Self::CMD).about("Run Namada ledger node.")
         }
     }
 
@@ -809,7 +818,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD).about(
-                "Delete Anoma ledger node's and Tendermint node's storage \
+                "Delete Namada ledger node's and Tendermint node's storage \
                  data.",
             )
         }
@@ -1056,8 +1065,8 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to create a new validator and \
-                     its staking reward account.",
+                    "Send a signed transaction to create a new validator \
+                     account.",
                 )
                 .add_args::<args::TxInitValidator>()
         }
@@ -1216,21 +1225,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower(pub args::QueryVotingPower);
+    pub struct QueryBondedStake(pub args::QueryBondedStake);
 
-    impl SubCmd for QueryVotingPower {
-        const CMD: &'static str = "voting-power";
+    impl SubCmd for QueryBondedStake {
+        const CMD: &'static str = "bonded-stake";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryVotingPower(args::QueryVotingPower::parse(matches))
+                QueryBondedStake(args::QueryBondedStake::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS voting power.")
-                .add_args::<args::QueryVotingPower>()
+                .about("Query PoS bonded stake.")
+                .add_args::<args::QueryBondedStake>()
         }
     }
 
@@ -1250,6 +1259,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")
                 .add_args::<args::QueryConversions>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+
+    impl SubCmd for QueryCommissionRate {
+        const CMD: &'static str = "commission-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryCommissionRate(args::QueryCommissionRate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query commission rate.")
+                .add_args::<args::QueryCommissionRate>()
         }
     }
 
@@ -1339,6 +1367,36 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxRevealPk(pub args::RevealPk);
+
+    impl SubCmd for TxRevealPk {
+        const CMD: &'static str = "reveal-pk";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxRevealPk(args::RevealPk::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to reveal the public key an implicit \
+                     account. Typically, you don't have to do this manually \
+                     and the client will detect when a tx to reveal PK is \
+                     needed and submit it automatically. This will write the \
+                     PK into the account's storage so that it can be used for \
+                     signature verification on transactions authorized by \
+                     this account.",
+                )
+                .add_args::<args::RevealPk>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -1390,7 +1448,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Configure Anoma to join an existing network.")
+                .about("Configure Namada to join an existing network.")
                 .add_args::<args::JoinNetwork>()
         }
     }
@@ -1448,15 +1506,15 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Initialize genesis validator's address, staking reward \
-                     address, consensus key, validator account key and \
-                     staking rewards key and use it in the ledger's node.",
+                    "Initialize genesis validator's address, consensus key \
+                     and validator account key and use it in the ledger's \
+                     node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
     }
 
-    /// Used as sub-commands (`SubCmd` instance) in `anoma` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
         /// Construct a proof that a set of transfers is in the pool.
@@ -1582,6 +1640,7 @@ pub mod args {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
+    use rust_decimal::Decimal;
 
     use super::context::*;
     use super::utils::*;
@@ -1601,7 +1660,7 @@ pub mod args {
     const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
-        DefaultFn(|| match env::var("ANOMA_BASE_DIR") {
+        DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
             Ok(dir) => dir.into(),
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
@@ -1613,6 +1672,7 @@ pub mod args {
     const CHANNEL_ID: Arg<ChannelId> = arg("channel-id");
     const CODE_PATH: Arg<PathBuf> = arg("code-path");
     const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
+    const COMMISSION_RATE: Arg<Decimal> = arg("commission-rate");
     const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -1651,6 +1711,8 @@ pub mod args {
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
+    const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
+        arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1671,8 +1733,6 @@ pub mod args {
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const RECEIVER: Arg<String> = arg("receiver");
-    const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
-    const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -1737,18 +1797,18 @@ pub mod args {
                 .arg(BASE_DIR.def().about(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
-                     be set via `ANOMA_BASE_DIR` environment variable, but \
+                     be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.anoma`.",
+                     `.namada`.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
-                     `ANOMA_WASM_DIR` environment variable, but the argument \
+                     `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
                 .arg(MODE.def().about(
-                    "The mode in which to run Anoma. Options are \n\t * \
+                    "The mode in which to run Namada. Options are \n\t * \
                      Validator (default)\n\t * Full\n\t * Seed",
                 ))
         }
@@ -2117,10 +2177,10 @@ pub mod args {
         pub consensus_key: Option<WalletKeypair>,
         pub eth_cold_key: Option<WalletKeypair>,
         pub eth_hot_key: Option<WalletKeypair>,
-        pub rewards_account_key: Option<WalletPublicKey>,
         pub protocol_key: Option<WalletPublicKey>,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
-        pub rewards_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -2133,10 +2193,11 @@ pub mod args {
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
             let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
-            let rewards_account_key = REWARDS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
-            let rewards_vp_code_path = REWARDS_CODE_PATH.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 tx,
@@ -2146,10 +2207,10 @@ pub mod args {
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
-                rewards_account_key,
                 protocol_key,
+                commission_rate,
+                max_commission_rate_change,
                 validator_vp_code_path,
-                rewards_vp_code_path,
                 unsafe_dont_encrypt,
             }
         }
@@ -2182,23 +2243,25 @@ pub mod args {
                      be generated if none given. Note that this must be \
                      secp256k1.",
                 ))
-                .arg(REWARDS_KEY.def().about(
-                    "A public key for the staking reward account. A new one \
-                     will be generated if none given.",
-                ))
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
                      one will be generated if none given.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. Expressed as a decimal between 0 and \
+                     1. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. \
+                     Expressed as a decimal between 0 and 1. This is a \
+                     required parameter.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().about(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
-                ))
-                .arg(REWARDS_CODE_PATH.def().about(
-                    "The path to the validity predicate WASM code to be used \
-                     for the staking reward account. Uses the default staking \
-                     reward VP if none specified.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
@@ -2425,6 +2488,28 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct RevealPk {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// A public key to be revealed on-chain
+        pub public_key: WalletPublicKey,
+    }
+
+    impl Args for RevealPk {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let public_key = PUBLIC_KEY.parse(matches);
+
+            Self { tx, public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(PUBLIC_KEY.def().about("A public key to reveal."))
         }
     }
 
@@ -2720,18 +2805,18 @@ pub mod args {
         }
     }
 
-    /// Query PoS voting power
+    /// Query PoS bonded stake
     #[derive(Clone, Debug)]
-    pub struct QueryVotingPower {
+    pub struct QueryBondedStake {
         /// Common query args
         pub query: Query,
         /// Address of a validator
         pub validator: Option<WalletAddress>,
-        /// Epoch in which to find voting power
+        /// Epoch in which to find bonded stake
         pub epoch: Option<Epoch>,
     }
 
-    impl Args for QueryVotingPower {
+    impl Args for QueryBondedStake {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2746,7 +2831,78 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(VALIDATOR_OPT.def().about(
-                    "The validator's address whose voting power to query.",
+                    "The validator's address whose bonded stake to query.",
+                ))
+                .arg(EPOCH.def().about(
+                    "The epoch at which to query (last committed, if not \
+                     specified).",
+                ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    /// Commission rate change args
+    pub struct TxCommissionRateChange {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Validator address (should be self)
+        pub validator: WalletAddress,
+        /// Value to which the tx changes the commission rate
+        pub rate: Decimal,
+    }
+
+    impl Args for TxCommissionRateChange {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let rate = COMMISSION_RATE.parse(matches);
+            Self {
+                tx,
+                validator,
+                rate,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to change.",
+                ))
+                .arg(
+                    COMMISSION_RATE
+                        .def()
+                        .about("The desired new commission rate."),
+                )
+        }
+    }
+
+    /// Query PoS commission rate
+    #[derive(Clone, Debug)]
+    pub struct QueryCommissionRate {
+        /// Common query args
+        pub query: Query,
+        /// Address of a validator
+        pub validator: WalletAddress,
+        /// Epoch in which to find commission rate
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for QueryCommissionRate {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(VALIDATOR.def().about(
+                    "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().about(
                     "The epoch at which to query (last committed, if not \
@@ -3440,6 +3596,8 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
         pub alias: String,
+        pub commission_rate: Decimal,
+        pub max_commission_rate_change: Decimal,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
@@ -3448,6 +3606,9 @@ pub mod args {
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
@@ -3456,6 +3617,8 @@ pub mod args {
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
+                commission_rate,
+                max_commission_rate_change,
             }
         }
 
@@ -3463,8 +3626,17 @@ pub mod args {
             app.arg(ALIAS.def().about("The validator address alias."))
                 .arg(NET_ADDRESS.def().about(
                     "Static {host:port} of your validator node's P2P address. \
-                     Anoma uses port `26656` for P2P connections by default, \
+                     Namada uses port `26656` for P2P connections by default, \
                      but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().about(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
@@ -3478,45 +3650,46 @@ pub mod args {
     }
 }
 
-pub fn anoma_cli() -> (cmds::Anoma, String) {
-    let app = anoma_app();
+pub fn namada_cli() -> (cmds::Namada, String) {
+    let app = namada_app();
     let matches = app.get_matches();
     let raw_sub_cmd =
         matches.subcommand().map(|(raw, _matches)| raw.to_string());
-    let result = cmds::Anoma::parse(&matches);
+    let result = cmds::Namada::parse(&matches);
     match (result, raw_sub_cmd) {
         (Some(cmd), Some(raw_sub)) => return (cmd, raw_sub),
         _ => {
-            anoma_app().print_help().unwrap();
+            namada_app().print_help().unwrap();
         }
     }
     safe_exit(2);
 }
 
-pub fn anoma_node_cli() -> Result<(cmds::AnomaNode, Context)> {
-    let app = anoma_node_app();
-    cmds::AnomaNode::parse_or_print_help(app)
+pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
+    let app = namada_node_app();
+    cmds::NamadaNode::parse_or_print_help(app)
 }
 
-pub enum AnomaClient {
+#[allow(clippy::large_enum_variant)]
+pub enum NamadaClient {
     WithoutContext(cmds::Utils, args::Global),
-    WithContext(Box<(cmds::AnomaClientWithContext, Context)>),
+    WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
-pub fn anoma_client_cli() -> Result<AnomaClient> {
-    let app = anoma_client_app();
-    let mut app = cmds::AnomaClient::add_sub(app);
+pub fn namada_client_cli() -> Result<NamadaClient> {
+    let app = namada_client_app();
+    let mut app = cmds::NamadaClient::add_sub(app);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => {
             let global_args = args::Global::parse(&matches);
             match cmd {
-                cmds::AnomaClient::WithContext(sub_cmd) => {
+                cmds::NamadaClient::WithContext(sub_cmd) => {
                     let context = Context::new(global_args)?;
-                    Ok(AnomaClient::WithContext(Box::new((sub_cmd, context))))
+                    Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
-                cmds::AnomaClient::WithoutContext(sub_cmd) => {
-                    Ok(AnomaClient::WithoutContext(sub_cmd, global_args))
+                cmds::NamadaClient::WithoutContext(sub_cmd) => {
+                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
                 }
             }
         }
@@ -3527,52 +3700,52 @@ pub fn anoma_client_cli() -> Result<AnomaClient> {
     }
 }
 
-pub fn anoma_wallet_cli() -> Result<(cmds::AnomaWallet, Context)> {
-    let app = anoma_wallet_app();
-    cmds::AnomaWallet::parse_or_print_help(app)
+pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
+    let app = namada_wallet_app();
+    cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-pub fn anoma_relayer_cli() -> Result<(cmds::EthBridgePool, Context)> {
-    let app = anoma_relayer_app();
+pub fn namada_relayer_cli() -> Result<(cmds::EthBridgePool, Context)> {
+    let app = namada_relayer_app();
     cmds::EthBridgePool::parse_or_print_help(app)
 }
 
-fn anoma_app() -> App {
+fn namada_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma command line interface.")
+        .version(namada_version())
+        .about("Namada command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::Anoma::add_sub(args::Global::def(app))
+    cmds::Namada::add_sub(args::Global::def(app))
 }
 
-fn anoma_node_app() -> App {
+fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma node command line interface.")
+        .version(namada_version())
+        .about("Namada node command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaNode::add_sub(args::Global::def(app))
+    cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
-fn anoma_client_app() -> App {
+fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma client command line interface.")
+        .version(namada_version())
+        .about("Namada client command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaClient::add_sub(args::Global::def(app))
+    cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
-fn anoma_wallet_app() -> App {
+fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma wallet command line interface.")
+        .version(namada_version())
+        .about("Namada wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::AnomaWallet::add_sub(args::Global::def(app))
+    cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
 
-fn anoma_relayer_app() -> App {
+fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
-        .version(anoma_version())
-        .about("Anoma Ethereum bridge pool command line interface.")
+        .version(namada_version())
+        .about("Namada Ethereum bridge pool command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::EthBridgePool::add_sub(args::Global::def(app))
 }

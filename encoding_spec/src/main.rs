@@ -8,10 +8,10 @@
 //! - For each non-top-level definition, format to md table
 //!
 //! Rebuild on changes with:
-//! `cargo watch -x "run --bin anoma_encoding_spec" -i docs`
+//! `cargo watch -x "run --bin namada_encoding_spec" -i docs`
 
-#![doc(html_favicon_url = "https://dev.anoma.net/master/favicon.png")]
-#![doc(html_logo_url = "https://dev.anoma.net/master/rustdoc-logo.png")]
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
@@ -67,9 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token_amount_schema = token::Amount::schema_container();
     let epoch_schema = Epoch::schema_container();
     let parameters_schema = Parameters::schema_container();
-    // TODO update after <https://github.com/anoma/anoma/issues/225>
+    // TODO update after <https://github.com/anoma/namada/issues/225>
     let public_key_schema = PublicKey::schema_container();
-    // TODO update after <https://github.com/anoma/anoma/issues/225>
+    // TODO update after <https://github.com/anoma/namada/issues/225>
     let signature_schema = Signature::schema_container();
     let signed_tx_data_schema = SignedTxData::schema_container();
     let init_account_schema = transaction::InitAccount::schema_container();
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let prefix_value_schema = storage::PrefixValue::schema_container();
 
     // PoS
-    // TODO add after <https://github.com/anoma/anoma/issues/439>
+    // TODO add after <https://github.com/anoma/namada/issues/439>
     // TODO imported from `use namada::ledger::pos::Bonds;`
     // let pos_bonds_schema = Bonds::schema_container();
 
@@ -115,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address_definition =
         definitions.remove(&address_schema.declaration).unwrap();
     let address_table =
-        definition_to_table(address_schema.declaration, address_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/address/enum.Address.html");
+        definition_to_table(address_schema.declaration, address_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/address/enum.Address.html");
     tables.push(address_table);
 
     let token_amount_definition = definitions
@@ -124,35 +124,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token_amount_table = definition_to_table(
         token_amount_schema.declaration,
         token_amount_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/token/struct.Amount.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Amount.html");
     tables.push(token_amount_table);
 
     let epoch_definition =
         definitions.remove(&epoch_schema.declaration).unwrap();
     let epoch_table =
-        definition_to_table(epoch_schema.declaration, epoch_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/storage/struct.Epoch.html");
+        definition_to_table(epoch_schema.declaration, epoch_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/storage/struct.Epoch.html");
     tables.push(epoch_table);
 
     let parameters_definition =
         definitions.remove(&parameters_schema.declaration).unwrap();
     let parameters_table =
-        definition_to_table(parameters_schema.declaration, parameters_definition).with_rust_doc_link("file:///Users/tz/dev/anoma/target/doc/anoma/ledger/parameters/struct.Parameters.html");
+        definition_to_table(parameters_schema.declaration, parameters_definition).with_rust_doc_link("file:///Users/tz/dev/namada/target/doc/namada/ledger/parameters/struct.Parameters.html");
     tables.push(parameters_table);
 
     let public_key_definition =
         definitions.remove(&public_key_schema.declaration).unwrap();
     let public_key_table =
         definition_to_table(public_key_schema.declaration, public_key_definition).with_rust_doc_link(
-            // TODO update after <https://github.com/anoma/anoma/issues/225>
-            "https://dev.anoma.net/master/rustdoc/anoma/types/key/ed25519/struct.PublicKey.html");
+            // TODO update after <https://github.com/anoma/namada/issues/225>
+            "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.PublicKey.html");
     tables.push(public_key_table);
 
     let signature_definition =
         definitions.remove(&signature_schema.declaration).unwrap();
     let signature_table =
         definition_to_table(signature_schema.declaration, signature_definition).with_rust_doc_link(
-            // TODO update after <https://github.com/anoma/anoma/issues/225>
-            "https://dev.anoma.net/master/rustdoc/anoma/types/key/ed25519/struct.Signature.html");
+            // TODO update after <https://github.com/anoma/namada/issues/225>
+            "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.Signature.html");
     tables.push(signature_table);
 
     let signed_tx_data_definition = definitions
@@ -160,8 +160,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     let signed_tx_data_table =
         definition_to_table(signed_tx_data_schema.declaration, signed_tx_data_definition).with_rust_doc_link(
-            // TODO update after <https://github.com/anoma/anoma/issues/225>
-            "https://dev.anoma.net/master/rustdoc/anoma/types/key/ed25519/struct.SignedTxData.html");
+            // TODO update after <https://github.com/anoma/namada/issues/225>
+            "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.SignedTxData.html");
     tables.push(signed_tx_data_table);
 
     let init_account_definition = definitions
@@ -170,7 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let init_account_table = definition_to_table(
         init_account_schema.declaration,
         init_account_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/struct.InitAccount.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.InitAccount.html");
     tables.push(init_account_table);
 
     let init_validator_definition = definitions
@@ -179,7 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let init_validator_table = definition_to_table(
         init_validator_schema.declaration,
         init_validator_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/struct.InitValidator.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.InitValidator.html");
     tables.push(init_validator_table);
 
     let token_transfer_definition = definitions
@@ -188,19 +188,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token_transfer_table = definition_to_table(
         token_transfer_schema.declaration,
         token_transfer_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/token/struct.Transfer.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Transfer.html");
     tables.push(token_transfer_table);
 
     let update_vp_definition =
         definitions.remove(&update_vp_schema.declaration).unwrap();
     let update_vp_table =
-        definition_to_table(update_vp_schema.declaration, update_vp_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/struct.UpdateVp.html");
+        definition_to_table(update_vp_schema.declaration, update_vp_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.UpdateVp.html");
     tables.push(update_vp_table);
 
     let pos_bond_definition =
         definitions.remove(&pos_bond_schema.declaration).unwrap();
     let pos_bond_table =
-        definition_to_table(pos_bond_schema.declaration, pos_bond_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/pos/struct.Bond.html");
+        definition_to_table(pos_bond_schema.declaration, pos_bond_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/pos/struct.Bond.html");
     tables.push(pos_bond_table);
 
     let pos_withdraw_definition = definitions
@@ -209,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pos_withdraw_table = definition_to_table(
         pos_withdraw_schema.declaration,
         pos_withdraw_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/pos/struct.Withdraw.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/pos/struct.Withdraw.html");
     tables.push(pos_withdraw_table);
 
     let wrapper_tx_definition =
@@ -217,7 +217,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let wrapper_tx_table = definition_to_table(
         wrapper_tx_schema.declaration,
         wrapper_tx_definition,
-    ).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html");
+    ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html");
     tables.push(wrapper_tx_table);
 
     // let tx_result_definition =
@@ -230,21 +230,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tx_type_definition =
         definitions.remove(&tx_type_schema.declaration).unwrap();
     let tx_type_table =
-        definition_to_table(tx_type_schema.declaration, tx_type_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/tx_types/enum.TxType.html");
+        definition_to_table(tx_type_schema.declaration, tx_type_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/tx_types/enum.TxType.html");
     tables.push(tx_type_table);
 
     let prefix_value_definition = definitions
         .remove(&prefix_value_schema.declaration)
         .unwrap();
     let prefix_value_table =
-        definition_to_table(prefix_value_schema.declaration, prefix_value_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/types/transaction/prefix_values/enum.TxType.html");
+        definition_to_table(prefix_value_schema.declaration, prefix_value_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/prefix_values/enum.TxType.html");
     tables.push(prefix_value_table);
 
     // Add PoS definitions
     // let pos_bonds_definition =
     //     definitions.remove(&pos_bonds_schema.declaration).unwrap();
     // let pos_bonds_table =
-    // definition_to_table(pos_bonds_schema.declaration, pos_bonds_definition).with_rust_doc_link("https://dev.anoma.net/master/rustdoc/anoma/ledger/pos/type.Bonds.html");
+    // definition_to_table(pos_bonds_schema.declaration, pos_bonds_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/ledger/pos/type.Bonds.html");
     // tables.push(pos_bonds_table);
 
     // Then add the rest of definitions sorted by their names
@@ -372,10 +372,11 @@ fn md_fmt_type(type_name: impl AsRef<str>) -> String {
 fn write_generated_code_notice(
     file: &mut std::fs::File,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let path = std::file!();
     writeln!(
         file,
-        "<!--- THIS PAGE IS GENERATED FROM CODE: {}. Do not edit manually! -->",
-        std::file!()
+        "<!--- THIS PAGE IS GENERATED FROM CODE: {path}. Do not edit \
+         manually! -->",
     )?;
     Ok(())
 }
@@ -390,9 +391,7 @@ fn escape_fragment_anchor(string: impl AsRef<str>) -> String {
     // mdBook turns headings fragment links to lowercase
     string
         .as_ref()
-        .replace('>', "")
-        .replace('<', "")
-        .replace(',', "")
+        .replace(['>', '<', ','], "")
         .replace(' ', "-")
         .replace(':', "")
         .to_ascii_lowercase()

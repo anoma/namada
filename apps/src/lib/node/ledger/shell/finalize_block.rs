@@ -1,8 +1,10 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -151,7 +153,6 @@ where
                     continue;
                 }
                 TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    #[cfg(not(feature = "abcipp"))]
                     ProtocolTxType::EthEventsVext(ref ext) => {
                         if self
                             .mode
@@ -167,29 +168,25 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(not(feature = "abcipp"))]
                     ProtocolTxType::ValSetUpdateVext(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::EthereumEvents(ref digest) => {
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
                         {
-                            for event in
-                                digest.events.iter().map(|signed| &signed.event)
+                            let this_signer =
+                                &(address, self.storage.last_height);
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
                             {
-                                self.mode.dequeue_eth_event(event);
+                                if signers.contains(this_signer) {
+                                    self.mode.dequeue_eth_event(event);
+                                }
                             }
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    #[cfg(feature = "abcipp")]
                     ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
@@ -318,21 +315,16 @@ where
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
+        let header_time = header.time;
         self.storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
 
         self.byzantine_validators = byzantine_validators;
 
-        let header = self
-            .storage
-            .header
-            .as_ref()
-            .expect("Header must have been set in prepare_proposal.");
-        let time = header.time;
         let new_epoch = self
             .storage
-            .update_epoch(height, time)
+            .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
 
         self.slash();
@@ -344,18 +336,19 @@ where
     fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let pos_params = self.storage.read_pos_params();
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
         self.storage.validator_set_update(current_epoch, |update| {
             let (consensus_key, power) = match update {
                 ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
-                    voting_power,
+                    bonded_stake,
                 }) => {
-                    let power: u64 = voting_power.into();
-                    let power: i64 = power
-                        .try_into()
-                        .expect("unexpected validator's voting power");
+                    let power: i64 = into_tm_voting_power(
+                        pos_params.tm_votes_per_token,
+                        bonded_stake,
+                    );
                     (consensus_key, power)
                 }
                 ValidatorSetUpdate::Deactivated(consensus_key) => {
@@ -380,12 +373,10 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
-    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
@@ -412,7 +403,7 @@ mod test_finalize_block {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -483,7 +474,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -535,7 +526,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -601,7 +592,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -632,7 +623,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -707,26 +698,10 @@ mod test_finalize_block {
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
 
-        #[cfg(feature = "abcipp")]
         let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             signatures: Default::default(),
             events: vec![],
         })
-        .sign(&protocol_key)
-        .to_bytes();
-
-        #[cfg(not(feature = "abcipp"))]
-        let tx = ProtocolTxType::EthEventsVext(
-            ethereum_events::Vext::empty(
-                LAST_HEIGHT,
-                shell
-                    .mode
-                    .get_validator_address()
-                    .expect("Test failed")
-                    .clone(),
-            )
-            .sign(&protocol_key),
-        )
         .sign(&protocol_key)
         .to_bytes();
 
@@ -749,9 +724,10 @@ mod test_finalize_block {
     }
 
     /// Test that once a validator's vote for an Ethereum event lands
-    /// on-chain, it dequeues from the list of events to vote on.
+    /// on-chain from a vote extension digest, it dequeues from the
+    /// list of events to vote on.
     #[test]
-    fn test_eth_events_dequeued() {
+    fn test_eth_events_dequeued_digest() {
         let (mut shell, _, oracle) = setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
@@ -772,7 +748,6 @@ mod test_finalize_block {
         assert_eq!(queued_event, event);
 
         // ---- The protocol tx that includes this event on-chain
-        #[allow(clippy::redundant_clone)]
         let ext = ethereum_events::Vext {
             block_height: shell.storage.last_height,
             ethereum_events: vec![event.clone()],
@@ -780,13 +755,9 @@ mod test_finalize_block {
         }
         .sign(&protocol_key);
 
-        #[cfg(feature = "abcipp")]
         let processed_tx = {
             let signed = MultiSignedEthEvent {
                 event,
-                #[cfg(feature = "abcipp")]
-                signers: BTreeSet::from([address.clone()]),
-                #[cfg(not(feature = "abcipp"))]
                 signers: BTreeSet::from([(
                     address.clone(),
                     shell.storage.last_height,
@@ -794,9 +765,6 @@ mod test_finalize_block {
             };
 
             let digest = ethereum_events::VextDigest {
-                #[cfg(feature = "abcipp")]
-                signatures: vec![(address, ext.sig)].into_iter().collect(),
-                #[cfg(not(feature = "abcipp"))]
                 signatures: vec![(
                     (address, shell.storage.last_height),
                     ext.sig,
@@ -816,7 +784,54 @@ mod test_finalize_block {
             }
         };
 
-        #[cfg(not(feature = "abcipp"))]
+        // ---- This protocol tx is accepted
+        let [result]: [Event; 1] = shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        let code = result.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // --- The event is removed from the queue
+        assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Test that once a validator's vote for an Ethereum event lands
+    /// on-chain from a protocol tx, it dequeues from the
+    /// list of events to vote on.
+    #[test]
+    fn test_eth_events_dequeued_protocol_tx() {
+        let (mut shell, _, oracle) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        // ---- the ledger receives a new Ethereum event
+        let event = EthereumEvent::NewContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
+        let [queued_event]: [EthereumEvent; 1] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        assert_eq!(queued_event, event);
+
+        // ---- The protocol tx that includes this event on-chain
+        let ext = ethereum_events::Vext {
+            block_height: shell.storage.last_height,
+            ethereum_events: vec![event],
+            validator_addr: address,
+        }
+        .sign(&protocol_key);
         let processed_tx = ProcessedTx {
             tx: ProtocolTxType::EthEventsVext(ext)
                 .sign(&protocol_key)

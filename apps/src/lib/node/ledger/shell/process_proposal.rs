@@ -2,11 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-#[cfg(feature = "abcipp")]
-use namada::ledger::pos::types::VotingPower;
-use namada::ledger::storage_api::queries::QueriesExt;
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::SendValsetUpd;
+use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
@@ -223,10 +219,9 @@ where
     /// If a vote extension is [`Some`], then it was validated properly,
     /// and the voting power of the validator who signed it is considered
     /// in the sum of the total voting power of all received vote extensions.
-    #[cfg(feature = "abcipp")]
     fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
     where
-        I: Iterator<Item = Option<VotingPower>>,
+        I: Iterator<Item = Option<namada::types::token::Amount>>,
     {
         #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
@@ -353,7 +348,6 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::EthEventsVext(ext) => self
                     .validate_eth_events_vext_and_get_it_back(
                         ext,
@@ -372,7 +366,6 @@ where
                                vote extensions was invalid."
                             .into(),
                     }),
-                #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
@@ -391,9 +384,11 @@ where
                                update vote extensions was invalid."
                             .into(),
                     }),
-                #[cfg(feature = "abcipp")]
                 ProtocolTxType::EthereumEvents(digest) => {
-                    counters.eth_ev_digest_num += 1;
+                    #[cfg(feature = "abcipp")]
+                    {
+                        counters.eth_ev_digest_num += 1;
+                    }
                     let extensions =
                         digest.decompress(self.storage.last_height);
                     let valid_extensions =
@@ -403,7 +398,6 @@ where
 
                     self.validate_vexts_in_proposal(valid_extensions)
                 }
-                #[cfg(feature = "abcipp")]
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
                         SendValsetUpd::AtPrevHeight,
@@ -416,8 +410,10 @@ where
                                 .into(),
                         };
                     }
-
-                    counters.valset_upd_digest_num += 1;
+                    #[cfg(feature = "abcipp")]
+                    {
+                        counters.valset_upd_digest_num += 1;
+                    }
 
                     let extensions =
                         digest.decompress(self.storage.last_height);
@@ -546,12 +542,11 @@ mod test_process_proposal {
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
     use namada::proto::SignedTxData;
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
-    use namada::types::token::Amount;
+    use namada::types::token;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
@@ -580,13 +575,6 @@ mod test_process_proposal {
         )
         .sign(protocol_key);
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
-            #[cfg(feature = "abcipp")]
-            signatures: {
-                let mut s = HashMap::new();
-                s.insert(addr, ext.sig);
-                s
-            },
-            #[cfg(not(feature = "abcipp"))]
             signatures: {
                 let mut s = HashMap::new();
                 s.insert((addr, shell.storage.last_height), ext.sig);
@@ -622,7 +610,10 @@ mod test_process_proposal {
             ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    s.insert(validator_addr, signed_vote_extension.sig);
+                    s.insert(
+                        (validator_addr, shell.storage.last_height),
+                        signed_vote_extension.sig,
+                    );
                     s
                 },
                 events: vec![],
@@ -727,14 +718,17 @@ mod test_process_proposal {
             let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    s.insert(addr.clone(), ext.sig);
+                    s.insert(
+                        (addr.clone(), shell.storage.last_height),
+                        ext.sig,
+                    );
                     s
                 },
                 events: vec![MultiSignedEthEvent {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        s.insert(addr);
+                        s.insert((addr, shell.storage.last_height));
                         s
                     },
                 }],
@@ -784,9 +778,6 @@ mod test_process_proposal {
             let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
-                    s.insert(addr.clone(), ext.sig);
-                    #[cfg(not(feature = "abcipp"))]
                     s.insert((addr.clone(), INVALID_HEIGHT), ext.sig);
                     s
                 },
@@ -794,9 +785,6 @@ mod test_process_proposal {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
-                        s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
                         s.insert((addr, INVALID_HEIGHT));
                         s
                     },
@@ -846,9 +834,6 @@ mod test_process_proposal {
             let vote_extension_digest = ethereum_events::VextDigest {
                 signatures: {
                     let mut s = HashMap::new();
-                    #[cfg(feature = "abcipp")]
-                    s.insert(addr.clone(), ext.sig);
-                    #[cfg(not(feature = "abcipp"))]
                     s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
                     s
                 },
@@ -856,9 +841,6 @@ mod test_process_proposal {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        #[cfg(feature = "abcipp")]
-                        s.insert(addr);
-                        #[cfg(not(feature = "abcipp"))]
                         s.insert((addr, LAST_HEIGHT));
                         s
                     },
@@ -889,7 +871,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -915,7 +897,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -952,7 +934,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 100.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -1004,6 +986,7 @@ mod test_process_proposal {
             let request = ProcessProposal {
                 txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
             };
+
             if let [resp, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
@@ -1011,7 +994,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1052,7 +1035,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -1074,7 +1057,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1114,8 +1097,8 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
-                token: nam(),
+                amount: token::Amount::whole(1_000_100),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -1138,7 +1121,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1180,7 +1163,7 @@ mod test_process_proposal {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -1203,7 +1186,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1275,7 +1258,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -1300,7 +1283,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1343,7 +1326,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -1371,7 +1354,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1406,7 +1389,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: shell.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -1432,7 +1415,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]
@@ -1509,7 +1492,7 @@ mod test_process_proposal {
             {
                 resp.clone()
             } else {
-                panic!("Test failed")
+                panic!("Test failed");
             }
         };
         #[cfg(not(feature = "abcipp"))]

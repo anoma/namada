@@ -2,11 +2,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
+use namada_core::types::token;
 
-use crate::ledger::pos::types::{VotingPower, WeightedValidator};
+use crate::ledger::pos::types::WeightedValidator;
+use crate::ledger::queries_ext::QueriesExt;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::ledger::storage_api::queries::QueriesExt;
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
@@ -56,7 +57,7 @@ where
 pub(super) fn get_active_validators<D, H>(
     storage: &Storage<D, H>,
     block_heights: HashSet<BlockHeight>,
-) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>
+) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -75,7 +76,7 @@ where
 /// Gets the voting power of `selected` from `all_active`. Errors if a
 /// `selected` validator is not found in `all_active`.
 pub(super) fn get_voting_powers_for_selected(
-    all_active: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>,
+    all_active: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>,
     selected: HashSet<(Address, BlockHeight)>,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>> {
     let total_voting_powers = sum_voting_powers_for_block_heights(all_active);
@@ -99,7 +100,7 @@ pub(super) fn get_voting_powers_for_selected(
                              for height {height}"
                         )
                     })?
-                    .voting_power;
+                    .bonded_stake;
                 let total_voting_power = total_voting_powers
                     .get(&height)
                     .ok_or_else(|| {
@@ -112,7 +113,7 @@ pub(super) fn get_voting_powers_for_selected(
                 Ok((
                     (addr, height),
                     FractionalVotingPower::new(
-                        individual_voting_power.into(),
+                        individual_voting_power,
                         total_voting_power.into(),
                     )?,
                 ))
@@ -123,8 +124,8 @@ pub(super) fn get_voting_powers_for_selected(
 }
 
 pub(super) fn sum_voting_powers_for_block_heights(
-    validators: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator<Address>>>,
-) -> BTreeMap<BlockHeight, VotingPower> {
+    validators: &BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>,
+) -> BTreeMap<BlockHeight, token::Amount> {
     validators
         .iter()
         .map(|(h, vs)| (h.to_owned(), sum_voting_powers(vs)))
@@ -132,11 +133,11 @@ pub(super) fn sum_voting_powers_for_block_heights(
 }
 
 pub(super) fn sum_voting_powers(
-    validators: &BTreeSet<WeightedValidator<Address>>,
-) -> VotingPower {
+    validators: &BTreeSet<WeightedValidator>,
+) -> token::Amount {
     validators
         .iter()
-        .map(|validator| u64::from(validator.voting_power))
+        .map(|validator| validator.bonded_stake)
         .sum::<u64>()
         .into()
 }
@@ -149,16 +150,16 @@ mod tests {
 
     use super::*;
     use crate::types::address;
-    use crate::types::ethereum_events::testing::arbitrary_voting_power;
+    use crate::types::ethereum_events::testing::arbitrary_bonded_stake;
 
     #[test]
     /// Test getting the voting power for the sole active validator from the set
     /// of active validators
     fn test_get_voting_powers_for_selected_sole_validator() {
         let sole_validator = address::testing::established_address_1();
-        let voting_power = arbitrary_voting_power();
+        let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            voting_power,
+            bonded_stake: bonded_stake.into(),
             address: sole_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![(
@@ -190,9 +191,9 @@ mod tests {
     fn test_get_voting_powers_for_selected_missing_validator() {
         let present_validator = address::testing::established_address_1();
         let missing_validator = address::testing::established_address_2();
-        let voting_power = arbitrary_voting_power();
+        let bonded_stake = arbitrary_bonded_stake();
         let weighted_present_validator = WeightedValidator {
-            voting_power,
+            bonded_stake: bonded_stake.into(),
             address: present_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -231,14 +232,14 @@ mod tests {
     fn test_get_voting_powers_for_selected_two_validators() {
         let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
-        let voting_power_1 = VotingPower::from(100);
-        let voting_power_2 = VotingPower::from(200);
+        let bonded_stake_1 = token::Amount::from(100);
+        let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            voting_power: voting_power_1,
+            bonded_stake: bonded_stake_1.into(),
             address: validator_1.clone(),
         };
         let weighted_validator_2 = WeightedValidator {
-            voting_power: voting_power_2,
+            bonded_stake: bonded_stake_2.into(),
             address: validator_2.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -276,16 +277,16 @@ mod tests {
     /// one validator
     fn test_sum_voting_powers_sole_validator() {
         let sole_validator = address::testing::established_address_1();
-        let voting_power = arbitrary_voting_power();
+        let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            voting_power,
+            bonded_stake: bonded_stake.into(),
             address: sole_validator,
         };
         let validators = BTreeSet::from_iter(vec![weighted_sole_validator]);
 
         let total = sum_voting_powers(&validators);
 
-        assert_eq!(total, voting_power);
+        assert_eq!(total, bonded_stake);
     }
 
     #[test]
@@ -294,14 +295,14 @@ mod tests {
     fn test_sum_voting_powers_two_validators() {
         let validator_1 = address::testing::established_address_1();
         let validator_2 = address::testing::established_address_2();
-        let voting_power_1 = VotingPower::from(100);
-        let voting_power_2 = VotingPower::from(200);
+        let bonded_stake_1 = token::Amount::from(100);
+        let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            voting_power: voting_power_1,
+            bonded_stake: bonded_stake_1.into(),
             address: validator_1,
         };
         let weighted_validator_2 = WeightedValidator {
-            voting_power: voting_power_2,
+            bonded_stake: bonded_stake_2.into(),
             address: validator_2,
         };
         let validators = BTreeSet::from_iter(vec![
@@ -311,6 +312,6 @@ mod tests {
 
         let total = sum_voting_powers(&validators);
 
-        assert_eq!(total, VotingPower::from(300));
+        assert_eq!(total, token::Amount::from(300));
     }
 }

@@ -16,6 +16,7 @@ use namada::types::key::*;
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
+use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -34,15 +35,16 @@ use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
-/// Github URL prefix of released Anoma network configs
-pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str = "ANOMA_NETWORK_CONFIGS_SERVER";
+/// Github URL prefix of released Namada network configs
+pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str =
+    "NAMADA_NETWORK_CONFIGS_SERVER";
 const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
     "https://github.com/heliaxdev/anoma-network-config/releases/download";
 
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
 
-/// Configure Anoma to join an existing network. The chain must be released in
+/// Configure Namada to join an existing network. The chain must be released in
 /// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
     global_args: args::Global,
@@ -158,7 +160,7 @@ pub async fn join_network(
 
     // Rename the base-dir from the default and rename wasm-dir, if non-default.
     if non_default_dir {
-        // For compatibility for networks released with Anoma <= v0.4:
+        // For compatibility for networks released with Namada <= v0.4:
         // The old releases include the WASM directory at root path of the
         // archive. This has been moved into the chain directory, so if the
         // WASM dir is found at the old path, we move it to the new path.
@@ -400,8 +402,7 @@ pub fn init_network(
         archive_dir,
     }: args::InitNetwork,
 ) {
-    let mut config =
-        genesis_config::open_genesis_config(&genesis_path).unwrap();
+    let mut config = genesis_config::open_genesis_config(genesis_path).unwrap();
 
     // Update the WASM checksums
     let checksums =
@@ -475,10 +476,7 @@ pub fn init_network(
 
         // Generate account and reward addresses
         let address = address::gen_established_address("validator account");
-        let reward_address =
-            address::gen_established_address("validator reward account");
         config.address = Some(address.to_string());
-        config.staking_reward_address = Some(reward_address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
         // pre-defined.
@@ -510,24 +508,6 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
-            keypair.ref_to()
-        });
-
-        let staking_reward_pk = try_parse_public_key(
-            format!("validator {name} staking reward key"),
-            &config.staking_reward_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-reward-key", name);
-            println!(
-                "Generating validator {} staking reward account key...",
-                name
-            );
             let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Ed25519,
                 Some(alias),
@@ -614,8 +594,6 @@ pub fn init_network(
             Some(genesis_config::HexString(consensus_pk.to_string()));
         config.account_public_key =
             Some(genesis_config::HexString(account_pk.to_string()));
-        config.staking_reward_public_key =
-            Some(genesis_config::HexString(staking_reward_pk.to_string()));
         config.eth_cold_key =
             Some(genesis_config::HexString(eth_cold_pk.to_string()));
         config.eth_hot_key =
@@ -628,7 +606,6 @@ pub fn init_network(
 
         // Write keypairs to wallet
         wallet.add_address(name.clone(), address);
-        wallet.add_address(format!("{}-reward", &name), reward_address);
 
         wallet.save().unwrap();
     });
@@ -647,18 +624,16 @@ pub fn init_network(
         })
     }
 
-    if let Some(token) = &mut config.token {
-        token.iter_mut().for_each(|(name, config)| {
-            if config.address.is_none() {
-                let address = address::gen_established_address("token");
-                config.address = Some(address.to_string());
-                wallet.add_address(name.clone(), address);
-            }
-            if config.vp.is_none() {
-                config.vp = Some("vp_token".to_string());
-            }
-        })
-    }
+    config.token.iter_mut().for_each(|(name, config)| {
+        if config.address.is_none() {
+            let address = address::gen_established_address("token");
+            config.address = Some(address.to_string());
+            wallet.add_address(name.clone(), address);
+        }
+        if config.vp.is_none() {
+            config.vp = Some("vp_token".to_string());
+        }
+    });
 
     if let Some(implicit) = &mut config.implicit {
         implicit.iter_mut().for_each(|(name, config)| {
@@ -714,7 +689,7 @@ pub fn init_network(
     fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Copy the WASM checksums
-    let wasm_dir_full = chain_dir.join(&config::DEFAULT_WASM_DIR);
+    let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
         &wasm_checksums_path,
@@ -731,14 +706,14 @@ pub fn init_network(
             .join(config::DEFAULT_BASE_DIR);
         let temp_validator_chain_dir =
             validator_dir.join(temp_chain_id.as_str());
-        let validator_chain_dir = validator_dir.join(&chain_id.as_str());
+        let validator_chain_dir = validator_dir.join(chain_id.as_str());
         // Rename the generated directories for validators from `temp_chain_id`
         // to `chain_id`
-        std::fs::rename(&temp_validator_chain_dir, &validator_chain_dir)
+        std::fs::rename(temp_validator_chain_dir, &validator_chain_dir)
             .unwrap();
 
         // Copy the WASM checksums
-        let wasm_dir_full = validator_chain_dir.join(&config::DEFAULT_WASM_DIR);
+        let wasm_dir_full = validator_chain_dir.join(config::DEFAULT_WASM_DIR);
         fs::create_dir_all(&wasm_dir_full).unwrap();
         fs::copy(
             &wasm_checksums_path,
@@ -931,18 +906,36 @@ fn init_established_account(
     }
 }
 
-/// Initialize genesis validator's address, staking reward address,
-/// consensus key, validator account key and staking rewards key and use
-/// it in the ledger's node.
+/// Initialize genesis validator's address, consensus key and validator account
+/// key and use it in the ledger's node.
 pub fn init_genesis_validator(
     global_args: args::Global,
     args::InitGenesisValidator {
         alias,
+        commission_rate,
+        max_commission_rate_change,
         net_address,
         unsafe_dont_encrypt,
         key_scheme,
     }: args::InitGenesisValidator,
 ) {
+    // Validate the commission rate data
+    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
+        eprintln!(
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive"
+        );
+        cli::safe_exit(1)
+    }
+    if max_commission_rate_change > Decimal::ONE
+        || max_commission_rate_change < Decimal::ZERO
+    {
+        eprintln!(
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%"
+        );
+        cli::safe_exit(1)
+    }
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
     println!("Generating validator keys...");
@@ -979,9 +972,6 @@ pub fn init_genesis_validator(
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
                 )),
-                staking_reward_public_key: Some(HexString(
-                    pre_genesis.rewards_key.ref_to().to_string(),
-                )),
                 protocol_public_key: Some(HexString(
                     pre_genesis
                         .store
@@ -1000,6 +990,8 @@ pub fn init_genesis_validator(
                         .public()
                         .to_string(),
                 )),
+                commission_rate: Some(commission_rate),
+                max_commission_rate_change: Some(max_commission_rate_change),
                 tendermint_node_key: Some(HexString(
                     pre_genesis.tendermint_node_key.ref_to().to_string(),
                 )),
@@ -1091,7 +1083,7 @@ pub fn write_tendermint_node_key(
         .create(true)
         .write(true)
         .truncate(true)
-        .open(&node_key_path)
+        .open(node_key_path)
         .expect("Couldn't create validator node key file");
     serde_json::to_writer_pretty(file, &tm_node_keypair_json)
         .expect("Couldn't write validator node key file");

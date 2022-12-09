@@ -3,12 +3,12 @@
 mod block_space_alloc;
 
 use index_set::vec::VecIndexSet;
-use namada::hints;
+use namada::core::hints;
+use namada::ledger::queries_ext::QueriesExt;
+#[cfg(feature = "abcipp")]
+use namada::ledger::queries_ext::SendValsetUpd;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::queries::QueriesExt;
-#[cfg(feature = "abcipp")]
-use namada::ledger::storage_api::queries::SendValsetUpd;
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
@@ -16,6 +16,7 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
+use shims::abcipp_shim_types::shim::response;
 
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
@@ -24,11 +25,9 @@ use self::block_space_alloc::states::{
 };
 use self::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 use super::super::*;
-use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{
-    tx_record::TxAction, ExtendedCommitInfo,
-};
+use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
+use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
@@ -108,18 +107,7 @@ where
             "Proposing block"
         );
 
-        #[cfg(feature = "abcipp")]
-        {
-            response::PrepareProposal {
-                // TODO(feature = "abcipp"): remove tx records
-                tx_records: txs,
-                ..Default::default()
-            }
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            response::PrepareProposal { txs }
-        }
+        response::PrepareProposal { txs }
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
@@ -200,7 +188,7 @@ where
         }
 
         let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
-            alloc.try_alloc(&*tx_bytes)
+            alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_space_left } => {
@@ -310,7 +298,7 @@ where
                 }
             })
             .take_while(|tx_bytes| {
-                alloc.try_alloc(&*tx_bytes)
+                alloc.try_alloc(&tx_bytes[..])
                     .map_or_else(
                         |status| match status {
                             AllocFailure::Rejected { bin_space_left } => {
@@ -351,7 +339,7 @@ where
     // essentially a NOOP
     //
     // sources:
-    // - https://specs.anoma.net/main/releases/v2.html
+    // - https://specs.namada.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &mut self,
@@ -374,7 +362,7 @@ where
             })
             // TODO: make sure all decrypted txs are accepted
             .take_while(|tx_bytes| {
-                alloc.try_alloc(&*tx_bytes).map_or_else(
+                alloc.try_alloc(&tx_bytes[..]).map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_space_left } => {
                             tracing::warn!(
@@ -416,7 +404,7 @@ where
     ) -> Vec<TxBytes> {
         get_remaining_protocol_txs(protocol_tx_indices, txs)
             .take_while(|tx_bytes| {
-                alloc.try_alloc(&*tx_bytes).map_or_else(
+                alloc.try_alloc(&tx_bytes[..]).map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_space_left } => {
                             tracing::debug!(
@@ -490,13 +478,10 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::ledger::pos::namada_proof_of_stake::types::{
-        VotingPower, WeightedValidator,
-    };
+    use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::storage_api::queries::QueriesExt;
+    use namada::ledger::queries_ext::QueriesExt;
     use namada::proto::{Signed, SignedTxData};
-    use namada::types::address::nam;
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -511,7 +496,7 @@ mod test_prepare_proposal {
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
-        tx_record::TxAction, ExtendedCommitInfo, ExtendedVoteInfo, TxRecord,
+        ExtendedCommitInfo, ExtendedVoteInfo,
     };
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
@@ -647,12 +632,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(
-            // NOTE: we process mempool txs after protocol txs
-            // TODO(feature = "abcipp"): remove tx records
-            shell.prepare_proposal(req).tx_records.remove(1),
-            record::remove(non_wrapper_tx.to_bytes())
-        );
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -739,7 +719,7 @@ mod test_prepare_proposal {
             assert_eq!(
                 filtered_votes,
                 vec![(
-                    test_utils::get_validator_voting_power(),
+                    test_utils::get_validator_bonded_stake(),
                     signed_vote_extension
                 )]
             )
@@ -840,13 +820,16 @@ mod test_prepare_proposal {
             event: ext.data.ethereum_events[0].clone(),
             signers: {
                 let mut s = BTreeSet::new();
-                s.insert(ext.data.validator_addr.clone());
+                s.insert((ext.data.validator_addr.clone(), last_height));
                 s
             },
         }];
         let signatures = {
             let mut s = HashMap::new();
-            s.insert(ext.data.validator_addr, ext.sig.clone());
+            s.insert(
+                (ext.data.validator_addr.clone(), last_height),
+                ext.sig.clone(),
+            );
             s
         };
 
@@ -908,14 +891,9 @@ mod test_prepare_proposal {
             ..Default::default()
         });
         let rsp_digest = {
-            // TODO(feature = "abcipp"): remove tx records
-            assert_eq!(rsp.tx_records.len(), 1);
-            // TODO(feature = "abcipp"): remove tx records
-            let tx_record = rsp.tx_records.pop().unwrap();
-
-            assert_eq!(tx_record.action(), TxAction::Added);
-
-            let got = Tx::try_from(&tx_record.tx[..]).unwrap();
+            assert_eq!(rsp.txs.len(), 1);
+            let tx_bytes = rsp.txs.remove(0);
+            let got = Tx::try_from(tx_bytes.as_slice()).expect("Test failed");
             let got_signed_tx =
                 SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
             let protocol_tx =
@@ -1019,7 +997,7 @@ mod test_prepare_proposal {
                 .iter()
                 .cloned()
                 .map(|v| WeightedValidator {
-                    voting_power: VotingPower::from(0u64),
+                    bonded_stake: 0,
                     ..v
                 })
                 .collect();
@@ -1063,7 +1041,7 @@ mod test_prepare_proposal {
         #[cfg(feature = "abcipp")]
         {
             let vote_extension = VoteExtension {
-                ethereum_events: signed_eth_ev_vote_extension.clone(),
+                ethereum_events: signed_eth_ev_vote_extension,
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
@@ -1134,7 +1112,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: nam(),
+                        token: shell.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
@@ -1156,12 +1134,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(
-            // NOTE: we process mempool txs after protocol txs
-            // TODO(feature = "abcipp"): remove tx records
-            shell.prepare_proposal(req).tx_records.remove(1),
-            record::remove(wrapper)
-        );
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -1193,7 +1166,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: nam(),
+                    token: shell.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -1214,51 +1187,18 @@ mod test_prepare_proposal {
             // fail the test
             .map(|tx| tx.data.expect("Test failed"))
             .collect();
-        #[cfg(feature = "abcipp")]
-        {
-            let received: Vec<TxBytes> = shell
-                .prepare_proposal(req)
-                // TODO(feature = "abcipp"): remove tx records
-                .tx_records
-                .iter()
-                .filter_map(
-                    |TxRecord {
-                         tx: tx_bytes,
-                         action,
-                     }| {
-                        if *action == (TxAction::Unmodified as i32)
-                            || *action == (TxAction::Added as i32)
-                        {
-                            Some(
-                                Tx::try_from(tx_bytes.as_slice())
-                                    .expect("Test failed")
-                                    .data
-                                    .expect("Test failed"),
-                            )
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let received: Vec<TxBytes> = shell
-                .prepare_proposal(req)
-                .txs
-                .into_iter()
-                .map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice())
-                        .expect("Test failed")
-                        .data
-                        .expect("Test failed")
-                })
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
+        let received: Vec<TxBytes> = shell
+            .prepare_proposal(req)
+            .txs
+            .into_iter()
+            .map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            })
+            .collect();
+        // check that the order of the txs is correct
+        assert_eq!(received, expected_txs);
     }
 }

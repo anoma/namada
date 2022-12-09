@@ -13,9 +13,9 @@ The following diagram illustrates the current boundaries between the async and b
 
 Configuration for threads usage can be changed via environment variables:
 
-- `ANOMA_TOKIO_THREADS`: Defaults to 1/2 logical cores
-- `ANOMA_RAYON_THREADS`: Defaults to 1/2 logical cores.
-- `ANOMA_ROCKSDB_COMPACTION_THREADS`: Defauls to 1/4 logical core. RocksDB also uses 1 more background thread for flushing.
+- `NAMADA_TOKIO_THREADS`: Defaults to 1/2 logical cores
+- `NAMADA_RAYON_THREADS`: Defaults to 1/2 logical cores.
+- `NAMADA_ROCKSDB_COMPACTION_THREADS`: Defauls to 1/4 logical core. RocksDB also uses 1 more background thread for flushing.
 
 ## Tendermint ABCI
 

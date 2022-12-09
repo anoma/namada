@@ -24,7 +24,7 @@ fn main() {
     };
     let mut version_rs =
         File::create("./version.rs").expect("cannot write version");
-    let pre = "pub fn anoma_version() -> &'static str { \"";
+    let pre = "pub fn namada_version() -> &'static str { \"";
     let post = "\" }";
     match version_string {
         Some(version_string) => {
@@ -54,10 +54,10 @@ fn main() {
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed={}", PROTO_SRC);
 
-    // Tell Cargo to build when the `ANOMA_DEV` env var changes
-    println!("cargo:rerun-if-env-changed=ANOMA_DEV");
-    // Enable "dev" feature if `ANOMA_DEV` is trueish
-    if let Ok(dev) = env::var("ANOMA_DEV") {
+    // Tell Cargo to build when the `NAMADA_DEV` env var changes
+    println!("cargo:rerun-if-env-changed=NAMADA_DEV");
+    // Enable "dev" feature if `NAMADA_DEV` is trueish
+    if let Ok(dev) = env::var("NAMADA_DEV") {
         if dev.to_ascii_lowercase().trim() == "true" {
             println!("cargo:rustc-cfg=feature=\"dev\"");
         }

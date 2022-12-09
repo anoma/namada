@@ -20,9 +20,9 @@ use crate::wallet::Wallet;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
-const ENV_VAR_CHAIN_ID: &str = "ANOMA_CHAIN_ID";
+const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
 /// Env. var to set wasm directory
-pub const ENV_VAR_WASM_DIR: &str = "ANOMA_WASM_DIR";
+pub const ENV_VAR_WASM_DIR: &str = "NAMADA_WASM_DIR";
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
 /// in the wallet
@@ -73,6 +73,8 @@ pub struct Context {
     pub config: Config,
     /// The context fr shielded operations
     pub shielded: ShieldedContext,
+    /// Native token's address
+    pub native_token: Address,
 }
 
 impl Context {
@@ -88,14 +90,16 @@ impl Context {
 
         let chain_dir = global_args
             .base_dir
-            .join(&global_config.default_chain_id.as_str());
+            .join(global_config.default_chain_id.as_str());
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let wallet = Wallet::load_or_new_from_genesis(
-            &chain_dir,
-            genesis_config::open_genesis_config(&genesis_file_path)?,
-        );
+        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
+        let native_token = genesis.native_token;
+        let default_genesis =
+            genesis_config::open_genesis_config(genesis_file_path)?;
+        let wallet =
+            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
@@ -115,6 +119,7 @@ impl Context {
             global_config,
             config,
             shielded: ShieldedContext::new(chain_dir),
+            native_token,
         })
     }
 

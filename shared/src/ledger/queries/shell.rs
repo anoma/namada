@@ -2,32 +2,30 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use tendermint::merkle::proof::Proof;
-
-use crate::ledger::eth_bridge::storage::bridge_pool::{
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_key_from_hash, get_signed_root_key,
 };
+use namada_core::ledger::storage::merkle_tree::StoreRef;
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::BlockResults;
+
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
 use crate::ledger::queries::types::{RequestCtx, RequestQuery};
 use crate::ledger::queries::{require_latest_height, EncodedResponseQuery};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, MerkleTree, StoreRef, StoreType, DB};
+use crate::ledger::storage::{DBIter, MerkleTree, StoreType, DB};
 use crate::ledger::storage_api::{self, CustomError, ResultExt, StorageRead};
-use crate::types::address::Address;
+use crate::tendermint::merkle::proof::Proof;
 use crate::types::eth_abi::EncodeCell;
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
-use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::MembershipProof::BridgePool;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
-use crate::types::storage::TxIndex;
-use crate::types::storage::{
-    self, BlockResults, Epoch, MerkleValue, PrefixValue,
-};
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+use crate::types::storage::{self, Epoch, PrefixValue};
+#[cfg(any(test, feature = "async-client"))]
 use crate::types::transaction::TxResult;
 
 type Conversion = (
@@ -37,7 +35,6 @@ type Conversion = (
     MerklePath<Node>,
 );
 
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
@@ -73,48 +70,11 @@ router! {SHELL,
     ( "eth_bridge_pool" / "contents" )
         -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
 
-    // Generate a merkle proof for the inclusion of requested transfers in the Ethereum bridge pool
-    ( "eth_bridge_pool" / "proof" )
-        -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
-}
-
-#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
-router! {SHELL,
-    // Epoch of the last committed block
-    ( "epoch" ) -> Epoch = epoch,
-
-    // Raw storage access - read value
-    ( "value" / [storage_key: storage::Key] )
-        -> Vec<u8> = (with_options storage_value),
-
-    // Raw storage access - prefix iterator
-    ( "prefix" / [storage_key: storage::Key] )
-        -> Vec<PrefixValue> = (with_options storage_prefix),
-
-    // Raw storage access - is given storage key present?
-    ( "has_key" / [storage_key: storage::Key] )
-       -> bool = storage_has_key,
-
-    // Conversion state access - read conversion
-    ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
-
-    // Block results access - read bit-vec
-    ( "results" ) -> Vec<BlockResults> = read_results,
-
-    // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash]) -> Option<Event> = accepted,
-
-    // was the transaction applied?
-    ( "applied" / [tx_hash: Hash]) -> Option<Event> = applied,
-
-    // Get the current contents of the Ethereum bridge pool
-    ( "eth_bridge_pool" / "contents" )
-        -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
-
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
     ( "eth_bridge_pool" / "proof" )
         -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
+
 }
 
 // Handlers:
@@ -132,6 +92,7 @@ where
     use crate::ledger::protocol::{self, ShellParams};
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
+    use crate::types::storage::TxIndex;
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
@@ -208,6 +169,18 @@ where
     }
 }
 
+#[cfg(not(all(feature = "wasm-runtime", feature = "ferveo-tpke")))]
+fn dry_run_tx<D, H>(
+    _ctx: RequestCtx<'_, D, H>,
+    _request: &RequestQuery,
+) -> storage_api::Result<EncodedResponseQuery>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
+}
+
 fn epoch<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Epoch>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -254,7 +227,7 @@ where
                     .storage
                     .get_existence_proof(
                         &storage_key,
-                        value.clone().into(),
+                        value.clone(),
                         request.height,
                     )
                     .into_storage_result()?;
@@ -298,10 +271,10 @@ where
 {
     require_latest_height(&ctx, request)?;
 
-    let (iter, _gas) = ctx.storage.iter_prefix(&storage_key);
+    let iter = storage_api::iter_prefix_bytes(ctx.storage, &storage_key)?;
     let data: storage_api::Result<Vec<PrefixValue>> = iter
-        .map(|(key, value, _gas)| {
-            let key = storage::Key::parse(key).into_storage_result()?;
+        .map(|iter_result| {
+            let (key, value) = iter_result?;
             Ok(PrefixValue { key, value })
         })
         .collect();
@@ -309,9 +282,9 @@ where
     let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let mut proof = ctx
+            let mut proof: Proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone().into(), request.height)
+                .get_existence_proof(key, value.clone(), request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
@@ -455,16 +428,12 @@ where
         );
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
-        let (keys, values): (Vec<_>, Vec<PendingTransfer>) = transfer_hashes
+        let (keys, values): (Vec<_>, Vec<_>) = transfer_hashes
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
                 match ctx.storage.read(&key) {
-                    Ok((Some(bytes), _)) => {
-                        PendingTransfer::try_from_slice(&bytes[..])
-                            .ok()
-                            .map(|transfer| (key, transfer))
-                    }
+                    Ok((Some(bytes), _)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
                         None
@@ -485,7 +454,7 @@ where
         // get the membership proof
         match tree.get_sub_tree_existence_proof(
             &keys,
-            values.into_iter().map(MerkleValue::from).collect(),
+            values.iter().map(|v| v.as_slice()).collect(),
         ) {
             Ok(BridgePool(proof)) => {
                 let data = EncodeCell::new(&RelayProof {
@@ -518,10 +487,10 @@ mod test {
     use std::collections::BTreeSet;
 
     use borsh::{BorshDeserialize, BorshSerialize};
-
-    use crate::ledger::eth_bridge::storage::bridge_pool::{
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
@@ -671,7 +640,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -709,7 +681,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -725,7 +700,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -763,7 +741,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -782,7 +763,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
@@ -853,7 +837,10 @@ mod test {
         // write a transfer into the bridge pool
         client
             .storage
-            .write(&get_pending_key(&transfer), transfer.clone())
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -872,7 +859,10 @@ mod test {
         transfer2.transfer.amount = 1.into();
         client
             .storage
-            .write(&get_pending_key(&transfer2), transfer2.clone())
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
