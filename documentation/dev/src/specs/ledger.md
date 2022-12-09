@@ -43,7 +43,7 @@ The fields of a `WrapperTx` are:
 - `pk`: [Public key](crypto.md#public-keys) of the source implicit account.
 - `epoch`: The [epoch](#epochs) in which the transaction is being included. This should be queried from a synchronized ledger node before the transaction is fully constructed.
 
-   Note that this is currently not used and so the default value `0` may be used for now (depends on <https://github.com/anoma/anoma/issues/669>).
+   Note that this is currently not used and so the default value `0` may be used for now (depends on <https://github.com/anoma/namada/issues/669>).
 
 - `gas_limit`: Maximum amount of gas that can be used when executing the inner transaction
 - `inner_tx`: The inner layer of the transaction. This MUST contain a [`Tx` type encoded with proto3](./encoding.md#transactions), encrypted against a public key that should be queried from a synchronized ledger node.
@@ -52,7 +52,7 @@ The fields of a `WrapperTx` are:
 
    Please refer to the [signing of the default transactions](ledger/default-transactions.md#signing-transactions) to learn how to construct inner transaction's signatures which will be accepted by the [default validity predicates](ledger/default-validity-predicates.md).
 
-   Note that currently the key doesn't change and so it stay constant for the duration of a chain and `<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator()` may be used to encrypt the inner transaction for now as done by the the [`WrapperTx::new` method](https://dev.anoma.net/master/rustdoc/anoma/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html#method.new) (depends on <https://github.com/anoma/anoma/issues/669>).
+   Note that currently the key doesn't change and so it stay constant for the duration of a chain and `<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator()` may be used to encrypt the inner transaction for now as done by the the [`WrapperTx::new` method](https://dev.namada.net/master/rustdoc/namada/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html#method.new) (depends on <https://github.com/anoma/namada/issues/669>).
 
 - `tx_hash`: A SHA-256 hash of the inner transaction. This MUST match the hash of decrypted `inner_tx`.
 
@@ -215,20 +215,20 @@ The following functions from the host ledger are made available in transaction's
 
 ```wat
 (import "env" "gas" (func (param i32)))
-(import "env" "anoma_tx_read" (func (param i64 i64) (result i64)))
-(import "env" "anoma_tx_result_buffer" (func (param i64)))
-(import "env" "anoma_tx_has_key" (func (param i64 i64) (result i64)))
-(import "env" "anoma_tx_write" (func (param i64 i64 i64 i64)))
-(import "env" "anoma_tx_delete" (func (param i64 i64)))
-(import "env" "anoma_tx_iter_prefix" (func (param i64 i64) (result i64)))
-(import "env" "anoma_tx_iter_next" (func (param i64) (result i64)))
-(import "env" "anoma_tx_insert_verifier" (func (param i64 i64)))
-(import "env" "anoma_tx_update_validity_predicate" (func (param i64 i64 i64 i64)))
-(import "env" "anoma_tx_init_account" (func (param i64 i64 i64)))
-(import "env" "anoma_tx_get_chain_id" (func (param i64)))
-(import "env" "anoma_tx_get_block_height" (func (param ) (result i64)))
-(import "env" "anoma_tx_get_block_hash" (func (param i64)))
-(import "env" "anoma_tx_log_string" (func (param i64 i64)))
+(import "env" "namada_tx_read" (func (param i64 i64) (result i64)))
+(import "env" "namada_tx_result_buffer" (func (param i64)))
+(import "env" "namada_tx_has_key" (func (param i64 i64) (result i64)))
+(import "env" "namada_tx_write" (func (param i64 i64 i64 i64)))
+(import "env" "namada_tx_delete" (func (param i64 i64)))
+(import "env" "namada_tx_iter_prefix" (func (param i64 i64) (result i64)))
+(import "env" "namada_tx_iter_next" (func (param i64) (result i64)))
+(import "env" "namada_tx_insert_verifier" (func (param i64 i64)))
+(import "env" "namada_tx_update_validity_predicate" (func (param i64 i64 i64 i64)))
+(import "env" "namada_tx_init_account" (func (param i64 i64 i64)))
+(import "env" "namada_tx_get_chain_id" (func (param i64)))
+(import "env" "namada_tx_get_block_height" (func (param ) (result i64)))
+(import "env" "namada_tx_get_block_hash" (func (param i64)))
+(import "env" "namada_tx_log_string" (func (param i64 i64)))
 ```
 
 Additionally, the WASM module MUST export its memory as shown:
@@ -237,7 +237,7 @@ Additionally, the WASM module MUST export its memory as shown:
 (export "memory" (memory 0))
 ```
 
-- `anoma_tx_init_account` TODO newly created accounts' validity predicates aren't used until the block is committed (i.e. only the transaction that created the account may write into its storage in the block in which its being applied).
+- `namada_tx_init_account` TODO newly created accounts' validity predicates aren't used until the block is committed (i.e. only the transaction that created the account may write into its storage in the block in which its being applied).
 - TODO describe functions in detail
 
 #### Validity predicate host environment functions
@@ -246,19 +246,19 @@ The following functions from the host ledger are made available in validity pred
 
 ```wat
 (import "env" "gas" (func (param i32)))
-(import "env" "anoma_vp_read_pre" (func (param i64 i64) (result i64)))
-(import "env" "anoma_vp_read_post" (func (param i64 i64) (result i64)))
-(import "env" "anoma_vp_result_buffer" (func (param i64)))
-(import "env" "anoma_vp_has_key_pre" (func (param i64 i64) (result i64)))
-(import "env" "anoma_vp_has_key_post" (func (param i64 i64) (result i64)))
-(import "env" "anoma_vp_iter_prefix" (func (param i64 i64) (result i64)))
-(import "env" "anoma_vp_iter_pre_next" (func (param i64) (result i64)))
-(import "env" "anoma_vp_iter_post_next" (func (param i64) (result i64)))
-(import "env" "anoma_vp_get_chain_id" (func (param i64)))
-(import "env" "anoma_vp_get_block_height" (func (param ) (result i64)))
-(import "env" "anoma_vp_get_block_hash" (func (param i64)))
-(import "env" "anoma_vp_verify_tx_signature" (func (param i64 i64 i64 i64) (result i64)))
-(import "env" "anoma_vp_eval" (func (param i64 i64 i64 i64) (result i64)))
+(import "env" "namada_vp_read_pre" (func (param i64 i64) (result i64)))
+(import "env" "namada_vp_read_post" (func (param i64 i64) (result i64)))
+(import "env" "namada_vp_result_buffer" (func (param i64)))
+(import "env" "namada_vp_has_key_pre" (func (param i64 i64) (result i64)))
+(import "env" "namada_vp_has_key_post" (func (param i64 i64) (result i64)))
+(import "env" "namada_vp_iter_prefix" (func (param i64 i64) (result i64)))
+(import "env" "namada_vp_iter_pre_next" (func (param i64) (result i64)))
+(import "env" "namada_vp_iter_post_next" (func (param i64) (result i64)))
+(import "env" "namada_vp_get_chain_id" (func (param i64)))
+(import "env" "namada_vp_get_block_height" (func (param ) (result i64)))
+(import "env" "namada_vp_get_block_hash" (func (param i64)))
+(import "env" "namada_vp_verify_tx_signature" (func (param i64 i64 i64 i64) (result i64)))
+(import "env" "namada_vp_eval" (func (param i64 i64 i64 i64) (result i64)))
 ```
 
 - TODO describe functions in detail

@@ -3,6 +3,7 @@
 # - User accounts same as the ones in "dev" build (Albert, Bertha, Christel)
 
 genesis_time = "2021-09-30T10:00:00Z"
+native_token = "NAM"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
@@ -10,9 +11,11 @@ tokens = 200000
 # Amount of the validator's genesis token balance which is not staked.
 non_staked_balance = 1000000000000
 # VP for the validator account
-validator_vp = "vp_user"
-# VP for the staking reward account
-staking_reward_vp = "vp_user"
+validator_vp = "vp_validator"
+# Commission rate for rewards
+commission_rate = 0.05
+# Maximum change per epoch in the commission rate
+max_commission_rate_change = 0.01
 # Public IP:port address.
 # We set the port to be the default+1000, so that if a local node was running at 
 # the same time as the E2E tests, it wouldn't affect them.
@@ -117,22 +120,26 @@ vp = "vp_masp"
 
 # Wasm VP definitions
 
-# Default user VP
+# Implicit VP
+[wasm.vp_implicit]
+filename = "vp_implicit.wasm"
+
+# Default user VP in established accounts
 [wasm.vp_user]
-# filename (relative to wasm path used by the node)
 filename = "vp_user.wasm"
-# SHA-256 hash of the wasm file
-sha256 = "dc7b97f0448f2369bd2401c3c1d8898f53cac8c464a8c1b1f7f81415a658625d"
+
+# Default validator VP
+[wasm.vp_validator]
+# filename (relative to wasm path used by the node)
+filename = "vp_validator.wasm"
 
 # Token VP
 [wasm.vp_token]
 filename = "vp_token.wasm"
-sha256 = "e428a11f570d21dd3c871f5d35de6fe18098eb8ee0456b3e11a72ccdd8685cd0"
 
 # Faucet VP
 [wasm.vp_testnet_faucet]
 filename = "vp_testnet_faucet.wasm"
-sha256 = "2038d93afd456a77c45123811b671627f488c8d2a72b714d82dd494cbbd552bc"
 
 # MASP VP
 [wasm.vp_masp]
@@ -142,8 +149,6 @@ filename = "vp_masp.wasm"
 [parameters]
 # Minimum number of blocks in an epoch.
 min_num_of_blocks = 4
-# Minimum duration of an epoch (in seconds).
-min_duration = 1
 # Maximum expected time per block (in seconds).
 max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx batch proposal.
@@ -152,6 +157,14 @@ max_proposal_bytes = 22020096
 vp_whitelist = []
 # tx whitelist
 tx_whitelist = []
+# Implicit VP WASM name
+implicit_vp = "vp_implicit"
+# Expected number of epochs per year (also sets the min duration of an epoch in seconds)
+epochs_per_year = 31_536_000
+# The P gain factor in the Proof of Stake rewards controller
+pos_gain_p = 0.1
+# The D gain factor in the Proof of Stake rewards controller
+pos_gain_d = 0.1
 
 # Proof of stake parameters.
 [pos_params]
@@ -163,18 +176,22 @@ pipeline_len = 2
 # Unbonding length (in epochs). Validators may have their stake slashed
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 3
-# Votes per token (in basis points, i.e., per 10,000 tokens)
-votes_per_token = 10
+# Votes per fundamental staking token (namnam)
+tm_votes_per_token = 1
 # Reward for proposing a block.
-block_proposer_reward = 100
+block_proposer_reward = 0.125
 # Reward for voting on a block.
-block_vote_reward = 1
+block_vote_reward = 0.1
+# Maximum inflation rate per annum (10%)
+max_inflation_rate = 0.1
+# Targeted ratio of staked tokens to total tokens in the supply
+target_staked_ratio = 0.6667
 # Portion of a validator's stake that should be slashed on a duplicate
-# vote (in basis points, i.e., 500 = 5%).
-duplicate_vote_slash_rate = 500
+# vote.
+duplicate_vote_min_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
-# client attack (in basis points, i.e., 500 = 5%).
-light_client_attack_slash_rate = 500
+# client attack.
+light_client_attack_min_slash_rate = 0.001
 
 # Governance parameters.
 [gov_params]

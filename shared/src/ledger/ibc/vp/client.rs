@@ -2,12 +2,12 @@
 use std::convert::TryInto;
 use std::str::FromStr;
 
-use thiserror::Error;
-
-use super::super::handler::{
+use namada_core::ledger::ibc::actions::{
     make_create_client_event, make_update_client_event,
     make_upgrade_client_event,
 };
+use thiserror::Error;
+
 use super::super::storage::{
     client_counter_key, client_state_key, client_type_key,
     client_update_height_key, client_update_timestamp_key, consensus_height,
@@ -489,7 +489,7 @@ where
             .iter_pre_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
-            let key = Key::parse(&key)
+            let key = Key::parse(key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
             let consensus_height = consensus_height(&key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
@@ -530,7 +530,7 @@ where
             .iter_pre_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
-            let key = Key::parse(&key)
+            let key = Key::parse(key)
                 .map_err(|_| Ics02Error::implementation_specific())?;
             let consensus_height = consensus_height(&key)
                 .map_err(|_| Ics02Error::implementation_specific())?;

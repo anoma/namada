@@ -12,19 +12,20 @@ mod token;
 use std::collections::{BTreeSet, HashSet};
 
 use borsh::BorshDeserialize;
+use namada_core::ledger::ibc::storage::{
+    client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
+};
+use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_core::proto::SignedTxData;
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::ibc::IbcEvent as WrappedIbcEvent;
+use namada_core::types::storage::Key;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
-use super::storage::{client_id, ibc_prefix, is_client_counter_key, IbcPrefix};
 use crate::ibc::core::ics02_client::context::ClientReader;
 use crate::ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{self as ledger_storage};
-use crate::proto::SignedTxData;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::IbcEvent as WrappedIbcEvent;
-use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -358,8 +359,25 @@ mod tests {
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf;
 
+    use super::super::storage::{
+        ack_key, capability_key, channel_key, client_state_key,
+        client_type_key, client_update_height_key, client_update_timestamp_key,
+        commitment_key, connection_key, consensus_state_key,
+        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        port_key, receipt_key,
+    };
     use super::get_dummy_header;
-    use super::super::handler::{
+    use super::*;
+    use crate::ledger::gas::VpGasMeter;
+    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::write_log::WriteLog;
+    use crate::proto::Tx;
+    use crate::types::ibc::data::{PacketAck, PacketReceipt};
+    use crate::types::key::testing::keypair_1;
+    use crate::types::storage::TxIndex;
+    use crate::types::storage::{BlockHash, BlockHeight};
+    use crate::vm::wasm;
+    use namada_core::ledger::ibc::actions::{
         self, commitment_prefix, init_connection, make_create_client_event,
         make_open_ack_channel_event, make_open_ack_connection_event,
         make_open_confirm_channel_event, make_open_confirm_connection_event,
@@ -368,23 +386,6 @@ mod tests {
         make_send_packet_event, make_update_client_event, packet_from_message,
         try_connection,
     };
-    use super::super::storage::{
-        ack_key, capability_key, channel_key, client_state_key,
-        client_type_key, client_update_height_key, client_update_timestamp_key,
-        commitment_key, connection_key, consensus_state_key,
-        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
-        port_key, receipt_key,
-    };
-    use super::*;
-    use crate::types::key::testing::keypair_1;
-    use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::Tx;
-    use crate::types::ibc::data::{PacketAck, PacketReceipt};
-    use crate::vm::wasm;
-    use crate::types::storage::TxIndex;
-    use crate::types::storage::{BlockHash, BlockHeight};
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
@@ -1520,7 +1521,7 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let key = commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
             .write(&key, commitment.into_vec())
@@ -1682,7 +1683,7 @@ mod tests {
         let bytes = channel.encode_vec().expect("encoding failed");
         write_log.write(&channel_key, bytes).expect("write failed");
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let commitment_key =
             commitment_key(&get_port_id(), &get_channel_id(), sequence);
         write_log
@@ -1783,7 +1784,7 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let packet = packet_from_message(&msg, sequence, &counterparty);
         // insert a commitment
-        let commitment = handler::commitment(&packet);
+        let commitment = actions::commitment(&packet);
         let commitment_key = commitment_key(
             &packet.source_port,
             &packet.source_channel,

@@ -28,14 +28,14 @@ In fact, most of the functionality in the Namada ledger is being built leveragin
 
 ## ☑ Validity predicates
 
-A custom validity predicates can be built from scratch using `vp_template` (from root directory [`wasm/vp_template`](https://github.com/anoma/anoma/tree/v0.5.0/wasm/vp_template)), which is Rust code compiled to WASM. Consult its `README.md` to find out more.
+A custom validity predicates can be built from scratch using `vp_template` (from root directory [`wasm/vp_template`](https://github.com/anoma/namada/tree/v0.5.0/wasm/vp_template)), which is Rust code compiled to WASM. Consult its `README.md` to find out more.
 
-You can also check out the pre-built validity predicates' source code in the [`wasm/wasm_source`](https://github.com/anoma/anoma/tree/v0.5.0/wasm/wasm_source), where each sub-module that begins with `vp_` implements a validity predicate. For example the [`vp_user`](https://github.com/anoma/anoma/blob/v0.5.0/wasm/wasm_source/src/vp_user.rs) is the default validity predicate used for established accounts (created with `init-account` command).
+You can also check out the pre-built validity predicates' source code in the [`wasm/wasm_source`](https://github.com/anoma/namada/tree/v0.5.0/wasm/wasm_source), where each sub-module that begins with `vp_` implements a validity predicate. For example the [`vp_user`](https://github.com/namada/namada/blob/v0.5.0/wasm/wasm_source/src/vp_user.rs) is the default validity predicate used for established accounts (created with `init-account` command).
 
 A validity predicate's must contain the following function:
 
 ```rust
-use anoma_vm_env::vp_prelude::*;
+use namada_vm_env::vp_prelude::*;
 
 #[validity_predicate]
 fn validate_tx(
@@ -57,11 +57,11 @@ fn validate_tx(
 You can think of it as its `main` function. When this VP is deployed to an account, this function will be called for every transaction that:
 
 - Modifies a storage key that contains the account's address to which the validity predicate belongs
-- Inserts the account's address into the verifier set with [`tx_prelude::insert_verifiers` function](https://docs.anoma.net/v0.5.0/rustdoc/anoma_vm_env/imports/tx/fn.insert_verifier.html)
+- Inserts the account's address into the verifier set with [`tx_prelude::insert_verifiers` function](https://docs.namada.net/v0.5.0/rustdoc/namada_vm_env/imports/tx/fn.insert_verifier.html)
 
 Inside the validity predicate function, you can read any storage value with the functions provided in the `vp_prelude` from the storage prior to the transaction (functions with name suffix `_pre`) and from the storage state after the transaction is applied (suffixed with `_post`).
 
-To find out about the host interface available in a validity predicate, please check out [Rust docs for `vp_prelude`](https://docs.anoma.net/v0.5.0/rustdoc/anoma_vm_env/vp_prelude/index.html).
+To find out about the host interface available in a validity predicate, please check out [Rust docs for `vp_prelude`](https://docs.namada.net/v0.5.0/rustdoc/namada_vm_env/vp_prelude/index.html).
 
 To compile the validity predicate's code from the template:
 
@@ -71,7 +71,7 @@ make -C wasm/vp_template
 
 This will output a WASM file that can be found in `wasm/vp_template/target/wasm32-unknown-unknown/release/vp_template.wasm`.
 
-You can, for example, copy it into your `wasm` directory (the default directory used by the ledger's node and the client, which can be changed with `--wasm-dir` global argument or `ANOMA_WASM_DIR`):
+You can, for example, copy it into your `wasm` directory (the default directory used by the ledger's node and the client, which can be changed with `--wasm-dir` global argument or `NAMADA_WASM_DIR`):
 
 ```shell
 cp \
@@ -82,21 +82,21 @@ cp \
 To submit a transaction that updates an account's validity predicate:
 
 ```shell
-anoma client update --address my-new-acc --code-path my_vp.wasm
+namada client update --address my-new-acc --code-path my_vp.wasm
 ```
 
 ## 📩 Custom transactions
 
 A transaction must contain a WASM code that can perform arbitrary storage changes. It can also contain arbitrary data, which will be passed onto the transaction and validity predicates when the transaction is being applied.
 
-A custom transaction can be built from scratch using `tx_template` (from root directory [`wasm/tx_template`](https://github.com/anoma/anoma/tree/v0.5.0/wasm/tx_template)), which is Rust code compiled to WASM. Consult its `README.md` to find out more.
+A custom transaction can be built from scratch using `tx_template` (from root directory [`wasm/tx_template`](https://github.com/anoma/namada/tree/v0.5.0/wasm/tx_template)), which is Rust code compiled to WASM. Consult its `README.md` to find out more.
 
-For some inspiration, check out the pre-built transactions source code in the [`wasm/wasm_source`](https://github.com/anoma/anoma/tree/v0.5.0/wasm/wasm_source), where each sub-module that begins with `tx_` implements a transaction.
+For some inspiration, check out the pre-built transactions source code in the [`wasm/wasm_source`](https://github.com/anoma/namada/tree/v0.5.0/wasm/wasm_source), where each sub-module that begins with `tx_` implements a transaction.
 
 A transaction code must contain the following function, which will be called when the transaction is being applied:
 
 ```rust
-use anoma_vm_env::tx_prelude::*;
+use namada_vm_env::tx_prelude::*;
 
 #[transaction]
 fn apply_tx(tx_data: Vec<u8>) {
@@ -106,7 +106,7 @@ fn apply_tx(tx_data: Vec<u8>) {
 
 Inside the validity predicate function, you can read, write or delete any storage value with the functions provided in the `tx_prelude` from the storage of any account.
 
-To find out about the interface available in a transaction, please check out [Rust docs for `tx_prelude`](https://docs.anoma.net/v0.5.0/rustdoc/anoma_vm_env/tx_prelude/index.html).
+To find out about the interface available in a transaction, please check out [Rust docs for `tx_prelude`](https://docs.namada.net/v0.5.0/rustdoc/namada_vm_env/tx_prelude/index.html).
 
 Compile the transaction's code from the template:
 
@@ -119,7 +119,7 @@ This will output a WASM file that can be found in `wasm/tx_template/target/wasm3
 Submit the transaction to the ledger:
 
 ```shell
-anoma client tx --code-path tx_template/tx.wasm
+namada client tx --code-path tx_template/tx.wasm
 ```
 
 Optionally, you can also attach some data to the transaction from a file with the `--data-path` argument.

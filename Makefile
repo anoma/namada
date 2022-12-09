@@ -23,13 +23,13 @@ build-test:
 	$(cargo) build --tests
 
 build-release:
-	ANOMA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
+	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
 install-release:
-	ANOMA_DEV=false $(cargo) install --path ./apps --locked
+	NAMADA_DEV=false $(cargo) install --path ./apps --locked
 
 check-release:
-	ANOMA_DEV=false $(cargo) check --release --package namada_apps
+	NAMADA_DEV=false $(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
@@ -41,16 +41,24 @@ check:
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
+check-abcipp:
+	$(cargo) check \
+		--workspace \
+		--exclude namada_tests \
+		--all-targets \
+		--no-default-features \
+		--features "abcipp ibc-mocks-abcipp testing"
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
 
 clippy-abcipp:
-	ANOMA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
+	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./apps/Cargo.toml \
 		--no-default-features \
 		--features "std testing abcipp" && \
@@ -58,22 +66,18 @@ clippy-abcipp:
 		--manifest-path ./proof_of_stake/Cargo.toml \
 		--features "testing" && \
 	$(cargo) +$(nightly) clippy --all-targets \
+		--manifest-path ./core/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke"
+	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" && \
-	$(cargo) +$(nightly) clippy \
-		--all-targets \
-		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features \
-		--features "abcipp" && \
-	make -C $(wasms) clippy && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
-
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke"
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
 install: tendermint
-	ANOMA_DEV=false $(cargo) install --path ./apps --locked
+	NAMADA_DEV=false $(cargo) install --path ./apps --locked
 
 tendermint:
 	./scripts/get_tendermint.sh
@@ -118,15 +122,21 @@ test-unit-abcipp:
 			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time && \
 	$(cargo) test \
+		--manifest-path ./core/Cargo.toml \
+		--no-default-features \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
+			$(TEST_FILTER) -- \
+			-Z unstable-options --report-time && \
+	$(cargo) test \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp" \
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" \
 			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time && \
 	$(cargo) test \
 		--manifest-path ./vm_env/Cargo.toml \
 		--no-default-features \
-		--features "abcipp" \
+		--features "namada_core/abcipp" \
 			$(TEST_FILTER) -- \
 			-Z unstable-options --report-time
 
@@ -191,16 +201,18 @@ build-wasm-scripts-docker: build-wasm-image-docker
 	docker run --rm -v ${PWD}:/__w/namada/namada namada-wasm make build-wasm-scripts
 
 debug-wasm-scripts-docker: build-wasm-image-docker
-	docker run --rm -v ${PWD}:/usr/local/rust/wasm anoma-wasm make debug-wasm-scripts
+	docker run --rm -v ${PWD}:/usr/local/rust/wasm namada-wasm make debug-wasm-scripts
 
 # Build the validity predicate and transactions wasm
 build-wasm-scripts:
+	rm wasm/*.wasm || true
 	make -C $(wasms)
 	make opt-wasm
 	make checksum-wasm
 
-# Debug build the validity predicate, transactions, matchmaker and matchmaker filter wasm
+# Debug build the validity predicate and transactions wasm
 debug-wasm-scripts:
+	rm wasm/*.wasm || true
 	make -C $(wasms) debug
 	make opt-wasm
 	make checksum-wasm

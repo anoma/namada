@@ -7,15 +7,13 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 
 use super::ChangedKeys;
-use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::read;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 use crate::types::voting_power::FractionalVotingPower;
 
 pub(super) mod storage;
+pub(super) mod update;
 
 /// The addresses of validators that voted for something, and the block
 /// heights at which they voted. We use a [`BTreeMap`] to enforce that a
@@ -71,39 +69,6 @@ pub fn calculate_new(
         seen_by,
         seen: newly_confirmed,
     })
-}
-
-/// Calculate an updated [`Tally`] based on one that is in storage under `keys`,
-/// with some new `voters`.
-pub fn calculate_updated<D, H, T>(
-    store: &mut Storage<D, H>,
-    keys: &vote_tallies::Keys<T>,
-    _voters: &HashMap<Address, FractionalVotingPower>,
-) -> Result<(Tally, ChangedKeys)>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    T: BorshDeserialize,
-{
-    // TODO(namada#515): implement this
-    let _body: T = read::value(store, &keys.body())?;
-    let seen: bool = read::value(store, &keys.seen())?;
-    let seen_by: Votes = read::value(store, &keys.seen_by())?;
-    let voting_power: FractionalVotingPower =
-        read::value(store, &keys.voting_power())?;
-
-    let tally = Tally {
-        voting_power,
-        seen_by,
-        seen,
-    };
-
-    tracing::warn!(
-        ?tally,
-        "Updating events is not implemented yet, so the returned vote tally \
-         will be identical to the one in storage",
-    );
-    Ok((tally, ChangedKeys::default()))
 }
 
 /// Deterministically constructs a [`Votes`] map from a set of validator

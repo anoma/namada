@@ -48,7 +48,7 @@ To a validator who proposed a block (`block.header.proposer_address`), the syste
 
 All the fees that are charged in a transaction execution (DKG transaction wrapper fee and transactions applied in a block) are transferred into a fee pool, which is another special account controlled by the PoS module. Note that the fee pool account may contain tokens other than the staking token NAM.
 
-- TODO describe the fee pool, related to <https://github.com/anomanetwork/anoma/issues/48>, <https://github.com/anomanetwork/anoma/issues/51> and <https://github.com/anomanetwork/anoma/issues/72>
+- TODO describe the fee pool, related to <https://github.com/anomanetwork/namada/issues/48>, <https://github.com/namadanetwork/namada/issues/51> and <https://github.com/namadanetwork/namada/issues/72>
 
 
 ## Transactions

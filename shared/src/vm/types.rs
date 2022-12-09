@@ -11,10 +11,8 @@
 
 use std::collections::BTreeSet;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-
 use crate::types::address::Address;
-use crate::types::storage::Key;
+use crate::types::storage;
 
 /// Input for validity predicate wasm module call
 pub struct VpInput<'a> {
@@ -24,16 +22,7 @@ pub struct VpInput<'a> {
     pub data: &'a [u8],
     /// The storage changed keys from the write log of storage updates
     /// performed by the transaction for the account associated with the VP
-    pub keys_changed: &'a BTreeSet<Key>,
+    pub keys_changed: &'a BTreeSet<storage::Key>,
     /// The verifiers to trigger VPs
     pub verifiers: &'a BTreeSet<Address>,
-}
-
-/// Key-value pair represents data from account's subspace
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct KeyVal {
-    /// The storage key
-    pub key: String,
-    /// The value as arbitrary bytes
-    pub val: Vec<u8>,
 }

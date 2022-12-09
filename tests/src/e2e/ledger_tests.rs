@@ -1,13 +1,14 @@
 //! By default, these tests will run in release mode. This can be disabled
-//! by setting environment variable `ANOMA_E2E_DEBUG=true`. For debugging,
+//! by setting environment variable `NAMADA_E2E_DEBUG=true`. For debugging,
 //! you'll typically also want to set `RUST_BACKTRACE=1`, e.g.:
 //!
 //! ```ignore,shell
-//! ANOMA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ledger_tests -- --test-threads=1 --nocapture
+//! NAMADA_E2E_DEBUG=true RUST_BACKTRACE=1 cargo test e2e::ledger_tests -- --test-threads=1 --nocapture
 //! ```
 //!
 //! To keep the temporary files created by a test, use env var
-//! `ANOMA_E2E_KEEP_TEMP=true`.
+//! `NAMADA_E2E_KEEP_TEMP=true`.
+#![allow(clippy::type_complexity)]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -18,7 +19,7 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::{btc, eth, masp_rewards};
+use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::token;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::ethereum_bridge;
@@ -31,7 +32,7 @@ use setup::constants::*;
 use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
-    epoch_sleep, find_address, find_voting_power, get_actor_rpc, get_epoch,
+    epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
@@ -56,7 +57,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is a validator")?;
     }
 
@@ -64,7 +65,7 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-        ledger.exp_string("Anoma ledger node started")?;
+        ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is not a validator")?;
     }
 
@@ -101,17 +102,17 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     validator_0.exp_string("Starting RPC HTTP server on")?;
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     validator_1.exp_string("Starting RPC HTTP server on")?;
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
     non_validator.exp_string("Starting RPC HTTP server on")?;
 
@@ -196,7 +197,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 /// 3. Check that the node detects this
 /// 4. Check that the node shuts down
 #[test]
-fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
+fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
     set_ethereum_bridge_mode(
@@ -210,23 +211,23 @@ fn test_anoma_shuts_down_if_tendermint_dies() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server on")?;
 
     // 2. Kill the tendermint node
     sleep(1);
     Command::new("pkill")
-        .args(&["tendermint"])
+        .args(["tendermint"])
         .spawn()
         .expect("Test failed")
         .wait()
         .expect("Test failed");
 
-    // 3. Check that anoma detects that the tendermint node is dead
+    // 3. Check that namada detects that the tendermint node is dead
     ledger.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
 
     Ok(())
@@ -254,7 +255,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -264,7 +265,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -272,7 +273,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -297,7 +298,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     let mut session =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    session.exp_string("Anoma ledger node started")?;
+    session.exp_string("Namada ledger node started")?;
 
     // There should be no previous state
     session.exp_string("No state could be found")?;
@@ -339,7 +340,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let txs_args = vec![
-        // 2. Submit a token transfer tx
+        // 2. Submit a token transfer tx (from an established account)
         vec![
             "transfer",
             "--source",
@@ -351,6 +352,26 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--amount",
             "10.1",
             "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from an implicit account)
+        vec![
+            "transfer",
+            "--source",
+            DAEWON,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--fee-amount",
             "0",
             "--gas-limit",
             "0",
@@ -511,7 +532,9 @@ fn masp_txs_and_queries() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 3600 } else { 360 },
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 3600 } else { 360 },
+                ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
@@ -533,7 +556,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -785,7 +808,7 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: 60,
+                epochs_per_year: epochs_per_year_from_min_duration(60),
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -806,7 +829,7 @@ fn masp_pinned_txs() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -952,7 +975,9 @@ fn masp_incentives() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_duration: if is_debug_mode() { 240 } else { 60 },
+                epochs_per_year: epochs_per_year_from_min_duration(
+                    if is_debug_mode() { 240 } else { 60 },
+                ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
@@ -974,7 +999,7 @@ fn masp_incentives() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server")?;
 
     let _bg_ledger = ledger.background();
@@ -1680,7 +1705,7 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("Starting RPC HTTP server on")?;
 
     let bg_ledger = ledger.background();
@@ -1743,7 +1768,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Anoma ledger node has shut down.")?;
+    ledger.exp_string("Namada ledger node has shut down.")?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -1751,7 +1776,7 @@ fn invalid_transactions() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -1813,8 +1838,8 @@ fn pos_bonds() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
                 ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
@@ -2011,7 +2036,7 @@ fn pos_bonds() -> Result<()> {
 /// 4. Transfer some NAM to the new validator
 /// 5. Submit a self-bond for the new validator
 /// 6. Wait for the pipeline epoch
-/// 7. Check the new validator's voting power
+/// 7. Check the new validator's bonded stake
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
@@ -2019,7 +2044,7 @@ fn pos_init_validator() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 min_num_of_blocks: 2,
-                min_duration: 1,
+                epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
@@ -2069,6 +2094,10 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--commission-rate",
+        "0.05",
+        "--max-commission-rate-change",
+        "0.01",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2171,12 +2200,12 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 6. Wait for the pipeline epoch when the validator's voting power should
+    // 6. Wait for the pipeline epoch when the validator's bonded stake should
     // be non-zero
     let epoch = get_epoch(&test, &validator_one_rpc)?;
     let earliest_update_epoch = epoch + pipeline_len;
     println!(
-        "Current epoch: {}, earliest epoch with updated voting power: {}",
+        "Current epoch: {}, earliest epoch with updated bonded stake: {}",
         epoch, earliest_update_epoch
     );
     let start = Instant::now();
@@ -2191,10 +2220,10 @@ fn pos_init_validator() -> Result<()> {
         }
     }
 
-    // 7. Check the new validator's voting power
-    let voting_power =
-        find_voting_power(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(voting_power, 11);
+    // 7. Check the new validator's bonded stake
+    let bonded_stake =
+        find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
+    assert_eq!(bonded_stake, 11_000_500_000);
 
     Ok(())
 }
@@ -2303,9 +2332,9 @@ fn proposal_submission() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
                 min_num_of_blocks: 1,
-                min_duration: 1,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
@@ -2317,6 +2346,7 @@ fn proposal_submission() -> Result<()> {
                     &working_dir,
                     Some("tx_"),
                 )),
+                ..genesis.parameters
             };
 
             GenesisConfig {
@@ -2334,10 +2364,10 @@ fn proposal_submission() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
     );
 
-    let anomac_help = vec!["--help"];
+    let namadac_help = vec!["--help"];
 
-    let mut client = run!(test, Bin::Client, anomac_help, Some(40))?;
-    client.exp_string("Anoma client command line interface.")?;
+    let mut client = run!(test, Bin::Client, namadac_help, Some(40))?;
+    client.exp_string("Namada client command line interface.")?;
     client.assert_success();
 
     // 1. Run the ledger node
@@ -2373,36 +2403,8 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 2. Submit valid proposal
-    let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
-
     let albert = find_address(&test, ALBERT)?;
-    let valid_proposal_json = json!(
-        {
-            "content": {
-                "title": "TheTitle",
-                "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
-                "created": "2022-03-10T08:54:37Z",
-                "license": "MIT",
-                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
-                "requires": "2"
-            },
-            "author": albert,
-            "voting_start_epoch": 12_u64,
-            "voting_end_epoch": 24_u64,
-            "grace_epoch": 30_u64,
-            "proposal_code_path": proposal_code.to_str().unwrap()
-        }
-    );
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
-    generate_proposal_json_file(
-        valid_proposal_json_path.as_path(),
-        &valid_proposal_json,
-    );
-
+    let valid_proposal_json_path = prepare_proposal_data(&test, albert);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2803,7 +2805,7 @@ fn proposal_offline() -> Result<()> {
     client.assert_success();
 
     let expected_file_name = format!("proposal-vote-{}", albert);
-    let expected_path_vote = test.test_dir.path().join(&expected_file_name);
+    let expected_path_vote = test.test_dir.path().join(expected_file_name);
     assert!(expected_path_vote.exists());
 
     // 4. Compute offline tally
@@ -2892,6 +2894,10 @@ fn test_genesis_validators() -> Result<()> {
             validator_0_alias,
             "--scheme",
             "ed25519",
+            "--commission-rate",
+            "0.05",
+            "--max-commission-rate-change",
+            "0.01",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(0)),
         ],
@@ -2930,6 +2936,10 @@ fn test_genesis_validators() -> Result<()> {
             validator_1_alias,
             "--scheme",
             "secp256k1",
+            "--commission-rate",
+            "0.05",
+            "--max-commission-rate-change",
+            "0.01",
             "--net-address",
             &format!("127.0.0.1:{}", get_first_port(1)),
         ],
@@ -2946,7 +2956,7 @@ fn test_genesis_validators() -> Result<()> {
             validator_1_alias,
         );
     let config = std::fs::read_to_string(
-        &namada_apps::client::utils::validator_pre_genesis_file(
+        namada_apps::client::utils::validator_pre_genesis_file(
             &validator_1_pre_genesis_dir,
         ),
     )
@@ -2968,7 +2978,6 @@ fn test_genesis_validators() -> Result<()> {
             config.tokens = Some(200000);
             config.non_staked_balance = Some(1000000000000);
             config.validator_vp = Some("vp_user".into());
-            config.staking_reward_vp = Some("vp_user".into());
             // Setup the validator ports same as what
             // `setup::set_validators` would do
             let mut net_address = net_address_0;
@@ -3138,19 +3147,19 @@ fn test_genesis_validators() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     validator_0.exp_string("Starting RPC HTTP server on")?;
 
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     validator_1.exp_string("Starting RPC HTTP server on")?;
 
     let mut non_validator =
         run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Anoma ledger node started")?;
+    non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
     non_validator.exp_string("Starting RPC HTTP server on")?;
 
@@ -3269,12 +3278,12 @@ fn double_signing_gets_slashed() -> Result<()> {
     let args = ["ledger"];
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Anoma ledger node started")?;
+    validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
     let _bg_validator_0 = validator_0.background();
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Anoma ledger node started")?;
+    validator_1.exp_string("Namada ledger node started")?;
     validator_1.exp_string("This node is a validator")?;
     let bg_validator_1 = validator_1.background();
 
@@ -3283,7 +3292,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let validator_0_base_dir_copy =
         test.test_dir.path().join("validator-0-copy");
     fs_extra::dir::copy(
-        &validator_0_base_dir,
+        validator_0_base_dir,
         &validator_0_base_dir_copy,
         &fs_extra::dir::CopyOptions {
             copy_inside: true,
@@ -3344,7 +3353,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "validator",
         loc,
     )?;
-    validator_0_copy.exp_string("Anoma ledger node started")?;
+    validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
@@ -3379,4 +3388,169 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.exp_string("Slashing")?;
 
     Ok(())
+}
+
+/// In this test we:
+/// 1. Run the ledger node
+/// 2. For some transactions that need signature authorization:
+///    2a. Generate a new key for an implicit account.
+///    2b. Send some funds to the implicit account.
+///    2c. Submit the tx with the implicit account as the source, that
+///        requires that the account has revealed its PK. This should be done
+///        by the client automatically.
+///    2d. Submit same tx again, this time the client shouldn't reveal again.
+#[test]
+fn implicit_account_reveal_pk() -> Result<()> {
+    let test = setup::network(|genesis| genesis, None)?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Some transactions that need signature authorization:
+    let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
+        // A token transfer tx
+        Box::new(|source| {
+            [
+                "transfer",
+                "--source",
+                source,
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "10.1",
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+        // A bond
+        Box::new(|source| {
+            vec![
+                "bond",
+                "--validator",
+                "validator-0",
+                "--source",
+                source,
+                "--amount",
+                "10.1",
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+        // Submit proposal
+        Box::new(|source| {
+            // Gen data for proposal tx
+            let source = find_address(&test, source).unwrap();
+            let valid_proposal_json_path = prepare_proposal_data(&test, source);
+            vec![
+                "init-proposal",
+                "--data-path",
+                valid_proposal_json_path.to_str().unwrap(),
+                "--ledger-address",
+                &validator_one_rpc,
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
+        }),
+    ];
+
+    for (ix, tx_args) in txs_args.into_iter().enumerate() {
+        let key_alias = format!("key-{ix}");
+
+        // 2a. Generate a new key for an implicit account.
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
+            Some(20),
+        )?;
+        cmd.assert_success();
+
+        // Apply the key_alias once the key is generated to obtain tx args
+        let tx_args = tx_args(&key_alias);
+
+        // 2b. Send some funds to the implicit account.
+        let credit_args = [
+            "transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            &key_alias,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, credit_args, Some(40))?;
+        client.assert_success();
+
+        // 2c. Submit the tx with the implicit account as the source.
+        let expected_reveal = "Submitting a tx to reveal the public key";
+        let mut client = run!(test, Bin::Client, &tx_args, Some(40))?;
+        client.exp_string(expected_reveal)?;
+        client.assert_success();
+
+        // 2d. Submit same tx again, this time the client shouldn't reveal
+        // again.
+        let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+        let unread = client.exp_eof()?;
+        assert!(!unread.contains(expected_reveal))
+    }
+
+    Ok(())
+}
+
+/// Prepare proposal data in the test's temp dir from the given source address.
+/// This can be submitted with "init-proposal" command.
+fn prepare_proposal_data(test: &setup::Test, source: Address) -> PathBuf {
+    let proposal_code = wasm_abs_path(TX_PROPOSAL_CODE);
+    let valid_proposal_json = json!(
+        {
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+                "requires": "2"
+            },
+            "author": source,
+            "voting_start_epoch": 12_u64,
+            "voting_end_epoch": 24_u64,
+            "grace_epoch": 30_u64,
+            "proposal_code_path": proposal_code.to_str().unwrap()
+        }
+    );
+    let valid_proposal_json_path =
+        test.test_dir.path().join("valid_proposal.json");
+    generate_proposal_json_file(
+        valid_proposal_json_path.as_path(),
+        &valid_proposal_json,
+    );
+    valid_proposal_json_path
+}
+
+/// Convert epoch `min_duration` in seconds to `epochs_per_year` genesis
+/// parameter.
+fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
+    60 * 60 * 24 * 365 / min_duration
 }

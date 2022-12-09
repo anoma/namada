@@ -6,18 +6,25 @@ license = "GPL-3.0"
 name = "namada_proof_of_stake"
 readme = "../README.md"
 resolver = "2"
-version = "0.10.1"
+version = "0.11.0"
 
 [features]
-default = []
+default = ["abciplus"]
+abciplus = [
+  "namada_core/abciplus",
+]
 # testing helpers
 testing = ["proptest"]
 
 [dependencies]
+namada_core = {path = "../core", default-features = false}
 borsh = "0.9.1"
-thiserror = "1.0.30"
+derivative = "2.2.0"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
-derivative = "2.2.0"
+rust_decimal = { version = "1.26.1", features = ["borsh"] }
+rust_decimal_macros = "1.26.1"
+thiserror = "1.0.30"
+tracing = "0.1.30"
 
 [dev-dependencies]

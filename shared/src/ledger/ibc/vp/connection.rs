@@ -1,12 +1,12 @@
 //! IBC validity predicate for connection module
 
-use thiserror::Error;
-
-use super::super::handler::{
+use namada_core::ledger::ibc::actions::{
     commitment_prefix, make_open_ack_connection_event,
     make_open_confirm_connection_event, make_open_init_connection_event,
     make_open_try_connection_event,
 };
+use thiserror::Error;
+
 use super::super::storage::{
     connection_counter_key, connection_id, connection_key,
     is_connection_counter_key, Error as IbcStorageError,
