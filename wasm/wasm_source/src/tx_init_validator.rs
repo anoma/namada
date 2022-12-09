@@ -1,5 +1,5 @@
-//! A tx to initialize a new validator account and staking reward account with a
-//! given public keys and a validity predicates.
+//! A tx to initialize a new validator account with a given public keys and a
+//! validity predicates.
 
 use namada_tx_prelude::transaction::InitValidator;
 use namada_tx_prelude::*;
@@ -15,12 +15,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
     // Register the validator in PoS
     match ctx.init_validator(init_validator) {
-        Ok((validator_address, staking_reward_address)) => {
-            debug_log!(
-                "Created validator {} and staking reward account {}",
-                validator_address.encode(),
-                staking_reward_address.encode()
-            )
+        Ok(validator_address) => {
+            debug_log!("Created validator {}", validator_address.encode(),)
         }
         Err(err) => {
             debug_log!("Validator creation failed with: {}", err);

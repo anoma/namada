@@ -1,15 +1,15 @@
+use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::ledger::events::EventType;
-use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::governance::utils::{
+use namada::ledger::governance::{
+    storage as gov_storage, ADDRESS as gov_address,
+};
+use namada::ledger::native_vp::governance::utils::{
     compute_tally, get_proposal_votes, ProposalEvent,
 };
-use namada::ledger::governance::vp::ADDRESS as gov_address;
 use namada::ledger::protocol;
-use namada::ledger::slash_fund::ADDRESS as slash_fund_address;
-use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::types::encode;
-use namada::ledger::storage::{DBIter, DB};
-use namada::types::address::{nam, Address};
+use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -51,11 +51,12 @@ where
             })?;
 
         let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
-        let tally_result =
-            compute_tally(&shell.storage, proposal_end_epoch, votes);
+        let is_accepted = votes.and_then(|votes| {
+            compute_tally(&shell.storage, proposal_end_epoch, votes)
+        });
 
-        let transfer_address = match tally_result {
-            TallyResult::Passed => {
+        let transfer_address = match is_accepted {
+            Ok(true) => {
                 let proposal_author_key = gov_storage::get_author_key(id);
                 let proposal_author = shell
                     .read_storage_key::<Address>(&proposal_author_key)
@@ -163,7 +164,7 @@ where
                     }
                 }
             }
-            TallyResult::Rejected | TallyResult::Unknown => {
+            Ok(false) => {
                 let proposal_event: Event = ProposalEvent::new(
                     EventType::Proposal.to_string(),
                     TallyResult::Rejected,
@@ -177,12 +178,33 @@ where
 
                 slash_fund_address
             }
+            Err(err) => {
+                tracing::error!(
+                    "Unexpectedly failed to tally proposal ID {id} with error \
+                     {err}"
+                );
+                let proposal_event: Event = ProposalEvent::new(
+                    EventType::Proposal.to_string(),
+                    TallyResult::Failed,
+                    id,
+                    false,
+                    false,
+                )
+                .into();
+                response.events.push(proposal_event);
+
+                slash_fund_address
+            }
         };
 
+        let native_token = shell.storage.native_token.clone();
         // transfer proposal locked funds
-        shell
-            .storage
-            .transfer(&nam(), funds, &gov_address, &transfer_address);
+        shell.storage.transfer(
+            &native_token,
+            funds,
+            &gov_address,
+            &transfer_address,
+        );
     }
 
     Ok(proposals_result)

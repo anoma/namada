@@ -2,12 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use namada::types::address::{masp, Address, InternalAddress};
-use namada::types::storage::Key;
+use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::storage::Key;
 /// Vp imports and functions.
-use namada::types::storage::KeySeg;
-use namada::types::token;
-pub use namada::types::token::*;
+use namada_core::types::storage::KeySeg;
+use namada_core::types::token;
+pub use namada_core::types::token::*;
 
 use super::*;
 
@@ -57,7 +57,7 @@ pub fn vp(
                 change += this_change;
                 // make sure that the spender approved the transaction
                 if this_change < 0
-                    && !(verifiers.contains(owner) || *owner == masp())
+                    && !(verifiers.contains(owner) || *owner == address::masp())
                 {
                     return reject();
                 }

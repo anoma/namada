@@ -1,6 +1,6 @@
 # Front-running prevention
 
-[Tracking Issue](https://github.com/anoma/anoma/issues/42)
+[Tracking Issue](https://github.com/anoma/namada/issues/42)
 
 ---
 

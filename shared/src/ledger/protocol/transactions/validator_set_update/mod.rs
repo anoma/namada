@@ -9,9 +9,9 @@ use crate::ledger::eth_bridge::storage::vote_tallies;
 use crate::ledger::protocol::transactions::utils;
 use crate::ledger::protocol::transactions::votes::update::NewVotes;
 use crate::ledger::protocol::transactions::votes::{self, Votes};
+use crate::ledger::queries_ext::QueriesExt;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::ledger::storage_api::queries::QueriesExt;
 use crate::types::address::Address;
 use crate::types::storage::BlockHeight;
 #[allow(unused_imports)]

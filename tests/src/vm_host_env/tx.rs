@@ -183,15 +183,14 @@ impl TestTxEnv {
             .unwrap();
     }
 
-    /// Apply the tx changes to the write log and return
-    /// the set of verifiers.
+    /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
         let empty_data = vec![];
         wasm::run::tx(
             &self.storage,
             &mut self.write_log,
             &mut self.gas_meter,
-            &TxIndex::default(),
+            &self.tx_index,
             &self.tx.code,
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,
@@ -253,7 +252,7 @@ mod native_tx_host_env {
                      `tx_host_env::init()`)",
                 )
                 .as_mut();
-            f(&mut *env)
+            f(&mut env)
         })
     }
 
@@ -303,7 +302,7 @@ mod native_tx_host_env {
     macro_rules! native_host_fn {
             // unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
-                concat_idents!(extern_fn_name = anoma, _, $fn {
+                concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) {
                         with(|TestTxEnv {
@@ -343,7 +342,7 @@ mod native_tx_host_env {
 
             // non-unit return type
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty ) => {
-                concat_idents!(extern_fn_name = anoma, _, $fn {
+                concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestTxEnv {
@@ -422,5 +421,6 @@ mod native_tx_host_env {
     native_host_fn!(tx_get_block_time() -> i64);
     native_host_fn!(tx_get_block_hash(result_ptr: u64));
     native_host_fn!(tx_get_block_epoch() -> u64);
+    native_host_fn!(tx_get_native_token(result_ptr: u64));
     native_host_fn!(tx_log_string(str_ptr: u64, str_len: u64));
 }

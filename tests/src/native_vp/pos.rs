@@ -71,7 +71,6 @@
 //!       address in Tendermint)
 //!     - `#{PoS}/validator_set`
 //!     - `#{PoS}/validator/#{validator}/consensus_key`
-//!     - `#{PoS}/validator/#{validator}/staking_reward_address`
 //!     - `#{PoS}/validator/#{validator}/state`
 //!     - `#{PoS}/validator/#{validator}/total_deltas`
 //!     - `#{PoS}/validator/#{validator}/voting_power`
@@ -100,10 +99,9 @@
 //! - add slashes
 
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::proof_of_stake::storage::GenesisValidator;
+use namada::proof_of_stake::PosParams;
 use namada::types::storage::Epoch;
-use namada_tx_prelude::proof_of_stake::{
-    staking_token_address, GenesisValidator, PosParams,
-};
 
 use crate::tx::tx_host_env;
 
@@ -119,22 +117,16 @@ pub fn init_pos(
     tx_host_env::with(|tx_env| {
         // Ensure that all the used
         // addresses exist
-        tx_env.spawn_accounts([&staking_token_address()]);
+        let native_token = tx_env.storage.native_token.clone();
+        tx_env.spawn_accounts([&native_token]);
         for validator in genesis_validators {
-            tx_env.spawn_accounts([
-                &validator.address,
-                &validator.staking_reward_address,
-            ]);
+            tx_env.spawn_accounts([&validator.address]);
         }
         tx_env.storage.block.epoch = start_epoch;
         // Initialize PoS storage
         tx_env
             .storage
-            .init_genesis(
-                params,
-                genesis_validators.iter(),
-                u64::from(start_epoch),
-            )
+            .init_genesis(params, genesis_validators.iter(), start_epoch)
             .unwrap();
     });
 }
@@ -142,12 +134,11 @@ pub fn init_pos(
 #[cfg(test)]
 mod tests {
 
-    use namada::ledger::pos::PosParams;
+    use namada::ledger::pos::{PosParams, PosVP};
     use namada::types::key::common::PublicKey;
     use namada::types::storage::Epoch;
     use namada::types::{address, token};
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::proof_of_stake::PosVP;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
     use proptest::prop_state_machine;
@@ -404,6 +395,8 @@ mod tests {
                     ValidPosAction::InitValidator {
                         address,
                         consensus_key,
+                        commission_rate: _,
+                        max_commission_rate_change: _,
                     } => {
                         !state.is_validator(address)
                             && !state.is_used_key(consensus_key)
@@ -575,29 +568,28 @@ pub mod testing {
     use derivative::Derivative;
     use itertools::Either;
     use namada::ledger::pos::namada_proof_of_stake::btree_set::BTreeSetShims;
+    use namada::proof_of_stake::epoched::{
+        DynEpochOffset, Epoched, EpochedDelta,
+    };
+    use namada::proof_of_stake::parameters::testing::arb_rate;
+    use namada::proof_of_stake::storage::{BondId, Bonds, Unbonds};
+    use namada::proof_of_stake::types::{
+        Bond, Unbond, ValidatorState, WeightedValidator,
+    };
+    use namada::proof_of_stake::PosParams;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
     use namada::types::{address, key, token};
-    use namada_tx_prelude::proof_of_stake::epoched::{
-        DynEpochOffset, Epoched, EpochedDelta,
-    };
-    use namada_tx_prelude::proof_of_stake::types::{
-        Bond, Unbond, ValidatorState, VotingPower, VotingPowerDelta,
-        WeightedValidator,
-    };
-    use namada_tx_prelude::proof_of_stake::{
-        staking_token_address, BondId, Bonds, PosParams, Unbonds,
-    };
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
+    use rust_decimal::Decimal;
 
     use crate::tx::{self, tx_host_env};
 
     #[derive(Clone, Debug, Default)]
     pub struct TestValidator {
         pub address: Option<Address>,
-        pub staking_reward_address: Option<Address>,
         pub stake: Option<token::Amount>,
         /// Balance is a pair of token address and its amount
         pub unstaked_balances: Vec<(Address, token::Amount)>,
@@ -612,6 +604,8 @@ pub mod testing {
         InitValidator {
             address: Address,
             consensus_key: PublicKey,
+            commission_rate: Decimal,
+            max_commission_rate_change: Decimal,
         },
         Bond {
             amount: token::Amount,
@@ -665,8 +659,8 @@ pub mod testing {
             owner: Address,
             validator: Address,
         },
-        TotalVotingPower {
-            vp_delta: i128,
+        TotalDeltas {
+            delta: i128,
             offset: Either<DynEpochOffset, Epoch>,
         },
         ValidatorSet {
@@ -679,19 +673,10 @@ pub mod testing {
             #[derivative(Debug = "ignore")]
             pk: PublicKey,
         },
-        ValidatorStakingRewardsAddress {
-            validator: Address,
-            address: Address,
-        },
-        ValidatorTotalDeltas {
+        ValidatorDeltas {
             validator: Address,
             delta: i128,
             offset: DynEpochOffset,
-        },
-        ValidatorVotingPower {
-            validator: Address,
-            vp_delta: i64,
-            offset: Either<DynEpochOffset, Epoch>,
         },
         ValidatorState {
             validator: Address,
@@ -704,6 +689,14 @@ pub mod testing {
             address: Address,
             #[derivative(Debug = "ignore")]
             consensus_key: PublicKey,
+        },
+        ValidatorCommissionRate {
+            address: Address,
+            rate: Decimal,
+        },
+        ValidatorMaxCommissionRateChange {
+            address: Address,
+            change: Decimal,
         },
     }
 
@@ -722,13 +715,24 @@ pub mod testing {
         let init_validator = (
             address::testing::arb_established_address(),
             key::testing::arb_common_keypair(),
+            arb_rate(),
+            arb_rate(),
         )
-            .prop_map(|(addr, consensus_key)| {
-                ValidPosAction::InitValidator {
-                    address: Address::Established(addr),
-                    consensus_key: consensus_key.ref_to(),
-                }
-            });
+            .prop_map(
+                |(
+                    addr,
+                    consensus_key,
+                    commission_rate,
+                    max_commission_rate_change,
+                )| {
+                    ValidPosAction::InitValidator {
+                        address: Address::Established(addr),
+                        consensus_key: consensus_key.ref_to(),
+                        commission_rate,
+                        max_commission_rate_change,
+                    }
+                },
+            );
 
         if validators.is_empty() {
             // When there is no validator, we can only initialize new ones
@@ -851,7 +855,7 @@ pub mod testing {
             });
             println!("Current epoch {}", current_epoch);
 
-            let changes = self.into_storage_changes(&params, current_epoch);
+            let changes = self.into_storage_changes(current_epoch);
             for change in changes {
                 apply_pos_storage_change(
                     change,
@@ -865,7 +869,6 @@ pub mod testing {
         /// Convert a valid PoS action to PoS storage changes
         pub fn into_storage_changes(
             self,
-            params: &PosParams,
             current_epoch: Epoch,
         ) -> PosStorageChanges {
             use namada_tx_prelude::PosRead;
@@ -874,6 +877,8 @@ pub mod testing {
                 ValidPosAction::InitValidator {
                     address,
                     consensus_key,
+                    commission_rate,
+                    max_commission_rate_change,
                 } => {
                     let offset = DynEpochOffset::PipelineLen;
                     vec![
@@ -893,10 +898,6 @@ pub mod testing {
                             validator: address.clone(),
                             pk: consensus_key,
                         },
-                        PosStorageChange::ValidatorStakingRewardsAddress {
-                            validator: address.clone(),
-                            address: address::testing::established_address_1(),
-                        },
                         PosStorageChange::ValidatorState {
                             validator: address.clone(),
                             state: ValidatorState::Pending,
@@ -905,15 +906,18 @@ pub mod testing {
                             validator: address.clone(),
                             state: ValidatorState::Candidate,
                         },
-                        PosStorageChange::ValidatorTotalDeltas {
+                        PosStorageChange::ValidatorDeltas {
                             validator: address.clone(),
                             delta: 0,
                             offset,
                         },
-                        PosStorageChange::ValidatorVotingPower {
-                            validator: address,
-                            vp_delta: 0,
-                            offset: Either::Left(offset),
+                        PosStorageChange::ValidatorCommissionRate {
+                            address: address.clone(),
+                            rate: commission_rate,
+                        },
+                        PosStorageChange::ValidatorMaxCommissionRateChange {
+                            address,
+                            change: max_commission_rate_change,
                         },
                     ]
                 }
@@ -923,28 +927,7 @@ pub mod testing {
                     validator,
                 } => {
                     let offset = DynEpochOffset::PipelineLen;
-                    // We first need to find if the validator's voting power
-                    // is affected
                     let token_delta = amount.change();
-
-                    // Read the validator's current total deltas (this may be
-                    // updated by previous transition(s) within the same
-                    // transaction via write log)
-                    let validator_total_deltas = tx::ctx()
-                        .read_validator_total_deltas(&validator)
-                        .unwrap()
-                        .unwrap();
-                    let total_delta = validator_total_deltas
-                        .get_at_offset(current_epoch, offset, params)
-                        .unwrap_or_default();
-                    // We convert the tokens from micro units to whole tokens
-                    // with division by 10^6
-                    let vp_before =
-                        params.votes_per_token * ((total_delta) / 1_000_000);
-                    let vp_after = params.votes_per_token
-                        * ((total_delta + token_delta) / 1_000_000);
-                    // voting power delta
-                    let vp_delta = vp_after - vp_before;
 
                     let mut changes = Vec::with_capacity(10);
                     // ensure that the owner account exists
@@ -952,100 +935,26 @@ pub mod testing {
                         address: owner.clone(),
                     });
 
-                    // If the bond increases the voting power, more storage
-                    // updates are needed
-                    if vp_delta != 0 {
-                        // IMPORTANT: we have to update `ValidatorSet` and
-                        // `TotalVotingPower` before we update
-                        // `ValidatorTotalDeltas`, because they needs to
-                        // read the total deltas before they change.
-                        changes.extend([
-                            PosStorageChange::ValidatorSet {
-                                validator: validator.clone(),
-                                token_delta,
-                                offset,
-                            },
-                            PosStorageChange::TotalVotingPower {
-                                vp_delta,
-                                offset: Either::Left(offset),
-                            },
-                            PosStorageChange::ValidatorVotingPower {
-                                validator: validator.clone(),
-                                vp_delta: vp_delta.try_into().unwrap(),
-                                offset: Either::Left(offset),
-                            },
-                        ]);
-                    }
-
-                    // Check and if necessary recalculate voting power change at
-                    // every epoch after pipeline offset until the last epoch of
-                    // validator total deltas
-                    let num_of_epochs = (DynEpochOffset::UnbondingLen
-                        .value(params)
-                        - DynEpochOffset::PipelineLen.value(params)
-                        + u64::from(validator_total_deltas.last_update()))
-                    .checked_sub(u64::from(current_epoch))
-                    .unwrap_or_default();
-
-                    // We have to accumulate the total delta to find the delta
-                    // for each epoch that we iterate, less the deltas of the
-                    // predecessor epochs
-                    let mut total_vp_delta = 0_i128;
-                    for epoch in namada::ledger::pos::namada_proof_of_stake::types::Epoch::iter_range(
-                        (current_epoch.0 + DynEpochOffset::PipelineLen.value(params) + 1).into(),
-                        num_of_epochs,
-                    ) {
-                        // Read the validator's current total deltas (this may
-                        // be updated by previous transition(s) within the same
-                        // transaction via write log)
-                        let total_delta = validator_total_deltas
-                            .get(epoch)
-                            .unwrap_or_default();
-                        // We convert the tokens from micro units to whole
-                        // tokens with division by 10^6
-                        let vp_before = params.votes_per_token
-                            * ((total_delta) / 1_000_000);
-                        let vp_after = params.votes_per_token
-                            * ((total_delta + token_delta) / 1_000_000);
-                        // voting power delta
-                        let vp_delta_at_unbonding =
-                            vp_after - vp_before - vp_delta - total_vp_delta;
-                            total_vp_delta += vp_delta_at_unbonding;
-
-                        // If the bond increases the voting power, we also need
-                        // to check if that affects updates at unbonding offset
-                        // and if so, update these again. We don't have to
-                        // update validator sets as those are already updated
-                        // from the bond offset to the unbonding offset.
-                        if vp_delta_at_unbonding != 0 {
-                            // IMPORTANT: we have to update `TotalVotingPower`
-                            // before we update `ValidatorTotalDeltas`, because
-                            // it needs to read the total deltas before they
-                            // change.
-                            changes.extend([
-                                PosStorageChange::TotalVotingPower {
-                                    vp_delta: vp_delta_at_unbonding,
-                                offset: Either::Right(epoch.into()),
-                                },
-                                PosStorageChange::ValidatorVotingPower {
-                                    validator: validator.clone(),
-                                    vp_delta: vp_delta_at_unbonding
-                                        .try_into()
-                                        .unwrap(),
-                                offset: Either::Right(epoch.into()),
-                                },
-                            ]);
-                        }
-                    }
-
                     changes.extend([
-                        PosStorageChange::Bond {
-                            owner,
+                        PosStorageChange::ValidatorSet {
+                            validator: validator.clone(),
+                            token_delta,
+                            offset,
+                        },
+                        PosStorageChange::TotalDeltas {
+                            delta: token_delta,
+                            offset: Either::Left(offset),
+                        },
+                        PosStorageChange::ValidatorDeltas {
                             validator: validator.clone(),
                             delta: token_delta,
                             offset,
                         },
-                        PosStorageChange::ValidatorTotalDeltas {
+                    ]);
+
+                    changes.extend([
+                        PosStorageChange::Bond {
+                            owner,
                             validator,
                             delta: token_delta,
                             offset,
@@ -1063,55 +972,26 @@ pub mod testing {
                     validator,
                 } => {
                     let offset = DynEpochOffset::UnbondingLen;
-                    // We first need to find if the validator's voting power
-                    // is affected
                     let token_delta = -amount.change();
-
-                    // Read the validator's current total deltas (this may be
-                    // updated by previous transition(s) within the same
-                    // transaction via write log)
-                    let validator_total_deltas_cur = tx::ctx()
-                        .read_validator_total_deltas(&validator)
-                        .unwrap()
-                        .unwrap();
-                    let total_delta_cur = validator_total_deltas_cur
-                        .get_at_offset(current_epoch, offset, params)
-                        .unwrap_or_default();
-                    // We convert the tokens from micro units to whole tokens
-                    // with division by 10^6
-                    let vp_before = params.votes_per_token
-                        * ((total_delta_cur) / 1_000_000);
-                    let vp_after = params.votes_per_token
-                        * ((total_delta_cur + token_delta) / 1_000_000);
-                    // voting power delta
-                    let vp_delta = vp_after - vp_before;
 
                     let mut changes = Vec::with_capacity(6);
 
-                    // If the bond increases the voting power, more storage
-                    // updates are needed
-                    if vp_delta != 0 {
-                        // IMPORTANT: we have to update `ValidatorSet` and
-                        // `TotalVotingPower` before we update
-                        // `ValidatorTotalDeltas`, because they needs to
-                        // read the total deltas before they change.
-                        changes.extend([
-                            PosStorageChange::ValidatorSet {
-                                validator: validator.clone(),
-                                token_delta,
-                                offset,
-                            },
-                            PosStorageChange::TotalVotingPower {
-                                vp_delta,
-                                offset: Either::Left(offset),
-                            },
-                            PosStorageChange::ValidatorVotingPower {
-                                validator: validator.clone(),
-                                vp_delta: vp_delta.try_into().unwrap(),
-                                offset: Either::Left(offset),
-                            },
-                        ]);
-                    }
+                    changes.extend([
+                        PosStorageChange::ValidatorSet {
+                            validator: validator.clone(),
+                            token_delta,
+                            offset,
+                        },
+                        PosStorageChange::TotalDeltas {
+                            delta: token_delta,
+                            offset: Either::Left(offset),
+                        },
+                        PosStorageChange::ValidatorDeltas {
+                            validator: validator.clone(),
+                            delta: token_delta,
+                            offset,
+                        },
+                    ]);
 
                     changes.extend([
                         // IMPORTANT: we have to update `Unbond` before we
@@ -1124,11 +1004,6 @@ pub mod testing {
                         },
                         PosStorageChange::Bond {
                             owner,
-                            validator: validator.clone(),
-                            delta: token_delta,
-                            offset,
-                        },
-                        PosStorageChange::ValidatorTotalDeltas {
                             validator,
                             delta: token_delta,
                             offset,
@@ -1201,10 +1076,9 @@ pub mod testing {
                         pos_deltas: HashMap::default(),
                         neg_deltas: Default::default(),
                     };
-                    value.pos_deltas.insert(
-                        (current_epoch + offset.value(params)).into(),
-                        amount,
-                    );
+                    value
+                        .pos_deltas
+                        .insert(current_epoch + offset.value(params), amount);
                     match bonds {
                         Some(mut bonds) => {
                             // Resize the data if needed (the offset may be
@@ -1283,8 +1157,7 @@ pub mod testing {
                                 value.deltas.insert(
                                     (
                                         *start_epoch,
-                                        (current_epoch + offset.value(params))
-                                            .into(),
+                                        (current_epoch + offset.value(params)),
                                     ),
                                     to_unbond,
                                 );
@@ -1295,8 +1168,7 @@ pub mod testing {
                                 value.deltas.insert(
                                     (
                                         *start_epoch,
-                                        (current_epoch + offset.value(params))
-                                            .into(),
+                                        (current_epoch + offset.value(params)),
                                     ),
                                     *delta,
                                 );
@@ -1323,31 +1195,27 @@ pub mod testing {
                 };
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
-            PosStorageChange::TotalVotingPower { vp_delta, offset } => {
-                let mut total_voting_powers =
-                    tx::ctx().read_total_voting_power().unwrap();
-                let vp_delta: i64 = vp_delta.try_into().unwrap();
+            PosStorageChange::TotalDeltas { delta, offset } => {
+                let mut total_deltas = tx::ctx().read_total_deltas().unwrap();
                 match offset {
                     Either::Left(offset) => {
-                        total_voting_powers.add_at_offset(
-                            VotingPowerDelta::from(vp_delta),
+                        total_deltas.add_at_offset(
+                            delta,
                             current_epoch,
                             offset,
                             params,
                         );
                     }
                     Either::Right(epoch) => {
-                        total_voting_powers.add_at_epoch(
-                            VotingPowerDelta::from(vp_delta),
+                        total_deltas.add_at_epoch(
+                            delta,
                             current_epoch,
                             epoch,
                             params,
                         );
                     }
                 }
-                tx::ctx()
-                    .write_total_voting_power(total_voting_powers)
-                    .unwrap()
+                tx::ctx().write_total_deltas(total_deltas).unwrap()
             }
             PosStorageChange::ValidatorAddressRawHash {
                 address,
@@ -1385,30 +1253,22 @@ pub mod testing {
                     .write_validator_consensus_key(&validator, consensus_key)
                     .unwrap();
             }
-            PosStorageChange::ValidatorStakingRewardsAddress {
-                validator,
-                address,
-            } => {
-                tx::ctx()
-                    .write_validator_staking_reward_address(&validator, address)
-                    .unwrap();
-            }
-            PosStorageChange::ValidatorTotalDeltas {
+            PosStorageChange::ValidatorDeltas {
                 validator,
                 delta,
                 offset,
             } => {
-                let total_deltas = tx::ctx()
-                    .read_validator_total_deltas(&validator)
+                let validator_deltas = tx::ctx()
+                    .read_validator_deltas(&validator)
                     .unwrap()
-                    .map(|mut total_deltas| {
-                        total_deltas.add_at_offset(
+                    .map(|mut validator_deltas| {
+                        validator_deltas.add_at_offset(
                             delta,
                             current_epoch,
                             offset,
                             params,
                         );
-                        total_deltas
+                        validator_deltas
                     })
                     .unwrap_or_else(|| {
                         EpochedDelta::init_at_offset(
@@ -1419,48 +1279,7 @@ pub mod testing {
                         )
                     });
                 tx::ctx()
-                    .write_validator_total_deltas(&validator, total_deltas)
-                    .unwrap();
-            }
-            PosStorageChange::ValidatorVotingPower {
-                validator,
-                vp_delta: delta,
-                offset,
-            } => {
-                let voting_power = tx::ctx()
-                    .read_validator_voting_power(&validator)
-                    .unwrap()
-                    .map(|mut voting_powers| {
-                        match offset {
-                            Either::Left(offset) => {
-                                voting_powers.add_at_offset(
-                                    delta.into(),
-                                    current_epoch,
-                                    offset,
-                                    params,
-                                );
-                            }
-                            Either::Right(epoch) => {
-                                voting_powers.add_at_epoch(
-                                    delta.into(),
-                                    current_epoch,
-                                    epoch,
-                                    params,
-                                );
-                            }
-                        }
-                        voting_powers
-                    })
-                    .unwrap_or_else(|| {
-                        EpochedDelta::init_at_offset(
-                            delta.into(),
-                            current_epoch,
-                            DynEpochOffset::PipelineLen,
-                            params,
-                        )
-                    });
-                tx::ctx()
-                    .write_validator_voting_power(&validator, voting_power)
+                    .write_validator_deltas(&validator, validator_deltas)
                     .unwrap();
             }
             PosStorageChange::ValidatorState { validator, state } => {
@@ -1478,7 +1297,7 @@ pub mod testing {
             }
             PosStorageChange::StakingTokenPosBalance { delta } => {
                 let balance_key = token::balance_key(
-                    &staking_token_address(),
+                    &tx::ctx().get_native_token().unwrap(),
                     &<namada_tx_prelude::Ctx as PosRead>::POS_ADDRESS,
                 );
                 let mut balance: token::Amount =
@@ -1504,6 +1323,35 @@ pub mod testing {
                 unbonds.delete_current(current_epoch, params);
                 tx::ctx().write_unbond(&bond_id, unbonds).unwrap();
             }
+            PosStorageChange::ValidatorCommissionRate { address, rate } => {
+                let rates = tx::ctx()
+                    .read_validator_commission_rate(&address)
+                    .unwrap()
+                    .map(|mut rates| {
+                        rates.set(rate, current_epoch, params);
+                        rates
+                    })
+                    .unwrap_or_else(|| {
+                        Epoched::init_at_genesis(rate, current_epoch)
+                    });
+                tx::ctx()
+                    .write_validator_commission_rate(&address, rates)
+                    .unwrap();
+            }
+            PosStorageChange::ValidatorMaxCommissionRateChange {
+                address,
+                change,
+            } => {
+                let max_change = tx::ctx()
+                    .read_validator_max_commission_rate_change(&address)
+                    .unwrap()
+                    .unwrap_or(change);
+                tx::ctx()
+                    .write_validator_max_commission_rate_change(
+                        &address, max_change,
+                    )
+                    .unwrap();
+            }
         }
     }
 
@@ -1516,41 +1364,36 @@ pub mod testing {
     ) {
         use namada_tx_prelude::{PosRead, PosWrite};
 
-        let validator_total_deltas =
-            tx::ctx().read_validator_total_deltas(&validator).unwrap();
-        // println!("Read validator set");
+        let validator_deltas =
+            tx::ctx().read_validator_deltas(&validator).unwrap();
         let mut validator_set = tx::ctx().read_validator_set().unwrap();
-        // println!("Read validator set: {:#?}", validator_set);
         validator_set.update_from_offset(
             |validator_set, epoch| {
-                let total_delta = validator_total_deltas
+                let validator_stake = validator_deltas
                     .as_ref()
-                    .and_then(|delta| delta.get(epoch));
-                match total_delta {
-                    Some(total_delta) => {
-                        let tokens_pre: u64 = total_delta.try_into().unwrap();
-                        let voting_power_pre =
-                            VotingPower::from_tokens(tokens_pre, params);
+                    .and_then(|deltas| deltas.get(epoch));
+                match validator_stake {
+                    Some(validator_stake) => {
+                        let tokens_pre: u64 =
+                            validator_stake.try_into().unwrap();
                         let tokens_post: u64 =
-                            (total_delta + token_delta).try_into().unwrap();
-                        let voting_power_post =
-                            VotingPower::from_tokens(tokens_post, params);
+                            (validator_stake + token_delta).try_into().unwrap();
                         let weighed_validator_pre = WeightedValidator {
-                            voting_power: voting_power_pre,
+                            bonded_stake: tokens_pre,
                             address: validator.clone(),
                         };
                         let weighed_validator_post = WeightedValidator {
-                            voting_power: voting_power_post,
+                            bonded_stake: tokens_post,
                             address: validator.clone(),
                         };
                         if validator_set.active.contains(&weighed_validator_pre)
                         {
                             let max_inactive_validator =
                                 validator_set.inactive.last_shim();
-                            let max_voting_power = max_inactive_validator
-                                .map(|v| v.voting_power)
+                            let max_bonded_stake = max_inactive_validator
+                                .map(|v| v.bonded_stake)
                                 .unwrap_or_default();
-                            if voting_power_post < max_voting_power {
+                            if tokens_post < max_bonded_stake {
                                 let activate_max =
                                     validator_set.inactive.pop_last_shim();
                                 let popped = validator_set
@@ -1574,10 +1417,10 @@ pub mod testing {
                         } else {
                             let min_active_validator =
                                 validator_set.active.first_shim();
-                            let min_voting_power = min_active_validator
-                                .map(|v| v.voting_power)
+                            let min_bonded_stake = min_active_validator
+                                .map(|v| v.bonded_stake)
                                 .unwrap_or_default();
-                            if voting_power_post > min_voting_power {
+                            if tokens_post > min_bonded_stake {
                                 let deactivate_min =
                                     validator_set.active.pop_first_shim();
                                 let popped = validator_set
@@ -1605,9 +1448,7 @@ pub mod testing {
                     None => {
                         let tokens: u64 = token_delta.try_into().unwrap();
                         let weighed_validator = WeightedValidator {
-                            voting_power: VotingPower::from_tokens(
-                                tokens, params,
-                            ),
+                            bonded_stake: tokens,
                             address: validator.clone(),
                         };
                         if has_vacant_active_validator_slots(

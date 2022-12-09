@@ -558,10 +558,10 @@ pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
 /// Read the password for encryption/decryption from the file/env/stdin. Panics
 /// if all options are empty/invalid.
 pub fn read_password(prompt_msg: &str) -> String {
-    let pwd = match env::var("ANOMA_WALLET_PASSWORD_FILE") {
+    let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
         Ok(path) => fs::read_to_string(path)
             .expect("Something went wrong reading the file"),
-        Err(_) => match env::var("ANOMA_WALLET_PASSWORD") {
+        Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
             Ok(password) => password,
             Err(_) => rpassword::read_password_from_tty(Some(prompt_msg))
                 .unwrap_or_default(),

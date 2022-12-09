@@ -1,7 +1,6 @@
 mod abortable;
 mod broadcaster;
 mod ethereum_node;
-pub mod rpc;
 mod shell;
 mod shims;
 pub mod storage;
@@ -32,6 +31,7 @@ use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
+use crate::node::ledger::config::genesis;
 use crate::node::ledger::ethereum_node::oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -39,10 +39,10 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::{config, wasm_loader};
 
 /// Env. var to set a number of Tokio RT worker threads
-const ENV_VAR_TOKIO_THREADS: &str = "ANOMA_TOKIO_THREADS";
+const ENV_VAR_TOKIO_THREADS: &str = "NAMADA_TOKIO_THREADS";
 
 /// Env. var to set a number of Rayon global worker threads
-const ENV_VAR_RAYON_THREADS: &str = "ANOMA_RAYON_THREADS";
+const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 
 /// The maximum number of Ethereum events the channel between
 /// the oracle and the shell can hold.
@@ -146,7 +146,7 @@ impl Shell {
                     CheckTxType::New => MempoolTxType::NewTransaction,
                     CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
                 };
-                Ok(Response::CheckTx(self.mempool_validate(&*tx.tx, r#type)))
+                Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots(_) => {
                 Ok(Response::ListSnapshots(Default::default()))
@@ -287,7 +287,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         }
     }
 
-    tracing::info!("Anoma ledger node has shut down.");
+    tracing::info!("Namada ledger node has shut down.");
 
     let res = task::block_in_place(move || shell_handler.join());
 
@@ -456,6 +456,10 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
+    #[cfg(not(feature = "dev"))]
+    let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
+    #[cfg(feature = "dev")]
+    let genesis = genesis::genesis();
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,
@@ -464,6 +468,7 @@ fn start_abci_broadcaster_shell(
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
+        genesis.native_token,
     );
 
     // Channel for signalling shut down to ABCI server
@@ -486,7 +491,7 @@ fn start_abci_broadcaster_shell(
     let thread_builder = thread::Builder::new().name("ledger-shell".into());
     let shell_handler = thread_builder
         .spawn(move || {
-            tracing::info!("Anoma ledger node started.");
+            tracing::info!("Namada ledger node started.");
             match tendermint_mode {
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");

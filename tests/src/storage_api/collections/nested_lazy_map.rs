@@ -428,8 +428,8 @@ mod tests {
                         |mut acc, (middle, inner_map)| {
                             acc.extend(
                                 inner_map
-                                    .into_iter()
-                                    .map(|(inner, _)| (outer, middle, inner)),
+                                    .into_keys()
+                                    .map(|inner| (outer, middle, inner)),
                             );
                             acc
                         },

@@ -4,7 +4,7 @@ Given a master seed (a 12 or 24 word `bip39` mnemonic), the user should be able 
 
 The wallet currently implements functionality to derive `bip32` addresses following `bip44` paths for [slip-0044](https://github.com/satoshilabs/slips/blob/master/slip-0044.md) registered coin types, using hardened addresses.
 
-The bulk of this funcionality resides in `anoma-apps/anoma-lib/lib/src/wallet.rs` (https://github.com/heliaxdev/anoma-apps/blob/main/packages/anoma-lib/lib/src/wallet.rs). Creating a new `Wallet` struct with a provided mnemonic generates a seed byte vector and establishes a root extended key. Calling the `derive` method on that `Wallet` providing a derivation path will give us the following struct:
+The bulk of this funcionality resides in `namada-apps/namada-lib/lib/src/wallet.rs` (https://github.com/heliaxdev/namada-apps/blob/main/packages/namada-lib/lib/src/wallet.rs). Creating a new `Wallet` struct with a provided mnemonic generates a seed byte vector and establishes a root extended key. Calling the `derive` method on that `Wallet` providing a derivation path will give us the following struct:
 
 ```rust
 pub struct DerivedAccount {

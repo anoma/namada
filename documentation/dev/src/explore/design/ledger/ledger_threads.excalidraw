@@ -779,7 +779,7 @@
       "updated": 1638282845956,
       "fontSize": 20,
       "fontFamily": 2,
-      "text": "number of threads configurable\nwith `ANOMA_TOKIO_THREADS`, \nby default `num_cpus::get() / 2`",
+      "text": "number of threads configurable\nwith `NAMADA_TOKIO_THREADS`, \nby default `num_cpus::get() / 2`",
       "baseline": 57,
       "textAlign": "left",
       "verticalAlign": "top"
@@ -809,7 +809,7 @@
       "updated": 1638282841096,
       "fontSize": 20,
       "fontFamily": 2,
-      "text": "number of threads configurable\nwith `ANOMA_RAYON_THREADS`, by default\n`num_cpus::get() / 2`",
+      "text": "number of threads configurable\nwith `NAMADA_RAYON_THREADS`, by default\n`num_cpus::get() / 2`",
       "baseline": 57,
       "textAlign": "left",
       "verticalAlign": "top"
@@ -839,7 +839,7 @@
       "updated": 1638282834114,
       "fontSize": 20,
       "fontFamily": 2,
-      "text": "RocksDB uses threads internally\n- one background thread for flush and 1/4 logical cores for compaction \n  (configurable with `ANOMA_ROCKSDB_COMPACTION_THREADS`)`",
+      "text": "RocksDB uses threads internally\n- one background thread for flush and 1/4 logical cores for compaction \n  (configurable with `NAMADA_ROCKSDB_COMPACTION_THREADS`)`",
       "baseline": 57,
       "textAlign": "left",
       "verticalAlign": "top"

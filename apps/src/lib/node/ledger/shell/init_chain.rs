@@ -2,7 +2,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::pos::PosParams;
+use namada::ledger::parameters::Parameters;
+use namada::ledger::pos::{into_tm_voting_power, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::{ibc, pos};
@@ -69,7 +70,55 @@ where
         .expect("genesis time should be a valid timestamp")
         .into();
 
-        genesis.parameters.init_storage(&mut self.storage);
+        // Initialize protocol parameters
+        let genesis::Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp_code_path,
+            implicit_vp_sha256,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
+        } = genesis.parameters;
+        // borrow necessary for release build, annoys clippy on dev build
+        #[allow(clippy::needless_borrow)]
+        let implicit_vp =
+            wasm_loader::read_wasm(&self.wasm_dir, &implicit_vp_code_path)
+                .map_err(Error::ReadingWasm)?;
+        // In dev, we don't check the hash
+        #[cfg(feature = "dev")]
+        let _ = implicit_vp_sha256;
+        #[cfg(not(feature = "dev"))]
+        {
+            let mut hasher = Sha256::new();
+            hasher.update(&implicit_vp);
+            let vp_code_hash = hasher.finalize();
+            assert_eq!(
+                vp_code_hash.as_slice(),
+                &implicit_vp_sha256,
+                "Invalid implicit account's VP sha256 hash for {}",
+                implicit_vp_code_path
+            );
+        }
+        let parameters = Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
+        };
+        parameters.init_storage(&mut self.storage);
+
+        // Initialize governance parameters
         genesis.gov_params.init_storage(&mut self.storage);
         // configure the Ethereum bridge if the configuration is set.
         if let Some(config) = genesis.ethereum_bridge_params {
@@ -79,11 +128,7 @@ where
 
         // Depends on parameters being initialized
         self.storage
-            .init_genesis_epoch(
-                initial_height,
-                genesis_time,
-                &genesis.parameters,
-            )
+            .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
 
         // Loaded VP code cache to avoid loading the same files multiple times
@@ -181,7 +226,7 @@ where
     ) {
         // Initialize genesis implicit
         for genesis::ImplicitAccount { public_key } in accounts {
-            let address: address::Address = (&public_key).into();
+            let address: Address = (&public_key).into();
             let pk_storage_key = pk_key(&address);
             self.storage
                 .write(&pk_storage_key, public_key.try_to_vec().unwrap())
@@ -290,7 +335,7 @@ where
             // Account balance (tokens no staked in PoS)
             self.storage
                 .write(
-                    &token::balance_key(&address::nam(), addr),
+                    &token::balance_key(&self.storage.native_token, addr),
                     validator
                         .non_staked_balance
                         .try_to_vec()
@@ -345,10 +390,10 @@ where
                 sum: Some(key_to_tendermint(&consensus_key).unwrap()),
             };
             abci_validator.pub_key = Some(pub_key);
-            let power: u64 = validator.pos_data.voting_power(pos_params).into();
-            abci_validator.power = power
-                .try_into()
-                .expect("unexpected validator's voting power");
+            abci_validator.power = into_tm_voting_power(
+                pos_params.tm_votes_per_token,
+                validator.pos_data.tokens,
+            );
             response.validators.push(abci_validator);
         }
         response

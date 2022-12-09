@@ -14,7 +14,7 @@
     "e2e::ledger_tests::proposal_submission": 35,
     "e2e::ledger_tests::run_ledger": 5,
     "e2e::ledger_tests::run_ledger_load_state_and_reset": 5,
-    "e2e::ledger_tests::test_anoma_shuts_down_if_tendermint_dies": 2,
+    "e2e::ledger_tests::test_namada_shuts_down_if_tendermint_dies": 2,
     "e2e::ledger_tests::test_genesis_validators": 9,
     "e2e::ledger_tests::test_node_connectivity_and_consensus": 20,
     "e2e::wallet_tests::wallet_address_cmds": 1,

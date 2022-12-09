@@ -1,0 +1,116 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+name = "namada_core"
+resolver = "2"
+version = "0.11.0"
+
+[features]
+default = []
+ferveo-tpke = [
+  "ferveo",
+  "tpke",
+  "ark-ec",
+  "rand_core",
+  "rand",
+]
+wasm-runtime = [
+  "rayon",
+]
+# secp256k1 key signing and verification, disabled in WASM build by default as 
+# it bloats the build a lot
+secp256k1-sign-verify = [
+  "libsecp256k1/hmac",
+]
+
+abcipp = [
+  "ibc-proto-abcipp",
+  "ibc-abcipp",
+  "tendermint-abcipp",
+  "tendermint-proto-abcipp"
+]
+abciplus = [
+  "ibc",
+  "ibc-proto",
+  "tendermint",
+  "tendermint-proto",
+]
+
+ibc-mocks = [
+  "ibc/mocks",
+]
+ibc-mocks-abcipp = [
+  "ibc-abcipp/mocks",
+]
+
+# for integration tests and test utilies
+testing = [
+  "rand",
+  "rand_core",
+  "proptest",
+]
+
+[dependencies]
+ark-bls12-381 = {version = "0.3"}
+ark-ec = {version = "0.3", optional = true}
+ark-serialize = {version = "0.3"}
+# We switch off "blake2b" because it cannot be compiled to wasm
+# branch = "bat/arse-merkle-tree"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
+bech32 = "0.8.0"
+bellman = "0.11.2"
+bit-vec = "0.6.3"
+borsh = "0.9.0"
+chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
+data-encoding = "2.3.2"
+derivative = "2.2.0"
+ed25519-consensus = "1.2.0"
+ethabi = "17.0.0"
+eyre = "0.6.8"
+ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
+ferveo-common = {git = "https://github.com/anoma/ferveo"}
+tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
+# TODO using the same version of tendermint-rs as we do here.
+ibc = {version = "0.14.0", default-features = false, optional = true}
+ibc-proto = {version = "0.17.1", default-features = false, optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
+ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
+ics23 = "0.7.0"
+itertools = "0.10.0"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+num-rational = "0.4.1"
+proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
+prost = "0.9.0"
+prost-types = "0.9.0"
+rand = {version = "0.8", optional = true}
+rand_core = {version = "0.6", optional = true}
+rayon = {version = "=1.5.3", optional = true}
+rust_decimal = { version = "1.26.1", features = ["borsh"] }
+rust_decimal_macros = "1.26.1"
+serde = {version = "1.0.125", features = ["derive"]}
+serde_json = "1.0.62"
+sha2 = "0.9.3"
+tendermint = {version = "0.23.6", optional = true}
+tendermint-proto = {version = "0.23.6", optional = true}
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+thiserror = "1.0.30"
+tiny-keccak = {version = "2.0.2", features = ["keccak"]}
+tracing = "0.1.30"
+zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
+pretty_assertions = "0.7.2"
+# A fork with state machine testing
+proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+rand = {version = "0.8"}
+rand_core = {version = "0.6"}
+test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+
+[build-dependencies]
+tonic-build = "0.6.0"

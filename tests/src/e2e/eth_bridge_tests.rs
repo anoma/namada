@@ -37,7 +37,7 @@ fn everything() {
 
     let test = setup::single_node_net().unwrap();
 
-    let mut anoman_ledger = run_as!(
+    let mut namadan_ledger = run_as!(
         test,
         SOLE_VALIDATOR,
         Bin::Node,
@@ -45,12 +45,14 @@ fn everything() {
         Some(LEDGER_STARTUP_TIMEOUT_SECONDS)
     )
     .unwrap();
-    anoman_ledger
-        .exp_string("Anoma ledger node started")
+    namadan_ledger
+        .exp_string("Namada ledger node started")
         .unwrap();
-    anoman_ledger.exp_string("Tendermint node started").unwrap();
-    anoman_ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = anoman_ledger.background();
+    namadan_ledger
+        .exp_string("Tendermint node started")
+        .unwrap();
+    namadan_ledger.exp_string("Committed block hash").unwrap();
+    let _bg_ledger = namadan_ledger.background();
 
     let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
     std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
@@ -78,7 +80,7 @@ fn everything() {
         } else {
             tx_args.clone()
         };
-        let mut anomac_tx = run!(
+        let mut namadac_tx = run!(
             test,
             Bin::Client,
             tx_args,
@@ -87,18 +89,18 @@ fn everything() {
         .unwrap();
 
         if !dry_run {
-            anomac_tx.exp_string("Transaction accepted").unwrap();
-            anomac_tx.exp_string("Transaction applied").unwrap();
+            namadac_tx.exp_string("Transaction accepted").unwrap();
+            namadac_tx.exp_string("Transaction applied").unwrap();
         }
         // TODO: we should check here explicitly with the ledger via a
         //  Tendermint RPC call that the path `value/#EthBridge/queue`
-        //  is unchanged rather than relying solely  on looking at anomac
+        //  is unchanged rather than relying solely  on looking at namadac
         //  stdout.
-        anomac_tx.exp_string("Transaction is invalid").unwrap();
-        anomac_tx
+        namadac_tx.exp_string("Transaction is invalid").unwrap();
+        namadac_tx
             .exp_string(&format!("Rejected: {}", ETH_BRIDGE_ADDRESS))
             .unwrap();
-        anomac_tx.assert_success();
+        namadac_tx.assert_success();
     }
 }
 
@@ -121,7 +123,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     ledger.exp_string(
         "Starting to listen for Borsh-serialized Ethereum events",
     )?;
-    ledger.exp_string("Anoma ledger node started")?;
+    ledger.exp_string("Namada ledger node started")?;
 
     ledger.send_control('c')?;
     ledger.exp_string(

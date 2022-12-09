@@ -683,12 +683,12 @@ mod tests {
 /// Helpers for testing with write log.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::types::address::testing::arb_address;
+    use namada_core::types::storage::testing::arb_key;
     use proptest::collection;
     use proptest::prelude::{any, prop_oneof, Just, Strategy};
 
     use super::*;
-    use crate::types::address::testing::arb_address;
-    use crate::types::storage::testing::arb_key;
 
     /// Generate an arbitrary tx write log of [`HashMap<storage::Key,
     /// StorageModification>`].

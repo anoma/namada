@@ -7,7 +7,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
@@ -39,9 +38,9 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
-use namada::ledger::pos::{BondId, Bonds, Unbonds};
+use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{masp, masp_tx_key, nam, Address};
+use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
@@ -51,6 +50,7 @@ use namada::types::storage::{
     self, BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
+use namada::types::token;
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
@@ -58,11 +58,11 @@ use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{address, token};
 use namada::{ledger, vm};
 use rand_core::{CryptoRng, OsRng, RngCore};
+use rust_decimal::Decimal;
 use sha2::Digest;
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant};
 
 use super::rpc;
 use super::types::ShieldedTransferContext;
@@ -82,6 +82,7 @@ const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
@@ -89,6 +90,7 @@ const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -202,10 +204,10 @@ pub async fn submit_init_validator(
         consensus_key,
         eth_cold_key,
         eth_hot_key,
-        rewards_account_key,
         protocol_key,
+        commission_rate,
+        max_commission_rate_change,
         validator_vp_code_path,
-        rewards_vp_code_path,
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
 ) {
@@ -217,7 +219,6 @@ pub async fn submit_init_validator(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let rewards_key_alias = format!("{}-rewards-key", alias);
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
@@ -294,19 +295,6 @@ pub async fn submit_init_validator(
                 )
                 .1
         });
-
-    let rewards_account_key =
-        ctx.get_opt_cached(&rewards_account_key).unwrap_or_else(|| {
-            println!("Generating staking reward account key...");
-            ctx.wallet
-                .gen_key(
-                    scheme,
-                    Some(rewards_key_alias.clone()),
-                    unsafe_dont_encrypt,
-                )
-                .1
-                .ref_to()
-        });
     let protocol_key = ctx.get_opt_cached(&protocol_key);
 
     if protocol_key.is_none() {
@@ -330,24 +318,32 @@ pub async fn submit_init_validator(
     let validator_vp_code = validator_vp_code_path
         .map(|path| ctx.read_wasm(path))
         .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    // Validate the validator VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
+
+    // Validate the commission rate data
+    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
         eprintln!(
-            "Validator validity predicate code validation failed with {}",
-            err
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive"
         );
         if !tx_args.force {
             safe_exit(1)
         }
     }
-    let rewards_vp_code = rewards_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    // Validate the rewards VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&rewards_vp_code) {
+    if max_commission_rate_change > Decimal::ONE
+        || max_commission_rate_change < Decimal::ZERO
+    {
         eprintln!(
-            "Staking reward account validity predicate code validation failed \
-             with {}",
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    // Validate the validator VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&validator_vp_code) {
+        eprintln!(
+            "Validator validity predicate code validation failed with {}",
             err
         );
         if !tx_args.force {
@@ -367,11 +363,11 @@ pub async fn submit_init_validator(
             &eth_hot_key.ref_to(),
         )
         .unwrap(),
-        rewards_account_key,
         protocol_key,
         dkg_key,
+        commission_rate,
+        max_commission_rate_change,
         validator_vp_code,
-        rewards_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
@@ -379,21 +375,10 @@ pub async fn submit_init_validator(
         process_tx(ctx, &tx_args, tx, TxSigningKey::WalletAddress(source))
             .await;
     if !tx_args.dry_run {
-        let (validator_address_alias, validator_address, rewards_address_alias) =
+        let (validator_address_alias, validator_address) =
             match &initialized_accounts[..] {
-                // There should be 2 accounts, one for the validator itself, one
-                // for its staking reward address.
-                [account_1, account_2] => {
-                    // We need to find out which address is which
-                    let (validator_address, rewards_address) =
-                        if rpc::is_validator(account_1, tx_args.ledger_address)
-                            .await
-                        {
-                            (account_1, account_2)
-                        } else {
-                            (account_2, account_1)
-                        };
-
+                // There should be 1 account for the validator itself
+                [validator_address] => {
                     let validator_address_alias = match tx_args
                         .initialized_account_alias
                     {
@@ -428,23 +413,7 @@ pub async fn submit_init_validator(
                             validator_address.encode()
                         );
                     }
-                    let rewards_address_alias =
-                        format!("{}-rewards", validator_address_alias);
-                    if let Some(new_alias) = ctx.wallet.add_address(
-                        rewards_address_alias.clone(),
-                        rewards_address.clone(),
-                    ) {
-                        println!(
-                            "Added alias {} for address {}.",
-                            new_alias,
-                            rewards_address.encode()
-                        );
-                    }
-                    (
-                        validator_address_alias,
-                        validator_address.clone(),
-                        rewards_address_alias,
-                    )
+                    (validator_address_alias, validator_address.clone())
                 }
                 _ => {
                     eprintln!("Expected two accounts to be created");
@@ -465,10 +434,8 @@ pub async fn submit_init_validator(
             "The validator's addresses and keys were stored in the wallet:"
         );
         println!("  Validator address \"{}\"", validator_address_alias);
-        println!("  Staking reward address \"{}\"", rewards_address_alias);
         println!("  Validator account key \"{}\"", validator_key_alias);
         println!("  Consensus key \"{}\"", consensus_key_alias);
-        println!("  Staking reward key \"{}\"", rewards_key_alias);
         println!(
             "The ledger node has been setup to use this validator's address \
              and consensus key."
@@ -1362,7 +1329,7 @@ fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
 
-/// Convert Anoma amount and token type to MASP equivalents
+/// Convert Namada amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
     token: &Address,
@@ -1650,7 +1617,11 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let (default_signer, amount, token) =
         if source == masp_addr && target == masp_addr {
             // TODO Refactor me, we shouldn't rely on any specific token here.
-            (TxSigningKey::SecretKey(masp_tx_key()), 0.into(), nam())
+            (
+                TxSigningKey::SecretKey(masp_tx_key()),
+                0.into(),
+                ctx.native_token.clone(),
+            )
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
@@ -1953,9 +1924,13 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(&client, &nam(), &proposal.author)
-            .await
-            .unwrap_or_default();
+        let balance = rpc::get_token_balance(
+            &client,
+            &ctx.native_token,
+            &proposal.author,
+        )
+        .await
+        .unwrap_or_default();
         if balance
             < token::Amount::from(governance_parameters.min_proposal_fund)
         {
@@ -2071,12 +2046,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         safe_exit(1)
                     }
                 }
-                let mut delegation_addresses = rpc::get_delegators_delegation(
-                    &client,
-                    &voter_address,
-                    epoch,
-                )
-                .await;
+                let mut delegations =
+                    rpc::get_delegators_delegation(&client, &voter_address)
+                        .await;
 
                 // Optimize by quering if a vote from a validator
                 // is equal to ours. If so, we can avoid voting, but ONLY if we
@@ -2093,22 +2065,20 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     )
                     .await
                 {
-                    delegation_addresses = filter_delegations(
+                    delegations = filter_delegations(
                         &client,
-                        delegation_addresses,
+                        delegations,
                         proposal_id,
                         &args.vote,
                     )
                     .await;
                 }
 
-                println!("{:?}", delegation_addresses);
-
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
                     voter: voter_address,
-                    delegations: delegation_addresses,
+                    delegations: delegations.into_iter().collect(),
                 };
 
                 let data = tx_data
@@ -2138,6 +2108,114 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     }
 }
 
+pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
+    let args::RevealPk {
+        tx: args,
+        public_key,
+    } = args;
+    let public_key = ctx.get_cached(&public_key);
+    if !reveal_pk_if_needed(&mut ctx, &public_key, &args).await {
+        let addr: Address = (&public_key).into();
+        println!("PK for {addr} is already revealed, nothing to do.");
+    }
+}
+
+pub async fn reveal_pk_if_needed(
+    ctx: &mut Context,
+    public_key: &common::PublicKey,
+    args: &args::Tx,
+) -> bool {
+    let addr: Address = public_key.into();
+    // Check if PK revealed
+    if args.force || !has_revealed_pk(&addr, args.ledger_address.clone()).await
+    {
+        // If not, submit it
+        submit_reveal_pk_aux(ctx, public_key, args).await;
+        true
+    } else {
+        false
+    }
+}
+
+pub async fn has_revealed_pk(
+    addr: &Address,
+    ledger_address: TendermintAddress,
+) -> bool {
+    rpc::get_public_key(addr, ledger_address).await.is_some()
+}
+
+pub async fn submit_reveal_pk_aux(
+    ctx: &mut Context,
+    public_key: &common::PublicKey,
+    args: &args::Tx,
+) {
+    let addr: Address = public_key.into();
+    println!("Submitting a tx to reveal the public key for address {addr}...");
+    let tx_data = public_key
+        .try_to_vec()
+        .expect("Encoding a public key shouldn't fail");
+    let tx_code = ctx.read_wasm(TX_REVEAL_PK);
+    let tx = Tx::new(tx_code, Some(tx_data));
+
+    // submit_tx without signing the inner tx
+    let keypair = if let Some(signing_key) = &args.signing_key {
+        ctx.get_cached(signing_key)
+    } else if let Some(signer) = args.signer.as_ref() {
+        let signer = ctx.get(signer);
+        find_keypair(&mut ctx.wallet, &signer, args.ledger_address.clone())
+            .await
+    } else {
+        find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
+    };
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.ledger_address.clone(),
+    })
+    .await;
+    let to_broadcast = if args.dry_run {
+        TxBroadcastData::DryRun(tx)
+    } else {
+        super::signing::sign_wrapper(ctx, args, epoch, tx, &keypair).await
+    };
+
+    if args.dry_run {
+        if let TxBroadcastData::DryRun(tx) = to_broadcast {
+            rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+        } else {
+            panic!(
+                "Expected a dry-run transaction, received a wrapper \
+                 transaction instead"
+            );
+        }
+    } else {
+        // Either broadcast or submit transaction and collect result into
+        // sum type
+        let result = if args.broadcast_only {
+            Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
+        } else {
+            Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
+        };
+        // Return result based on executed operation, otherwise deal with
+        // the encountered errors uniformly
+        match result {
+            Right(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+            Left(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
@@ -2157,7 +2235,7 @@ async fn is_safe_voting_window(
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !namada::ledger::governance::vp::is_valid_validator_voting_period(
+            !namada::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,
@@ -2174,33 +2252,37 @@ async fn is_safe_voting_window(
 /// vote)
 async fn filter_delegations(
     client: &HttpClient,
-    mut delegation_addresses: Vec<Address>,
+    delegations: HashSet<Address>,
     proposal_id: u64,
     delegator_vote: &ProposalVote,
-) -> Vec<Address> {
-    let mut remove_indexes: Vec<usize> = vec![];
+) -> HashSet<Address> {
+    // Filter delegations by their validator's vote concurrently
+    let delegations = futures::future::join_all(
+        delegations
+            .into_iter()
+            // we cannot use `filter/filter_map` directly because we want to
+            // return a future
+            .map(|validator_address| async {
+                let vote_key = gov_storage::get_vote_proposal_key(
+                    proposal_id,
+                    validator_address.to_owned(),
+                    validator_address.to_owned(),
+                );
 
-    for (index, validator_address) in delegation_addresses.iter().enumerate() {
-        let vote_key = gov_storage::get_vote_proposal_key(
-            proposal_id,
-            validator_address.to_owned(),
-            validator_address.to_owned(),
-        );
-
-        if let Some(validator_vote) =
-            rpc::query_storage_value::<ProposalVote>(client, &vote_key).await
-        {
-            if &validator_vote == delegator_vote {
-                remove_indexes.push(index);
-            }
-        }
-    }
-
-    for index in remove_indexes {
-        delegation_addresses.swap_remove(index);
-    }
-
-    delegation_addresses
+                if let Some(validator_vote) =
+                    rpc::query_storage_value::<ProposalVote>(client, &vote_key)
+                        .await
+                {
+                    if &validator_vote == delegator_vote {
+                        return None;
+                    }
+                }
+                Some(validator_address)
+            }),
+    )
+    .await;
+    // Take out the `None`s
+    delegations.into_iter().flatten().collect()
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
@@ -2232,7 +2314,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&address::nam(), bond_source);
+    let balance_key = token::balance_key(&ctx.native_token, bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -2412,6 +2494,88 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
+}
+
+pub async fn submit_validator_commission_change(
+    ctx: Context,
+    args: args::TxCommissionRateChange,
+) {
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.tx.ledger_address.clone(),
+    })
+    .await;
+
+    let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
+    let validator = ctx.get(&args.validator);
+    if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
+        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+            eprintln!("Invalid new commission rate, received {}", args.rate);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+
+        let commission_rate_key =
+            ledger::pos::validator_commission_rate_key(&validator);
+        let max_commission_rate_change_key =
+            ledger::pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = rpc::query_storage_value::<CommissionRates>(
+            &client,
+            &commission_rate_key,
+        )
+        .await;
+        let max_change = rpc::query_storage_value::<Decimal>(
+            &client,
+            &max_commission_rate_change_key,
+        )
+        .await;
+
+        match (commission_rates, max_change) {
+            (Some(rates), Some(max_change)) => {
+                // Assuming that pipeline length = 2
+                let rate_next_epoch = rates.get(epoch.next()).unwrap();
+                if (args.rate - rate_next_epoch).abs() > max_change {
+                    eprintln!(
+                        "New rate is too large of a change with respect to \
+                         the predecessor epoch in which the rate will take \
+                         effect."
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Error retrieving from storage");
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+        }
+    } else {
+        eprintln!("The given address {validator} is not a validator.");
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
+    let data = pos::CommissionChange {
+        validator: ctx.get(&args.validator),
+        new_rate: args.rate,
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.validator;
     process_tx(
         ctx,
         &args.tx,

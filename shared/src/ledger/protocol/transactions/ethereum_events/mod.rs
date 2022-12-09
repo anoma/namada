@@ -283,7 +283,7 @@ mod tests {
             active: active_validators
                 .into_iter()
                 .map(|address| WeightedValidator {
-                    voting_power: 100.into(),
+                    bonded_stake: 100_u64,
                     address,
                 })
                 .collect(),
