@@ -16,7 +16,6 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
-use shims::abcipp_shim_types::shim::response;
 
 use self::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
@@ -35,7 +34,7 @@ use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
 where
