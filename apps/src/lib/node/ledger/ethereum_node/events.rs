@@ -67,6 +67,7 @@ pub mod eth_events {
 
     pub type Result<T> = std::result::Result<T, Error>;
 
+    #[derive(Clone, Debug, PartialEq)]
     /// An event waiting for a certain number of confirmations
     /// before being sent to the ledger
     pub(in super::super) struct PendingEvent {
@@ -126,7 +127,8 @@ pub mod eth_events {
             match signature {
                 signatures::TRANSFER_TO_NAMADA_SIG => {
                     RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
-                        confirmations: txs.confirmations.into(),
+                        confirmations: min_confirmations
+                            .max(txs.confirmations.into()),
                         block_height,
                         event: EthereumEvent::TransfersToNamada {
                             nonce: txs.nonce,
@@ -137,7 +139,8 @@ pub mod eth_events {
                 signatures::TRANSFER_TO_ETHEREUM_SIG => {
                     RawTransfersToEthereum::decode(data).map(|txs| {
                         PendingEvent {
-                            confirmations: txs.confirmations.into(),
+                            confirmations: min_confirmations
+                                .max(txs.confirmations.into()),
                             block_height,
                             event: EthereumEvent::TransfersToEthereum {
                                 nonce: txs.nonce,
@@ -757,6 +760,8 @@ pub mod eth_events {
 
     #[cfg(test)]
     mod test_events {
+        use assert_matches::assert_matches;
+
         use super::*;
 
         #[test]
@@ -798,6 +803,104 @@ pub mod eth_events {
                 }]
             )
         }
+
+        /// Test that for Ethereum events for which a custom number of
+        /// confirmations may be specified, if a value lower than the
+        /// protocol-specified minimum confirmations is attempted to be used,
+        /// then the protocol-specified minimum confirmations is used instead.
+        #[test]
+        fn test_min_confirmations_enforced() -> Result<()> {
+            let arbitrary_block_height: Uint256 = 123u64.into();
+            let min_confirmations: Uint256 = 100u64.into();
+            let lower_than_min_confirmations = 5;
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_NAMADA_SIG,
+                RawTransfersToNamada {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: lower_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height.clone(),
+                &data,
+                min_confirmations.clone(),
+            )?;
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_ETHEREUM_SIG,
+                RawTransfersToEthereum {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: lower_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height,
+                &data,
+                min_confirmations.clone(),
+            )?;
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+
+            Ok(())
+        }
+
+        /// Test that for Ethereum events for which a custom number of
+        /// confirmations may be specified, the custom number is used if it is
+        /// at least the protocol-specified minimum confirmations.
+        #[test]
+        fn test_custom_confirmations_used() {
+            let arbitrary_block_height: Uint256 = 123u64.into();
+            let min_confirmations: Uint256 = 100u64.into();
+            let higher_than_min_confirmations = 200;
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_NAMADA_SIG,
+                RawTransfersToNamada {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: higher_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height.clone(),
+                &data,
+                min_confirmations.clone(),
+            )
+            .unwrap();
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
+
+            let (sig, event) = (
+                signatures::TRANSFER_TO_ETHEREUM_SIG,
+                RawTransfersToEthereum {
+                    transfers: vec![],
+                    nonce: 0.into(),
+                    confirmations: higher_than_min_confirmations,
+                },
+            );
+            let data = event.encode();
+            let pending_event = PendingEvent::decode(
+                sig,
+                arbitrary_block_height,
+                &data,
+                min_confirmations,
+            )
+            .unwrap();
+
+            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
+        }
+
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
         #[test]

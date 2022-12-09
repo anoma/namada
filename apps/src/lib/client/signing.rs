@@ -109,9 +109,20 @@ pub async fn tx_signer(
                 args.ledger_address.clone(),
             )
             .await;
+            // Check if the signer is implicit account that needs to reveal its
+            // PK first
+            if matches!(signer, Address::Implicit(_)) {
+                let pk: common::PublicKey = signing_key.ref_to();
+                super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+            }
             signing_key
         }
-        TxSigningKey::SecretKey(signing_key) => signing_key,
+        TxSigningKey::SecretKey(signing_key) => {
+            // Check if the signing key needs to reveal its PK first
+            let pk: common::PublicKey = signing_key.ref_to();
+            super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+            signing_key
+        }
         TxSigningKey::None => {
             panic!(
                 "All transactions must be signed; please either specify the \

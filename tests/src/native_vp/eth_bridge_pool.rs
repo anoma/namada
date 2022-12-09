@@ -3,11 +3,11 @@ mod test_bridge_pool_vp {
     use std::path::PathBuf;
 
     use borsh::{BorshDeserialize, BorshSerialize};
+    use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::ledger::eth_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
-    use namada::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::eth_bridge::ADDRESS;
     use namada::proto::Tx;

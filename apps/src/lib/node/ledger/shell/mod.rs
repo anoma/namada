@@ -1,10 +1,10 @@
-//! The ledger shell connects the ABCI++ interface with the Anoma ledger app.
+//! The ledger shell connects the ABCI++ interface with the Namada ledger app.
 //!
 //! Any changes applied before [`Shell::finalize_block`] might have to be
 //! reverted, so any changes applied in the methods [`Shell::prepare_proposal`]
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
-//! More info in <https://github.com/anoma/anoma/issues/362>.
+//! More info in <https://github.com/anoma/namada/issues/362>.
 mod finalize_block;
 mod governance;
 mod init_chain;
@@ -34,8 +34,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
-use namada::types::address;
-use namada::types::address::{masp, masp_tx_key};
+use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
@@ -154,7 +153,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn reset(config: config::Ledger) -> Result<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
-    match std::fs::remove_dir_all(&db_path) {
+    match std::fs::remove_dir_all(db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
     };
@@ -225,7 +224,7 @@ impl EthereumReceiver {
 
 impl ShellMode {
     /// Get the validator address if ledger is in validator mode
-    pub fn get_validator_address(&self) -> Option<&address::Address> {
+    pub fn get_validator_address(&self) -> Option<&Address> {
         match &self {
             ShellMode::Validator { data, .. } => Some(&data.address),
             _ => None,
@@ -347,6 +346,7 @@ where
 {
     /// Create a new shell from a path to a database and a chain id. Looks
     /// up the database with this data and tries to load the last state.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: config::Ledger,
         wasm_dir: PathBuf,
@@ -355,6 +355,7 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -364,10 +365,11 @@ where
             config.shell.storage_read_past_height_limit;
         if !Path::new(&base_dir).is_dir() {
             std::fs::create_dir(&base_dir)
-                .expect("Creating directory for Anoma should not fail");
+                .expect("Creating directory for Namada should not fail");
         }
         // load last state from storage
-        let mut storage = Storage::open(db_path, chain_id.clone(), db_cache);
+        let mut storage =
+            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
         storage
             .load_last_state()
             .map_err(|e| {
@@ -695,17 +697,21 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    // TODO: move this to another file after 0.11 merges,
+    // since this method has become fairly large at this point
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        use namada::types::transaction::protocol::{
-            ProtocolTx, ProtocolTxType,
-        };
+        use namada::types::transaction::protocol::ProtocolTx;
+        #[cfg(not(feature = "abcipp"))]
+        use namada::types::transaction::protocol::ProtocolTxType;
 
         let mut response = response::CheckTx::default();
+
         const VALID_MSG: &str = "Mempool validation passed";
+        const INVALID_MSG: &str = "Mempool validation failed";
 
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(tx) => {
@@ -715,16 +721,19 @@ where
                         tx: ProtocolTxType::EthEventsVext(ext),
                         ..
                     })) => {
-                        if self.validate_eth_events_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
-                            response.log = String::from(VALID_MSG);
-                        } else {
+                        if let Err(err) = self
+                            .validate_eth_events_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid Ethereum events vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid Ethereum events vote \
+                                 extension: {err}",
                             );
+                        } else {
+                            response.log = String::from(VALID_MSG);
                         }
                     }
                     #[cfg(not(feature = "abcipp"))]
@@ -732,33 +741,57 @@ where
                         tx: ProtocolTxType::ValSetUpdateVext(ext),
                         ..
                     })) => {
-                        if self.validate_valset_upd_vext(
-                            ext,
-                            self.storage.last_height,
-                        ) {
-                            response.log = String::from(VALID_MSG);
-                        } else {
+                        if let Err(err) = self
+                            .validate_valset_upd_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
                             response.code = 1;
-                            response.log = String::from(
-                                "Invalid validator set update vote extension",
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid validator set update \
+                                 vote extension: {err}",
                             );
+                        } else {
+                            response.log = String::from(VALID_MSG);
+                            // validator set update votes should be decided
+                            // as soon as possible
+                            response.priority = i64::MAX;
                         }
                     }
-                    Ok(TxType::Protocol(ProtocolTx { tx, .. })) => {
+                    Ok(TxType::Protocol(ProtocolTx { .. })) => {
                         response.code = 1;
                         response.log = format!(
-                            "The following protocol tx cannot be added to the \
-                             mempool: {tx:?}"
+                            "{INVALID_MSG}: The given protocol tx cannot be \
+                             added to the mempool"
                         );
                     }
-                    // `process_tx` errors are handled by
-                    // `Shell::finalize_block`
-                    _ => response.log = String::from(VALID_MSG),
+                    Ok(TxType::Wrapper(_)) => {
+                        response.log = String::from(VALID_MSG);
+                    }
+                    Ok(TxType::Raw(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Raw transactions cannot be \
+                             accepted into the mempool"
+                        );
+                    }
+                    Ok(TxType::Decrypted(_)) => {
+                        response.code = 1;
+                        response.log = format!(
+                            "{INVALID_MSG}: Decrypted txs cannot be sent by \
+                             clients"
+                        );
+                    }
+                    Err(err) => {
+                        response.code = 1;
+                        response.log = format!("{INVALID_MSG}: {err}");
+                    }
                 }
             }
             Err(msg) => {
                 response.code = 1;
-                response.log = msg.to_string();
+                response.log = format!("{INVALID_MSG}: {msg}");
             }
         }
 
@@ -825,12 +858,9 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
-    #[cfg(not(feature = "abcipp"))]
-    use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::traits::Sha256Hasher;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree};
-    use namada::types::address::{nam, EstablishedAddressGen};
+    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -841,7 +871,6 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
-    #[cfg(feature = "abciplus")]
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -981,6 +1010,7 @@ mod test_utils {
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
+                address::nam(),
             );
             shell.storage.last_height = height.into();
             (Self { shell }, receiver, eth_sender)
@@ -1050,8 +1080,8 @@ mod test_utils {
     /// Get the only validator's voting power.
     #[inline]
     #[cfg(not(feature = "abcipp"))]
-    pub fn get_validator_voting_power() -> VotingPower {
-        200.into()
+    pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
+        200_000_000_000.into()
     }
 
     /// Start a new test shell and initialize it. Returns the shell paired with
@@ -1108,6 +1138,7 @@ mod test_utils {
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let native_token = address::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -1120,6 +1151,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            native_token.clone(),
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
@@ -1130,7 +1162,7 @@ mod test_utils {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: nam(),
+                token: native_token,
             },
             &keypair,
             Epoch(0),
@@ -1181,6 +1213,7 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
+            address::nam(),
         );
         assert!(!shell.storage.tx_queue.is_empty());
     }

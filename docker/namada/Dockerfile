@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.61.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.65.0 AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -28,8 +28,8 @@ WORKDIR /app
 RUN git clone -b v0.1.1-abcipp --single-branch https://github.com/heliaxdev/tendermint.git && cd tendermint && make build
 
 FROM debian:bullseye-slim AS runtime
-ENV ANOMA_BASE_DIR=/.anoma 
-ENV ANOMA_LOG_COLOR=false
+ENV NAMADA_BASE_DIR=/.namada 
+ENV NAMADA_LOG_COLOR=false
 
 RUN apt-get update && apt-get install libcurl4-openssl-dev -y && apt-get clean
 

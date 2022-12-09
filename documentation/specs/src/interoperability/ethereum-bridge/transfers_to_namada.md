@@ -20,13 +20,13 @@ the receiver, or release the escrowed native Namada token.
 ```rust
 pub struct EthAddress(pub [u8; 20]);
 
-/// An event transferring some kind of value from Ethereum to Anoma
+/// An event transferring some kind of value from Ethereum to Namada
 pub struct TransferToNamada {
     /// Quantity of ether in the transfer
     pub amount: Amount,
     /// Address on Ethereum of the asset
     pub asset: EthereumAsset,
-    /// The Namada address receiving wrapped assets on Anoma
+    /// The Namada address receiving wrapped assets on Namada
     pub receiver: Address,
 }
 ```

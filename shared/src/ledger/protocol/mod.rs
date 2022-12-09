@@ -10,12 +10,12 @@ use thiserror::Error;
 use crate::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::governance::GovernanceVp;
+use crate::ledger::native_vp::parameters::{self, ParametersVp};
+use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
-use crate::ledger::parameters::{self, ParametersVp};
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::slash_fund::SlashFundVp;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::proto::{self, Tx};
@@ -57,9 +57,9 @@ pub enum Error {
     #[error("IBC Token native VP: {0}")]
     IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::governance::vp::Error),
+    GovernanceNativeVpError(crate::ledger::native_vp::governance::Error),
     #[error("SlashFund native VP error: {0}")]
-    SlashFundNativeVpError(crate::ledger::slash_fund::Error),
+    SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
@@ -197,7 +197,6 @@ where
 /// is updated natively rather than via the wasm environment, so gas does not
 /// need to be metered and validity predicates are bypassed. A [`TxResult`]
 /// containing changed keys and the like should be returned in the normal way.
-#[cfg(not(feature = "abcipp"))]
 pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
     storage: &mut Storage<D, H>,
@@ -238,27 +237,6 @@ where
             )
             .map_err(Error::ProtocolTxError)
         }
-        _ => {
-            tracing::error!(
-                "Attempt made to apply an unsupported protocol transaction! - \
-                 {:#?}",
-                tx
-            );
-            Err(Error::TxTypeError)
-        }
-    }
-}
-
-#[cfg(feature = "abcipp")]
-pub(crate) fn apply_protocol_tx<D, H>(
-    tx: ProtocolTxType,
-    _storage: &mut Storage<D, H>,
-) -> Result<TxResult>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    match tx {
         ProtocolTxType::EthereumEvents(_)
         | ProtocolTxType::ValidatorSetUpdate(_) => {
             // TODO(namada#198): implement this
@@ -370,12 +348,10 @@ where
 {
     verifiers
         .par_iter()
-        // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
-        .filter(|addr| !matches!(addr, Address::Implicit(_)))
         .try_fold(VpsResult::default, |mut result, addr| {
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
-                Address::Established(_) => {
+                Address::Implicit(_) | Address::Established(_) => {
                     let (vp, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
@@ -523,8 +499,6 @@ where
 
                     accepted
                 }
-                // TODO temporary pending on <https://github.com/anoma/anoma/issues/193>
-                Address::Implicit(_) => unreachable!(),
             };
 
             // Returning error from here will short-circuit the VP parallel

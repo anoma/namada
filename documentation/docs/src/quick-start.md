@@ -43,7 +43,7 @@ namada ledger
 
 For a more verbose output, one can run 
 ```shell
-export ANOMA_TM_STDOUT='true'
+export NAMADA_TM_STDOUT='true'
 namada ledger
 ```
 
@@ -79,7 +79,7 @@ namadac init-account \
   --public-key example-implicit \
   --alias example-established
 
-➜ Jan 06 22:22:19.864  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜ Jan 06 22:22:19.864  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Enter decryption password: 
 Last committed epoch: 22386
 Transaction added to mempool: Response { code: Ok, data: Data([]), log: Log("Mempool validation passed"), hash: transaction::Hash(9193C2B2C56AAB1B081B18DA0FBBD4B26C5EF7CEE4B35812ECCB1CC1D1443C45) }
@@ -107,7 +107,7 @@ namadac transfer \
   --amount 1000 \
   --signer example-established
 
-➜ Jan 06 22:24:32.926  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜ Jan 06 22:24:32.926  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 ➜ Looking-up public key of atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw from the ledger...
 Enter decryption password: 
 Last committed epoch: 22388
@@ -138,7 +138,7 @@ namadac init-validator \
   --alias example-validator \
   --source example-established
 
-➜  Jan 06 22:26:29.927  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜  Jan 06 22:26:29.927  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Generating validator account key...
 ```
 
@@ -186,7 +186,7 @@ namadac transfer \
 ```
 
 ```shell
-➜  Jan 06 22:28:17.624  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜  Jan 06 22:28:17.624  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Looking-up public key of atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw from the ledger...
 Enter decryption password: 
 Last committed epoch: 22392
@@ -212,7 +212,7 @@ namadac bond \
 
 
 ```shell
-➜ Jan 06 22:29:08.903  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜ Jan 06 22:29:08.903  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Looking-up public key of atest1v4ehgw36g3prx3pjxapyvve3xvury3fkxg6nqsesxccnzw2rxdryg335xcmnysjzxdzyvd2pamfmwd from the ledger...
 Enter decryption password: 
 Last committed epoch: 22393
@@ -233,7 +233,7 @@ Check your bond:
 namadac bonds \
   --validator example-validator
 
-➜ Jan 06 22:30:42.798  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜ Jan 06 22:30:42.798  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Last committed epoch: 22394
 Self-bonds:
   Active from epoch 22395: Δ 1000
@@ -246,7 +246,7 @@ Check the voting power - this will be 0 until the active-from epoch is reached (
 namadac voting-power \
   --validator example-validator
 
-➜ Jan 06 22:31:24.908  INFO anoma_apps::cli::context: Chain ID: anoma-testnet-1.2.bf0181d9f7e0
+➜ Jan 06 22:31:24.908  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 Last committed epoch: 22395
 Validator atest1v4ehgw36g3prx3pjxapyvve3xvury3fkxg6nqsesxccnzw2rxdryg335xcmnysjzxdzyvd2pamfmwd is active, voting power: 1
 Total voting power: 44

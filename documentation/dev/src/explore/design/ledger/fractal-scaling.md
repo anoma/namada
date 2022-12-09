@@ -1,5 +1,5 @@
 # Fractal scaling
 
-[Tracking Issue](https://github.com/anoma/anoma/issues/41)
+[Tracking Issue](https://github.com/anoma/namada/issues/41)
 
 ---

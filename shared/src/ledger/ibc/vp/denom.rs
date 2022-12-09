@@ -48,7 +48,7 @@ where
                     &data.denom
                 );
                 let token_hash = storage::calc_hash(&denom);
-                let denom_key = storage::ibc_denom_key(&token_hash.raw());
+                let denom_key = storage::ibc_denom_key(token_hash.raw());
                 match self.ctx.read_bytes_post(&denom_key) {
                     Ok(Some(v)) => match std::str::from_utf8(&v) {
                         Ok(d) if d == denom => Ok(()),

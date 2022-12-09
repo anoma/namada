@@ -2,13 +2,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::pos::namada_proof_of_stake::types::VotingPower;
+use namada::ledger::queries_ext::QueriesExt;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::queries::QueriesExt;
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
+use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
@@ -33,6 +33,7 @@ where
     ///  * There are no duplicate Ethereum events in this vote extension, and
     ///    the events are sorted in ascending order.
     #[inline]
+    #[allow(dead_code)]
     pub fn validate_eth_events_vext(
         &self,
         ext: Signed<ethereum_events::Vext>,
@@ -50,7 +51,7 @@ where
         ext: Signed<ethereum_events::Vext>,
         last_height: BlockHeight,
     ) -> std::result::Result<
-        (VotingPower, Signed<ethereum_events::Vext>),
+        (token::Amount, Signed<ethereum_events::Vext>),
         VoteExtensionError,
     > {
         #[cfg(feature = "abcipp")]
@@ -165,7 +166,7 @@ where
         + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
-            (VotingPower, Signed<ethereum_events::Vext>),
+            (token::Amount, Signed<ethereum_events::Vext>),
             VoteExtensionError,
         >,
     > + 'iter {
@@ -184,7 +185,7 @@ where
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
         + 'iter,
-    ) -> impl Iterator<Item = (VotingPower, Signed<ethereum_events::Vext>)> + 'iter
+    ) -> impl Iterator<Item = (token::Amount, Signed<ethereum_events::Vext>)> + 'iter
     {
         self.validate_eth_events_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
@@ -221,7 +222,6 @@ where
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
-            #[cfg(not(feature = "abcipp"))]
             let block_height = vote_extension.data.block_height;
 
             // update voting power
@@ -242,25 +242,12 @@ where
             for ev in vote_extension.data.ethereum_events {
                 let signers =
                     event_observers.entry(ev).or_insert_with(BTreeSet::new);
-                #[cfg(feature = "abcipp")]
-                signers.insert(validator_addr.clone());
-                #[cfg(not(feature = "abcipp"))]
                 signers.insert((validator_addr.clone(), block_height));
             }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
             let sig = vote_extension.sig;
-
-            #[cfg(feature = "abcipp")]
-            if let Some(sig) = signatures.insert(addr, sig) {
-                tracing::warn!(
-                    ?sig,
-                    ?validator_addr,
-                    "Overwrote old signature from validator while \
-                     constructing ethereum_events::VextDigest"
-                );
-            }
 
             let key = (addr, block_height);
             tracing::debug!(
@@ -269,7 +256,6 @@ where
                 ?validator_addr,
                 "Inserting signature into ethereum_events::VextDigest"
             );
-            #[cfg(not(feature = "abcipp"))]
             if let Some(existing_sig) = signatures.insert(key, sig.clone()) {
                 tracing::warn!(
                     ?sig,
@@ -308,7 +294,7 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::storage_api::queries::QueriesExt;
+    use namada::ledger::queries_ext::QueriesExt;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };

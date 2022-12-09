@@ -10,7 +10,7 @@ This devnet contains the following new features:
 Latest values regarding the testnet that would be useful to have in your shell:
 
 ```shell
-export NAMADA_CHAIN_ID='anoma-gov-masp.3f1b25f2ee35b2e'
+export NAMADA_CHAIN_ID='namada-gov-masp.3f1b25f2ee35b2e'
 export NAMADA_COMMIT='f1afdffd5e43ad4bb448db7bf5bc1e23464350f7'
 ```
 

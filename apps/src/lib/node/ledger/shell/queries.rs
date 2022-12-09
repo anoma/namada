@@ -1,6 +1,11 @@
 //! Shell methods for querying state
 
+use borsh::BorshDeserialize;
+use ferveo_common::TendermintValidator;
+use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::types::key;
+use namada::types::key::dkg_session_keys::DkgPublicKey;
 
 use super::*;
 use crate::node::ledger::response;
@@ -54,14 +59,69 @@ where
             },
         }
     }
+
+    /// Lookup data about a validator from their protocol signing key
+    #[allow(dead_code)]
+    pub fn get_validator_from_protocol_pk(
+        &self,
+        pk: &common::PublicKey,
+    ) -> Option<TendermintValidator<EllipticCurve>> {
+        let pk_bytes = pk
+            .try_to_vec()
+            .expect("Serializing public key should not fail");
+        // get the current epoch
+        let (current_epoch, _) = self.storage.get_current_epoch();
+        // get the PoS params
+        let pos_params = self.storage.read_pos_params();
+        // get the active validator set
+        self.storage
+            .read_validator_set()
+            .get(current_epoch)
+            .expect("Validators for the next epoch should be known")
+            .active
+            .iter()
+            .find(|validator| {
+                let pk_key = key::protocol_pk_key(&validator.address);
+                match self.storage.read(&pk_key) {
+                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                    _ => false,
+                }
+            })
+            .map(|validator| {
+                let dkg_key =
+                    key::dkg_session_keys::dkg_pk_key(&validator.address);
+                let bytes = self
+                    .storage
+                    .read(&dkg_key)
+                    .expect("Validator should have public dkg key")
+                    .0
+                    .expect("Validator should have public dkg key");
+                let dkg_publickey =
+                    &<DkgPublicKey as BorshDeserialize>::deserialize(
+                        &mut bytes.as_ref(),
+                    )
+                    .expect(
+                        "DKG public key in storage should be deserializable",
+                    );
+                TendermintValidator {
+                    power: into_tm_voting_power(
+                        pos_params.tm_votes_per_token,
+                        validator.bonded_stake,
+                    ) as u64,
+                    address: validator.address.to_string(),
+                    public_key: dkg_publickey.into(),
+                }
+            })
+    }
 }
 
-// NOTE: we are testing `namada::ledger::storage_api::queries`,
+// NOTE: we are testing `namada::ledger::queries_ext`,
 // which is not possible from `namada` since we do not have
 // access to the `Shell` there
 #[cfg(test)]
+#[cfg(not(feature = "abcipp"))]
 mod test_queries {
-    use namada::ledger::storage_api::queries::{QueriesExt, SendValsetUpd};
+    use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
     use namada::types::storage::Epoch;
 
     use super::*;
