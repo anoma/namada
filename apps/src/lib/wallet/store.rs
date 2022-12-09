@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::prelude::*;
 use std::io::{self, Write};
@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
-use bimap::BiHashMap;
+use bimap::BiBTreeMap;
 use file_lock::{FileLock, FileOptions};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::{Address, ImplicitAddress};
@@ -55,18 +55,18 @@ pub struct ValidatorData {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
-    view_keys: HashMap<Alias, ExtendedViewingKey>,
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
     /// Known spending keys
-    spend_keys: HashMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
+    spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
     /// Known payment addresses
-    payment_addrs: HashMap<Alias, PaymentAddress>,
+    payment_addrs: BTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
-    keys: HashMap<Alias, StoredKeypair<common::SecretKey>>,
+    keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Namada address book
-    addresses: BiHashMap<Alias, Address>,
+    addresses: BiBTreeMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
-    pkhs: HashMap<PublicKeyHash, Alias>,
+    pkhs: BTreeMap<PublicKeyHash, Alias>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
 }
@@ -266,11 +266,11 @@ impl Store {
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_keys(
         &self,
-    ) -> HashMap<
+    ) -> BTreeMap<
         Alias,
         (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
     > {
-        let mut keys: HashMap<
+        let mut keys: BTreeMap<
             Alias,
             (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
         > = self
@@ -290,24 +290,24 @@ impl Store {
     }
 
     /// Get all known addresses by their alias, paired with PKH, if known.
-    pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
+    pub fn get_addresses(&self) -> &BiBTreeMap<Alias, Address> {
         &self.addresses
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &HashMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(&self) -> &BTreeMap<Alias, PaymentAddress> {
         &self.payment_addrs
     }
 
     /// Get all known viewing keys by their alias.
-    pub fn get_viewing_keys(&self) -> &HashMap<Alias, ExtendedViewingKey> {
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
-    ) -> &HashMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
+    ) -> &BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
         &self.spend_keys
     }
 
