@@ -28,6 +28,7 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
+use namada_core::ledger::storage::types::{decode, encode};
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
@@ -36,14 +37,14 @@ use namada_core::ledger::storage_api::{
     self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::key::common;
+use namada_core::types::key::{common, tm_consensus_key_raw_hash};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use parameters::PosParams;
 use rust_decimal::Decimal;
 use storage::{
-    num_active_validators_key, validator_max_commission_rate_change_key,
-    validator_state_key,
+    num_active_validators_key, params_key, validator_address_raw_hash_key,
+    validator_max_commission_rate_change_key, validator_state_key,
 };
 use thiserror::Error;
 use types::{
@@ -1780,7 +1781,7 @@ pub fn init_genesis_new<S>(
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
     let mut total_bonded = token::Amount::default();
     active_validator_set_handle().init(storage, current_epoch)?;
@@ -1856,11 +1857,12 @@ where
             }
         }
         // Write validator data to storage
-        storage.write_validator_address_raw_hash(&address, &consensus_key);
-        storage.write_validator_max_commission_rate_change(
+        write_validator_address_raw_hash(storage, &address, &consensus_key)?;
+        write_validator_max_commission_rate_change(
+            storage,
             &address,
-            &max_commission_rate_change,
-        );
+            max_commission_rate_change,
+        )?;
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
@@ -1909,43 +1911,96 @@ where
         current_epoch,
     )?;
     // Credit bonded token amount to the PoS account
-    storage.credit_tokens(
-        &storage.staking_token_address(),
-        &<S as PosBase>::POS_ADDRESS,
+    credit_tokens_new(
+        storage,
+        &staking_token_address(),
+        &ADDRESS,
         total_bonded,
     );
 
     Ok(())
 }
 
-/// Read PoS validator's consensus key (used for signing block votes).
-pub fn read_validator_consensus_key<S>(
-    storage: &S,
-    params: &PosParams,
-    validator: &Address,
-    epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<common::PublicKey>>
+/// Read PoS parameters
+pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
     S: for<'iter> StorageRead<'iter>,
 {
-    let handle = validator_consensus_key_handle(validator);
-    handle.get(storage, epoch, params)
+    let value = storage.read_bytes(&params_key())?.unwrap();
+    Ok(decode(value).unwrap())
 }
 
-/// Write PoS validator's consensus key (used for signing block votes).
-pub fn write_validator_consensus_key<S>(
-    storage: &mut S,
-    params: &PosParams,
+/// Read PoS validator's address raw hash.
+pub fn read_validator_address_raw_hash<S>(
+    storage: &S,
     validator: &Address,
-    consensus_key: common::PublicKey,
-    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<Option<Address>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let key = validator_address_raw_hash_key(validator.raw_hash().unwrap());
+    let value = storage.read_bytes(&key)?;
+    Ok(value.map(|value| decode(value).unwrap()))
+}
+
+/// Write PoS validator's address raw hash.
+pub fn write_validator_address_raw_hash<S>(
+    storage: &mut S,
+    validator: &Address,
+    consensus_key: &common::PublicKey,
 ) -> storage_api::Result<()>
 where
     S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
-    let handle = validator_consensus_key_handle(validator);
-    let offset = OffsetPipelineLen::value(params);
-    handle.set(storage, consensus_key, current_epoch, offset)
+    let raw_hash = tm_consensus_key_raw_hash(consensus_key);
+    storage.write(&validator_address_raw_hash_key(raw_hash), encode(validator))
+}
+
+/// Read PoS validator's max commission rate change.
+pub fn read_validator_max_commission_rate_change<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Decimal>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let key = validator_max_commission_rate_change_key(validator);
+    let value = storage.read_bytes(&key)?.unwrap();
+    Ok(decode(value).unwrap())
+}
+
+/// Write PoS validator's max commission rate change.
+pub fn write_validator_max_commission_rate_change<S>(
+    storage: &mut S,
+    validator: &Address,
+    change: Decimal,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let key = validator_max_commission_rate_change_key(validator);
+    storage.write(&key, change)
+}
+
+/// Read number of active PoS validators.
+pub fn read_num_active_validators<S>(storage: &S) -> storage_api::Result<u64>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let value = storage.read_bytes(&num_active_validators_key())?.unwrap();
+    Ok(decode(value).unwrap())
+}
+
+/// Read number of active PoS validators.
+pub fn write_num_active_validators<S>(
+    storage: &mut S,
+    new_num: u64,
+) -> storage_api::Result<()>
+where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let key = num_active_validators_key();
+    storage.write(&key, new_num)
 }
 
 /// Read PoS validator's delta value.
@@ -1998,93 +2053,6 @@ where
         .get_delta_val(storage, current_epoch, params)?
         .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
-}
-
-/// Read PoS validator's state.
-pub fn read_validator_state<S>(
-    storage: &S,
-    params: &PosParams,
-    validator: &Address,
-    epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<ValidatorState>>
-where
-    S: for<'iter> StorageRead<'iter>,
-{
-    let handle = validator_state_handle(validator);
-    handle.get(storage, epoch, params)
-}
-
-/// Write PoS validator's consensus key (used for signing block votes).
-pub fn write_validator_state<S>(
-    storage: &mut S,
-    params: &PosParams,
-    validator: &Address,
-    state: ValidatorState,
-    current_epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<()>
-where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
-{
-    let handle = validator_state_handle(validator);
-    let offset = OffsetPipelineLen::value(params);
-    handle.set(storage, state, current_epoch, offset)
-}
-
-/// Read PoS validator's commission rate.
-pub fn read_validator_commission_rate<S>(
-    storage: &S,
-    params: &PosParams,
-    validator: &Address,
-    epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<Decimal>>
-where
-    S: for<'iter> StorageRead<'iter>,
-{
-    let handle = validator_commission_rate_handle(validator);
-    handle.get(storage, epoch, params)
-}
-
-/// Write PoS validator's commission rate.
-pub fn write_validator_commission_rate<S>(
-    storage: &mut S,
-    params: &PosParams,
-    validator: &Address,
-    rate: Decimal,
-    current_epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<()>
-where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
-{
-    let handle = validator_commission_rate_handle(validator);
-    let offset = OffsetPipelineLen::value(params);
-    handle.set(storage, rate, current_epoch, offset)
-
-    // Do I want to do any checking for valid rate changes here (prob not)?
-}
-
-/// Read PoS validator's max commission rate change.
-pub fn read_validator_max_commission_rate_change<S>(
-    storage: &S,
-    validator: &Address,
-) -> storage_api::Result<Option<Decimal>>
-where
-    S: for<'iter> StorageRead<'iter>,
-{
-    let key = validator_max_commission_rate_change_key(validator);
-    storage.read(&key)
-}
-
-/// Write PoS validator's max commission rate change.
-pub fn write_validator_max_commission_rate_change<S>(
-    storage: &mut S,
-    validator: &Address,
-    change: Decimal,
-) -> storage_api::Result<()>
-where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
-{
-    let key = validator_max_commission_rate_change_key(validator);
-    storage.write(&key, change)
 }
 
 /// Read PoS total stake (sum of deltas).
@@ -2181,7 +2149,7 @@ pub fn is_validator<S>(
 where
     S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
-    let state = read_validator_state(storage, params, address, epoch)?;
+    let state = validator_state_handle(address).get(storage, epoch, params)?;
     Ok(state.is_some())
 }
 
@@ -2196,9 +2164,9 @@ pub fn bond_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
-    let params = storage.read_pos_params();
+    let params = read_pos_params(storage)?;
     if let Some(source) = source {
         if source != validator
             && is_validator(storage, source, &params, current_epoch)?
@@ -2279,12 +2247,14 @@ where
     update_total_deltas(storage, &params, amount, current_epoch)?;
 
     // Transfer the bonded tokens from the source to PoS
-    storage.transfer(
+    transfer_tokens(
+        storage,
         &staking_token_address(),
         token::Amount::from_change(amount),
         source,
-        &<S as PosBase>::POS_ADDRESS,
+        &ADDRESS,
     );
+
     Ok(())
 }
 
@@ -2510,9 +2480,9 @@ pub fn unbond_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
-    let params = storage.read_pos_params();
+    let params = read_pos_params(storage)?;
     if let Some(source) = source {
         if source != validator
             && is_validator(storage, source, &params, current_epoch)?
@@ -2669,14 +2639,16 @@ pub fn become_validator_new<S>(
     max_commission_rate_change: Decimal,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
     // Non-epoched validator data
-    storage.write_validator_address_raw_hash(address, consensus_key);
-    storage.write_validator_max_commission_rate_change(
+    write_validator_address_raw_hash(storage, address, consensus_key)?;
+    write_validator_max_commission_rate_change(
+        storage,
         address,
-        &max_commission_rate_change,
-    );
+        max_commission_rate_change,
+    )?;
+
     // Epoched validator data
     validator_consensus_key_handle(address).init(
         storage,
@@ -2704,7 +2676,7 @@ where
         params.pipeline_len,
     )?;
 
-    let num_active_validators = storage.read_num_active_validators();
+    let num_active_validators = read_num_active_validators(storage)?;
     if num_active_validators < params.max_validator_slots {
         let active_val_handle = active_validator_set_handle()
             .at(&current_epoch)
@@ -2738,9 +2710,9 @@ pub fn withdraw_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<token::Amount>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
-    let params = storage.read_pos_params();
+    let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
 
     let slashes = validator_slashes_handle(validator);
@@ -2797,14 +2769,15 @@ where
     for (end_epoch, start_epoch) in unbonds_to_remove {
         unbond_handle.at(&end_epoch).remove(storage, &start_epoch)?;
         // TODO: check if the `end_epoch` layer is now empty and remove it if
-        // so, may need to implement remove for nested map
+        // so, may need to implement remove/delete for nested map
     }
 
     // Transfer the tokens from the PoS address back to the source
-    storage.transfer(
+    transfer_tokens(
+        storage,
         &staking_token_address(),
         withdrawable_amount,
-        &<S as PosBase>::POS_ADDRESS,
+        &ADDRESS,
         source,
     );
 
@@ -2819,7 +2792,7 @@ pub fn change_validator_commission_rate_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
     if new_rate < Decimal::ZERO {
         return Err(CommissionRateChangeError::NegativeRate(
@@ -2829,27 +2802,9 @@ where
         .into());
     }
 
-    let max_change = storage
-        // Fix error handling
-        .read_validator_max_commission_rate_change(validator)
-        // .map_err(|_| {
-        //     CommissionRateChangeError::NoMaxSetInStorage(validator.clone())
-        // })?
-        // .ok_or_else(|| {
-        //     CommissionRateChangeError::CannotRead(validator.clone())
-        // })?
-        ;
-
-    // match self.read_validator_commission_rate(validator) {
-    //     Ok(Some(rates)) => rates,
-    //     _ => {
-    //         return Err(CommissionRateChangeError::CannotRead(
-    //             validator.clone(),
-    //         )
-    //         .into());
-    //     }
-    // };
-    let params = storage.read_pos_params();
+    let max_change =
+        read_validator_max_commission_rate_change(storage, validator)?;
+    let params = read_pos_params(storage)?;
     let commission_handle = validator_commission_rate_handle(validator);
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
@@ -2887,7 +2842,7 @@ pub fn slash_new<S>(
     validator: &Address,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite + PosBase,
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
     let rate = slash_type.get_slash_rate(params);
     let slash = SlashNew {
@@ -2924,11 +2879,12 @@ where
     validator_slashes_handle(validator).push(storage, slash)?;
 
     // Transfer the slashed tokens from PoS account to Slash Fund address
-    storage.transfer(
+    transfer_tokens(
+        storage,
         &staking_token_address(),
         token::Amount::from(slashed_amount),
-        &<S as PosBase>::POS_ADDRESS,
-        &<S as PosBase>::POS_SLASH_POOL_ADDRESS,
+        &ADDRESS,
+        &SLASH_POOL_ADDRESS,
     );
 
     Ok(())
@@ -2937,3 +2893,74 @@ where
 // TODO: should we write a new function for PoSReadOnly::bond_amount? For the
 // one place it is used in native_vp/governance/utils.rs, the usage may actually
 // be properly to read the deltas than use this function
+
+/// Transfer tokens between accounts
+/// TODO: may want to move this into core crate
+pub fn transfer_tokens<S>(
+    storage: &mut S,
+    token: &Address,
+    amount: token::Amount,
+    src: &Address,
+    dest: &Address,
+) where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let src_key = token::balance_key(token, src);
+    let dest_key = token::balance_key(token, dest);
+    if let Some(src_balance) = storage
+        .read_bytes(&src_key)
+        .expect("Unable to read token balance for PoS system")
+    {
+        let mut src_balance: token::Amount =
+            decode(src_balance).unwrap_or_default();
+        if src_balance < amount {
+            tracing::error!(
+                "PoS system transfer error, the source doesn't have \
+                 sufficient balance. It has {}, but {} is required",
+                src_balance,
+                amount
+            );
+            return;
+        }
+        src_balance.spend(&amount);
+        let dest_balance = storage.read_bytes(&dest_key).unwrap_or_default();
+        let mut dest_balance: token::Amount = dest_balance
+            .and_then(|b| decode(b).ok())
+            .unwrap_or_default();
+        dest_balance.receive(&amount);
+        storage
+            .write(&src_key, encode(&src_balance))
+            .expect("Unable to write token balance for PoS system");
+        storage
+            .write(&dest_key, encode(&dest_balance))
+            .expect("Unable to write token balance for PoS system");
+    } else {
+        tracing::error!("PoS system transfer error, the source has no balance");
+    }
+}
+
+/// Credit tokens to an account, to be used only during genesis
+/// TODO: may want to move this into core crate
+pub fn credit_tokens_new<S>(
+    storage: &mut S,
+    token: &Address,
+    target: &Address,
+    amount: token::Amount,
+) where
+    S: for<'iter> StorageRead<'iter> + StorageWrite,
+{
+    let key = token::balance_key(token, target);
+    let new_balance = match storage
+        .read_bytes(&key)
+        .expect("Unable to read token balance for PoS system")
+    {
+        Some(balance) => {
+            let balance: token::Amount = decode(balance).unwrap_or_default();
+            balance + amount
+        }
+        None => amount,
+    };
+    storage
+        .write(&key, encode(&new_balance))
+        .expect("Unable to write token balance for PoS system");
+}

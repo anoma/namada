@@ -14,7 +14,8 @@ use namada_proof_of_stake::storage::{
 };
 use namada_proof_of_stake::types::{CommissionRates, ValidatorStates};
 pub use namada_proof_of_stake::{
-    epoched, parameters, types, PosActions as PosWrite, PosReadOnly as PosRead,
+    bond_tokens_new, epoched, parameters, types, PosActions as PosWrite,
+    PosReadOnly as PosRead,
 };
 use rust_decimal::Decimal;
 
@@ -50,11 +51,11 @@ impl Ctx {
         amount: token::Amount,
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
-        namada_proof_of_stake::PosActions::bond_tokens(
+        bond_tokens_new(
             self,
             source,
             validator,
-            amount,
+            token::Change::from(amount),
             current_epoch,
         )
     }
