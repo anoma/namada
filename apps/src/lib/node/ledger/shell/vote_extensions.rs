@@ -267,7 +267,12 @@ where
                     false
                 })
         })
-        .unwrap_or(true)
+        .unwrap_or(
+            // NOTE: if we're not supposed to send a validator set update
+            // vote extension at a particular block height, we will
+            // just return true as the validation result
+            true,
+        )
     }
 }
 

@@ -281,6 +281,8 @@ pub mod shim {
         #[cfg(feature = "abcipp")]
         impl From<PrepareProposal> for ResponsePrepareProposal {
             fn from(_: PrepareProposal) -> Self {
+                // TODO(namada#198): When abci++ arrives, we should return a
+                // real response.
                 Self::default()
             }
         }
