@@ -23,7 +23,10 @@ jobs:
         make:
           - name: tendermint-unreleased
             repository: heliaxdev/tendermint
-            tendermint_version: ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_version: ad825dcadbd4b98c3f91ce5a711e4fb36a69c377  # approximately v0.1.3-abciplus
+          - name: tendermint
+            repository: tendermint/tendermint
+            tendermint_version: v0.37.0-rc1
 
     steps:
       - name: Build ${{ matrix.make.name }}
