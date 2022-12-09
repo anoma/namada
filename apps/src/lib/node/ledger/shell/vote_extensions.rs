@@ -244,7 +244,7 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<validator_set_update::SignedVext>,
     ) -> bool {
-        ext.map(|ext| {
+        if let Some(ext) = ext {
             self.storage
                 .can_send_validator_set_update(SendValsetUpd::Now)
                 .then(|| {
@@ -266,13 +266,12 @@ where
                     );
                     false
                 })
-        })
-        .unwrap_or(
+        } else {
             // NOTE: if we're not supposed to send a validator set update
             // vote extension at a particular block height, we will
             // just return true as the validation result
-            true,
-        )
+            true
+        }
     }
 }
 
