@@ -250,7 +250,7 @@ jobs:
         make:
           - name: ABCI Release build
             suffix: ''
-            cache_key: anoma-e2e-release
+            cache_key: namada-e2e-release
             cache_version: "v2"
 
     env:
