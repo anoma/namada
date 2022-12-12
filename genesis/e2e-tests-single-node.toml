@@ -151,6 +151,8 @@ filename = "vp_masp.wasm"
 min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).
 max_expected_time_per_block = 30
+# Max payload size, in bytes, for a tx batch proposal.
+max_proposal_bytes = 22020096
 # vp whitelist
 vp_whitelist = []
 # tx whitelist

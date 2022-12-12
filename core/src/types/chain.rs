@@ -1,10 +1,11 @@
 //! Chain related data types
 // TODO move BlockHash and BlockHeight here from the storage types
 
-use std::fmt::Display;
+use std::fmt;
+use std::num::NonZeroU64;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -15,6 +16,165 @@ pub const CHAIN_ID_LENGTH: usize = 30;
 pub const CHAIN_ID_PREFIX_MAX_LEN: usize = 19;
 /// Separator between chain ID prefix and the generated hash
 pub const CHAIN_ID_PREFIX_SEP: char = '.';
+
+/// Configuration parameter for the upper limit on the number
+/// of bytes transactions can occupy in a block proposal.
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+)]
+pub struct ProposalBytes {
+    inner: NonZeroU64,
+}
+
+impl Serialize for ProposalBytes {
+    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        s.serialize_u64(self.inner.get())
+    }
+}
+
+impl<'de> Deserialize<'de> for ProposalBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = ProposalBytes;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(
+                    f,
+                    "a u64 in the range 1 - {}",
+                    ProposalBytes::RAW_MAX.get()
+                )
+            }
+
+            fn visit_u64<E>(self, size: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ProposalBytes::new(size).ok_or_else(|| {
+                    serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Unsigned(size),
+                        &self,
+                    )
+                })
+            }
+
+            // NOTE: this is only needed because of a bug in the toml parser
+            // https://github.com/toml-rs/toml-rs/issues/256
+            fn visit_i64<E>(self, size: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                ProposalBytes::new(size as u64).ok_or_else(|| {
+                    serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Signed(size),
+                        &self,
+                    )
+                })
+            }
+        }
+
+        deserializer.deserialize_u64(Visitor)
+    }
+}
+
+impl BorshSchema for ProposalBytes {
+    fn add_definitions_recursively(
+        definitions: &mut std::collections::HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(vec![(
+            "inner".into(),
+            u64::declaration(),
+        )]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        definitions.insert(Self::declaration(), definition);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        std::any::type_name::<Self>().into()
+    }
+}
+
+impl Default for ProposalBytes {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            inner: Self::RAW_DEFAULT,
+        }
+    }
+}
+
+// constants
+impl ProposalBytes {
+    /// The upper bound of a [`ProposalBytes`] value.
+    pub const MAX: ProposalBytes = ProposalBytes {
+        inner: Self::RAW_MAX,
+    };
+    /// The (raw) default value for a [`ProposalBytes`].
+    ///
+    /// This value must be within the range `[1 B, 90 MiB]`.
+    const RAW_DEFAULT: NonZeroU64 = unsafe {
+        // SAFETY: We are constructing a greater than zero
+        // value, so the API contract is never violated.
+        // Moreover, 21 MiB <= 90 MiB.
+        NonZeroU64::new_unchecked(21 << 20)
+    };
+    /// The (raw) upper bound of a [`ProposalBytes`] value.
+    ///
+    /// The maximum space a serialized Tendermint block can
+    /// occupy is 100 MiB. We reserve 10 MiB for serialization
+    /// overhead, evidence and header data, and 90 MiB for
+    /// tx data.
+    const RAW_MAX: NonZeroU64 = unsafe {
+        // SAFETY: We are constructing a greater than zero
+        // value, so the API contract is never violated.
+        NonZeroU64::new_unchecked(90 << 20)
+    };
+}
+
+impl ProposalBytes {
+    /// Return the number of bytes as a [`u64`] value.
+    #[inline]
+    pub const fn get(self) -> u64 {
+        self.inner.get()
+    }
+
+    /// Try to construct a new [`ProposalBytes`] instance,
+    /// from the given `max_bytes` value.
+    ///
+    /// This function will return [`None`] if `max_bytes` is not within
+    /// the inclusive range of 1 to [`ProposalBytes::MAX`].
+    #[inline]
+    pub fn new(max_bytes: u64) -> Option<Self> {
+        NonZeroU64::new(max_bytes)
+            .map(|inner| Self { inner })
+            .and_then(|value| {
+                if value.get() > Self::RAW_MAX.get() {
+                    None
+                } else {
+                    Some(value)
+                }
+            })
+    }
+}
 
 /// Development default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
 #[cfg(feature = "dev")]
@@ -110,7 +270,7 @@ impl Default for ChainId {
     }
 }
 
-impl Display for ChainId {
+impl fmt::Display for ChainId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -158,7 +318,7 @@ impl FromStr for ChainId {
 #[serde(transparent)]
 pub struct ChainIdPrefix(String);
 
-impl Display for ChainIdPrefix {
+impl fmt::Display for ChainIdPrefix {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -233,6 +393,17 @@ mod tests {
             // There should be no validation errors
             let errors = chain_id.validate(&genesis_bytes);
             assert!(errors.is_empty(), "There should be no validation errors {:#?}", errors);
+        }
+
+        /// Test if [`ProposalBytes`] serde serialization is correct.
+        #[test]
+        fn test_proposal_size_serialize_roundtrip(s in 1u64..=ProposalBytes::MAX.get()) {
+            let size = ProposalBytes::new(s).expect("Test failed");
+            assert_eq!(size.get(), s);
+            let json = serde_json::to_string(&size).expect("Test failed");
+            let deserialized: ProposalBytes =
+                serde_json::from_str(&json).expect("Test failed");
+            assert_eq!(size, deserialized);
         }
     }
 }
