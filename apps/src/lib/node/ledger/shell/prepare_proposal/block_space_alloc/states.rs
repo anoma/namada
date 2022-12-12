@@ -27,9 +27,18 @@ mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
 
-use super::AllocFailure;
-#[allow(unused_imports)]
-use super::BlockSpaceAllocator;
+use super::{AllocFailure, BlockSpaceAllocator};
+
+/// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
+/// encrypted transactions.
+pub enum EncryptedTxBatchAllocator {
+    WithEncryptedTxs(
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
+    ),
+    WithoutEncryptedTxs(
+        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
+    ),
+}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG decrypted transactions.

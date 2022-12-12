@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use super::super::{AllocFailure, BlockSpaceAllocator};
 use super::{
-    BuildingEncryptedTxBatch, FillingRemainingSpace, NextStateImpl, TryAlloc,
-    WithEncryptedTxs, WithoutEncryptedTxs,
+    BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
+    NextStateImpl, TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
 impl TryAlloc
@@ -70,5 +70,37 @@ fn next_state<Mode>(
         protocol_txs,
         encrypted_txs,
         decrypted_txs,
+    }
+}
+
+impl TryAlloc for EncryptedTxBatchAllocator {
+    #[inline]
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
+        match self {
+            EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
+                state.try_alloc(tx)
+            }
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
+                // NOTE: this operation will cause the allocator to
+                // run out of memory immediately
+                state.try_alloc(tx)
+            }
+        }
+    }
+}
+
+impl NextStateImpl for EncryptedTxBatchAllocator {
+    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
+
+    #[inline]
+    fn next_state_impl(self) -> Self::Next {
+        match self {
+            EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
+                state.next_state_impl()
+            }
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
+                state.next_state_impl()
+            }
+        }
     }
 }

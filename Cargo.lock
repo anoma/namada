@@ -3264,6 +3264,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
+name = "index-set"
+version = "0.5.0"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.5.0#d3ee2073e0656240d8a497b71449d62fa3d9a530"
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4124,6 +4129,7 @@ dependencies = [
  "flate2",
  "futures 0.3.25",
  "git2",
+ "index-set",
  "itertools",
  "libc",
  "libloading",

@@ -131,9 +131,11 @@ pub trait QueriesExt {
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    ///
-    /// This is done by checking if we are at the second block of a new epoch.
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current [`Epoch`].
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
@@ -312,6 +314,7 @@ where
     }
 
     #[cfg(feature = "abcipp")]
+    #[inline]
     fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
         // TODO: implement this method for ABCI++; should only be able to send
         // a validator set update at the second block of an epoch
@@ -319,13 +322,20 @@ where
     }
 
     #[cfg(not(feature = "abcipp"))]
+    #[inline]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        // when checking vote extensions in Prepare
-        // and ProcessProposal, we simply return true
         if matches!(can_send, SendValsetUpd::AtPrevHeight) {
-            return true;
+            // when checking vote extensions in Prepare
+            // and ProcessProposal, we simply return true
+            true
+        } else {
+            // offset of 1 => are we at the 2nd
+            // block within the epoch?
+            self.is_deciding_offset_within_epoch(1)
         }
+    }
 
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
@@ -333,10 +343,9 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        match current_decision_height {
-            BlockHeight(1) => return false,
-            BlockHeight(2) => return true,
-            _ => (),
+        if self.get_current_epoch().0 == Epoch(0) {
+            let height_offset_within_epoch = BlockHeight(1 + height_offset);
+            return current_decision_height == height_offset_within_epoch;
         }
 
         let fst_heights_of_each_epoch =
@@ -345,8 +354,8 @@ where
         fst_heights_of_each_epoch
             .last()
             .map(|&h| {
-                let second_height_of_epoch = h + 1;
-                current_decision_height == second_height_of_epoch
+                let height_offset_within_epoch = h + height_offset;
+                current_decision_height == height_offset_within_epoch
             })
             .unwrap_or(false)
     }
