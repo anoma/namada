@@ -457,7 +457,9 @@ async fn write_tm_genesis(
     genesis.consensus_params.block = Some(block::Size {
         // maximum size of a serialized Tendermint block
         // cannot go over 100 MiB
-        max_bytes: 100 << 20,
+        max_bytes: (100 << 20) - 1, /* unsure if we are dealing with an open
+                                     * range, so it's better to subtract one,
+                                     * here */
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,
