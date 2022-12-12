@@ -234,19 +234,19 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
-        // Max payload size, in bytes, for a tx batch proposal.
+        /// Max payload size, in bytes, for a tx batch proposal.
         pub max_proposal_bytes: ProposalBytes,
-        // Minimum number of blocks per epoch.
+        /// Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Maximum duration per block (in seconds).
+        /// Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
-        // Hashes of whitelisted vps array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted vps array. `None` value or an empty array
+        /// disables whitelisting.
         pub vp_whitelist: Option<Vec<String>>,
-        // Hashes of whitelisted txs array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted txs array. `None` value or an empty array
+        /// disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
         /// Filename of implicit accounts validity predicate WASM code
         pub implicit_vp: String,
