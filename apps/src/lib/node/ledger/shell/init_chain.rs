@@ -73,6 +73,7 @@ where
         // Initialize protocol parameters
         let genesis::Parameters {
             epoch_duration,
+            max_proposal_bytes,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
@@ -106,6 +107,7 @@ where
         }
         let parameters = Parameters {
             epoch_duration,
+            max_proposal_bytes,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,

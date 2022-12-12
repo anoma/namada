@@ -12,6 +12,7 @@ const POS_GAIN_P_KEY: &str = "pos_gain_p";
 const POS_GAIN_D_KEY: &str = "pos_gain_d";
 const STAKED_RATIO_KEY: &str = "staked_ratio_key";
 const POS_INFLATION_AMOUNT_KEY: &str = "pos_inflation_amount_key";
+const MAX_PROPOSAL_BYTES_KEY: &str = "max_proposal_bytes";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -20,10 +21,19 @@ pub fn is_parameter_key(key: &Key) -> bool {
 
 /// Returns if the key is a protocol parameter key.
 pub fn is_protocol_parameter_key(key: &Key) -> bool {
+    // TODO: improve this code; use some kind of prefix
+    // tree to efficiently match `key`
     is_epoch_duration_storage_key(key)
         || is_max_expected_time_per_block_key(key)
         || is_tx_whitelist_key(key)
         || is_vp_whitelist_key(key)
+        || is_implicit_vp_key(key)
+        || is_epochs_per_year_key(key)
+        || is_pos_gain_p_key(key)
+        || is_pos_gain_d_key(key)
+        || is_staked_ratio_key(key)
+        || is_pos_inflation_amount_key(key)
+        || is_max_proposal_bytes_key(key)
 }
 
 /// Returns if the key is an epoch storage key.
@@ -104,6 +114,14 @@ pub fn is_pos_inflation_amount_key(key: &Key) -> bool {
         DbKeySeg::AddressSeg(addr),
         DbKeySeg::StringSeg(pos_inflation_amount),
     ] if addr == &ADDRESS && pos_inflation_amount == POS_INFLATION_AMOUNT_KEY)
+}
+
+/// Returns if the key is the max proposal bytes key.
+pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(max_proposal_bytes),
+    ] if addr == &ADDRESS && max_proposal_bytes == MAX_PROPOSAL_BYTES_KEY)
 }
 
 /// Storage key used for epoch parameter.
@@ -202,6 +220,16 @@ pub fn get_pos_inflation_amount_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(POS_INFLATION_AMOUNT_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for the max proposal bytes.
+pub fn get_max_proposal_bytes_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(MAX_PROPOSAL_BYTES_KEY.to_string()),
         ],
     }
 }
