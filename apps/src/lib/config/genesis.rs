@@ -235,6 +235,17 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
         /// Max payload size, in bytes, for a tx batch proposal.
+        ///
+        /// Block proposers may never return a `PrepareProposal`
+        /// response containing `txs` with a byte length greater
+        /// than whatever is configured through this parameter.
+        ///
+        /// Note that this parameter's value will always be strictly
+        /// smaller than a Tendermint block's `MaxBytes` consensus
+        /// parameter. Currently, we hard cap `max_proposal_bytes`
+        /// at 90 MiB in Namada, which leaves at least 10 MiB of
+        /// room for header data, evidence and protobuf
+        /// serialization overhead in Tendermint blocks.
         pub max_proposal_bytes: ProposalBytes,
         /// Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
