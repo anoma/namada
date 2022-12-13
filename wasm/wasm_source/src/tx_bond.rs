@@ -291,7 +291,7 @@ mod tests {
         (
             arb_established_address(),
             prop::option::of(arb_non_internal_address()),
-            token::testing::arb_amount_ceiled(max_amount),
+            token::testing::arb_amount_non_zero_ceiled(max_amount),
         )
             .prop_map(|(validator, source, amount)| {
                 transaction::pos::Bond {
