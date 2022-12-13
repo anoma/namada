@@ -55,7 +55,8 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+use namada::core::ledger::storage::{self, Storage};
+use namada::ledger::queries_ext::QueriesExt;
 
 /// Block space allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -94,13 +95,15 @@ pub struct BlockSpaceAllocator<State> {
     decrypted_txs: TxBin,
 }
 
-impl From<&RequestPrepareProposal>
+impl<D, H> From<&Storage<D, H>>
     for BlockSpaceAllocator<states::BuildingDecryptedTxBatch>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
 {
     #[inline]
-    fn from(req: &RequestPrepareProposal) -> Self {
-        let tendermint_max_block_space_in_bytes = req.max_tx_bytes as u64;
-        Self::init(tendermint_max_block_space_in_bytes)
+    fn from(storage: &Storage<D, H>) -> Self {
+        Self::init(storage.get_max_proposal_bytes().get())
     }
 }
 
