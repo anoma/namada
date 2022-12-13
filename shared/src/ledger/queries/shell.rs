@@ -335,7 +335,7 @@ mod test {
     use crate::proto::Tx;
     use crate::types::{address, token};
 
-    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
+    const TX_NO_OP_WASM: &str = "../wasm/test_wasms/built/tx_no_op.wasm";
 
     #[test]
     fn test_shell_queries_router_paths() {

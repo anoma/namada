@@ -207,8 +207,7 @@ mod tests {
 
     use super::*;
 
-    const VP_ALWAYS_TRUE_WASM: &str =
-        "../../wasm_for_tests/vp_always_true.wasm";
+    const VP_ALWAYS_TRUE_WASM: &str = "../test_wasms/built/vp_always_true.wasm";
 
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]

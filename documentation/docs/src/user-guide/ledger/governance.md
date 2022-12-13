@@ -36,7 +36,7 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
     "voting_start_epoch": 3,
     "voting_end_epoch": 6,
     "grace_epoch": 12,
-    "proposal_code_path": "./wasm_for_tests/tx_no_op.wasm"
+    "proposal_code_path": "./wasm/test_wasms/built/tx_no_op.wasm"
 }
 ```
 

@@ -72,7 +72,7 @@ use namada_tx_prelude::StorageWrite;
 
 use crate::tx::{self, *};
 
-const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
+const VP_ALWAYS_TRUE_WASM: &str = "../wasm/test_wasms/built/vp_always_true.wasm";
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
 pub struct TestIbcVp<'a> {

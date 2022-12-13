@@ -531,7 +531,7 @@ mod test_finalize_block {
 
         // create two decrypted txs
         let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        wasm_path.push("wasm/test_wasms/built/tx_no_op.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
         for i in 0..2 {

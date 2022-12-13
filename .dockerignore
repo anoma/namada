@@ -4,6 +4,6 @@ target
 .vscode
 audit
 test
-wasm_for_tests
+wasm/test_wasms
 genesis
 docker

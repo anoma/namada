@@ -17,7 +17,6 @@ members = [
 # wasm packages have to be built separately
 exclude = [
   "wasm",
-  "wasm_for_tests",
 ]
 
 [patch.crates-io]

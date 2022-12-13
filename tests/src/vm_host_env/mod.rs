@@ -47,8 +47,10 @@ mod tests {
     use crate::vp::{vp_host_env, TestVpEnv};
 
     // paths to the WASMs used for tests
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_ALWAYS_FALSE_WASM: &str = "../wasm_for_tests/vp_always_false.wasm";
+    const VP_ALWAYS_TRUE_WASM: &str =
+        "../wasm/test_wasms/built/vp_always_true.wasm";
+    const VP_ALWAYS_FALSE_WASM: &str =
+        "../wasm/test_wasms/built/vp_always_false.wasm";
 
     #[test]
     fn test_tx_read_write() {

@@ -827,16 +827,20 @@ pub mod constants {
     // Paths to the WASMs used for tests
     pub const TX_TRANSFER_WASM: &str = "wasm/tx_transfer.wasm";
     pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
-    pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
-    pub const TX_INIT_PROPOSAL: &str = "wasm_for_tests/tx_init_proposal.wasm";
+    pub const TX_NO_OP_WASM: &str = "wasm/test_wasms/built/tx_no_op.wasm";
+    pub const TX_INIT_PROPOSAL: &str =
+        "wasm/test_wasms/built/tx_init_proposal.wasm";
     pub const TX_WRITE_STORAGE_KEY_WASM: &str =
-        "wasm_for_tests/tx_write_storage_key.wasm";
+        "wasm/test_wasms/built/tx_write_storage_key.wasm";
     pub const TX_IBC_WASM: &str = "wasm/tx_ibc.wasm";
-    pub const VP_ALWAYS_TRUE_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
+    pub const VP_ALWAYS_TRUE_WASM: &str =
+        "wasm/test_wasms/built/vp_always_true.wasm";
     pub const VP_ALWAYS_FALSE_WASM: &str =
-        "wasm_for_tests/vp_always_false.wasm";
-    pub const TX_MINT_TOKENS_WASM: &str = "wasm_for_tests/tx_mint_tokens.wasm";
-    pub const TX_PROPOSAL_CODE: &str = "wasm_for_tests/tx_proposal_code.wasm";
+        "wasm/test_wasms/built/vp_always_false.wasm";
+    pub const TX_MINT_TOKENS_WASM: &str =
+        "wasm/test_wasms/built/tx_mint_tokens.wasm";
+    pub const TX_PROPOSAL_CODE: &str =
+        "wasm/test_wasms/built/tx_proposal_code.wasm";
 
     /// Find the absolute path to one of the WASM files above
     pub fn wasm_abs_path(file_name: &str) -> PathBuf {

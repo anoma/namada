@@ -414,15 +414,18 @@ mod tests {
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
-    const TX_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/tx_memory_limit.wasm";
-    const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
+    const TX_MEMORY_LIMIT_WASM: &str =
+        "../wasm/test_wasms/built/tx_memory_limit.wasm";
+    const TX_NO_OP_WASM: &str = "../wasm/test_wasms/built/tx_no_op.wasm";
     const TX_READ_STORAGE_KEY_WASM: &str =
-        "../wasm_for_tests/tx_read_storage_key.wasm";
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_EVAL_WASM: &str = "../wasm_for_tests/vp_eval.wasm";
-    const VP_MEMORY_LIMIT_WASM: &str = "../wasm_for_tests/vp_memory_limit.wasm";
+        "../wasm/test_wasms/built/tx_read_storage_key.wasm";
+    const VP_ALWAYS_TRUE_WASM: &str =
+        "../wasm/test_wasms/built/vp_always_true.wasm";
+    const VP_EVAL_WASM: &str = "../wasm/test_wasms/built/vp_eval.wasm";
+    const VP_MEMORY_LIMIT_WASM: &str =
+        "../wasm/test_wasms/built/vp_memory_limit.wasm";
     const VP_READ_STORAGE_KEY_WASM: &str =
-        "../wasm_for_tests/vp_read_storage_key.wasm";
+        "../wasm/test_wasms/built/vp_read_storage_key.wasm";
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.

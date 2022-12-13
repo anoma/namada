@@ -553,11 +553,11 @@ mod test {
     use super::*;
     use crate::vm::WasmCacheRwAccess;
 
-    const TX_NO_OP: &str = "../wasm_for_tests/tx_no_op.wasm";
+    const TX_NO_OP: &str = "../wasm/test_wasms/built/tx_no_op.wasm";
     const TX_READ_STORAGE_KEY: &str =
-        "../wasm_for_tests/tx_read_storage_key.wasm";
-    const VP_ALWAYS_TRUE: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_EVAL: &str = "../wasm_for_tests/vp_eval.wasm";
+        "../wasm/test_wasms/built/tx_read_storage_key.wasm";
+    const VP_ALWAYS_TRUE: &str = "../wasm/test_wasms/built/vp_always_true.wasm";
+    const VP_EVAL: &str = "../wasm/test_wasms/built/vp_eval.wasm";
 
     #[test]
     fn test_fetch_or_compile_valid_wasm() {

@@ -9,7 +9,7 @@ nightly := $(shell cat rust-nightly-version)
 
 # Path to the wasm source for the provided txs and VPs
 wasms := wasm/wasm_source
-wasms_for_tests := wasm_for_tests/wasm_source
+wasms_for_tests := wasm/test_wasms
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template
 

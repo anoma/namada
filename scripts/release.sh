@@ -33,6 +33,7 @@ git commit --fixup=$HASH_AFTER
 cargo release --execute $VERSION
 
 # update the wasm_for_tests crate version, and rebuild them (3 fixups)
+# TODO: update for move of wasm_for_tests/wasm_source to wasm/test_wasms
 cd $REPO_ROOT/wasm_for_tests/wasm_source
 cargo update -w
 git add Cargo.lock
