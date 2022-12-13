@@ -2650,6 +2650,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_wasm_for_tests"
+version = "0.12.0"
+dependencies = [
+ "borsh",
+ "getrandom 0.2.8",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "wee_alloc",
+]
+
+[[package]]
 name = "nanoid"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

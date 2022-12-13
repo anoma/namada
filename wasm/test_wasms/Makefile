@@ -47,7 +47,7 @@ fmt-check:
 # Build a selected wasm
 $(wasms): %:
 	$(cargo) build --release --target wasm32-unknown-unknown --target-dir 'target' --features $@ && \
-	cp "./target/wasm32-unknown-unknown/release/namada_wasm_for_tests.wasm" ../$@.wasm
+	cp "./target/wasm32-unknown-unknown/release/namada_wasm_for_tests.wasm" built/$@.wasm
 
 # `cargo check` one of the wasms, e.g. `make check_tx_no_op`
 $(patsubst %,check_%,$(wasms)): check_%:
@@ -67,7 +67,7 @@ $(patsubst %,watch_%,$(wasms)): watch_%:
 $(patsubst %,clippy_%,$(wasms)): clippy_%:
 	$(cargo) +$(nightly) clippy --all-targets --features $* -- -D warnings
 
-clean-wasm = rm ../$(wasm).wasm
+clean-wasm = rm built/$(wasm).wasm
 clean:
 	$(foreach wasm,$(wasms),$(clean-wasm) && ) true
 
@@ -76,6 +76,6 @@ deps:
 
 # this command needs wasm-opt installed
 opt-wasm:
-	@for file in $(shell ls ../*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	@for file in $(shell ls built/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
 
 .PHONY : all check test clippy fmt fmt-check clean deps opt-wasm
