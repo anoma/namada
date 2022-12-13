@@ -182,9 +182,12 @@ pub struct Tracker<S> {
     _marker: PhantomData<*const S>,
 }
 
-impl<S> Tracker<S> {
+impl<S> Tracker<S>
+where
+    S: 'static,
+    BlockSpaceAllocator<S>: TryAlloc,
+{
     /// Return a new [`Tracker`] for a state `S`.
-    #[inline]
     pub const fn new() -> Self {
         Self {
             _marker: PhantomData,
@@ -194,8 +197,10 @@ impl<S> Tracker<S> {
 
 impl<A, B> PartialEq<Tracker<B>> for Tracker<A>
 where
-    A: TryAlloc + 'static,
-    B: TryAlloc + 'static,
+    A: 'static,
+    B: 'static,
+    BlockSpaceAllocator<A>: TryAlloc,
+    BlockSpaceAllocator<B>: TryAlloc,
 {
     #[inline]
     fn eq(&self, _: &Tracker<B>) -> bool {
@@ -203,10 +208,15 @@ where
     }
 }
 
-impl<S: TryAlloc + 'static> Eq for Tracker<S> {}
+impl<S> Eq for Tracker<S>
+where
+    S: 'static,
+    BlockSpaceAllocator<S>: TryAlloc,
+{
+}
 
 /// Current state tracker for a [`BlockSpaceAllocator`].
-pub trait CurrentState {
+pub trait CurrentState: TryAlloc {
     type State;
 
     /// Retrieve the current state of a [`BlockSpaceAllocator`].
@@ -216,7 +226,11 @@ pub trait CurrentState {
     fn current_state(&self) -> Tracker<Self::State>;
 }
 
-impl<S> CurrentState for BlockSpaceAllocator<S> {
+impl<S> CurrentState for BlockSpaceAllocator<S>
+where
+    S: 'static,
+    BlockSpaceAllocator<S>: TryAlloc,
+{
     type State = S;
 
     #[inline]
