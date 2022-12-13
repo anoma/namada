@@ -27,6 +27,9 @@ mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
 
+use std::any::TypeId;
+use std::marker::PhantomData;
+
 use super::{AllocFailure, BlockSpaceAllocator};
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
@@ -172,3 +175,50 @@ pub trait NextState: NextStateImpl {
 }
 
 impl<S> NextState for S where S: NextStateImpl {}
+
+/// Utility to dynamically track the state of a [`BlockSpaceAllocator`].
+#[derive(Debug, Copy, Clone, Hash)]
+pub struct Tracker<S> {
+    _marker: PhantomData<*const S>,
+}
+
+impl<S> Tracker<S> {
+    /// Return a new [`Tracker`] for a state `S`.
+    pub const fn new() -> Self {
+        Self {
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<A, B> PartialEq<Tracker<B>> for Tracker<A>
+where
+    A: TryAlloc + 'static,
+    B: TryAlloc + 'static,
+{
+    fn eq(&self, _: &Tracker<B>) -> bool {
+        TypeId::of::<A>() == TypeId::of::<B>()
+    }
+}
+
+impl<S: TryAlloc + 'static> Eq for Tracker<S> {}
+
+/// Current state tracker for a [`BlockSpaceAllocator`].
+pub trait CurrentState {
+    type State;
+
+    /// Retrieve the current state of a [`BlockSpaceAllocator`].
+    ///
+    /// The returned [`Tracker`] can be compared against a
+    /// [`Tracker`] for another state.
+    fn current_state(&self) -> Tracker<Self::State>;
+}
+
+impl<S> CurrentState for BlockSpaceAllocator<S> {
+    type State = S;
+
+    #[inline]
+    fn current_state(&self) -> Tracker<S> {
+        Tracker::new()
+    }
+}
