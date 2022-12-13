@@ -26,7 +26,7 @@ mod decrypted_txs;
 mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
-mod tracker;
+pub mod tracker;
 
 use super::{AllocFailure, BlockSpaceAllocator};
 
