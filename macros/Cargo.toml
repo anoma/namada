@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_macros"
 resolver = "2"
-version = "0.11.0"
+version = "0.12.0"
 
 [lib]
 proc-macro = true
