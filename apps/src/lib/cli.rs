@@ -1687,9 +1687,9 @@ pub mod args {
 
     /// Transaction associated results arguments
     #[derive(Clone, Debug)]
-    pub struct QueryResult {
+    pub struct QueryResult<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Hash of transaction to lookup
         pub tx_hash: String,
     }
@@ -1712,9 +1712,9 @@ pub mod args {
 
     /// Custom transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxCustom {
+    pub struct TxCustom<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Path to the tx WASM code file
         pub code_path: PathBuf,
         /// Path to the data file
@@ -1750,15 +1750,15 @@ pub mod args {
 
     /// Transfer transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxTransfer {
+    pub struct TxTransfer<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Transfer source address
-        pub source: WalletTransferSource,
+        pub source: C::TransferSource,
         /// Transfer target address
-        pub target: WalletTransferTarget,
+        pub target: C::TransferTarget,
         /// Transferred token address
-        pub token: WalletAddress,
+        pub token: C::Address,
         /// Transferred token address
         pub sub_prefix: Option<String>,
         /// Transferred token amount
@@ -1801,15 +1801,15 @@ pub mod args {
 
     /// IBC transfer transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer {
+    pub struct TxIbcTransfer<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Transfer source address
-        pub source: WalletAddress,
+        pub source: C::Address,
         /// Transfer target address
         pub receiver: String,
         /// Transferred token address
-        pub token: WalletAddress,
+        pub token: C::Address,
         /// Transferred token address
         pub sub_prefix: Option<String>,
         /// Transferred token amount
@@ -1875,15 +1875,15 @@ pub mod args {
 
     /// Transaction to initialize a new account
     #[derive(Clone, Debug)]
-    pub struct TxInitAccount {
+    pub struct TxInitAccount<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Address of the source account
-        pub source: WalletAddress,
+        pub source: C::Address,
         /// Path to the VP WASM code file for the new account
         pub vp_code_path: Option<PathBuf>,
         /// Public key for the new account
-        pub public_key: WalletPublicKey,
+        pub public_key: C::PublicKey,
     }
 
     impl Args for TxInitAccount {
@@ -1919,13 +1919,13 @@ pub mod args {
 
     /// Transaction to initialize a new account
     #[derive(Clone, Debug)]
-    pub struct TxInitValidator {
-        pub tx: Tx,
-        pub source: WalletAddress,
+    pub struct TxInitValidator<C: NamadaTypes = CliTypes> {
+        pub tx: Tx<C>,
+        pub source: C::Address,
         pub scheme: SchemeType,
-        pub account_key: Option<WalletPublicKey>,
-        pub consensus_key: Option<WalletKeypair>,
-        pub protocol_key: Option<WalletPublicKey>,
+        pub account_key: Option<C::PublicKey>,
+        pub consensus_key: Option<C::Keypair>,
+        pub protocol_key: Option<C::PublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
@@ -2005,13 +2005,13 @@ pub mod args {
 
     /// Transaction to update a VP arguments
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp {
+    pub struct TxUpdateVp<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Path to the VP WASM code file
         pub vp_code_path: PathBuf,
         /// Address of the account whose VP is to be updated
-        pub addr: WalletAddress,
+        pub addr: C::Address,
     }
 
     impl Args for TxUpdateVp {
@@ -2042,16 +2042,16 @@ pub mod args {
 
     /// Bond arguments
     #[derive(Clone, Debug)]
-    pub struct Bond {
+    pub struct Bond<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Validator address
-        pub validator: WalletAddress,
+        pub validator: C::Address,
         /// Amount of tokens to stake in a bond
         pub amount: token::Amount,
         /// Source address for delegations. For self-bonds, the validator is
         /// also the source.
-        pub source: Option<WalletAddress>,
+        pub source: Option<C::Address>,
     }
 
     impl Args for Bond {
@@ -2081,16 +2081,16 @@ pub mod args {
 
     /// Unbond arguments
     #[derive(Clone, Debug)]
-    pub struct Unbond {
+    pub struct Unbond<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Validator address
-        pub validator: WalletAddress,
+        pub validator: C::Address,
         /// Amount of tokens to unbond from a bond
         pub amount: token::Amount,
         /// Source address for unbonding from delegations. For unbonding from
         /// self-bonds, the validator is also the source
-        pub source: Option<WalletAddress>,
+        pub source: Option<C::Address>,
     }
 
     impl Args for Unbond {
@@ -2124,9 +2124,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct InitProposal {
+    pub struct InitProposal<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// The proposal file path
         pub proposal_data: PathBuf,
         /// Flag if proposal should be run offline
@@ -2160,9 +2160,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct VoteProposal {
+    pub struct VoteProposal<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
@@ -2225,11 +2225,11 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct RevealPk {
+    pub struct RevealPk<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// A public key to be revealed on-chain
-        pub public_key: WalletPublicKey,
+        pub public_key: C::PublicKey,
     }
 
     impl Args for RevealPk {
@@ -2247,9 +2247,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposal {
+    pub struct QueryProposal<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
     }
@@ -2269,9 +2269,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposalResult {
+    pub struct QueryProposalResult<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// Flag if proposal result should be run on offline data
@@ -2320,9 +2320,9 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters {
+    pub struct QueryProtocolParameters<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
     }
 
     impl Args for QueryProtocolParameters {
@@ -2339,14 +2339,14 @@ pub mod args {
 
     /// Withdraw arguments
     #[derive(Clone, Debug)]
-    pub struct Withdraw {
+    pub struct Withdraw<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Validator address
-        pub validator: WalletAddress,
+        pub validator: C::Address,
         /// Source address for withdrawing from delegations. For withdrawing
         /// from self-bonds, the validator is also the source
-        pub source: Option<WalletAddress>,
+        pub source: Option<C::Address>,
     }
 
     impl Args for Withdraw {
@@ -2374,11 +2374,11 @@ pub mod args {
 
     /// Query asset conversions
     #[derive(Clone, Debug)]
-    pub struct QueryConversions {
+    pub struct QueryConversions<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of a token
-        pub token: Option<WalletAddress>,
+        pub token: Option<C::Address>,
         /// Epoch of the asset
         pub epoch: Option<Epoch>,
     }
@@ -2412,13 +2412,13 @@ pub mod args {
 
     /// Query token balance(s)
     #[derive(Clone, Debug)]
-    pub struct QueryBalance {
+    pub struct QueryBalance<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of an owner
-        pub owner: Option<WalletBalanceOwner>,
+        pub owner: Option<C::BalanceOwner>,
         /// Address of a token
-        pub token: Option<WalletAddress>,
+        pub token: Option<C::Address>,
         /// Whether not to convert balances
         pub no_conversions: bool,
         /// Sub prefix of an account
@@ -2468,13 +2468,13 @@ pub mod args {
 
     /// Query historical transfer(s)
     #[derive(Clone, Debug)]
-    pub struct QueryTransfers {
+    pub struct QueryTransfers<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of an owner
-        pub owner: Option<WalletBalanceOwner>,
+        pub owner: Option<C::BalanceOwner>,
         /// Address of a token
-        pub token: Option<WalletAddress>,
+        pub token: Option<C::Address>,
     }
 
     impl Args for QueryTransfers {
@@ -2502,13 +2502,13 @@ pub mod args {
 
     /// Query PoS bond(s)
     #[derive(Clone, Debug)]
-    pub struct QueryBonds {
+    pub struct QueryBonds<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of an owner
-        pub owner: Option<WalletAddress>,
+        pub owner: Option<C::Address>,
         /// Address of a validator
-        pub validator: Option<WalletAddress>,
+        pub validator: Option<C::Address>,
     }
 
     impl Args for QueryBonds {
@@ -2540,11 +2540,11 @@ pub mod args {
 
     /// Query PoS bonded stake
     #[derive(Clone, Debug)]
-    pub struct QueryBondedStake {
+    pub struct QueryBondedStake<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of a validator
-        pub validator: Option<WalletAddress>,
+        pub validator: Option<C::Address>,
         /// Epoch in which to find bonded stake
         pub epoch: Option<Epoch>,
     }
@@ -2575,11 +2575,11 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     /// Commission rate change args
-    pub struct TxCommissionRateChange {
+    pub struct TxCommissionRateChange<C: NamadaTypes = CliTypes> {
         /// Common tx arguments
-        pub tx: Tx,
+        pub tx: Tx<C>,
         /// Validator address (should be self)
-        pub validator: WalletAddress,
+        pub validator: C::Address,
         /// Value to which the tx changes the commission rate
         pub rate: Decimal,
     }
@@ -2611,11 +2611,11 @@ pub mod args {
 
     /// Query PoS commission rate
     #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate {
+    pub struct QueryCommissionRate<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of a validator
-        pub validator: WalletAddress,
+        pub validator: C::Address,
         /// Epoch in which to find commission rate
         pub epoch: Option<Epoch>,
     }
@@ -2646,11 +2646,11 @@ pub mod args {
 
     /// Query PoS slashes
     #[derive(Clone, Debug)]
-    pub struct QuerySlashes {
+    pub struct QuerySlashes<C: NamadaTypes = CliTypes> {
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
         /// Address of a validator
-        pub validator: Option<WalletAddress>,
+        pub validator: Option<C::Address>,
     }
 
     impl Args for QuerySlashes {
@@ -2670,11 +2670,11 @@ pub mod args {
     }
     /// Query the raw bytes of given storage key
     #[derive(Clone, Debug)]
-    pub struct QueryRawBytes {
+    pub struct QueryRawBytes<C: NamadaTypes = CliTypes> {
         /// The storage key to query
         pub storage_key: storage::Key,
         /// Common query args
-        pub query: Query,
+        pub query: Query<C>,
     }
 
     impl Args for QueryRawBytes {
@@ -2689,9 +2689,66 @@ pub mod args {
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
     }
+
+    /// Abstraction of types being used in Namada
+    pub trait NamadaTypes: Clone + std::fmt::Debug {
+        type Address: Clone + std::fmt::Debug;
+        type Keypair: Clone + std::fmt::Debug;
+        type TendermintAddress: Clone + std::fmt::Debug;
+        type ViewingKey: Clone + std::fmt::Debug;
+        type BalanceOwner: Clone + std::fmt::Debug;
+        type PublicKey: Clone + std::fmt::Debug;
+        type TransferSource: Clone + std::fmt::Debug;
+        type TransferTarget: Clone + std::fmt::Debug;
+    }
+
+    /// The concrete types being used in Namada SDK
+    #[derive(Clone, Debug)]
+    pub struct SdkTypes;
+
+    impl NamadaTypes for SdkTypes {
+        type Address = Address;
+
+        type Keypair = common::SecretKey;
+
+        type TendermintAddress = ();
+
+        type ViewingKey = namada::types::masp::ExtendedViewingKey;
+
+        type BalanceOwner = namada::types::masp::BalanceOwner;
+
+        type PublicKey = common::PublicKey;
+
+        type TransferSource = namada::types::masp::TransferSource;
+
+        type TransferTarget = namada::types::masp::TransferTarget;
+    }
+
+    /// The concrete types being used in the CLI
+    #[derive(Clone, Debug)]
+    pub struct CliTypes;
+
+    impl NamadaTypes for CliTypes {
+        type Address = WalletAddress;
+
+        type Keypair = WalletKeypair;
+
+        type TendermintAddress = TendermintAddress;
+
+        type ViewingKey = WalletViewingKey;
+
+        type BalanceOwner = WalletBalanceOwner;
+
+        type PublicKey = WalletPublicKey;
+
+        type TransferSource = WalletTransferSource;
+
+        type TransferTarget = WalletTransferTarget;
+    }
+    
     /// Common transaction arguments
     #[derive(Clone, Debug)]
-    pub struct Tx {
+    pub struct Tx<C: NamadaTypes = CliTypes> {
         /// Simulate applying the transaction
         pub dry_run: bool,
         /// Submit the transaction even if it doesn't pass client checks
@@ -2699,20 +2756,20 @@ pub mod args {
         /// Do not wait for the transaction to be added to the blockchain
         pub broadcast_only: bool,
         /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
+        pub ledger_address: C::TendermintAddress,
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
         /// The amount being payed to include the transaction
         pub fee_amount: token::Amount,
         /// The token in which the fee is being paid
-        pub fee_token: WalletAddress,
+        pub fee_token: C::Address,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
         /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
+        pub signing_key: Option<C::Keypair>,
         /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
+        pub signer: Option<C::Address>,
     }
 
     impl Args for Tx {
@@ -2795,9 +2852,9 @@ pub mod args {
 
     /// Common query arguments
     #[derive(Clone, Debug)]
-    pub struct Query {
+    pub struct Query<C: NamadaTypes = CliTypes> {
         /// The address of the ledger node as host:port
-        pub ledger_address: TendermintAddress,
+        pub ledger_address: C::TendermintAddress,
     }
 
     impl Args for Query {
@@ -2886,11 +2943,11 @@ pub mod args {
 
     /// MASP generate payment address arguments
     #[derive(Clone, Debug)]
-    pub struct MaspPayAddrGen {
+    pub struct MaspPayAddrGen<C: NamadaTypes = CliTypes> {
         /// Key alias
         pub alias: String,
         /// Viewing key
-        pub viewing_key: WalletViewingKey,
+        pub viewing_key: C::ViewingKey,
         /// Pin
         pub pin: bool,
     }
