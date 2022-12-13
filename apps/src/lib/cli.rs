@@ -1694,6 +1694,15 @@ pub mod args {
         pub tx_hash: String,
     }
 
+    impl QueryResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
+            QueryResult::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                tx_hash: self.tx_hash,
+            }
+        }
+    }
+
     impl Args for QueryResult {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -1719,6 +1728,16 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
+    }
+
+    impl TxCustom<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+            TxCustom::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                code_path: self.code_path,
+                data_path: self.data_path,
+            }
+        }
     }
 
     impl Args for TxCustom {
@@ -1763,6 +1782,19 @@ pub mod args {
         pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
+    }
+
+    impl TxTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+            TxTransfer::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get_cached(&self.source),
+                target: ctx.get(&self.target),
+                token: ctx.get(&self.token),
+                sub_prefix: self.sub_prefix,
+                amount: self.amount,
+            }
+        }
     }
 
     impl Args for TxTransfer {
@@ -1822,6 +1854,23 @@ pub mod args {
         pub timeout_height: Option<u64>,
         /// Timeout timestamp offset
         pub timeout_sec_offset: Option<u64>,
+    }
+
+    impl TxIbcTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+            TxIbcTransfer::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                receiver: self.receiver,
+                token: ctx.get(&self.token),
+                sub_prefix: self.sub_prefix,
+                amount: self.amount,
+                port_id: self.port_id,
+                channel_id: self.channel_id,
+                timeout_height: self.timeout_height,
+                timeout_sec_offset: self.timeout_sec_offset,
+            }
+        }
     }
 
     impl Args for TxIbcTransfer {
@@ -1886,6 +1935,17 @@ pub mod args {
         pub public_key: C::PublicKey,
     }
 
+    impl TxInitAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+            TxInitAccount::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                vp_code_path: self.vp_code_path,
+                public_key: ctx.get_cached(&self.public_key),
+            }
+        }
+    }
+
     impl Args for TxInitAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -1930,6 +1990,23 @@ pub mod args {
         pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
         pub unsafe_dont_encrypt: bool,
+    }
+
+    impl TxInitValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+            TxInitValidator::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                source: ctx.get(&self.source),
+                scheme: self.scheme,
+                account_key: self.account_key.map(|x| ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
+                protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
+                commission_rate: self.commission_rate,
+                max_commission_rate_change: self.max_commission_rate_change,
+                validator_vp_code_path: self.validator_vp_code_path,
+                unsafe_dont_encrypt: self.unsafe_dont_encrypt,
+            }
+        }
     }
 
     impl Args for TxInitValidator {
@@ -2014,6 +2091,16 @@ pub mod args {
         pub addr: C::Address,
     }
 
+    impl TxUpdateVp<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
+            TxUpdateVp::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                vp_code_path: self.vp_code_path,
+                addr: ctx.get(&self.addr),
+            }
+        }
+    }
+
     impl Args for TxUpdateVp {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -2054,6 +2141,17 @@ pub mod args {
         pub source: Option<C::Address>,
     }
 
+    impl Bond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+            Bond::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                amount: self.amount,
+                source: self.source.map(|x| ctx.get(&x)),
+            }
+        }
+    }
+
     impl Args for Bond {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -2091,6 +2189,17 @@ pub mod args {
         /// Source address for unbonding from delegations. For unbonding from
         /// self-bonds, the validator is also the source
         pub source: Option<C::Address>,
+    }
+
+    impl Unbond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+            Unbond::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                amount: self.amount,
+                source: self.source.map(|x| ctx.get(&x)),
+            }
+        }
     }
 
     impl Args for Unbond {
@@ -2133,6 +2242,16 @@ pub mod args {
         pub offline: bool,
     }
 
+    impl InitProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
+            InitProposal::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                proposal_data: self.proposal_data,
+                offline: self.offline,
+            }
+        }
+    }
+
     impl Args for InitProposal {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -2171,6 +2290,18 @@ pub mod args {
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
+    }
+
+    impl VoteProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
+            VoteProposal::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                vote: self.vote,
+                offline: self.offline,
+                proposal_data: self.proposal_data,
+            }
+        }
     }
 
     impl Args for VoteProposal {
@@ -2232,6 +2363,15 @@ pub mod args {
         pub public_key: C::PublicKey,
     }
 
+    impl RevealPk<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+            RevealPk::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                public_key: ctx.get_cached(&self.public_key),
+            }
+        }
+    }
+
     impl Args for RevealPk {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
@@ -2252,6 +2392,15 @@ pub mod args {
         pub query: Query<C>,
         /// Proposal id
         pub proposal_id: Option<u64>,
+    }
+
+    impl QueryProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
+            QueryProposal::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+            }
+        }
     }
 
     impl Args for QueryProposal {
@@ -2278,6 +2427,17 @@ pub mod args {
         pub offline: bool,
         /// The folder containing the proposal and votes
         pub proposal_folder: Option<PathBuf>,
+    }
+
+    impl QueryProposalResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
+            QueryProposalResult::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                offline: self.offline,
+                proposal_folder: self.proposal_folder,
+            }
+        }
     }
 
     impl Args for QueryProposalResult {
@@ -2325,6 +2485,14 @@ pub mod args {
         pub query: Query<C>,
     }
 
+    impl QueryProtocolParameters<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProtocolParameters<SdkTypes> {
+            QueryProtocolParameters::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+            }
+        }
+    }
+
     impl Args for QueryProtocolParameters {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -2347,6 +2515,16 @@ pub mod args {
         /// Source address for withdrawing from delegations. For withdrawing
         /// from self-bonds, the validator is also the source
         pub source: Option<C::Address>,
+    }
+
+    impl Withdraw<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+            Withdraw::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                source: self.source.map(|x| ctx.get(&x)),
+            }
+        }
     }
 
     impl Args for Withdraw {
@@ -2381,6 +2559,16 @@ pub mod args {
         pub token: Option<C::Address>,
         /// Epoch of the asset
         pub epoch: Option<Epoch>,
+    }
+
+    impl QueryConversions<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
+            QueryConversions::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                token: self.token.map(|x| ctx.get(&x)),
+                epoch: self.epoch,
+            }
+        }
     }
 
     impl Args for QueryConversions {
@@ -2423,6 +2611,18 @@ pub mod args {
         pub no_conversions: bool,
         /// Sub prefix of an account
         pub sub_prefix: Option<String>,
+    }
+
+    impl QueryBalance<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+            QueryBalance::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get_cached(&x)),
+                token: self.token.map(|x| ctx.get(&x)),
+                no_conversions: self.no_conversions,
+                sub_prefix: self.sub_prefix,
+            }
+        }
     }
 
     impl Args for QueryBalance {
@@ -2477,6 +2677,16 @@ pub mod args {
         pub token: Option<C::Address>,
     }
 
+    impl QueryTransfers<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+            QueryTransfers::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get_cached(&x)),
+                token: self.token.map(|x| ctx.get(&x)),
+            }
+        }
+    }
+
     impl Args for QueryTransfers {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -2509,6 +2719,16 @@ pub mod args {
         pub owner: Option<C::Address>,
         /// Address of a validator
         pub validator: Option<C::Address>,
+    }
+
+    impl QueryBonds<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+            QueryBonds::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: self.owner.map(|x| ctx.get(&x)),
+                validator: self.validator.map(|x| ctx.get(&x)),
+            }
+        }
     }
 
     impl Args for QueryBonds {
@@ -2549,6 +2769,16 @@ pub mod args {
         pub epoch: Option<Epoch>,
     }
 
+    impl QueryBondedStake<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
+            QueryBondedStake::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: self.validator.map(|x| ctx.get(&x)),
+                epoch: self.epoch,
+            }
+        }
+    }
+
     impl Args for QueryBondedStake {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -2582,6 +2812,16 @@ pub mod args {
         pub validator: C::Address,
         /// Value to which the tx changes the commission rate
         pub rate: Decimal,
+    }
+
+    impl TxCommissionRateChange<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
+            TxCommissionRateChange::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                rate: self.rate,
+            }
+        }
     }
 
     impl Args for TxCommissionRateChange {
@@ -2620,6 +2860,16 @@ pub mod args {
         pub epoch: Option<Epoch>,
     }
 
+    impl QueryCommissionRate<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
+            QueryCommissionRate::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                epoch: self.epoch,
+            }
+        }
+    }
+
     impl Args for QueryCommissionRate {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -2653,6 +2903,15 @@ pub mod args {
         pub validator: Option<C::Address>,
     }
 
+    impl QuerySlashes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
+            QuerySlashes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: self.validator.map(|x| ctx.get(&x)),
+            }
+        }
+    }
+
     impl Args for QuerySlashes {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -2675,6 +2934,15 @@ pub mod args {
         pub storage_key: storage::Key,
         /// Common query args
         pub query: Query<C>,
+    }
+
+    impl QueryRawBytes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
+            QueryRawBytes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                storage_key: self.storage_key,
+            }
+        }
     }
 
     impl Args for QueryRawBytes {
@@ -2772,6 +3040,23 @@ pub mod args {
         pub signer: Option<C::Address>,
     }
 
+    impl Tx<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+            Tx::<SdkTypes> {
+                dry_run: self.dry_run,
+                force: self.force,
+                broadcast_only: self.broadcast_only,
+                ledger_address: (),
+                initialized_account_alias: self.initialized_account_alias,
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                gas_limit: self.gas_limit,
+                signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                signer: self.signer.map(|x| ctx.get(&x)),
+            }
+        }
+    }
+
     impl Args for Tx {
         fn def(app: App) -> App {
             app.arg(
@@ -2855,6 +3140,14 @@ pub mod args {
     pub struct Query<C: NamadaTypes = CliTypes> {
         /// The address of the ledger node as host:port
         pub ledger_address: C::TendermintAddress,
+    }
+
+    impl Query<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
+            Query::<SdkTypes> {
+                ledger_address: (),
+            }
+        }
     }
 
     impl Args for Query {
@@ -2950,6 +3243,16 @@ pub mod args {
         pub viewing_key: C::ViewingKey,
         /// Pin
         pub pin: bool,
+    }
+
+    impl MaspPayAddrGen<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+            MaspPayAddrGen::<SdkTypes> {
+                alias: self.alias,
+                viewing_key: ctx.get_cached(&self.viewing_key),
+                pin: self.pin,
+            }
+        }
     }
 
     impl Args for MaspPayAddrGen {
