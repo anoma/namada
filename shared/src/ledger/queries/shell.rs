@@ -206,11 +206,7 @@ where
             let proof = if request.prove {
                 let proof = ctx
                     .storage
-                    .get_existence_proof(
-                        &storage_key,
-                        value.clone().into(),
-                        request.height,
-                    )
+                    .get_existence_proof(&storage_key, &value, request.height)
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -265,7 +261,7 @@ where
         for PrefixValue { key, value } in &data {
             let mut proof: crate::tendermint::merkle::proof::Proof = ctx
                 .storage
-                .get_existence_proof(key, value.clone().into(), request.height)
+                .get_existence_proof(key, value, request.height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }

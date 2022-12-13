@@ -15,6 +15,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
+use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -624,7 +625,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: crate::types::storage::MerkleValue,
+        value: StorageBytes,
         height: BlockHeight,
     ) -> Result<Proof> {
         use std::array;

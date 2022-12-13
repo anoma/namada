@@ -356,27 +356,6 @@ impl FromStr for Key {
     }
 }
 
-/// An enum representing the different types of values
-/// that can be passed into Namada's storage.
-///
-/// This is a multi-store organized as
-/// several Merkle trees, each of which is
-/// responsible for understanding how to parse
-/// this value.
-pub enum MerkleValue {
-    /// raw bytes
-    Bytes(Vec<u8>),
-}
-
-impl<T> From<T> for MerkleValue
-where
-    T: AsRef<[u8]>,
-{
-    fn from(bytes: T) -> Self {
-        Self::Bytes(bytes.as_ref().to_owned())
-    }
-}
-
 /// Storage keys that are utf8 encoded strings
 #[derive(Eq, PartialEq, Copy, Clone, Hash)]
 pub struct StringKey {
