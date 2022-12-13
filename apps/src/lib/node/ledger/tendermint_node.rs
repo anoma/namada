@@ -458,6 +458,12 @@ async fn write_tm_genesis(
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
     #[cfg(not(feature = "abcipp"))]
     {
+        // NOTE(feature = "abcipp"): this setting of the block consensus
+        // parameters is guarded for the time being as it is different for
+        // Tendermint v0.37 to the ABCI++-compatible tendermint-rs we were using
+        // previously. Once ABCI++ is finished, hopefully the layout of
+        // these block consensus parameters will be similar if not the
+        // same.
         genesis.consensus_params.block = Some(block::Size {
             // maximum size of a serialized Tendermint block
             // cannot go over 100 MiB
