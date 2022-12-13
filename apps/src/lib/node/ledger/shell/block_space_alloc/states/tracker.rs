@@ -6,9 +6,36 @@ use std::marker::PhantomData;
 use super::super::BlockSpaceAllocator;
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    EncryptedTxBatchAllocator, FillingRemainingSpace, TryAlloc,
-    WithEncryptedTxs, WithoutEncryptedTxs,
+    BuildingProtocolTxBatch, FillingRemainingSpace, TryAlloc, WithEncryptedTxs,
+    WithoutEncryptedTxs,
 };
+
+/// A tracker for the state of a decrypted txs allocator.
+#[allow(dead_code)]
+pub const DECRYPTED: Tracker<BuildingDecryptedTxBatch> = Tracker::new();
+
+/// A tracker for the state of a protocol txs allocator.
+#[allow(dead_code)]
+pub const PROTOCOL: Tracker<BuildingProtocolTxBatch> = Tracker::new();
+
+/// A tracker for the state of an allocator with encrypted txs.
+///
+/// Encrypted txs can be allocated in a block.
+#[allow(dead_code)]
+pub const WITH_ENCRYPTED: Tracker<BuildingEncryptedTxBatch<WithEncryptedTxs>> =
+    Tracker::new();
+
+/// A tracker for the state of an allocator without encrypted txs.
+///
+/// No encrypted txs will be allowed in a block.
+#[allow(dead_code)]
+pub const WITHOUT_ENCRYPTED: Tracker<
+    BuildingEncryptedTxBatch<WithoutEncryptedTxs>,
+> = Tracker::new();
+
+/// A tracker for the state of a remaining txs allocator.
+#[allow(dead_code)]
+pub const REMAINING: Tracker<FillingRemainingSpace> = Tracker::new();
 
 /// Utility to dynamically track the state of a [`BlockSpaceAllocator`].
 #[derive(Debug, Copy, Clone, Hash)]
