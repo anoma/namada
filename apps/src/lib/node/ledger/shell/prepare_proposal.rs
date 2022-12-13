@@ -1,7 +1,5 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-mod block_space_alloc;
-
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
 use namada::ledger::queries_ext::QueriesExt;
@@ -17,13 +15,13 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::block_space_alloc::states::{
+use super::super::*;
+use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, FillingRemainingSpace, NextState,
     NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
 };
-use self::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
-use super::super::*;
+use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
