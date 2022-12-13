@@ -184,6 +184,7 @@ pub struct Tracker<S> {
 
 impl<S> Tracker<S> {
     /// Return a new [`Tracker`] for a state `S`.
+    #[inline]
     pub const fn new() -> Self {
         Self {
             _marker: PhantomData,
@@ -196,6 +197,7 @@ where
     A: TryAlloc + 'static,
     B: TryAlloc + 'static,
 {
+    #[inline]
     fn eq(&self, _: &Tracker<B>) -> bool {
         TypeId::of::<A>() == TypeId::of::<B>()
     }
