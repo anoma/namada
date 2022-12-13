@@ -7,6 +7,8 @@ use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
+use super::block_space_alloc::states::tracker::CurrentState;
+use super::block_space_alloc::BlockSpaceAllocator;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
@@ -204,11 +206,12 @@ where
     /// function returns.
     #[cfg(not(feature = "abcipp"))]
     pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
+        let mut alloc = BlockSpaceAllocator::from(&self.storage);
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
-                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter)
+                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter, &mut alloc)
             })
             .collect();
         tx_results
@@ -301,10 +304,12 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn check_proposal_tx<'a>(
+    // TODO: return Result<TxResult, AllocFailure>
+    pub(crate) fn check_proposal_tx<'a, A: CurrentState>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+        _alloc: &mut A,
         #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
