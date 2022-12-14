@@ -349,7 +349,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2022-05-20]
+        nightly_version: [nightly-2022-11-03]
         mold_version: [1.7.0]
         make:
           - name: e2e
