@@ -612,7 +612,7 @@ pub mod cmds {
 
     /// Generate a payment address from a viewing key or payment address
     #[derive(Clone, Debug)]
-    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen);
+    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen<args::CliTypes>);
 
     impl SubCmd for MaspGenPayAddr {
         const CMD: &'static str = "gen-addr";
@@ -628,7 +628,7 @@ pub mod cmds {
                 .about(
                     "Generates a payment address from the given spending key",
                 )
-                .add_args::<args::MaspPayAddrGen>()
+                .add_args::<args::MaspPayAddrGen::<args::CliTypes>>()
         }
     }
 
@@ -853,7 +853,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryResult(pub args::QueryResult);
+    pub struct QueryResult(pub args::QueryResult::<args::CliTypes>);
 
     impl SubCmd for QueryResult {
         const CMD: &'static str = "tx-result";
@@ -867,12 +867,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the result of a transaction.")
-                .add_args::<args::QueryResult>()
+                .add_args::<args::QueryResult::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposal(pub args::QueryProposal);
+    pub struct QueryProposal(pub args::QueryProposal::<args::CliTypes>);
 
     impl SubCmd for QueryProposal {
         const CMD: &'static str = "query-proposal";
@@ -889,12 +889,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query proposals.")
-                .add_args::<args::QueryProposal>()
+                .add_args::<args::QueryProposal::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposalResult(pub args::QueryProposalResult);
+    pub struct QueryProposalResult(pub args::QueryProposalResult::<args::CliTypes>);
 
     impl SubCmd for QueryProposalResult {
         const CMD: &'static str = "query-proposal-result";
@@ -911,12 +911,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query proposals result.")
-                .add_args::<args::QueryProposalResult>()
+                .add_args::<args::QueryProposalResult::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters(pub args::QueryProtocolParameters);
+    pub struct QueryProtocolParameters(pub args::QueryProtocolParameters::<args::CliTypes>);
 
     impl SubCmd for QueryProtocolParameters {
         const CMD: &'static str = "query-protocol-parameters";
@@ -935,12 +935,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query protocol parameters.")
-                .add_args::<args::QueryProtocolParameters>()
+                .add_args::<args::QueryProtocolParameters::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxCustom(pub args::TxCustom);
+    pub struct TxCustom(pub args::TxCustom::<args::CliTypes>);
 
     impl SubCmd for TxCustom {
         const CMD: &'static str = "tx";
@@ -954,12 +954,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a transaction with custom WASM code.")
-                .add_args::<args::TxCustom>()
+                .add_args::<args::TxCustom::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxTransfer(pub args::TxTransfer);
+    pub struct TxTransfer(pub args::TxTransfer::<crate::cli::args::CliTypes>);
 
     impl SubCmd for TxTransfer {
         const CMD: &'static str = "transfer";
@@ -973,12 +973,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a signed transfer transaction.")
-                .add_args::<args::TxTransfer>()
+                .add_args::<args::TxTransfer<crate::cli::args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer(pub args::TxIbcTransfer);
+    pub struct TxIbcTransfer(pub args::TxIbcTransfer::<args::CliTypes>);
 
     impl SubCmd for TxIbcTransfer {
         const CMD: &'static str = "ibc-transfer";
@@ -992,12 +992,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Send a signed IBC transfer transaction.")
-                .add_args::<args::TxIbcTransfer>()
+                .add_args::<args::TxIbcTransfer::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp);
+    pub struct TxUpdateVp(pub args::TxUpdateVp::<args::CliTypes>);
 
     impl SubCmd for TxUpdateVp {
         const CMD: &'static str = "update";
@@ -1014,12 +1014,12 @@ pub mod cmds {
                     "Send a signed transaction to update account's validity \
                      predicate.",
                 )
-                .add_args::<args::TxUpdateVp>()
+                .add_args::<args::TxUpdateVp::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitAccount(pub args::TxInitAccount);
+    pub struct TxInitAccount(pub args::TxInitAccount::<args::CliTypes>);
 
     impl SubCmd for TxInitAccount {
         const CMD: &'static str = "init-account";
@@ -1036,12 +1036,12 @@ pub mod cmds {
                     "Send a signed transaction to create a new established \
                      account.",
                 )
-                .add_args::<args::TxInitAccount>()
+                .add_args::<args::TxInitAccount::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitValidator(pub args::TxInitValidator);
+    pub struct TxInitValidator(pub args::TxInitValidator::<args::CliTypes>);
 
     impl SubCmd for TxInitValidator {
         const CMD: &'static str = "init-validator";
@@ -1058,12 +1058,12 @@ pub mod cmds {
                     "Send a signed transaction to create a new validator \
                      account.",
                 )
-                .add_args::<args::TxInitValidator>()
+                .add_args::<args::TxInitValidator::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Bond(pub args::Bond);
+    pub struct Bond(pub args::Bond::<args::CliTypes>);
 
     impl SubCmd for Bond {
         const CMD: &'static str = "bond";
@@ -1077,12 +1077,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Bond tokens in PoS system.")
-                .add_args::<args::Bond>()
+                .add_args::<args::Bond::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Unbond(pub args::Unbond);
+    pub struct Unbond(pub args::Unbond::<args::CliTypes>);
 
     impl SubCmd for Unbond {
         const CMD: &'static str = "unbond";
@@ -1096,12 +1096,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Unbond tokens from a PoS bond.")
-                .add_args::<args::Unbond>()
+                .add_args::<args::Unbond::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct Withdraw(pub args::Withdraw);
+    pub struct Withdraw(pub args::Withdraw::<args::CliTypes>);
 
     impl SubCmd for Withdraw {
         const CMD: &'static str = "withdraw";
@@ -1115,12 +1115,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Withdraw tokens from previously unbonded PoS bond.")
-                .add_args::<args::Withdraw>()
+                .add_args::<args::Withdraw::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEpoch(pub args::Query);
+    pub struct QueryEpoch(pub args::Query::<args::CliTypes>);
 
     impl SubCmd for QueryEpoch {
         const CMD: &'static str = "epoch";
@@ -1134,12 +1134,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryConversions(pub args::QueryConversions);
+    pub struct QueryConversions(pub args::QueryConversions::<args::CliTypes>);
 
     impl SubCmd for QueryConversions {
         const CMD: &'static str = "conversions";
@@ -1153,12 +1153,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query currently applicable conversions.")
-                .add_args::<args::QueryConversions>()
+                .add_args::<args::QueryConversions::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBlock(pub args::Query);
+    pub struct QueryBlock(pub args::Query::<args::CliTypes>);
 
     impl SubCmd for QueryBlock {
         const CMD: &'static str = "block";
@@ -1172,12 +1172,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the last committed block.")
-                .add_args::<args::Query>()
+                .add_args::<args::Query::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBalance(pub args::QueryBalance);
+    pub struct QueryBalance(pub args::QueryBalance::<args::CliTypes>);
 
     impl SubCmd for QueryBalance {
         const CMD: &'static str = "balance";
@@ -1191,12 +1191,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query balance(s) of tokens.")
-                .add_args::<args::QueryBalance>()
+                .add_args::<args::QueryBalance::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBonds(pub args::QueryBonds);
+    pub struct QueryBonds(pub args::QueryBonds::<args::CliTypes>);
 
     impl SubCmd for QueryBonds {
         const CMD: &'static str = "bonds";
@@ -1210,12 +1210,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS bond(s).")
-                .add_args::<args::QueryBonds>()
+                .add_args::<args::QueryBonds::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryBondedStake(pub args::QueryBondedStake);
+    pub struct QueryBondedStake(pub args::QueryBondedStake::<args::CliTypes>);
 
     impl SubCmd for QueryBondedStake {
         const CMD: &'static str = "bonded-stake";
@@ -1229,12 +1229,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS bonded stake.")
-                .add_args::<args::QueryBondedStake>()
+                .add_args::<args::QueryBondedStake::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryTransfers(pub args::QueryTransfers);
+    pub struct QueryTransfers(pub args::QueryTransfers::<args::CliTypes>);
 
     impl SubCmd for QueryTransfers {
         const CMD: &'static str = "show-transfers";
@@ -1248,12 +1248,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the accepted transfers to date.")
-                .add_args::<args::QueryTransfers>()
+                .add_args::<args::QueryTransfers::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate(pub args::QueryCommissionRate);
+    pub struct QueryCommissionRate(pub args::QueryCommissionRate::<args::CliTypes>);
 
     impl SubCmd for QueryCommissionRate {
         const CMD: &'static str = "commission-rate";
@@ -1267,12 +1267,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query commission rate.")
-                .add_args::<args::QueryCommissionRate>()
+                .add_args::<args::QueryCommissionRate::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySlashes(pub args::QuerySlashes);
+    pub struct QuerySlashes(pub args::QuerySlashes::<args::CliTypes>);
 
     impl SubCmd for QuerySlashes {
         const CMD: &'static str = "slashes";
@@ -1289,12 +1289,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query PoS applied slashes.")
-                .add_args::<args::QuerySlashes>()
+                .add_args::<args::QuerySlashes::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRawBytes(pub args::QueryRawBytes);
+    pub struct QueryRawBytes(pub args::QueryRawBytes::<args::CliTypes>);
 
     impl SubCmd for QueryRawBytes {
         const CMD: &'static str = "query-bytes";
@@ -1308,12 +1308,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the raw bytes of a given storage key")
-                .add_args::<args::QueryRawBytes>()
+                .add_args::<args::QueryRawBytes::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxInitProposal(pub args::InitProposal);
+    pub struct TxInitProposal(pub args::InitProposal::<args::CliTypes>);
 
     impl SubCmd for TxInitProposal {
         const CMD: &'static str = "init-proposal";
@@ -1330,12 +1330,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Create a new proposal.")
-                .add_args::<args::InitProposal>()
+                .add_args::<args::InitProposal::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxVoteProposal(pub args::VoteProposal);
+    pub struct TxVoteProposal(pub args::VoteProposal::<args::CliTypes>);
 
     impl SubCmd for TxVoteProposal {
         const CMD: &'static str = "vote-proposal";
@@ -1352,12 +1352,12 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Vote a proposal.")
-                .add_args::<args::VoteProposal>()
+                .add_args::<args::VoteProposal::<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxRevealPk(pub args::RevealPk);
+    pub struct TxRevealPk(pub args::RevealPk::<args::CliTypes>);
 
     impl SubCmd for TxRevealPk {
         const CMD: &'static str = "reveal-pk";
@@ -1382,7 +1382,7 @@ pub mod cmds {
                      signature verification on transactions authorized by \
                      this account.",
                 )
-                .add_args::<args::RevealPk>()
+                .add_args::<args::RevealPk::<args::CliTypes>>()
         }
     }
 
@@ -1687,7 +1687,7 @@ pub mod args {
 
     /// Transaction associated results arguments
     #[derive(Clone, Debug)]
-    pub struct QueryResult<C: NamadaTypes = CliTypes> {
+    pub struct QueryResult<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Hash of transaction to lookup
@@ -1695,7 +1695,7 @@ pub mod args {
     }
 
     impl QueryResult<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
             QueryResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tx_hash: self.tx_hash,
@@ -1703,7 +1703,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryResult {
+    impl Args for QueryResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let tx_hash = TX_HASH.parse(matches);
@@ -1711,7 +1711,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query::<CliTypes>>().arg(
                 TX_HASH
                     .def()
                     .about("The hash of the transaction being looked up."),
@@ -1721,7 +1721,7 @@ pub mod args {
 
     /// Custom transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxCustom<C: NamadaTypes = CliTypes> {
+    pub struct TxCustom<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Path to the tx WASM code file
@@ -1731,7 +1731,7 @@ pub mod args {
     }
 
     impl TxCustom<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 code_path: self.code_path,
@@ -1740,7 +1740,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxCustom {
+    impl Args for TxCustom<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
@@ -1753,7 +1753,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(
                     CODE_PATH
                         .def()
@@ -1769,7 +1769,7 @@ pub mod args {
 
     /// Transfer transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxTransfer<C: NamadaTypes = CliTypes> {
+    pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Transfer source address
@@ -1785,7 +1785,7 @@ pub mod args {
     }
 
     impl TxTransfer<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
             TxTransfer::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get_cached(&self.source),
@@ -1797,7 +1797,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxTransfer {
+    impl Args for TxTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = TRANSFER_SOURCE.parse(matches);
@@ -1816,7 +1816,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(TRANSFER_SOURCE.def().about(
                     "The source account address. The source's key may be used \
                      to produce the signature.",
@@ -1833,7 +1833,7 @@ pub mod args {
 
     /// IBC transfer transaction arguments
     #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer<C: NamadaTypes = CliTypes> {
+    pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Transfer source address
@@ -1857,7 +1857,7 @@ pub mod args {
     }
 
     impl TxIbcTransfer<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
             TxIbcTransfer::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -1873,7 +1873,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxIbcTransfer {
+    impl Args for TxIbcTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
@@ -1900,7 +1900,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account address. The source's key is used to \
                      produce the signature.",
@@ -1924,7 +1924,7 @@ pub mod args {
 
     /// Transaction to initialize a new account
     #[derive(Clone, Debug)]
-    pub struct TxInitAccount<C: NamadaTypes = CliTypes> {
+    pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Address of the source account
@@ -1936,7 +1936,7 @@ pub mod args {
     }
 
     impl TxInitAccount<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -1946,7 +1946,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxInitAccount {
+    impl Args for TxInitAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
@@ -1961,7 +1961,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
                 ))
@@ -1979,7 +1979,7 @@ pub mod args {
 
     /// Transaction to initialize a new account
     #[derive(Clone, Debug)]
-    pub struct TxInitValidator<C: NamadaTypes = CliTypes> {
+    pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
         pub tx: Tx<C>,
         pub source: C::Address,
         pub scheme: SchemeType,
@@ -1993,7 +1993,7 @@ pub mod args {
     }
 
     impl TxInitValidator<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             TxInitValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -2009,7 +2009,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxInitValidator {
+    impl Args for TxInitValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
@@ -2037,7 +2037,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(SOURCE.def().about(
                     "The source account's address that signs the transaction.",
                 ))
@@ -2082,7 +2082,7 @@ pub mod args {
 
     /// Transaction to update a VP arguments
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp<C: NamadaTypes = CliTypes> {
+    pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Path to the VP WASM code file
@@ -2092,7 +2092,7 @@ pub mod args {
     }
 
     impl TxUpdateVp<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 vp_code_path: self.vp_code_path,
@@ -2101,7 +2101,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxUpdateVp {
+    impl Args for TxUpdateVp<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH.parse(matches);
@@ -2114,7 +2114,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(
                     CODE_PATH.def().about(
                         "The path to the new validity predicate WASM code.",
@@ -2129,7 +2129,7 @@ pub mod args {
 
     /// Bond arguments
     #[derive(Clone, Debug)]
-    pub struct Bond<C: NamadaTypes = CliTypes> {
+    pub struct Bond<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Validator address
@@ -2142,7 +2142,7 @@ pub mod args {
     }
 
     impl Bond<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
             Bond::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2152,7 +2152,7 @@ pub mod args {
         }
     }
 
-    impl Args for Bond {
+    impl Args for Bond<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2167,7 +2167,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(AMOUNT.def().about("Amount of tokens to stake in a bond."))
                 .arg(SOURCE_OPT.def().about(
@@ -2179,7 +2179,7 @@ pub mod args {
 
     /// Unbond arguments
     #[derive(Clone, Debug)]
-    pub struct Unbond<C: NamadaTypes = CliTypes> {
+    pub struct Unbond<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Validator address
@@ -2192,7 +2192,7 @@ pub mod args {
     }
 
     impl Unbond<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
             Unbond::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2202,7 +2202,7 @@ pub mod args {
         }
     }
 
-    impl Args for Unbond {
+    impl Args for Unbond<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2217,7 +2217,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(
                     AMOUNT
@@ -2233,7 +2233,7 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct InitProposal<C: NamadaTypes = CliTypes> {
+    pub struct InitProposal<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// The proposal file path
@@ -2243,7 +2243,7 @@ pub mod args {
     }
 
     impl InitProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: self.proposal_data,
@@ -2252,7 +2252,7 @@ pub mod args {
         }
     }
 
-    impl Args for InitProposal {
+    impl Args for InitProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
@@ -2266,7 +2266,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(DATA_PATH.def().about(
                     "The data path file (json) that describes the proposal.",
                 ))
@@ -2279,7 +2279,7 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct VoteProposal<C: NamadaTypes = CliTypes> {
+    pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Proposal id
@@ -2293,7 +2293,7 @@ pub mod args {
     }
 
     impl VoteProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
             VoteProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2304,7 +2304,7 @@ pub mod args {
         }
     }
 
-    impl Args for VoteProposal {
+    impl Args for VoteProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2322,7 +2322,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(
                     PROPOSAL_ID_OPT
                         .def()
@@ -2356,7 +2356,7 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct RevealPk<C: NamadaTypes = CliTypes> {
+    pub struct RevealPk<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// A public key to be revealed on-chain
@@ -2364,7 +2364,7 @@ pub mod args {
     }
 
     impl RevealPk<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
             RevealPk::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 public_key: ctx.get_cached(&self.public_key),
@@ -2372,7 +2372,7 @@ pub mod args {
         }
     }
 
-    impl Args for RevealPk {
+    impl Args for RevealPk<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let public_key = PUBLIC_KEY.parse(matches);
@@ -2381,13 +2381,13 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(PUBLIC_KEY.def().about("A public key to reveal."))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposal<C: NamadaTypes = CliTypes> {
+    pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Proposal id
@@ -2395,7 +2395,7 @@ pub mod args {
     }
 
     impl QueryProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
             QueryProposal::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2403,7 +2403,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryProposal {
+    impl Args for QueryProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2412,13 +2412,13 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProposalResult<C: NamadaTypes = CliTypes> {
+    pub struct QueryProposalResult<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Proposal id
@@ -2430,7 +2430,7 @@ pub mod args {
     }
 
     impl QueryProposalResult<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
             QueryProposalResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2440,7 +2440,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryProposalResult {
+    impl Args for QueryProposalResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
@@ -2456,7 +2456,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().about("The proposal identifier."))
                 .arg(
                     PROPOSAL_OFFLINE
@@ -2480,20 +2480,20 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters<C: NamadaTypes = CliTypes> {
+    pub struct QueryProtocolParameters<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
     }
 
     impl QueryProtocolParameters<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProtocolParameters<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryProtocolParameters<SdkTypes> {
             QueryProtocolParameters::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
             }
         }
     }
 
-    impl Args for QueryProtocolParameters {
+    impl Args for QueryProtocolParameters<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
 
@@ -2501,13 +2501,13 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
         }
     }
 
     /// Withdraw arguments
     #[derive(Clone, Debug)]
-    pub struct Withdraw<C: NamadaTypes = CliTypes> {
+    pub struct Withdraw<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Validator address
@@ -2518,7 +2518,7 @@ pub mod args {
     }
 
     impl Withdraw<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
             Withdraw::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2527,7 +2527,7 @@ pub mod args {
         }
     }
 
-    impl Args for Withdraw {
+    impl Args for Withdraw<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2540,7 +2540,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx>()
+            app.add_args::<Tx::<CliTypes>>()
                 .arg(VALIDATOR.def().about("Validator address."))
                 .arg(SOURCE_OPT.def().about(
                     "Source address for withdrawing from delegations. For \
@@ -2552,7 +2552,7 @@ pub mod args {
 
     /// Query asset conversions
     #[derive(Clone, Debug)]
-    pub struct QueryConversions<C: NamadaTypes = CliTypes> {
+    pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of a token
@@ -2562,7 +2562,7 @@ pub mod args {
     }
 
     impl QueryConversions<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
             QueryConversions::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 token: self.token.map(|x| ctx.get(&x)),
@@ -2571,7 +2571,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryConversions {
+    impl Args for QueryConversions<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let token = TOKEN_OPT.parse(matches);
@@ -2584,7 +2584,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(
                     EPOCH
                         .def()
@@ -2600,7 +2600,7 @@ pub mod args {
 
     /// Query token balance(s)
     #[derive(Clone, Debug)]
-    pub struct QueryBalance<C: NamadaTypes = CliTypes> {
+    pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of an owner
@@ -2614,7 +2614,7 @@ pub mod args {
     }
 
     impl QueryBalance<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
             QueryBalance::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
@@ -2625,7 +2625,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryBalance {
+    impl Args for QueryBalance<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
@@ -2642,7 +2642,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(
                     BALANCE_OWNER
                         .def()
@@ -2668,7 +2668,7 @@ pub mod args {
 
     /// Query historical transfer(s)
     #[derive(Clone, Debug)]
-    pub struct QueryTransfers<C: NamadaTypes = CliTypes> {
+    pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of an owner
@@ -2678,7 +2678,7 @@ pub mod args {
     }
 
     impl QueryTransfers<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
             QueryTransfers::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
@@ -2687,7 +2687,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryTransfers {
+    impl Args for QueryTransfers<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
@@ -2700,7 +2700,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(BALANCE_OWNER.def().about(
                     "The account address that queried transfers must involve.",
                 ))
@@ -2712,7 +2712,7 @@ pub mod args {
 
     /// Query PoS bond(s)
     #[derive(Clone, Debug)]
-    pub struct QueryBonds<C: NamadaTypes = CliTypes> {
+    pub struct QueryBonds<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of an owner
@@ -2722,7 +2722,7 @@ pub mod args {
     }
 
     impl QueryBonds<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
             QueryBonds::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get(&x)),
@@ -2731,7 +2731,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryBonds {
+    impl Args for QueryBonds<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = OWNER.parse(matches);
@@ -2744,7 +2744,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(
                     OWNER.def().about(
                         "The owner account address whose bonds to query.",
@@ -2760,7 +2760,7 @@ pub mod args {
 
     /// Query PoS bonded stake
     #[derive(Clone, Debug)]
-    pub struct QueryBondedStake<C: NamadaTypes = CliTypes> {
+    pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of a validator
@@ -2770,7 +2770,7 @@ pub mod args {
     }
 
     impl QueryBondedStake<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
             QueryBondedStake::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self.validator.map(|x| ctx.get(&x)),
@@ -2779,7 +2779,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryBondedStake {
+    impl Args for QueryBondedStake<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2792,7 +2792,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(VALIDATOR_OPT.def().about(
                     "The validator's address whose bonded stake to query.",
                 ))
@@ -2805,7 +2805,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     /// Commission rate change args
-    pub struct TxCommissionRateChange<C: NamadaTypes = CliTypes> {
+    pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Validator address (should be self)
@@ -2815,7 +2815,7 @@ pub mod args {
     }
 
     impl TxCommissionRateChange<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
             TxCommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2824,7 +2824,7 @@ pub mod args {
         }
     }
 
-    impl Args for TxCommissionRateChange {
+    impl Args for TxCommissionRateChange<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2837,7 +2837,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to change.",
                 ))
@@ -2851,7 +2851,7 @@ pub mod args {
 
     /// Query PoS commission rate
     #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate<C: NamadaTypes = CliTypes> {
+    pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of a validator
@@ -2861,7 +2861,7 @@ pub mod args {
     }
 
     impl QueryCommissionRate<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
             QueryCommissionRate::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2870,7 +2870,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryCommissionRate {
+    impl Args for QueryCommissionRate<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR.parse(matches);
@@ -2883,7 +2883,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(VALIDATOR.def().about(
                     "The validator's address whose commission rate to query.",
                 ))
@@ -2896,7 +2896,7 @@ pub mod args {
 
     /// Query PoS slashes
     #[derive(Clone, Debug)]
-    pub struct QuerySlashes<C: NamadaTypes = CliTypes> {
+    pub struct QuerySlashes<C: NamadaTypes = SdkTypes> {
         /// Common query args
         pub query: Query<C>,
         /// Address of a validator
@@ -2904,7 +2904,7 @@ pub mod args {
     }
 
     impl QuerySlashes<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
             QuerySlashes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self.validator.map(|x| ctx.get(&x)),
@@ -2912,7 +2912,7 @@ pub mod args {
         }
     }
 
-    impl Args for QuerySlashes {
+    impl Args for QuerySlashes<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
@@ -2920,7 +2920,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(
+            app.add_args::<Query::<CliTypes>>().arg(
                 VALIDATOR_OPT
                     .def()
                     .about("The validator's address whose slashes to query."),
@@ -2929,7 +2929,7 @@ pub mod args {
     }
     /// Query the raw bytes of given storage key
     #[derive(Clone, Debug)]
-    pub struct QueryRawBytes<C: NamadaTypes = CliTypes> {
+    pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
         /// The storage key to query
         pub storage_key: storage::Key,
         /// Common query args
@@ -2937,7 +2937,7 @@ pub mod args {
     }
 
     impl QueryRawBytes<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
             QueryRawBytes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 storage_key: self.storage_key,
@@ -2945,7 +2945,7 @@ pub mod args {
         }
     }
 
-    impl Args for QueryRawBytes {
+    impl Args for QueryRawBytes<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let storage_key = STORAGE_KEY.parse(matches);
             let query = Query::parse(matches);
@@ -2953,7 +2953,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>()
+            app.add_args::<Query::<CliTypes>>()
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
     }
@@ -3016,7 +3016,7 @@ pub mod args {
     
     /// Common transaction arguments
     #[derive(Clone, Debug)]
-    pub struct Tx<C: NamadaTypes = CliTypes> {
+    pub struct Tx<C: NamadaTypes = SdkTypes> {
         /// Simulate applying the transaction
         pub dry_run: bool,
         /// Submit the transaction even if it doesn't pass client checks
@@ -3041,7 +3041,7 @@ pub mod args {
     }
 
     impl Tx<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
                 force: self.force,
@@ -3057,7 +3057,7 @@ pub mod args {
         }
     }
 
-    impl Args for Tx {
+    impl Args for Tx<CliTypes> {
         fn def(app: App) -> App {
             app.arg(
                 DRY_RUN_TX
@@ -3137,20 +3137,20 @@ pub mod args {
 
     /// Common query arguments
     #[derive(Clone, Debug)]
-    pub struct Query<C: NamadaTypes = CliTypes> {
+    pub struct Query<C: NamadaTypes = SdkTypes> {
         /// The address of the ledger node as host:port
         pub ledger_address: C::TendermintAddress,
     }
 
     impl Query<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
             Query::<SdkTypes> {
                 ledger_address: (),
             }
         }
     }
 
-    impl Args for Query {
+    impl Args for Query<CliTypes> {
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
         }
@@ -3236,7 +3236,7 @@ pub mod args {
 
     /// MASP generate payment address arguments
     #[derive(Clone, Debug)]
-    pub struct MaspPayAddrGen<C: NamadaTypes = CliTypes> {
+    pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
         /// Key alias
         pub alias: String,
         /// Viewing key
@@ -3246,7 +3246,7 @@ pub mod args {
     }
 
     impl MaspPayAddrGen<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+        pub fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
             MaspPayAddrGen::<SdkTypes> {
                 alias: self.alias,
                 viewing_key: ctx.get_cached(&self.viewing_key),
@@ -3255,7 +3255,7 @@ pub mod args {
         }
     }
 
-    impl Args for MaspPayAddrGen {
+    impl Args for MaspPayAddrGen<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);

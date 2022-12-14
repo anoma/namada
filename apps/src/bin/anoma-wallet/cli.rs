@@ -16,7 +16,7 @@ use namada_apps::wallet::{DecryptionError, FindKeyError};
 use rand_core::OsRng;
 
 pub fn main() -> Result<()> {
-    let (cmd, ctx) = cli::anoma_wallet_cli()?;
+    let (cmd, mut ctx) = cli::anoma_wallet_cli()?;
     match cmd {
         cmds::AnomaWallet::Key(sub) => match sub {
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
@@ -45,6 +45,7 @@ pub fn main() -> Result<()> {
                 spending_key_gen(ctx, args)
             }
             cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
+                let args = args.to_sdk(&mut ctx);
                 payment_address_gen(ctx, args)
             }
             cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
@@ -218,7 +219,7 @@ fn payment_address_gen(
 ) {
     let alias = alias.to_lowercase();
     let viewing_key =
-        ExtendedFullViewingKey::from(ctx.get_cached(&viewing_key))
+        ExtendedFullViewingKey::from(viewing_key)
             .fvk
             .vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);

@@ -4,93 +4,153 @@ use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
+use tendermint_rpc::{HttpClient, WebSocketClient, SubscriptionClient};
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli()? {
         cli::AnomaClient::WithContext(cmd_box) => {
-            let (cmd, ctx) = *cmd_box;
+            let (cmd, mut ctx) = *cmd_box;
             use AnomaClientWithContext as Sub;
             match cmd {
                 // Ledger cmds
                 Sub::TxCustom(TxCustom(args)) => {
-                    tx::submit_custom(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_custom(&client, ctx, args).await;
                 }
                 Sub::TxTransfer(TxTransfer(args)) => {
-                    tx::submit_transfer(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_transfer(&client, ctx, args).await;
                 }
                 Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
-                    tx::submit_ibc_transfer(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_ibc_transfer(&client, ctx, args).await;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
-                    tx::submit_update_vp(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_update_vp(&client, ctx, args).await;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
-                    tx::submit_init_account(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_init_account(&client, ctx, args).await;
                 }
                 Sub::TxInitValidator(TxInitValidator(args)) => {
-                    tx::submit_init_validator(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_init_validator(&client, ctx, args).await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
-                    tx::submit_init_proposal(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_init_proposal(&client, ctx, args).await;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
-                    tx::submit_vote_proposal(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_vote_proposal(&client, ctx, args).await;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
-                    tx::submit_reveal_pk(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_reveal_pk(&client, ctx, args).await;
                 }
                 Sub::Bond(Bond(args)) => {
-                    tx::submit_bond(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_bond(&client, ctx, args).await;
                 }
                 Sub::Unbond(Unbond(args)) => {
-                    tx::submit_unbond(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_unbond(&client, ctx, args).await;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
-                    tx::submit_withdraw(ctx, args).await;
+                    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_withdraw(&client, ctx, args).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
-                    rpc::query_epoch(args).await;
+                    let client = HttpClient::new(args.ledger_address).unwrap();
+                    rpc::query_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
+                    let args = args.to_sdk(&mut ctx);
                     rpc::query_transfers(ctx, args).await;
                 }
                 Sub::QueryConversions(QueryConversions(args)) => {
-                    rpc::query_conversions(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_conversions(&client, ctx, args).await;
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
-                    rpc::query_block(args).await;
+                    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_block(&client, args).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
-                    rpc::query_balance(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_balance(&client, ctx, args).await;
                 }
                 Sub::QueryBonds(QueryBonds(args)) => {
-                    rpc::query_bonds(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_bonds(&client, ctx, args).await;
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
-                    rpc::query_bonded_stake(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_bonded_stake(&client, ctx, args).await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
-                    rpc::query_commission_rate(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_commission_rate(&client, ctx, args).await;
                 }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
-                    rpc::query_slashes(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_slashes(&client, ctx, args).await;
                 }
                 Sub::QueryResult(QueryResult(args)) => {
-                    rpc::query_result(ctx, args).await;
+                    // Connect to the Tendermint server holding the transactions
+                    let (client, driver) = WebSocketClient::new(args.query.ledger_address.clone()).await?;
+                    let driver_handle = tokio::spawn(async move { driver.run().await });
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_result(&client, ctx, args).await;
+                    // Signal to the driver to terminate.
+                    client.close()?;
+                    // Await the driver's termination to ensure proper connection closure.
+                    let _ = driver_handle.await.unwrap_or_else(|x| {
+                        eprintln!("{}", x);
+                        cli::safe_exit(1)
+                    });
                 }
                 Sub::QueryRawBytes(QueryRawBytes(args)) => {
-                    rpc::query_raw_bytes(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_raw_bytes(&client, ctx, args).await;
                 }
 
                 Sub::QueryProposal(QueryProposal(args)) => {
-                    rpc::query_proposal(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_proposal(&client, ctx, args).await;
                 }
                 Sub::QueryProposalResult(QueryProposalResult(args)) => {
-                    rpc::query_proposal_result(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_proposal_result(&client, ctx, args).await;
                 }
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
-                    rpc::query_protocol_parameters(ctx, args).await;
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_protocol_parameters(&client, ctx, args).await;
                 }
             }
         }

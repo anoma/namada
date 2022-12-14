@@ -65,8 +65,8 @@ use crate::facade::tendermint_rpc::{
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
 pub async fn query_tx_status(
+    client: &HttpClient,
     status: TxEventQuery<'_>,
-    address: TendermintAddress,
     deadline: Instant,
 ) -> Event {
     const ONE_SECOND: Duration = Duration::from_secs(1);
@@ -84,7 +84,6 @@ pub async fn query_tx_status(
         *backoff += ONE_SECOND;
     }
     tokio::time::timeout_at(deadline, async move {
-        let client = HttpClient::new(address).unwrap();
         let mut backoff = ONE_SECOND;
 
         loop {
@@ -112,18 +111,17 @@ pub async fn query_tx_status(
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(args: args::Query) -> Epoch {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
+pub async fn query_epoch(client: &HttpClient) -> Epoch {
+    let epoch = unwrap_client_response(RPC.shell().epoch(&client.clone()).await);
     println!("Last committed epoch: {}", epoch);
     epoch
 }
 
 /// Query the last committed block
 pub async fn query_block(
+    client: &HttpClient,
     args: args::Query,
 ) -> crate::facade::tendermint_rpc::endpoint::block::Response {
-    let client = HttpClient::new(args.ledger_address).unwrap();
     let response = client.latest_block().await.unwrap();
     println!(
         "Last committed block ID: {}, height: {}, time: {}",
@@ -135,21 +133,18 @@ pub async fn query_block(
 }
 
 /// Query the results of the last committed block
-pub async fn query_results(args: args::Query) -> Vec<BlockResults> {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    unwrap_client_response(RPC.shell().read_results(&client).await)
+pub async fn query_results(client: &HttpClient) -> Vec<BlockResults> {
+    unwrap_client_response(RPC.shell().read_results(&client.clone()).await)
 }
 
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
-    let query_token = args.token.as_ref().map(|x| ctx.get(x));
-    let query_owner = args.owner.as_ref().map(|x| ctx.get_cached(x))
+    let query_token = args.token;
+    let query_owner = args.owner
         .map_or_else(
             || Either::Right(ctx.wallet.get_addresses().into_values().collect()),
             Either::Left,
         );
-    // Build up the context that will be queried for asset decodings
-    ctx.shielded.utils.ledger_address = Some(args.query.ledger_address.clone());
     let _ = ctx.shielded.load();
     // Obtain the effects of all shielded and transparent transactions
     let transfers = ctx.shielded.query_tx_deltas(
@@ -260,11 +255,10 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
 }
 
 /// Query the raw bytes of given storage key
-pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn query_raw_bytes(client: &HttpClient, _ctx: Context, args: args::QueryRawBytes) {
     let response = unwrap_client_response(
         RPC.shell()
-            .storage_value(&client, None, None, false, &args.storage_key)
+            .storage_value(client, None, None, false, &args.storage_key)
             .await,
     );
     if !response.data.is_empty() {
@@ -275,15 +269,15 @@ pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(mut ctx: Context, args: args::QueryBalance) {
+pub async fn query_balance(client: &HttpClient, mut ctx: Context, args: args::QueryBalance) {
     // Query the balances of shielded or transparent account types depending on
     // the CLI arguments
-    match args.owner.as_ref().map(|x| ctx.get_cached(x)) {
+    match &args.owner {
         Some(BalanceOwner::FullViewingKey(_viewing_key)) => {
-            query_shielded_balance(&mut ctx, args).await
+            query_shielded_balance(client, &mut ctx, args).await
         }
         Some(BalanceOwner::Address(_owner)) => {
-            query_transparent_balance(&mut ctx, args).await
+            query_transparent_balance(client, &mut ctx, args).await
         }
         Some(BalanceOwner::PaymentAddress(_owner)) => {
             query_pinned_balance(&mut ctx, args).await
@@ -292,24 +286,22 @@ pub async fn query_balance(mut ctx: Context, args: args::QueryBalance) {
             // Print pinned balance
             query_pinned_balance(&mut ctx, args.clone()).await;
             // Print shielded balance
-            query_shielded_balance(&mut ctx, args.clone()).await;
+            query_shielded_balance(client, &mut ctx, args.clone()).await;
             // Then print transparent balance
-            query_transparent_balance(&mut ctx, args).await;
+            query_transparent_balance(client, &mut ctx, args).await;
         }
     };
 }
 
 /// Query token balance(s)
 pub async fn query_transparent_balance(
+    client: &HttpClient,
     ctx: &mut Context,
     args: args::QueryBalance,
 ) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let token = ctx.get(&token);
-            let owner = ctx.get_cached(&owner);
             let key = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
@@ -342,7 +334,6 @@ pub async fn query_transparent_balance(
             }
         }
         (None, Some(owner)) => {
-            let owner = ctx.get_cached(&owner);
             for (token, _) in tokens {
                 let prefix = token.to_db_key().into();
                 let balances =
@@ -359,7 +350,6 @@ pub async fn query_transparent_balance(
             }
         }
         (Some(token), None) => {
-            let token = ctx.get(&token);
             let prefix = token.to_db_key().into();
             let balances =
                 query_storage_prefix::<token::Amount>(&client, &prefix).await;
@@ -386,7 +376,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
     let tokens = address::tokens();
     let owners = if let Some(pa) = args
         .owner
-        .and_then(|x| ctx.get_cached(&x).payment_address())
+        .and_then(|x| x.payment_address())
     {
         vec![pa]
     } else {
@@ -403,8 +393,6 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    // Build up the context that will be queried for asset decodings
-    ctx.shielded.utils.ledger_address = Some(args.query.ledger_address.clone());
     let _ = ctx.shielded.load();
     // Print the token balances by payment address
     for owner in owners {
@@ -456,7 +444,6 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 println!("Payment address {} has not yet been consumed.", owner)
             }
             (Ok((balance, epoch)), Some(token)) => {
-                let token = ctx.get(token);
                 // Extract and print only the specified token from the total
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
@@ -580,7 +567,7 @@ fn print_balances(
 }
 
 /// Query Proposals
-pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
+pub async fn query_proposal(client: &HttpClient, _ctx: Context, args: args::QueryProposal) {
     async fn print_proposal(
         client: &HttpClient,
         id: u64,
@@ -659,8 +646,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         Some(())
     }
 
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_epoch(client).await;
     match args.proposal_id {
         Some(id) => {
             if print_proposal(&client, id, current_epoch, true)
@@ -708,6 +694,7 @@ pub fn value_by_address(
 
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance(
+    client: &HttpClient,
     ctx: &mut Context,
     args: args::QueryBalance,
 ) {
@@ -715,7 +702,7 @@ pub async fn query_shielded_balance(
     // printed
     let owner = args
         .owner
-        .and_then(|x| ctx.get_cached(&x).full_viewing_key());
+        .and_then(|x| x.full_viewing_key());
     // Used to control whether conversions are automatically performed
     let no_conversions = args.no_conversions;
     // Viewing keys are used to query shielded balances. If a spending key is
@@ -724,8 +711,6 @@ pub async fn query_shielded_balance(
         Some(viewing_key) => vec![viewing_key],
         None => ctx.wallet.get_viewing_keys().values().copied().collect(),
     };
-    // Build up the context that will be queried for balances
-    ctx.shielded.utils.ledger_address = Some(args.query.ledger_address.clone());
     let _ = ctx.shielded.load();
     let fvks: Vec<_> = viewing_keys
         .iter()
@@ -735,7 +720,7 @@ pub async fn query_shielded_balance(
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // The epoch is required to identify timestamped tokens
-    let epoch = query_epoch(args.query.clone()).await;
+    let epoch = query_epoch(client).await;
     // Map addresses to token names
     let tokens = address::tokens();
     match (args.token, owner.is_some()) {
@@ -758,7 +743,7 @@ pub async fn query_shielded_balance(
                     .expect("context should contain viewing key")
             };
             // Compute the unique asset identifier from the token address
-            let token = ctx.get(&token);
+            let token = token;
             let asset_type = AssetType::new(
                 (token.clone(), epoch.0)
                     .try_to_vec()
@@ -862,7 +847,7 @@ pub async fn query_shielded_balance(
         // users
         (Some(token), false) => {
             // Compute the unique asset identifier from the token address
-            let token = ctx.get(&token);
+            let token = token;
             let asset_type = AssetType::new(
                 (token.clone(), epoch.0)
                     .try_to_vec()
@@ -993,11 +978,11 @@ pub async fn get_token_balance(
 }
 
 pub async fn query_proposal_result(
+    client: &HttpClient,
     _ctx: Context,
     args: args::QueryProposalResult,
 ) {
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_epoch(client).await;
 
     match args.proposal_id {
         Some(id) => {
@@ -1086,8 +1071,8 @@ pub async fn query_proposal_result(
                             );
 
                         let public_key = get_public_key(
+                            client,
                             &proposal.address,
-                            args.query.ledger_address.clone(),
                         )
                         .await
                         .expect("Public key should exist.");
@@ -1128,11 +1113,10 @@ pub async fn query_proposal_result(
 }
 
 pub async fn query_protocol_parameters(
+    client: &HttpClient,
     _ctx: Context,
     args: args::QueryProtocolParameters,
 ) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-
     let gov_parameters = get_governance_parameters(&client).await;
     println!("Governance Parameters\n {:4}", gov_parameters);
 
@@ -1199,13 +1183,12 @@ pub async fn query_protocol_parameters(
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let epoch = query_epoch(args.query.clone()).await;
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn query_bonds(client: &HttpClient, ctx: Context, args: args::QueryBonds) {
+    let epoch = query_epoch(client).await;
     match (args.owner, args.validator) {
         (Some(owner), Some(validator)) => {
-            let source = ctx.get(&owner);
-            let validator = ctx.get(&validator);
+            let source = owner;
+            let validator = validator;
             // Find owner's delegations to the given validator
             let bond_id = pos::BondId { source, validator };
             let bond_key = pos::bond_key(&bond_id);
@@ -1261,7 +1244,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             }
         }
         (None, Some(validator)) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find validator's self-bonds
             let bond_id = pos::BondId {
                 source: validator.clone(),
@@ -1308,7 +1291,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             }
         }
         (Some(owner), None) => {
-            let owner = ctx.get(&owner);
+            let owner = owner;
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
             let bonds =
@@ -1546,12 +1529,11 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
 }
 
 /// Query PoS bonded stake
-pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
+pub async fn query_bonded_stake(client: &HttpClient, ctx: Context, args: args::QueryBondedStake) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_epoch(client).await,
     };
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
@@ -1565,7 +1547,7 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
 
     match args.validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find bonded stake for the given validator
             let validator_deltas_key = pos::validator_deltas_key(&validator);
             let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
@@ -1647,17 +1629,17 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
 
 /// Query PoS validator's commission rate
 pub async fn query_commission_rate(
+    client: &HttpClient,
     ctx: Context,
     args: args::QueryCommissionRate,
 ) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_epoch(client).await,
     };
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let validator = ctx.get(&args.validator);
+    let validator = args.validator;
     let is_validator =
-        is_validator(&validator, args.query.ledger_address).await;
+        is_validator(client, &validator).await;
 
     if is_validator {
         let validator_commission_key =
@@ -1702,11 +1684,10 @@ pub async fn query_commission_rate(
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn query_slashes(client: &HttpClient, ctx: Context, args: args::QuerySlashes) {
     match args.validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes =
@@ -1772,11 +1753,10 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
+pub async fn dry_run_tx(client: &HttpClient, tx_bytes: Vec<u8>) {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = unwrap_client_response(
-        RPC.shell().dry_run_tx(&client, data, height, prove).await,
+        RPC.shell().dry_run_tx(client, data, height, prove).await,
     )
     .data;
     println!("Dry-run result: {}", result);
@@ -1784,29 +1764,26 @@ pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
 
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
+    client: &HttpClient,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> Option<common::PublicKey> {
-    let client = HttpClient::new(ledger_address).unwrap();
     let key = pk_key(address);
     query_storage_value(&client, &key).await
 }
 
 /// Check if the given address is a known validator.
 pub async fn is_validator(
+    client: &HttpClient,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
+    unwrap_client_response(RPC.vp().pos().is_validator(client, address).await)
 }
 
 /// Check if a given address is a known delegator
 pub async fn is_delegator(
+    client: &HttpClient,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
     let bonds_prefix = pos::bonds_for_source_prefix(address);
     let bonds =
         query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix).await;
@@ -1831,10 +1808,9 @@ pub async fn is_delegator_at(
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
 pub async fn known_address(
+    client: &HttpClient,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
@@ -1980,12 +1956,11 @@ fn process_unbonds_query(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
+pub async fn query_conversions(client: &HttpClient, ctx: Context, args: args::QueryConversions) {
     // The chosen token type of the conversions
-    let target_token = args.token.as_ref().map(|x| ctx.get(x));
+    let target_token = args.token;
     // To facilitate human readable token addresses
     let tokens = address::tokens();
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
     let masp_addr = masp();
     let key_prefix: Key = masp_addr.to_db_key().into();
     let state_key = key_prefix
@@ -2225,12 +2200,9 @@ pub async fn query_tx_events(
 /// Lookup the full response accompanying the specified transaction event
 // TODO: maybe remove this in favor of `query_tx_status`
 pub async fn query_tx_response(
-    ledger_address: &TendermintAddress,
+    client: &WebSocketClient,
     tx_query: TxEventQuery<'_>,
 ) -> Result<TxResponse, TError> {
-    // Connect to the Tendermint server holding the transactions
-    let (client, driver) = WebSocketClient::new(ledger_address.clone()).await?;
-    let driver_handle = tokio::spawn(async move { driver.run().await });
     // Find all blocks that apply a transaction with the specified hash
     let blocks = &client
         .block_search(tx_query.into(), 1, 255, Order::Ascending)
@@ -2293,22 +2265,15 @@ pub async fn query_tx_response(
         )
         .unwrap_or_default(),
     };
-    // Signal to the driver to terminate.
-    client.close()?;
-    // Await the driver's termination to ensure proper connection closure.
-    let _ = driver_handle.await.unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        cli::safe_exit(1)
-    });
     Ok(result)
 }
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
-pub async fn query_result(_ctx: Context, args: args::QueryResult) {
+pub async fn query_result(client: &WebSocketClient, _ctx: Context, args: args::QueryResult) {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
-        &args.query.ledger_address,
+        client,
         TxEventQuery::Applied(&args.tx_hash),
     )
     .await;
@@ -2322,7 +2287,7 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
         Err(err1) => {
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
-                &args.query.ledger_address,
+                client,
                 TxEventQuery::Accepted(&args.tx_hash),
             )
             .await;
