@@ -16,6 +16,9 @@ use namada_core::types::storage::{self, Epoch};
 
 use crate::parameters::PosParams;
 
+const LAZY_MAP_SUB_KEY: &str = "lazy_map";
+const LAST_UPDATE_SUB_KEY: &str = "last_update";
+
 /// Discrete epoched data handle
 pub struct Epoched<
     Data,
@@ -210,7 +213,9 @@ where
     }
 
     fn get_last_update_storage_key(&self) -> storage::Key {
-        self.storage_prefix.push(&"last_update".to_owned()).unwrap()
+        self.storage_prefix
+            .push(&LAST_UPDATE_SUB_KEY.to_owned())
+            .unwrap()
     }
 
     fn get_last_update<S>(
@@ -225,7 +230,10 @@ where
     }
 
     fn get_data_handler(&self) -> LazyMap<Epoch, Data> {
-        let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
+        let key = self
+            .storage_prefix
+            .push(&LAZY_MAP_SUB_KEY.to_owned())
+            .unwrap();
         LazyMap::open(key)
     }
 
@@ -247,7 +255,10 @@ where
 
     /// Get handle to the NestedMap data itself
     pub fn get_data_handler(&self) -> NestedMap<Epoch, Data> {
-        let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
+        let key = self
+            .storage_prefix
+            .push(&LAZY_MAP_SUB_KEY.to_owned())
+            .unwrap();
         NestedMap::open(key)
     }
 
@@ -265,7 +276,9 @@ where
     }
 
     fn get_last_update_storage_key(&self) -> storage::Key {
-        self.storage_prefix.push(&"last_update".to_owned()).unwrap()
+        self.storage_prefix
+            .push(&LAST_UPDATE_SUB_KEY.to_owned())
+            .unwrap()
     }
 
     // TODO: we may need an update_data() method, figure out when it should be
@@ -499,7 +512,9 @@ where
     }
 
     fn get_last_update_storage_key(&self) -> storage::Key {
-        self.storage_prefix.push(&"last_update".to_owned()).unwrap()
+        self.storage_prefix
+            .push(&LAST_UPDATE_SUB_KEY.to_owned())
+            .unwrap()
     }
 
     fn get_last_update<S>(
@@ -515,7 +530,10 @@ where
 
     /// Get handle to the raw LazyMap data
     pub fn get_data_handler(&self) -> LazyMap<Epoch, Data> {
-        let key = self.storage_prefix.push(&"data".to_owned()).unwrap();
+        let key = self
+            .storage_prefix
+            .push(&LAZY_MAP_SUB_KEY.to_owned())
+            .unwrap();
         LazyMap::open(key)
     }
 
