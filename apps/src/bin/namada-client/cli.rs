@@ -114,6 +114,9 @@ pub async fn main() -> Result<()> {
             Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(args)) => {
                 utils::validate_genesis_templates(global_args, args)
             }
+            Utils::SignGenesisTx(SignGenesisTx(args)) => {
+                utils::sign_genesis_tx(global_args, args)
+            }
         },
     }
     Ok(())

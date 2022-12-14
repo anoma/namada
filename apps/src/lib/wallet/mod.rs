@@ -20,7 +20,7 @@ use namada::types::masp::{
 pub use store::wallet_file;
 use thiserror::Error;
 
-use self::alias::Alias;
+pub use self::alias::Alias;
 pub use self::keys::{DecryptionError, StoredKeypair};
 use self::store::Store;
 pub use self::store::{ValidatorData, ValidatorKeys};

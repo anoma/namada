@@ -1,0 +1,36 @@
+[[validator_account]]
+alias = "validator-0"
+dkg_key = "dpktest1vqqqqqxh958jkkqvuct3suxygge2ygtagphnd6yv6h7u9y4fuhsl2ktwc6rqxxpn4ueq50vv9yxrqjzdzy854hay2xd47g47xc397zy53tvs9ha0pmja28qh6vrsxatx7n8c6zhez4jzrz85894lj3luwylvwuvyj6k0al"
+vp = "vp_validator"
+commission_rate = "0.05"
+max_commission_rate_change = "0.01"
+net_address = "127.0.0.1:27656"
+
+[validator_account.account_key]
+pk = "pktest1qzaf0ahj0elwwrz635tv9dxdma2yq6h87yqd383me56yj045nfxg5lqfayr"
+authorization = "sigtest1qrxnx2r28rwq0sjaj3cgd0qzr68hr0k8uz2escxyufr8stqzyqdkpd6tsds583akcavp9aqe4fhv6ggjpxpdkhv9whwt0vq5wj6hr7qxurtjzw"
+
+[validator_account.consensus_key]
+pk = "pktest1qrupw3vwe60r888wuwysch3ft5dyktahd78hzelrthe9ddw2f6lcgd7u6z2"
+authorization = "sigtest1qz23mkfn97pftupjcca39cwn92wtm2phk6xh2jy586gtkkhdyknfrdea2ts3t9jheth284mtfdt4cpgz77ufqd7ag9pdpa0vhqzx57q9pnpmnk"
+
+[validator_account.protocol_key]
+pk = "pktest1qz5hlmj5x20mvppt9he7kw7xrue6ku7hwdfs6pvlaxrs0f3e9xmyzw0qztp"
+authorization = "sigtest1qppjrxxhcx4vrpupkeyszy5ds7xsrn2dgkgecechr3he4fvyyeuw49zt6qk2vg2c9zprul2v8c5ej87zcl7qj2l9vmxk5pw4kherkwq90xw7ut"
+
+[validator_account.tendermint_node_key]
+pk = "pktest1qz53k5khmdsmz44d0nd427tfaypd9v6luks3880u9tycvldnrrx5c3exrc0"
+authorization = "sigtest1qz2xxnd35xh9pmpmye7vvfyfmycap4685035a53xg4qgunvjgn4zta92qlzle2lc7rscdjgxadxzytdk5aufyfmn247npj709ws928gpqtgnw3"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup"
+target = "validator-0"
+amount = "1000000000"
+signature = "sigtest1qr77x3uql5jhql2trwvtm4fv0m2svrxetf5nz5hrrvvpdq3ktrxupr3m8jj37ghpeppqwhrxqh7md3snex50v8yjgv5avnceyskkzhcv07uyex"
+
+[[bond]]
+source = "validator-0"
+validator = "validator-0"
+amount = "900000000"
+signature = "sigtest1qrthgmdle3mr4wv3mmlgwqzderwhlag7esdq8frgl202wm6qryvhzhwy76e89km2yy99fp52mqfca9ksm0d3zp5kv23ht33xt926ydsra5mzqt"

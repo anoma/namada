@@ -1450,6 +1450,7 @@ pub mod cmds {
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
+        SignGenesisTx(SignGenesisTx),
     }
 
     impl SubCmd for Utils {
@@ -1466,11 +1467,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let validate_genesis_templates =
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
+                let genesis_tx =
+                    SubCmd::parse(matches).map(Self::SignGenesisTx);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(validate_genesis_templates)
+                    .or(genesis_tx)
             })
         }
 
@@ -1482,6 +1486,7 @@ pub mod cmds {
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(ValidateGenesisTemplates::def())
+                .subcommand(SignGenesisTx::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1584,6 +1589,25 @@ pub mod cmds {
                 .add_args::<args::ValidateGenesisTemplates>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct SignGenesisTx(pub args::SignGenesisTx);
+
+    impl SubCmd for SignGenesisTx {
+        const CMD: &'static str = "sign-genesis-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::SignGenesisTx::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Sign genesis transaction(s).")
+                .add_args::<args::SignGenesisTx>()
+        }
+    }
 }
 
 pub mod args {
@@ -1609,8 +1633,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
-    use crate::config;
-    use crate::config::TendermintMode;
+    use crate::config::{self, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1677,8 +1700,9 @@ pub mod args {
     const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
-    const OWNER: Arg<WalletAddress> = arg("owner");
+    const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
     const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
+    const OWNER: Arg<WalletAddress> = arg("owner");
     const PATH: Arg<PathBuf> = arg("path");
     const PIN: ArgFlag = flag("pin");
     const PORT_ID: ArgDefault<PortId> = arg_default(
@@ -1696,9 +1720,11 @@ pub mod args {
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
+    const RAW_SOURCE: Arg<String> = arg("source");
     const RECEIVER: Arg<String> = arg("receiver");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
+    const SELF_BOND_AMOUNT: Arg<token::Amount> = arg("self-bond-amount");
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
@@ -1710,6 +1736,8 @@ pub mod args {
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
+    const TRANSFER_FROM_SOURCE_AMOUNT: Arg<token::Amount> =
+        arg("transfer-from-source-amount");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const TX_HASH: Arg<String> = arg("tx-hash");
@@ -3643,16 +3671,20 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
+        pub source: String,
         pub alias: String,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
+        pub transfer_from_source_amount: token::Amount,
+        pub self_bond_amount: token::Amount,
     }
 
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
+            let source = RAW_SOURCE.parse(matches);
             let alias = ALIAS.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
@@ -3660,40 +3692,67 @@ pub mod args {
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
+            let transfer_from_source_amount =
+                TRANSFER_FROM_SOURCE_AMOUNT.parse(matches);
+            let self_bond_amount = SELF_BOND_AMOUNT.parse(matches);
             Self {
+                source,
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
                 commission_rate,
                 max_commission_rate_change,
+                transfer_from_source_amount,
+                self_bond_amount,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().about("The validator address alias."))
-                .arg(NET_ADDRESS.def().about(
-                    "Static {host:port} of your validator node's P2P address. \
-                     Namada uses port `26656` for P2P connections by default, \
-                     but you can configure a different value.",
-                ))
-                .arg(COMMISSION_RATE.def().about(
-                    "The commission rate charged by the validator for \
-                     delegation rewards. This is a required parameter.",
-                ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
-                    "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. This is \
-                     a required parameter.",
-                ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().about(
-                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
-                     use this for keys used in a live network.",
-                ))
-                .arg(SCHEME.def().about(
-                    "The key scheme/type used for the validator keys. \
-                     Currently supports ed25519 and secp256k1.",
-                ))
+            app.arg(RAW_SOURCE.def().about(
+                "The source key for native token transfer from the \
+                 `balances.toml` genesis template.",
+            ))
+            .arg(ALIAS.def().about("The validator address alias."))
+            .arg(NET_ADDRESS.def().about(
+                "Static {host:port} of your validator node's P2P address. \
+                 Namada uses port `26656` for P2P connections by default, but \
+                 you can configure a different value.",
+            ))
+            .arg(COMMISSION_RATE.def().about(
+                "The commission rate charged by the validator for delegation \
+                 rewards. This is a required parameter.",
+            ))
+            .arg(MAX_COMMISSION_RATE_CHANGE.def().about(
+                "The maximum change per epoch in the commission rate charged \
+                 by the validator for delegation rewards. This is a required \
+                 parameter.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
+                 this for keys used in a live network.",
+            ))
+            .arg(SCHEME.def().about(
+                "The key scheme/type used for the validator keys. Currently \
+                 supports ed25519 and secp256k1.",
+            ))
+            .arg(TRANSFER_FROM_SOURCE_AMOUNT.def().about(
+                "The amount of native token to transfer into the validator \
+                 account from the `--source`. To self-bond some tokens to the \
+                 validator at genesis, specify `--self-bond-amount`.",
+            ))
+            .arg(
+                SELF_BOND_AMOUNT
+                    .def()
+                    .about(
+                        "The amount of native token to self-bond in PoS. \
+                         Because this amount will be bonded from the \
+                         validator's account, it must be lower or equal to \
+                         the amount specified in \
+                         `--transfer-from-source-amount`.",
+                    )
+                    .requires(TRANSFER_FROM_SOURCE_AMOUNT.name),
+            )
         }
     }
 
@@ -3714,6 +3773,31 @@ pub mod args {
                 PATH.def()
                     .about("Path to the directory with the template files."),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignGenesisTx {
+        pub path: PathBuf,
+        pub output: Option<PathBuf>,
+    }
+
+    impl Args for SignGenesisTx {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            let output = OUTPUT.parse(matches);
+            Self { path, output }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .about("Path to the unsigned transactions TOML file."),
+            )
+            .arg(OUTPUT.def().about(
+                "Save the output to a TOML file. When not supplied, the \
+                 signed transactions will be printed to stdout instead.",
+            ))
         }
     }
 }

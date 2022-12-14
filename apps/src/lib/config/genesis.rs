@@ -1,5 +1,8 @@
 //! The parameters used for the chain's genesis
 
+pub mod templates;
+pub mod transactions;
+
 use std::collections::HashMap;
 use std::path::Path;
 

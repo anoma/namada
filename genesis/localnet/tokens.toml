@@ -1,0 +1,22 @@
+# Token accounts with their validity predicates
+
+[token.NAM]
+vp = "vp_token"
+
+[token.BTC]
+vp = "vp_token"
+
+[token.ETH]
+vp = "vp_token"
+
+[token.DOT]
+vp = "vp_token"
+
+[token.Schnitzel]
+vp = "vp_token"
+
+[token.Apfel]
+vp = "vp_token"
+
+[token.Kartoffel]
+vp = "vp_token"

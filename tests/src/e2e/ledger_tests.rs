@@ -2852,12 +2852,13 @@ fn test_genesis_validators() -> Result<()> {
             test_dir.path(),
             validator_0_alias,
         );
-    let config = std::fs::read_to_string(
-        namada_apps::client::utils::validator_pre_genesis_file(
-            &validator_0_pre_genesis_dir,
-        ),
-    )
-    .unwrap();
+    let config = String::from("TODO");
+    // let config = std::fs::read_to_string(
+    //     namada_apps::client::utils::validator_pre_genesis_file(
+    //         &validator_0_pre_genesis_dir,
+    //     ),
+    // )
+    // .unwrap();
     let mut validator_0_config: ValidatorPreGenesisConfig =
         toml::from_str(&config).unwrap();
     let validator_0_config = validator_0_config
@@ -2894,12 +2895,13 @@ fn test_genesis_validators() -> Result<()> {
             test_dir.path(),
             validator_1_alias,
         );
-    let config = std::fs::read_to_string(
-        namada_apps::client::utils::validator_pre_genesis_file(
-            &validator_1_pre_genesis_dir,
-        ),
-    )
-    .unwrap();
+    let config = String::from("TODO");
+    // let config = std::fs::read_to_string(
+    //     namada_apps::client::utils::validator_pre_genesis_file(
+    //         &validator_1_pre_genesis_dir,
+    //     ),
+    // )
+    // .unwrap();
     let mut validator_1_config: ValidatorPreGenesisConfig =
         toml::from_str(&config).unwrap();
     let validator_1_config = validator_1_config

@@ -1,0 +1,9 @@
+account_key = "unencrypted:00c0d8d6d533a2449d9ddaa8bd5760ebab9ae125b5ed2571d3dc5395dfac927284"
+consensus_key = "unencrypted:002c9424c0e42e3e110c5e29856de185de9ae33dbebdd2dea85e64d5546719eec1"
+tendermint_node_key = "unencrypted:0060b815cff846ff1b7c09c7aeac6a122232bd81cbca7cd8dd243b822a05e0f511"
+
+[validator_keys]
+protocol_keypair = "ED25519_SK_PREFIX00363606bdc785ac3d3e02c80c51194996283c793ecad97aef59ed9ddd7ee5df19"
+
+[validator_keys.dkg_keypair]
+decryption_key = [86, 225, 200, 37, 234, 119, 4, 143, 28, 251, 163, 172, 246, 225, 23, 44, 13, 175, 198, 55, 249, 255, 208, 178, 211, 3, 177, 79, 190, 168, 61, 8]

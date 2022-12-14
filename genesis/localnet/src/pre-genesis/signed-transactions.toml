@@ -1,0 +1,159 @@
+[[established_account]]
+alias = "masp"
+vp = "vp_masp"
+
+[[established_account]]
+alias = "faucet"
+vp = "vp_testnet_faucet"
+
+[established_account.public_key]
+pk = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+authorization = "sigtest1qz333ykz4ql3wqykxd79j6h2htfdk3mekup5sepgtvzjzc7p4k4hgxvtqpcfz5h59fe4nq7wsp5maen9qecf4fgx2kl6jgr8yx2vq5sxwaeu95"
+
+[[established_account]]
+alias = "albert"
+vp = "vp_user"
+
+[established_account.public_key]
+pk = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+authorization = "sigtest1qp2pd5n368tsv2jw73dmz066c06nwthu606admdxcyhn5lk0l5f47jt5n962tm5n5f7kt2zcx8t75hfqcprhlp96m4ja3vudss3me5s2ejqjsn"
+
+[[established_account]]
+alias = "bertha"
+vp = "vp_user"
+
+[established_account.public_key]
+pk = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+authorization = "sigtest1qrv2nqfdt7n2gtexyfcay2hmhl6a92a74zawlr70ed5nhu0hzplfe5dwxj52k5x7kfwrngcxg44r5a783782quw2w8n92qgkfre8jvqqx4l6g3"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qpsnys6nl6ap0zuenvr264ql7wge50xlxvzyhlne6c6yfz3km4yjlus37mpvq7l62lwgeguqfd3p9hs9947xf08ehtms6ap5t6zllngtqq042u"
+
+[[transfer]]
+token = "btc"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qqa8snqa4jvmakzcgr3jn3v4klydsa3w6zzfey2fnkejskqrlnjg0plx86eqvpgtm09m9hl00226rt24l8gtdnald3n86nfh9gvtkrqpanzvf4"
+
+[[transfer]]
+token = "dot"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qrhdfzgvdq5xc0u35tum06aj0qgap2kgx6cmfaw8dx6xe60z9zznk8hjd03p9fphd0mq0yftlrcc4d5pxschav2zt0trxjk5ermqpgqdejnat5"
+
+[[transfer]]
+token = "schnitzel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qrnmzaur63rqqy3rz2rn8akfmg0rysnhzlemgnfft559ggjtxl2u9ms6ek6htp43nu49ffqfxuf8pde0040ww2e3yhylaajnqg7jhxqtm7zl5d"
+
+[[transfer]]
+token = "apfel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qr32ncyehpqcltupu6qkkz4drel94vpmk5cpnlscp0pcgh0ws4asl9qgtqvrta6edukdpmehtvr6k05vcfqr3zh4ldc8uqa2nls3mcq27dx82u"
+
+[[transfer]]
+token = "kartoffel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+signature = "sigtest1qz9jhgz8ml34a8uuzn843057ux8mp2dhnqz2ac75nvhp6huw8dfnqkmd7c4rza9wqmpx25vylaeclxgekhx5xkcp75vfz8449y94fvs2apkxk5"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qq66etw6ees4vqvrs7fv2qll0u4jndxazfwyzxyear0ermp5pymqq955cfhtusr834re7g54astn3pl6x7548w9fc7s6u7dlfe0dq2cwhn8t7e"
+
+[[transfer]]
+token = "btc"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qqvff5xxw2g7dw7esacds7cl626gkfqpms4gg29uf2hh9taqczv05czyptx3j553l3w04pkv8r5n042wksrcxv9u8jlgsd78ump2yrgp4xnzkh"
+
+[[transfer]]
+token = "dot"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qryqp7whfxwnzfmz9k4wznzgvjrp537vfhlgdnz8w6257363seucje8g45gt6naereqpel62zlpv7dutjs42n2fww3saew2vuscuj2grsdtvyt"
+
+[[transfer]]
+token = "schnitzel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qrnlpl89yh5l4gu84xa4ngqclk2qgwpp3wndywk0lgapjhvgmnfsu9czkr0guprpxq7u3k3usxrqf3qdhgq95033csusxxk07v8y6pg84sxzts"
+
+[[transfer]]
+token = "apfel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qzk8jtjaf5qk6vu203h0vey8mfmmrk7dz8rtunz5ex6h2vdwhrzf2pmty4cf5uvnl5yvwka4f92fjfga2wejxhpycx5hy6nzckgcclcwhu5l2f"
+
+[[transfer]]
+token = "kartoffel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qz4934vyvyy4rmdqj5vtjsgnvef5sal5q9nwlj0g65pea8p8pks5w8d2wkd6gxuyhfm6s5q3xzfn43fzfxs3h9aqp8qjnqg5ztngryqf7m45l5"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qrm3cf0tdggrxczst4phw3zynu8udts45lzwfdagzf2p6nqzxgfxt5dn38a3qd7xdjzwhvvl0ja66zkh9nd3nvuf8lrf3xsqs93an4s20wz4g8"
+
+[[transfer]]
+token = "btc"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qp086qnenkmd6vrfdj5yg7vmmxyj9ylmgjukn8g9v5qdy09dsljsdca8ejmh3fal8z7qx494d0khay6649vvrx7ucvnzws3vp7ryu9gtxuvf3t"
+
+[[transfer]]
+token = "dot"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qp7mu2lv3pmmnv49vp7a6wzwp0w65hq76yqkwtqcvxx5htjn2ph6ths2ll6lg2shyerm0kpzlskauejfkxd6wm49uxq8dcx8kswyars998xthq"
+
+[[transfer]]
+token = "schnitzel"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qr32qu5ekgca5y23fuenhz8vdqcm8f6zdpzvqe77628jy9ev22ava5qelfnjf9jfng56k8e9pj940hnjcm44w20tz2v5dm2vs829v0s96mh523"
+
+[[transfer]]
+token = "apfel"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qpyycjq4uj3elrkr2n9z8ed680zd83cgd60dv9aey9csgedar9nfeqk7nzpl4y6a5j4mgfd85ktcemexuswzevpa8feqk7ezfhfy54cxu3lfp9"
+
+[[transfer]]
+token = "kartoffel"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qp666as2h5kgtq46sp688eamvjewlvg7a2w3y3g874r4lstqdt57w7rk6xaf9pvs7ql4v22hej4g7fhj4l7ds07zk9cdwt82zeptdncyjqlx8n"
+
+[[bond]]
+source = "albert"
+validator = "validator-0"
+amount = "20000"
+signature = "sigtest1qztmj7xfc2jfmk0xypwu6ddcnas2m2dsgznpreypa5sj3y2q7rrp48wpnd26tsrrhm9n9yat5k4aw65rswun8cfjstcaj0htrvmgadgxgmxrtn"
