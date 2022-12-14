@@ -82,8 +82,8 @@ pub trait CurrentState: TryAlloc {
 
     /// Retrieve the current state of a [`BlockSpaceAllocator`].
     ///
-    /// The returned [`Tracker`] can be compared against a
-    /// [`Tracker`] for another state.
+    /// The returned [`Tracker`] can be compared against
+    /// another state's [`Tracker`].
     fn current_state(&self) -> Tracker<Self::State>;
 }
 
