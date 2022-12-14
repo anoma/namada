@@ -5,12 +5,15 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
 /// `PartialEq` instance is case-insensitive.
-#[derive(Clone, Debug, Default, Deserialize, PartialOrd, Ord, Eq)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialOrd, Ord, Eq, BorshDeserialize,
+)]
 #[serde(transparent)]
 pub struct Alias(String);
 
@@ -31,12 +34,21 @@ impl Alias {
     }
 }
 
+impl BorshSerialize for Alias {
+    fn serialize<W: ark_serialize::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.normalize(), writer)
+    }
+}
+
 impl Serialize for Alias {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.normalize().serialize(serializer)
+        Serialize::serialize(&self.normalize(), serializer)
     }
 }
 
