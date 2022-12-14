@@ -61,7 +61,11 @@ pub mod main {
 /// A tx that attempts to write arbitrary data to the given key
 #[cfg(feature = "tx_write")]
 pub mod main {
-    use namada_tx_prelude::*;
+    use borsh::BorshDeserialize;
+    use namada_tx_prelude::{
+        log_string, storage, transaction, Ctx, ResultExt, SignedTxData,
+        StorageRead, StorageWrite, TxResult,
+    };
 
     const TX_NAME: &str = "tx_write";
 
