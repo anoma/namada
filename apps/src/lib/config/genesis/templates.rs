@@ -392,6 +392,19 @@ mod tests {
         );
     }
 
+    /// Validate the `genesis/starter` genesis templates.
+    #[test]
+    fn test_validate_starter_genesis_templates() {
+        let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("genesis/starter");
+        assert!(
+            validate(&templates_dir),
+            "Starter genesis templates must be valid"
+        );
+    }
+
     #[test]
     fn test_read_balances() {
         let test_dir = tempdir().unwrap();
