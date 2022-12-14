@@ -30,7 +30,10 @@ pub struct ValidationMeta {
     pub txs_bin: TxBin,
     /// Check if the decrypted tx queue has any elements
     /// left.
-    pub decrypted_queue_has_txs: bool,
+    ///
+    /// This field will only evaluate to true if a block
+    /// proposer didn't include all decrypted txs in a block.
+    pub decrypted_queue_has_remaining_txs: bool,
 }
 
 impl<D, H> From<&Storage<D, H>> for ValidationMeta
@@ -46,7 +49,7 @@ where
         Self {
             #[cfg(feature = "abcipp")]
             digest: DigestCounters::default(),
-            decrypted_queue_has_txs: false,
+            decrypted_queue_has_remaining_txs: false,
             encrypted_txs_bin,
             txs_bin,
         }
@@ -234,7 +237,8 @@ where
                 )
             })
             .collect();
-        metadata.decrypted_queue_has_txs = tx_queue_iter.next().is_some();
+        metadata.decrypted_queue_has_remaining_txs =
+            !self.storage.tx_queue.is_empty() && tx_queue_iter.next().is_some();
         (tx_results, metadata)
     }
 
