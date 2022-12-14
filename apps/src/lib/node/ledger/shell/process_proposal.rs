@@ -7,7 +7,7 @@ use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
-use super::block_space_alloc::states::tracker::CurrentState;
+use super::block_space_alloc::states::tracker::{self, CurrentState};
 use super::block_space_alloc::BlockSpaceAllocator;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
@@ -304,13 +304,17 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn check_proposal_tx<'a>(
+    pub(crate) fn check_proposal_tx<'a, A>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        _alloc: &mut impl CurrentState,
+        alloc: &mut A,
         #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
-    ) -> TxResult {
+    ) -> TxResult
+    where
+        A: CurrentState,
+        A::State: 'static,
+    {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
                 tracing::debug!(
@@ -352,8 +356,13 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthEventsVext(ext) => self
-                    .validate_eth_events_vext_and_get_it_back(
+                ProtocolTxType::EthEventsVext(ext) => {
+                    let state = alloc.current_state();
+                    if state != tracker::PROTOCOL && state != tracker::REMAINING
+                    {
+                        todo!();
+                    }
+                    self.validate_eth_events_vext_and_get_it_back(
                         ext,
                         self.storage.last_height,
                     )
@@ -369,9 +378,15 @@ where
                              one of the included Ethereum events vote \
                              extensions was invalid: {err}"
                         ),
-                    }),
-                ProtocolTxType::ValSetUpdateVext(ext) => self
-                    .validate_valset_upd_vext_and_get_it_back(
+                    })
+                }
+                ProtocolTxType::ValSetUpdateVext(ext) => {
+                    let state = alloc.current_state();
+                    if state != tracker::PROTOCOL && state != tracker::REMAINING
+                    {
+                        todo!();
+                    }
+                    self.validate_valset_upd_vext_and_get_it_back(
                         ext,
                         self.storage.last_height,
                     )
@@ -387,7 +402,8 @@ where
                              one of the included validator set update vote \
                              extensions was invalid: {err}"
                         ),
-                    }),
+                    })
+                }
                 ProtocolTxType::EthereumEvents(digest) => {
                     #[cfg(feature = "abcipp")]
                     {
