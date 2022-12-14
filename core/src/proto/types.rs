@@ -154,8 +154,7 @@ impl SigningTx {
 
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let to_sign = self.hash();
-        let sig = common::SigScheme::sign(keypair, to_sign);
+        let sig = self.standalone_signature(keypair);
         let signed = SignedTxData {
             data: self.data,
             sig,
@@ -167,6 +166,15 @@ impl SigningTx {
             data: Some(signed),
             timestamp: self.timestamp,
         }
+    }
+
+    /// Get a signature for a transaction using [`SignedTxData`].
+    pub fn standalone_signature(
+        &self,
+        keypair: &common::SecretKey,
+    ) -> common::Signature {
+        let to_sign = self.hash();
+        common::SigScheme::sign(keypair, to_sign)
     }
 
     /// Verify that the transaction has been signed by the secret key
@@ -186,7 +194,17 @@ impl SigningTx {
             data,
             timestamp: self.timestamp,
         };
-        let signed_data = tx.hash();
+        tx.verify_standalone_sig(pk, sig)
+    }
+
+    /// Verify that the transaction has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify_standalone_sig(
+        &self,
+        pk: &common::PublicKey,
+        sig: &common::Signature,
+    ) -> std::result::Result<(), VerifySigError> {
+        let signed_data = self.hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
     }
 
@@ -375,6 +393,14 @@ impl Tx {
             .expect("code hashes to unexpected value")
     }
 
+    /// Get a signature for a transaction using [`SignedTxData`].
+    pub fn standalone_signature(
+        self,
+        keypair: &common::SecretKey,
+    ) -> common::Signature {
+        SigningTx::from(self).standalone_signature(keypair)
+    }
+
     /// Verify that the transaction has been signed by the secret key
     /// counterpart of the given public key.
     pub fn verify_sig(
@@ -383,6 +409,18 @@ impl Tx {
         sig: &common::Signature,
     ) -> std::result::Result<(), VerifySigError> {
         SigningTx::from(self.clone()).verify_sig(pk, sig)
+    }
+
+    /// Verify that the transaction has been signed by the secret key
+    /// counterpart of the given public key.
+    /// Unlike `verify_sig`, this method doesn't expect the `tx.data` to be
+    /// `SignedTxData` and the signature is verified against the tx as given.
+    pub fn verify_standalone_sig(
+        &self,
+        pk: &common::PublicKey,
+        sig: &common::Signature,
+    ) -> std::result::Result<(), VerifySigError> {
+        SigningTx::from(self.clone()).verify_standalone_sig(pk, sig)
     }
 }
 
