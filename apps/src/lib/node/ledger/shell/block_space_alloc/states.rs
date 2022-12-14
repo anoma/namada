@@ -26,72 +26,8 @@ mod decrypted_txs;
 mod encrypted_txs;
 mod protocol_txs;
 mod remaining_txs;
-pub mod tracker;
 
 use super::{AllocFailure, BlockSpaceAllocator};
-
-/// A [`BlockSpaceAllocator`] that keeps track of
-/// some contextual data, such as error codes.
-pub struct CtxBlockSpaceAllocator<Ctx, S> {
-    /// The inner [`BlockSpaceAllocator`].
-    alloc: BlockSpaceAllocator<S>,
-    /// The context data.
-    ctx: Ctx,
-}
-
-impl<Ctx, S> CtxBlockSpaceAllocator<Ctx, S> {
-    /// Return the context data of this [`CtxBlockSpaceAllocator`].
-    #[inline]
-    #[allow(dead_code)]
-    pub fn context(&self) -> &Ctx {
-        &self.ctx
-    }
-
-    /// Add some context data to this [`CtxBlockSpaceAllocator`].
-    #[inline]
-    #[allow(dead_code)]
-    pub fn push_context(&mut self, ctx: Ctx) {
-        self.ctx = ctx;
-    }
-}
-
-impl<S> BlockSpaceAllocator<S> {
-    /// Wrap this [`BlockSpaceAllocator`] in a [`CtxBlockSpaceAllocator`].
-    ///
-    /// The resulting allocator is allowed to store some context data.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn with_context<Ctx>(
-        self,
-        data: Ctx,
-    ) -> CtxBlockSpaceAllocator<Ctx, S> {
-        CtxBlockSpaceAllocator {
-            alloc: self,
-            ctx: data,
-        }
-    }
-}
-
-impl<Ctx, S> TryAlloc for CtxBlockSpaceAllocator<Ctx, S>
-where
-    BlockSpaceAllocator<S>: TryAlloc,
-{
-    #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
-        self.alloc.try_alloc(tx)
-    }
-}
-
-impl<Ctx, S, T> NextStateImpl<T> for CtxBlockSpaceAllocator<Ctx, S>
-where
-    BlockSpaceAllocator<S>: NextStateImpl<T>,
-{
-    type Next = <BlockSpaceAllocator<S> as NextStateImpl<T>>::Next;
-
-    fn next_state_impl(self) -> Self::Next {
-        self.alloc.next_state_impl()
-    }
-}
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
 /// encrypted transactions.
