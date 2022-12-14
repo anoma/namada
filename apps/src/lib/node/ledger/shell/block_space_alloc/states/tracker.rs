@@ -6,8 +6,8 @@ use std::marker::PhantomData;
 use super::super::BlockSpaceAllocator;
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    BuildingProtocolTxBatch, FillingRemainingSpace, TryAlloc, WithEncryptedTxs,
-    WithoutEncryptedTxs,
+    BuildingProtocolTxBatch, FillingRemainingSpace, FusedBlockSpaceAllocator,
+    TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
 /// A tracker for the state of a decrypted txs allocator.
@@ -88,6 +88,19 @@ pub trait CurrentState: TryAlloc {
 }
 
 impl<S> CurrentState for BlockSpaceAllocator<S>
+where
+    S: 'static,
+    BlockSpaceAllocator<S>: TryAlloc,
+{
+    type State = S;
+
+    #[inline]
+    fn current_state(&self) -> Tracker<S> {
+        Tracker::new()
+    }
+}
+
+impl<S> CurrentState for FusedBlockSpaceAllocator<S>
 where
     S: 'static,
     BlockSpaceAllocator<S>: TryAlloc,
