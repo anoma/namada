@@ -304,14 +304,15 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    pub(crate) fn check_proposal_tx<'a, A>(
+    pub(crate) fn check_proposal_tx<'tx, A, Q>(
         &self,
         tx_bytes: &[u8],
-        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+        tx_queue_iter: &mut Q,
         alloc: &mut A,
         #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
     ) -> TxResult
     where
+        Q: Iterator<Item = &'tx WrapperTx>,
         A: CurrentState,
         A::State: 'static,
     {
