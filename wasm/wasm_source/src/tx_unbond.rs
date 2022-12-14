@@ -11,7 +11,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("failed to decode Unbond")?;
 
-    ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
+    ctx.unbond_tokens_new(
+        unbond.source.as_ref(),
+        &unbond.validator,
+        unbond.amount,
+    )
 }
 
 #[cfg(test)]

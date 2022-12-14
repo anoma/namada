@@ -10,7 +10,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let bond = transaction::pos::Bond::try_from_slice(&data[..])
         .wrap_err("failed to decode Bond")?;
 
-    ctx.bond_tokens(bond.source.as_ref(), &bond.validator, bond.amount)
+    ctx.bond_tokens_new(bond.source.as_ref(), &bond.validator, bond.amount)
 }
 
 #[cfg(test)]

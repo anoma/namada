@@ -12,9 +12,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         .wrap_err("failed to decode Withdraw")?;
 
     let slashed =
-        ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
+        ctx.withdraw_tokens_new(withdraw.source.as_ref(), &withdraw.validator)?;
     if slashed != token::Amount::default() {
-        debug_log!("Withdrawal slashed for {}", slashed);
+        debug_log!("New withdrawal slashed for {}", slashed);
     }
     Ok(())
 }
