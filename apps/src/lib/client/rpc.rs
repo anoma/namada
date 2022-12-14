@@ -53,11 +53,10 @@ use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use namada::ledger::masp::{Conversions, PinnedBalanceError};
 use crate::facade::tendermint::merkle::proof::Proof;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+    Client, HttpClient, Order, WebSocketClient,
 };
 
 /// Query the status of a given transaction.
@@ -120,7 +119,6 @@ pub async fn query_epoch(client: &HttpClient) -> Epoch {
 /// Query the last committed block
 pub async fn query_block(
     client: &HttpClient,
-    args: args::Query,
 ) -> crate::facade::tendermint_rpc::endpoint::block::Response {
     let response = client.latest_block().await.unwrap();
     println!(
@@ -1114,7 +1112,6 @@ pub async fn query_proposal_result(
 
 pub async fn query_protocol_parameters(
     client: &HttpClient,
-    _ctx: Context,
     args: args::QueryProtocolParameters,
 ) {
     let gov_parameters = get_governance_parameters(&client).await;
@@ -1183,7 +1180,7 @@ pub async fn query_protocol_parameters(
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds(client: &HttpClient, ctx: Context, args: args::QueryBonds) {
+pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
     let epoch = query_epoch(client).await;
     match (args.owner, args.validator) {
         (Some(owner), Some(validator)) => {
@@ -1529,7 +1526,7 @@ pub async fn query_bonds(client: &HttpClient, ctx: Context, args: args::QueryBon
 }
 
 /// Query PoS bonded stake
-pub async fn query_bonded_stake(client: &HttpClient, ctx: Context, args: args::QueryBondedStake) {
+pub async fn query_bonded_stake(client: &HttpClient, args: args::QueryBondedStake) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(client).await,
@@ -1630,7 +1627,6 @@ pub async fn query_bonded_stake(client: &HttpClient, ctx: Context, args: args::Q
 /// Query PoS validator's commission rate
 pub async fn query_commission_rate(
     client: &HttpClient,
-    ctx: Context,
     args: args::QueryCommissionRate,
 ) {
     let epoch = match args.epoch {
@@ -1684,7 +1680,7 @@ pub async fn query_commission_rate(
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(client: &HttpClient, ctx: Context, args: args::QuerySlashes) {
+pub async fn query_slashes(client: &HttpClient, args: args::QuerySlashes) {
     match args.validator {
         Some(validator) => {
             let validator = validator;
@@ -1956,7 +1952,7 @@ fn process_unbonds_query(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions(client: &HttpClient, ctx: Context, args: args::QueryConversions) {
+pub async fn query_conversions(client: &HttpClient, args: args::QueryConversions) {
     // The chosen token type of the conversions
     let target_token = args.token;
     // To facilitate human readable token addresses

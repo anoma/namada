@@ -10,10 +10,8 @@ use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 use tendermint_rpc::HttpClient;
 
 use super::rpc;
-use crate::cli::context::{WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::wallet::Wallet;
 
 /// Find the public key for the given address and try to load the keypair
@@ -157,7 +155,7 @@ pub async fn sign_tx(
     let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
-        sign_wrapper(&ctx, args, epoch, tx, &keypair).await
+        sign_wrapper(args, epoch, tx, &keypair).await
     };
     (ctx, broadcast_data)
 }
@@ -166,7 +164,6 @@ pub async fn sign_tx(
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper(
-    ctx: &Context,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
