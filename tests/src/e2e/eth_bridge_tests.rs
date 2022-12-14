@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use namada::ledger::eth_bridge;
 use namada_core::types::storage;
 use namada_core::types::storage::KeySeg;
-use namada_core::types::wasm::WriteOp;
+use namada_core::types::tx_data::TxWriteData;
 
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
@@ -40,7 +40,7 @@ fn everything() {
     let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
     std::fs::write(
         &tx_data_path,
-        WriteOp {
+        TxWriteData {
             key: storage::Key::from(eth_bridge::vp::ADDRESS.to_db_key()),
             value: b"arbitrary value".to_vec(),
         }

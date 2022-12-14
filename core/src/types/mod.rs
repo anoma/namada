@@ -12,5 +12,5 @@ pub mod storage;
 pub mod time;
 pub mod token;
 pub mod transaction;
+pub mod tx_data;
 pub mod validity_predicate;
-pub mod wasm;

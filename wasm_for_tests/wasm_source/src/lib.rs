@@ -62,9 +62,10 @@ pub mod main {
 #[cfg(feature = "tx_write")]
 pub mod main {
     use borsh::BorshDeserialize;
+    use namada_tx_prelude::tx_data::TxWriteData;
     use namada_tx_prelude::{
-        log_string, transaction, wasm, Ctx, ResultExt, SignedTxData,
-        StorageRead, StorageWrite, TxResult,
+        log_string, transaction, Ctx, ResultExt, SignedTxData, StorageRead,
+        StorageWrite, TxResult,
     };
 
     const TX_NAME: &str = "tx_write";
@@ -96,8 +97,8 @@ pub mod main {
                 fatal_msg("no data provided");
             }
         };
-        let wasm::WriteOp { key, value } =
-            match wasm::WriteOp::try_from_slice(&data[..]) {
+        let TxWriteData { key, value } =
+            match TxWriteData::try_from_slice(&data[..]) {
                 Ok(write_op) => {
                     log(&format!(
                         "parsed WriteOp to key {} ({} bytes)",
