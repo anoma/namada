@@ -320,10 +320,12 @@ fn key_and_address_gen(
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = load_wallet(ctx, is_pre_genesis);
-    let (alias, _key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
+    let (alias, key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
+    let pk = key.ref_to();
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     println!(
-        "Successfully added a key and an address with alias: \"{}\"",
+        "Successfully added a key and an address with alias: \"{}\".\nPublic \
+         key: {pk}",
         alias
     );
 }
