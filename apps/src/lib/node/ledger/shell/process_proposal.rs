@@ -206,7 +206,8 @@ where
     /// function returns.
     #[cfg(not(feature = "abcipp"))]
     pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
-        let mut alloc = BlockSpaceAllocator::from(&self.storage).fuse();
+        let mut alloc =
+            BlockSpaceAllocator::from(&self.storage).with_context::<()>();
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         let tx_results: Vec<_> = txs
             .iter()

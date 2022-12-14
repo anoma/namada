@@ -30,59 +30,56 @@ pub mod tracker;
 
 use super::{AllocFailure, BlockSpaceAllocator};
 
-/// A [`BlockSpaceAllocator`] that keeps track of whether
-/// any bin space is left or not.
-pub struct FusedBlockSpaceAllocator<S> {
+/// A [`BlockSpaceAllocator`] that keeps track of
+/// some contextual data, such as error codes.
+pub struct CtxBlockSpaceAllocator<Ctx, S> {
     /// The inner [`BlockSpaceAllocator`].
     alloc: BlockSpaceAllocator<S>,
-    /// Boolean flag that keeps track of the failure
-    /// status of some allocation.
-    ///
-    /// In turn, this means that the current allocator
-    /// state has no more space left for txs.
-    ran_out_of_space: bool,
+    /// The context data.
+    ctx: Option<Ctx>,
 }
 
-impl<S> FusedBlockSpaceAllocator<S> {
-    /// Check if this [`FusedBlockSpaceAllocator`]
-    /// still has any bin space left.
+impl<Ctx, S> CtxBlockSpaceAllocator<Ctx, S> {
+    /// Return the context data of this [`CtxBlockSpaceAllocator`].
     #[inline]
     #[allow(dead_code)]
-    pub fn has_run_out_of_space(&self) -> bool {
-        self.ran_out_of_space
+    pub fn context(&self) -> Option<&Ctx> {
+        self.ctx.as_ref()
+    }
+
+    /// Add some context data to this [`CtxBlockSpaceAllocator`].
+    #[inline]
+    #[allow(dead_code)]
+    pub fn push_context(&mut self, ctx: Ctx) {
+        self.ctx = Some(ctx);
     }
 }
 
 impl<S> BlockSpaceAllocator<S> {
-    /// Fuse the current [`BlockSpaceAllocator`].
+    /// Wrap this [`BlockSpaceAllocator`] in a [`CtxBlockSpaceAllocator`].
+    ///
+    /// The resulting allocator is allowed to store some context data.
     #[inline]
     #[allow(dead_code)]
-    pub fn fuse(self) -> FusedBlockSpaceAllocator<S> {
-        FusedBlockSpaceAllocator {
+    pub fn with_context<Ctx>(self) -> CtxBlockSpaceAllocator<Ctx, S> {
+        CtxBlockSpaceAllocator {
             alloc: self,
-            ran_out_of_space: false,
+            ctx: None,
         }
     }
 }
 
-impl<S> TryAlloc for FusedBlockSpaceAllocator<S>
+impl<Ctx, S> TryAlloc for CtxBlockSpaceAllocator<Ctx, S>
 where
     BlockSpaceAllocator<S>: TryAlloc,
 {
+    #[inline]
     fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
-        if self.ran_out_of_space {
-            return Err(AllocFailure::Rejected { bin_space_left: 0 });
-        }
-        self.alloc.try_alloc(tx).map_err(|err| {
-            if matches!(err, AllocFailure::Rejected { .. }) {
-                self.ran_out_of_space = true;
-            }
-            err
-        })
+        self.alloc.try_alloc(tx)
     }
 }
 
-impl<S, T> NextStateImpl<T> for FusedBlockSpaceAllocator<S>
+impl<Ctx, S, T> NextStateImpl<T> for CtxBlockSpaceAllocator<Ctx, S>
 where
     BlockSpaceAllocator<S>: NextStateImpl<T>,
 {

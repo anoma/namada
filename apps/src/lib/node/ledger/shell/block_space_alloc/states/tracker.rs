@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use super::super::BlockSpaceAllocator;
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
-    BuildingProtocolTxBatch, FillingRemainingSpace, FusedBlockSpaceAllocator,
+    BuildingProtocolTxBatch, CtxBlockSpaceAllocator, FillingRemainingSpace,
     TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
 };
 
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<S> CurrentState for FusedBlockSpaceAllocator<S>
+impl<Ctx, S> CurrentState for CtxBlockSpaceAllocator<Ctx, S>
 where
     S: 'static,
     BlockSpaceAllocator<S>: TryAlloc,
