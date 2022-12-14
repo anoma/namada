@@ -145,7 +145,7 @@ pub async fn submit_update_vp(client: &HttpClient, ctx: Context, args: args::TxU
     process_tx(client, ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
-pub async fn submit_init_account(client: &HttpClient, mut ctx: Context, args: args::TxInitAccount) {
+pub async fn submit_init_account(client: &HttpClient, ctx: Context, args: args::TxInitAccount) {
     let public_key = args.public_key;
     let vp_code = args
         .vp_code_path
@@ -1140,7 +1140,7 @@ pub async fn submit_reveal_pk_aux(
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
-        super::signing::sign_wrapper(ctx, args, epoch, tx, &keypair).await
+        super::signing::sign_wrapper(args, epoch, tx, &keypair).await
     };
 
     if args.dry_run {

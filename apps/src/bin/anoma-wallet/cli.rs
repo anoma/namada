@@ -210,7 +210,7 @@ fn spending_key_gen(
 
 /// Generate a shielded payment address from the given key.
 fn payment_address_gen(
-    mut ctx: Context,
+    ctx: Context,
     args::MaspPayAddrGen {
         alias,
         viewing_key,

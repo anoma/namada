@@ -85,12 +85,12 @@ pub async fn main() -> Result<()> {
                 Sub::QueryConversions(QueryConversions(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_conversions(&client, ctx, args).await;
+                    rpc::query_conversions(&client, args).await;
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_block(&client, args).await;
+                    rpc::query_block(&client).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
@@ -100,22 +100,22 @@ pub async fn main() -> Result<()> {
                 Sub::QueryBonds(QueryBonds(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_bonds(&client, ctx, args).await;
+                    rpc::query_bonds(&client, args).await;
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_bonded_stake(&client, ctx, args).await;
+                    rpc::query_bonded_stake(&client, args).await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_commission_rate(&client, ctx, args).await;
+                    rpc::query_commission_rate(&client, args).await;
                 }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_slashes(&client, ctx, args).await;
+                    rpc::query_slashes(&client, args).await;
                 }
                 Sub::QueryResult(QueryResult(args)) => {
                     // Connect to the Tendermint server holding the transactions
@@ -150,7 +150,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_protocol_parameters(&client, ctx, args).await;
+                    rpc::query_protocol_parameters(&client, args).await;
                 }
             }
         }
