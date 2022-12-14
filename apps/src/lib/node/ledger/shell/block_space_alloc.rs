@@ -160,7 +160,7 @@ impl<State> BlockSpaceAllocator<State> {
 /// Allotted space for a batch of transactions of the same kind in some
 /// proposed block, measured in bytes.
 #[derive(Debug, Copy, Clone, Default)]
-struct TxBin {
+pub struct TxBin {
     /// The current space utilized by the batch of transactions.
     occupied_space_in_bytes: u64,
     /// The maximum space the batch of transactions may occupy.
@@ -171,7 +171,7 @@ impl TxBin {
     /// Return a new [`TxBin`] with a total allotted space equal to the
     /// floor of the fraction `frac` of the available block space `max_bytes`.
     #[inline]
-    fn init_over_ratio(max_bytes: u64, frac: threshold::Threshold) -> Self {
+    pub fn init_over_ratio(max_bytes: u64, frac: threshold::Threshold) -> Self {
         let allotted_space_in_bytes = frac.over(max_bytes);
         Self {
             allotted_space_in_bytes,
@@ -181,13 +181,13 @@ impl TxBin {
 
     /// Return the amount of space left in this [`TxBin`].
     #[inline]
-    fn space_left_in_bytes(&self) -> u64 {
+    pub fn space_left_in_bytes(&self) -> u64 {
         self.allotted_space_in_bytes - self.occupied_space_in_bytes
     }
 
     /// Construct a new [`TxBin`], with a capacity of `max_bytes`.
     #[inline]
-    fn init(max_bytes: u64) -> Self {
+    pub fn init(max_bytes: u64) -> Self {
         Self {
             allotted_space_in_bytes: max_bytes,
             occupied_space_in_bytes: 0,
@@ -197,7 +197,7 @@ impl TxBin {
     /// Shrink the allotted space of this [`TxBin`] to whatever
     /// space is currently being utilized.
     #[inline]
-    fn shrink_to_fit(&mut self) {
+    pub fn shrink_to_fit(&mut self) {
         self.allotted_space_in_bytes = self.occupied_space_in_bytes;
     }
 
@@ -205,7 +205,7 @@ impl TxBin {
     ///
     /// Signal the caller if the tx is larger than its max
     /// allotted bin space.
-    fn try_dump(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
+    pub fn try_dump(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
         let tx_len = tx.len() as u64;
         if tx_len > self.allotted_space_in_bytes {
             let bin_size = self.allotted_space_in_bytes;
@@ -222,7 +222,7 @@ impl TxBin {
     }
 }
 
-mod threshold {
+pub mod threshold {
     //! Transaction allotment thresholds.
 
     use num_rational::Ratio;
