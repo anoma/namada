@@ -99,6 +99,9 @@ pub struct Rfc3339String(pub String);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
+/// The minimum possible DateTime<Utc>.
+pub const MIN_UTC: DateTimeUtc = DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC);
+
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
