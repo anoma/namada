@@ -26,6 +26,8 @@ pub struct ValidationMeta {
     pub digests: DigestCounters,
     /// Space utilized by encrypted txs.
     pub encrypted_txs_bin: TxBin,
+    /// Space utilized by all txs.
+    pub txs_bin: TxBin,
     /// Check if the decrypted tx queue has any elements
     /// left.
     pub decrypted_queue_has_txs: bool,
@@ -37,15 +39,16 @@ where
     H: StorageHasher,
 {
     fn from(storage: &Storage<D, H>) -> Self {
-        let encrypted_txs_bin = TxBin::init_over_ratio(
-            storage.get_max_proposal_bytes().get(),
-            threshold::ONE_THIRD,
-        );
+        let max_proposal_bytes = storage.get_max_proposal_bytes().get();
+        let encrypted_txs_bin =
+            TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
+        let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
             #[cfg(feature = "abcipp")]
             digest: DigestCounters::default(),
             decrypted_queue_has_txs: false,
             encrypted_txs_bin,
+            txs_bin,
         }
     }
 }
@@ -194,6 +197,8 @@ where
 
         let will_reject_proposal = invalid_txs;
 
+        // TODO: check if tx queue still has txs left in it
+
         let status = if will_reject_proposal {
             ProposalStatus::Reject
         } else {
@@ -326,6 +331,23 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
         metadata: &mut ValidationMeta,
     ) -> TxResult {
+        // try to allocate space for this tx
+        if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
+            return TxResult {
+                code: ErrorCodes::AllocationError.into(),
+                info: match e {
+                    AllocFailure::Rejected { .. } => {
+                        "No more space left in the block"
+                    }
+                    AllocFailure::OverflowsBin { .. } => {
+                        "The given tx is larger than the max configured \
+                         proposal size"
+                    }
+                }
+                .into(),
+            };
+        }
+
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
                 tracing::debug!(
@@ -479,10 +501,10 @@ where
                 },
             },
             TxType::Wrapper(tx) => {
-                // try to allocate space for this tx
+                // try to allocate space for this encrypted tx
                 if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
                     return TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
+                        code: ErrorCodes::AllocationError.into(),
                         info: match e {
                             AllocFailure::Rejected { .. } => {
                                 "No more space left in the block for wrapper \
