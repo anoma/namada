@@ -7,6 +7,7 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
+use tendermint_rpc::HttpClient;
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -18,9 +19,9 @@ use crate::wallet::Wallet;
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
 pub async fn find_keypair(
+    client: &HttpClient,
     wallet: &mut Wallet,
     addr: &Address,
-    ledger_address: TendermintAddress,
 ) -> common::SecretKey {
     match addr {
         Address::Established(_) => {
@@ -28,7 +29,7 @@ pub async fn find_keypair(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key(addr, ledger_address)
+            let public_key = rpc::get_public_key(client, addr)
                 .await
                 .unwrap_or_else(|| {
                     eprintln!(
@@ -74,9 +75,9 @@ pub enum TxSigningKey {
     // Do not sign any transaction
     None,
     // Obtain the actual keypair from wallet and use that to sign
-    WalletKeypair(WalletKeypair),
+    WalletKeypair(common::SecretKey),
     // Obtain the keypair corresponding to given address from wallet and sign
-    WalletAddress(WalletAddress),
+    WalletAddress(Address),
     // Directly use the given secret key to sign transactions
     SecretKey(common::SecretKey),
 }
@@ -86,6 +87,7 @@ pub enum TxSigningKey {
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
 pub async fn tx_signer(
+    client: &HttpClient,
     ctx: &mut Context,
     args: &args::Tx,
     mut default: TxSigningKey,
@@ -99,28 +101,28 @@ pub async fn tx_signer(
     // Now actually fetch the signing key and apply it
     match default {
         TxSigningKey::WalletKeypair(signing_key) => {
-            ctx.get_cached(&signing_key)
+            signing_key
         }
         TxSigningKey::WalletAddress(signer) => {
-            let signer = ctx.get(&signer);
+            let signer = signer;
             let signing_key = find_keypair(
+                client,
                 &mut ctx.wallet,
                 &signer,
-                args.ledger_address.clone(),
             )
             .await;
             // Check if the signer is implicit account that needs to reveal its
             // PK first
             if matches!(signer, Address::Implicit(_)) {
                 let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+                super::tx::reveal_pk_if_needed(client, ctx, &pk, args).await;
             }
             signing_key
         }
         TxSigningKey::SecretKey(signing_key) => {
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+            super::tx::reveal_pk_if_needed(client, ctx, &pk, args).await;
             signing_key
         }
         TxSigningKey::None => {
@@ -141,17 +143,16 @@ pub async fn tx_signer(
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
+    client: &HttpClient,
     mut ctx: Context,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> (Context, TxBroadcastData) {
-    let keypair = tx_signer(&mut ctx, args, default).await;
+    let keypair = tx_signer(client, &mut ctx, args, default).await;
     let tx = tx.sign(&keypair);
 
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.ledger_address.clone(),
-    })
+    let epoch = rpc::query_epoch(client)
     .await;
     let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(tx)
@@ -175,7 +176,7 @@ pub async fn sign_wrapper(
         WrapperTx::new(
             Fee {
                 amount: args.fee_amount,
-                token: ctx.get(&args.fee_token),
+                token: args.fee_token.clone(),
             },
             keypair,
             epoch,
