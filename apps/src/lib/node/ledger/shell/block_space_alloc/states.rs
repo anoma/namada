@@ -36,22 +36,22 @@ pub struct CtxBlockSpaceAllocator<Ctx, S> {
     /// The inner [`BlockSpaceAllocator`].
     alloc: BlockSpaceAllocator<S>,
     /// The context data.
-    ctx: Option<Ctx>,
+    ctx: Ctx,
 }
 
 impl<Ctx, S> CtxBlockSpaceAllocator<Ctx, S> {
     /// Return the context data of this [`CtxBlockSpaceAllocator`].
     #[inline]
     #[allow(dead_code)]
-    pub fn context(&self) -> Option<&Ctx> {
-        self.ctx.as_ref()
+    pub fn context(&self) -> &Ctx {
+        &self.ctx
     }
 
     /// Add some context data to this [`CtxBlockSpaceAllocator`].
     #[inline]
     #[allow(dead_code)]
     pub fn push_context(&mut self, ctx: Ctx) {
-        self.ctx = Some(ctx);
+        self.ctx = ctx;
     }
 }
 
@@ -61,10 +61,13 @@ impl<S> BlockSpaceAllocator<S> {
     /// The resulting allocator is allowed to store some context data.
     #[inline]
     #[allow(dead_code)]
-    pub fn with_context<Ctx>(self) -> CtxBlockSpaceAllocator<Ctx, S> {
+    pub fn with_context<Ctx>(
+        self,
+        data: Ctx,
+    ) -> CtxBlockSpaceAllocator<Ctx, S> {
         CtxBlockSpaceAllocator {
             alloc: self,
-            ctx: None,
+            ctx: data,
         }
     }
 }
