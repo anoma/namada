@@ -33,8 +33,14 @@ use super::{AllocFailure, BlockSpaceAllocator};
 /// A [`BlockSpaceAllocator`] that keeps track of whether
 /// any bin space is left or not.
 pub struct FusedBlockSpaceAllocator<S> {
+    /// The inner [`BlockSpaceAllocator`].
     alloc: BlockSpaceAllocator<S>,
-    done: bool,
+    /// Boolean flag that keeps track of the failure
+    /// status of some allocation.
+    ///
+    /// In turn, this means that the current allocator
+    /// state has no more space left for txs.
+    ran_out_of_space: bool,
 }
 
 impl<S> FusedBlockSpaceAllocator<S> {
@@ -42,8 +48,8 @@ impl<S> FusedBlockSpaceAllocator<S> {
     /// still has any bin space left.
     #[inline]
     #[allow(dead_code)]
-    pub fn is_done(&self) -> bool {
-        self.done
+    pub fn has_run_out_of_space(&self) -> bool {
+        self.ran_out_of_space
     }
 }
 
@@ -54,7 +60,7 @@ impl<S> BlockSpaceAllocator<S> {
     pub fn fuse(self) -> FusedBlockSpaceAllocator<S> {
         FusedBlockSpaceAllocator {
             alloc: self,
-            done: false,
+            ran_out_of_space: false,
         }
     }
 }
@@ -64,12 +70,12 @@ where
     BlockSpaceAllocator<S>: TryAlloc,
 {
     fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
-        if self.done {
+        if self.ran_out_of_space {
             return Err(AllocFailure::Rejected { bin_space_left: 0 });
         }
         self.alloc.try_alloc(tx).map_err(|err| {
             if matches!(err, AllocFailure::Rejected { .. }) {
-                self.done = true;
+                self.ran_out_of_space = true;
             }
             err
         })
