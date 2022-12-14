@@ -30,6 +30,63 @@ pub mod tracker;
 
 use super::{AllocFailure, BlockSpaceAllocator};
 
+/// A [`BlockSpaceAllocator`] that keeps track of whether
+/// any bin space is left or not.
+pub struct FusedBlockSpaceAllocator<S> {
+    alloc: BlockSpaceAllocator<S>,
+    done: bool,
+}
+
+impl<S> FusedBlockSpaceAllocator<S> {
+    /// Check if this [`FusedBlockSpaceAllocator`]
+    /// still has any bin space left.
+    #[inline]
+    #[allow(dead_code)]
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+}
+
+impl<S> BlockSpaceAllocator<S> {
+    /// Fuse the current [`BlockSpaceAllocator`].
+    #[inline]
+    #[allow(dead_code)]
+    pub fn fuse(self) -> FusedBlockSpaceAllocator<S> {
+        FusedBlockSpaceAllocator {
+            alloc: self,
+            done: false,
+        }
+    }
+}
+
+impl<S> TryAlloc for FusedBlockSpaceAllocator<S>
+where
+    BlockSpaceAllocator<S>: TryAlloc,
+{
+    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
+        if self.done {
+            return Err(AllocFailure::Rejected { bin_space_left: 0 });
+        }
+        self.alloc.try_alloc(tx).map_err(|err| {
+            if matches!(err, AllocFailure::Rejected { .. }) {
+                self.done = true;
+            }
+            err
+        })
+    }
+}
+
+impl<S, T> NextStateImpl<T> for FusedBlockSpaceAllocator<S>
+where
+    BlockSpaceAllocator<S>: NextStateImpl<T>,
+{
+    type Next = <BlockSpaceAllocator<S> as NextStateImpl<T>>::Next;
+
+    fn next_state_impl(self) -> Self::Next {
+        self.alloc.next_state_impl()
+    }
+}
+
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
 /// encrypted transactions.
 pub enum EncryptedTxBatchAllocator {
