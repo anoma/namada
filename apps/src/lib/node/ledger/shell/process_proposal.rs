@@ -206,7 +206,7 @@ where
     /// function returns.
     #[cfg(not(feature = "abcipp"))]
     pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
-        let mut alloc = BlockSpaceAllocator::from(&self.storage);
+        let mut alloc = BlockSpaceAllocator::from(&self.storage).fuse();
         let mut tx_queue_iter = self.storage.tx_queue.iter();
         let tx_results: Vec<_> = txs
             .iter()
@@ -304,12 +304,11 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
-    // TODO: return Result<TxResult, AllocFailure>
-    pub(crate) fn check_proposal_tx<'a, A: CurrentState>(
+    pub(crate) fn check_proposal_tx<'a>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        _alloc: &mut A,
+        _alloc: &mut impl CurrentState,
         #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
