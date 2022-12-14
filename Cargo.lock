@@ -3886,6 +3886,7 @@ dependencies = [
  "itertools",
  "namada",
  "namada_apps",
+ "namada_core",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "pretty_assertions",
