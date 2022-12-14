@@ -125,8 +125,8 @@ pub enum ErrorCodes {
     ExtraTxs = 5,
     Undecryptable = 6,
     InvalidVoteExtension = 7,
-    // NOTE: keep these values in sync with
-    // [`ErrorCodes::is_recoverable`]
+    AllocationError = 8, /* NOTE: keep these values in sync with
+                          * [`ErrorCodes::is_recoverable`] */
 }
 
 impl ErrorCodes {
