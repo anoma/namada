@@ -145,9 +145,22 @@ where
             );
         }
 
+        let has_remaining_decrypted_txs =
+            meta.decrypted_queue_has_remaining_txs;
+        if has_remaining_decrypted_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Not all decrypted txs from the previous height were included in
+                 the proposal, the block will be rejected"
+            );
+        }
+
         let will_reject_proposal = invalid_num_of_eth_ev_digests
             || invalid_num_of_valset_upd_digests
-            || invalid_txs;
+            || invalid_txs
+            || has_remaining_decrypted_txs;
 
         let status = if will_reject_proposal {
             ProposalStatus::Reject
@@ -177,7 +190,7 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, _meta) = self.check_proposal(&req.txs);
+        let (tx_results, meta) = self.check_proposal(&req.txs);
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -198,7 +211,19 @@ where
             );
         }
 
-        let will_reject_proposal = invalid_txs;
+        let has_remaining_decrypted_txs =
+            meta.decrypted_queue_has_remaining_txs;
+        if has_remaining_decrypted_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Not all decrypted txs from the previous height were included in
+                 the proposal, the block will be rejected"
+            );
+        }
+
+        let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
 
         // TODO: check if tx queue still has txs left in it
 
