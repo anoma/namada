@@ -60,8 +60,6 @@ impl<A, B> PartialEq<Tracker<B>> for Tracker<A>
 where
     A: 'static,
     B: 'static,
-    BlockSpaceAllocator<A>: TryAlloc,
-    BlockSpaceAllocator<B>: TryAlloc,
 {
     #[inline]
     fn eq(&self, _: &Tracker<B>) -> bool {
@@ -69,15 +67,10 @@ where
     }
 }
 
-impl<S> Eq for Tracker<S>
-where
-    S: 'static,
-    BlockSpaceAllocator<S>: TryAlloc,
-{
-}
+impl<S> Eq for Tracker<S> where S: 'static {}
 
 /// Current state tracker for a [`BlockSpaceAllocator`].
-pub trait CurrentState: TryAlloc {
+pub trait CurrentState {
     type State;
 
     /// Retrieve the current state of a [`BlockSpaceAllocator`].
