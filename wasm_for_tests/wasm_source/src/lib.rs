@@ -119,7 +119,9 @@ pub mod main {
             }
         }
         log(&format!("attempting to write new value to key {}", key));
-        ctx.write(&key, value)?;
+        // using `ctx.write_bytes` instead of `ctx.write` here, as we want to
+        // write the actual bytes, not a Borsh-serialization of a `Vec<u8>`
+        ctx.write_bytes(&key, &value[..])?;
         Ok(())
     }
 }
