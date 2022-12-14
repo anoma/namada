@@ -2,6 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::storage::Storage;
 use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -10,8 +11,44 @@ use namada::types::voting_power::FractionalVotingPower;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shell::block_space_alloc::{
+    threshold, AllocFailure, TxBin,
+};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+
+/// Validation metadata, to keep track of used resources or
+/// transaction numbers, in a block proposal.
+#[derive(Default)]
+pub struct ValidationMeta {
+    /// Vote extension digest counters.
+    #[cfg(feature = "abcipp")]
+    pub digests: DigestCounters,
+    /// Space utilized by encrypted txs.
+    pub encrypted_txs_bin: TxBin,
+    /// Check if the decrypted tx queue has any elements
+    /// left.
+    pub decrypted_queue_has_txs: bool,
+}
+
+impl<D, H> From<&Storage<D, H>> for ValidationMeta
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn from(storage: &Storage<D, H>) -> Self {
+        let encrypted_txs_bin = TxBin::init_over_ratio(
+            storage.get_max_proposal_bytes().get(),
+            threshold::ONE_THIRD,
+        );
+        Self {
+            #[cfg(feature = "abcipp")]
+            digest: DigestCounters::default(),
+            decrypted_queue_has_txs: false,
+            encrypted_txs_bin,
+        }
+    }
+}
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
@@ -19,9 +56,9 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 #[cfg(feature = "abcipp")]
 pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
-    eth_ev_digest_num: usize,
+    pub eth_ev_digest_num: usize,
     /// The number of validator set update vote extensions found thus far.
-    valset_upd_digest_num: usize,
+    pub valset_upd_digest_num: usize,
 }
 
 impl<D, H> Shell<D, H>
@@ -53,31 +90,31 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, counters) = self.check_proposal(&req.txs);
+        let (tx_results, metadata) = self.check_proposal(&req.txs);
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let invalid_num_of_eth_ev_digests =
-            !self.has_proper_eth_events_num(&counters);
+            !self.has_proper_eth_events_num(&metadata);
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
                 hash = ?HEXUPPER.encode(&req.hash),
-                eth_ev_digest_num = counters.eth_ev_digest_num,
+                eth_ev_digest_num = metadata.digests.eth_ev_digest_num,
                 "Found invalid number of Ethereum events vote extension digests, proposed block \
                  will be rejected"
             );
         }
 
         let invalid_num_of_valset_upd_digests =
-            !self.has_proper_valset_upd_num(&counters);
+            !self.has_proper_valset_upd_num(&metadata);
         if invalid_num_of_valset_upd_digests {
             tracing::warn!(
                 proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
                 hash = ?HEXUPPER.encode(&req.hash),
-                valset_upd_digest_num = counters.valset_upd_digest_num,
+                valset_upd_digest_num = metadata.digests.valset_upd_digest_num,
                 "Found invalid number of validator set update vote extension digests, proposed block \
                  will be rejected"
             );
@@ -134,7 +171,7 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let tx_results = self.check_proposal(&req.txs);
+        let (tx_results, _meta) = self.check_proposal(&req.txs);
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -169,49 +206,31 @@ where
         }
     }
 
-    /// Evaluates the corresponding [`TxResult`] for each tx in a
-    /// proposed block, and counts the number of digest transactions.
+    /// Evaluates the corresponding [`TxResult`] for each tx in the
+    /// proposal. Additionally, counts the number of digest
+    /// txs and the bytes used by encrypted txs in the proposal.
     ///
     /// `ProcessProposal` should be able to make a decision on whether a
     /// proposed block is acceptable or not based solely on what this
     /// function returns.
-    #[cfg(feature = "abcipp")]
     pub fn check_proposal(
         &self,
         txs: &[TxBytes],
-    ) -> (Vec<TxResult>, DigestCounters) {
+    ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
-        // the number of vote extension digests included in the block proposal
-        let mut counters = DigestCounters::default();
+        let mut metadata = ValidationMeta::from(&self.storage);
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
                 self.check_proposal_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
-                    &mut counters,
+                    &mut metadata,
                 )
             })
             .collect();
-        (tx_results, counters)
-    }
-
-    /// Evaluates the corresponding [`TxResult`] for each tx in a
-    /// proposed block.
-    ///
-    /// `ProcessProposal` should be able to make a decision on whether a
-    /// proposed block is acceptable or not based solely on what this
-    /// function returns.
-    #[cfg(not(feature = "abcipp"))]
-    pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
-        let tx_results: Vec<_> = txs
-            .iter()
-            .map(|tx_bytes| {
-                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter)
-            })
-            .collect();
-        tx_results
+        metadata.decrypted_queue_has_txs = tx_queue_iter.next().is_some();
+        (tx_results, metadata)
     }
 
     /// Validates a list of vote extensions, included in PrepareProposal.
@@ -305,7 +324,7 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
+        metadata: &mut ValidationMeta,
     ) -> TxResult {
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
@@ -387,7 +406,7 @@ where
                 ProtocolTxType::EthereumEvents(digest) => {
                     #[cfg(feature = "abcipp")]
                     {
-                        counters.eth_ev_digest_num += 1;
+                        metadata.digests.eth_ev_digest_num += 1;
                     }
                     let extensions =
                         digest.decompress(self.storage.last_height);
@@ -412,7 +431,7 @@ where
                     }
                     #[cfg(feature = "abcipp")]
                     {
-                        counters.valset_upd_digest_num += 1;
+                        metadata.digests.valset_upd_digest_num += 1;
                     }
 
                     let extensions =
@@ -460,6 +479,24 @@ where
                 },
             },
             TxType::Wrapper(tx) => {
+                // try to allocate space for this tx
+                if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
+                    return TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: match e {
+                            AllocFailure::Rejected { .. } => {
+                                "No more space left in the block for wrapper \
+                                 txs"
+                            }
+                            AllocFailure::OverflowsBin { .. } => {
+                                "The given wrapper tx is larger than 1/3 of \
+                                 the available block space"
+                            }
+                        }
+                        .into(),
+                    };
+                }
+
                 // validate the ciphertext via Ferveo
                 if !tx.validate_ciphertext() {
                     TxResult {
@@ -512,19 +549,20 @@ where
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
-    fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
+    fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
+        self.storage.last_height.0 == 0 || meta.digests.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
-    fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
+    fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
-            self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
+            self.storage.last_height.0 == 0
+                || meta.digests.valset_upd_digest_num == 1
         } else {
             true
         }
