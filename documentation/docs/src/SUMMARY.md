@@ -12,4 +12,4 @@
     - [Governance](./user-guide/ledger/governance.md)
   - [Genesis validator setup](./user-guide/genesis-validator-setup.md)
   - [Applying to be a genesis validator](./user-guide/genesis-validator-apply.md)
-- [Testnets](./testnets/testnets.md)
+- [Testnets](./testnets/README.md)
