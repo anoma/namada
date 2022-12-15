@@ -31,6 +31,7 @@ use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
+use namada::ledger::masp::ShieldedUtils;
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
 use namada::types::address::{masp, tokens, Address};
@@ -38,6 +39,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
 };
+use namada::ledger::masp::ShieldedContext;
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -49,7 +51,8 @@ use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
-use crate::cli::{self, args, Context};
+use crate::wallet::Wallet;
+use crate::cli::{self, args};
 use crate::client::tendermint_rpc_types::TxResponse;
 use namada::ledger::masp::{Conversions, PinnedBalanceError};
 use crate::facade::tendermint::merkle::proof::Proof;
@@ -136,24 +139,28 @@ pub async fn query_results(client: &HttpClient) -> Vec<BlockResults> {
 }
 
 /// Query the specified accepted transfers from the ledger
-pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
+pub async fn query_transfers<U: ShieldedUtils>(
+    wallet: &mut Wallet,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryTransfers
+) {
     let query_token = args.token;
     let query_owner = args.owner
         .map_or_else(
-            || Either::Right(ctx.wallet.get_addresses().into_values().collect()),
+            || Either::Right(wallet.get_addresses().into_values().collect()),
             Either::Left,
         );
-    let _ = ctx.shielded.load();
+    let _ = shielded.load();
     // Obtain the effects of all shielded and transparent transactions
-    let transfers = ctx.shielded.query_tx_deltas(
+    let transfers = shielded.query_tx_deltas(
         &query_owner,
         &query_token,
-        &ctx.wallet.get_viewing_keys(),
+        &wallet.get_viewing_keys(),
     )
     .await;
     // To facilitate lookups of human-readable token names
     let tokens = tokens();
-    let vks = ctx.wallet.get_viewing_keys();
+    let vks = wallet.get_viewing_keys();
     // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
     let fvk_map: HashMap<_, _> = vks
         .values()
@@ -176,8 +183,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         for (acc, amt) in tx_delta {
             // Realize the rewards that would have been attained upon the
             // transaction's reception
-            let amt = ctx
-                .shielded
+            let amt = shielded
                 .compute_exchanged_amount(
                     amt,
                     epoch,
@@ -186,7 +192,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                 .await
                 .0;
             let dec =
-                ctx.shielded.decode_amount(amt, epoch).await;
+                shielded.decode_amount(amt, epoch).await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -253,7 +259,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
 }
 
 /// Query the raw bytes of given storage key
-pub async fn query_raw_bytes(client: &HttpClient, _ctx: Context, args: args::QueryRawBytes) {
+pub async fn query_raw_bytes(client: &HttpClient, args: args::QueryRawBytes) {
     let response = unwrap_client_response(
         RPC.shell()
             .storage_value(client, None, None, false, &args.storage_key)
@@ -267,26 +273,31 @@ pub async fn query_raw_bytes(client: &HttpClient, _ctx: Context, args: args::Que
 }
 
 /// Query token balance(s)
-pub async fn query_balance(client: &HttpClient, mut ctx: Context, args: args::QueryBalance) {
+pub async fn query_balance<U: ShieldedUtils>(
+    client: &HttpClient,
+    wallet: &mut Wallet,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryBalance,
+) {
     // Query the balances of shielded or transparent account types depending on
     // the CLI arguments
     match &args.owner {
         Some(BalanceOwner::FullViewingKey(_viewing_key)) => {
-            query_shielded_balance(client, &mut ctx, args).await
+            query_shielded_balance(client, wallet, shielded, args).await
         }
         Some(BalanceOwner::Address(_owner)) => {
-            query_transparent_balance(client, &mut ctx, args).await
+            query_transparent_balance(client, wallet, args).await
         }
         Some(BalanceOwner::PaymentAddress(_owner)) => {
-            query_pinned_balance(&mut ctx, args).await
+            query_pinned_balance(wallet, shielded, args).await
         }
         None => {
             // Print pinned balance
-            query_pinned_balance(&mut ctx, args.clone()).await;
+            query_pinned_balance(wallet, shielded, args.clone()).await;
             // Print shielded balance
-            query_shielded_balance(client, &mut ctx, args.clone()).await;
+            query_shielded_balance(client, wallet, shielded, args.clone()).await;
             // Then print transparent balance
-            query_transparent_balance(client, &mut ctx, args).await;
+            query_transparent_balance(client, wallet, args).await;
         }
     };
 }
@@ -294,7 +305,7 @@ pub async fn query_balance(client: &HttpClient, mut ctx: Context, args: args::Qu
 /// Query token balance(s)
 pub async fn query_transparent_balance(
     client: &HttpClient,
-    ctx: &mut Context,
+    wallet: &mut Wallet,
     args: args::QueryBalance,
 ) {
     let tokens = address::tokens();
@@ -339,7 +350,7 @@ pub async fn query_transparent_balance(
                         .await;
                 if let Some(balances) = balances {
                     print_balances(
-                        ctx,
+                        wallet,
                         balances,
                         &token,
                         owner.address().as_ref(),
@@ -352,7 +363,7 @@ pub async fn query_transparent_balance(
             let balances =
                 query_storage_prefix::<token::Amount>(&client, &prefix).await;
             if let Some(balances) = balances {
-                print_balances(ctx, balances, &token, None);
+                print_balances(wallet, balances, &token, None);
             }
         }
         (None, None) => {
@@ -361,7 +372,7 @@ pub async fn query_transparent_balance(
                 let balances =
                     query_storage_prefix::<token::Amount>(&client, &key).await;
                 if let Some(balances) = balances {
-                    print_balances(ctx, balances, &token, None);
+                    print_balances(wallet, balances, &token, None);
                 }
             }
         }
@@ -369,7 +380,11 @@ pub async fn query_transparent_balance(
 }
 
 /// Query the token pinned balance(s)
-pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
+pub async fn query_pinned_balance<U: ShieldedUtils>(
+    wallet: &mut Wallet,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryBalance,
+) {
     // Map addresses to token names
     let tokens = address::tokens();
     let owners = if let Some(pa) = args
@@ -378,28 +393,26 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
     {
         vec![pa]
     } else {
-        ctx.wallet
+        wallet
             .get_payment_addrs()
             .into_values()
             .filter(PaymentAddress::is_pinned)
             .collect()
     };
     // Get the viewing keys with which to try note decryptions
-    let viewing_keys: Vec<ViewingKey> = ctx
-        .wallet
+    let viewing_keys: Vec<ViewingKey> = wallet
         .get_viewing_keys()
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    let _ = ctx.shielded.load();
+    let _ = shielded.load();
     // Print the token balances by payment address
     for owner in owners {
         let mut balance = Err(PinnedBalanceError::InvalidViewingKey);
         // Find the viewing key that can recognize payments the current payment
         // address
         for vk in &viewing_keys {
-            balance = ctx
-                .shielded
+            balance = shielded
                 .compute_exchanged_pinned_balance(
                     owner,
                     vk,
@@ -424,8 +437,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             };
             let vk = ExtendedFullViewingKey::from(fvk).fvk.vk;
             // Use the given viewing key to decrypt pinned transaction data
-            balance = ctx
-                .shielded
+            balance = shielded
                 .compute_exchanged_pinned_balance(
                     owner,
                     &vk,
@@ -467,8 +479,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             (Ok((balance, epoch)), None) => {
                 let mut found_any = false;
                 // Print balances by human-readable token names
-                let balance = ctx
-                    .shielded
+                let balance = shielded
                     .decode_amount(balance, epoch)
                     .await;
                 for (addr, value) in balance.components() {
@@ -501,7 +512,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
 }
 
 fn print_balances(
-    ctx: &Context,
+    wallet: &Wallet,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: &Address,
     target: Option<&Address>,
@@ -526,7 +537,7 @@ fn print_balances(
                         "with {}: {}, owned by {}",
                         sub_prefix,
                         balance,
-                        lookup_alias(ctx, owner)
+                        lookup_alias(wallet, owner)
                     ),
                 )),
                 None => token::is_any_token_balance_key(&key).map(|owner| {
@@ -535,7 +546,7 @@ fn print_balances(
                         format!(
                             ": {}, owned by {}",
                             balance,
-                            lookup_alias(ctx, owner)
+                            lookup_alias(wallet, owner)
                         ),
                     )
                 }),
@@ -554,7 +565,7 @@ fn print_balances(
     if print_num == 0 {
         match target {
             Some(t) => {
-                writeln!(w, "No balances owned by {}", lookup_alias(ctx, t))
+                writeln!(w, "No balances owned by {}", lookup_alias(wallet, t))
                     .unwrap()
             }
             None => {
@@ -565,7 +576,7 @@ fn print_balances(
 }
 
 /// Query Proposals
-pub async fn query_proposal(client: &HttpClient, _ctx: Context, args: args::QueryProposal) {
+pub async fn query_proposal(client: &HttpClient, args: args::QueryProposal) {
     async fn print_proposal(
         client: &HttpClient,
         id: u64,
@@ -691,9 +702,10 @@ pub fn value_by_address(
 }
 
 /// Query token shielded balance(s)
-pub async fn query_shielded_balance(
+pub async fn query_shielded_balance<U: ShieldedUtils>(
     client: &HttpClient,
-    ctx: &mut Context,
+    wallet: &mut Wallet,
+    shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
     // Used to control whether balances for all keys or a specific key are
@@ -707,16 +719,16 @@ pub async fn query_shielded_balance(
     // provided, then convert to a viewing key first.
     let viewing_keys = match owner {
         Some(viewing_key) => vec![viewing_key],
-        None => ctx.wallet.get_viewing_keys().values().copied().collect(),
+        None => wallet.get_viewing_keys().values().copied().collect(),
     };
-    let _ = ctx.shielded.load();
+    let _ = shielded.load();
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded.fetch(&[], &fvks).await;
+    shielded.fetch(&[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
-    let _ = ctx.shielded.save();
+    let _ = shielded.save();
     // The epoch is required to identify timestamped tokens
     let epoch = query_epoch(client).await;
     // Map addresses to token names
@@ -728,11 +740,11 @@ pub async fn query_shielded_balance(
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance: Amount<AssetType> = if no_conversions {
-                ctx.shielded
+                shielded
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key")
             } else {
-                ctx.shielded
+                shielded
                     .compute_exchanged_balance(
                         &viewing_key,
                         epoch,
@@ -772,11 +784,11 @@ pub async fn query_shielded_balance(
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
-                    ctx.shielded
+                    shielded
                         .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key")
                 } else {
-                    ctx.shielded
+                    shielded
                         .compute_exchanged_balance(
                             &viewing_key,
                             epoch,
@@ -797,8 +809,7 @@ pub async fn query_shielded_balance(
             // Print non-zero balances whose asset types can be decoded
             for (asset_type, balances) in balances {
                 // Decode the asset type
-                let decoded = ctx
-                    .shielded
+                let decoded = shielded
                     .decode_asset_type(asset_type)
                     .await;
                 match decoded {
@@ -863,11 +874,11 @@ pub async fn query_shielded_balance(
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
-                    ctx.shielded
+                    shielded
                         .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key")
                 } else {
-                    ctx.shielded
+                    shielded
                         .compute_exchanged_balance(
                             &viewing_key,
                             epoch,
@@ -896,19 +907,16 @@ pub async fn query_shielded_balance(
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance;
             if no_conversions {
-                balance = ctx
-                    .shielded
+                balance = shielded
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
+                let decoded_balance = shielded
                     .decode_all_amounts(balance)
                     .await;
                 print_decoded_balance_with_epoch(decoded_balance);
             } else {
-                balance = ctx
-                    .shielded
+                balance = shielded
                     .compute_exchanged_balance(
                         &viewing_key,
                         epoch,
@@ -916,8 +924,7 @@ pub async fn query_shielded_balance(
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
+                let decoded_balance = shielded
                     .decode_amount(balance, epoch)
                     .await;
                 print_decoded_balance(decoded_balance);
@@ -977,7 +984,6 @@ pub async fn get_token_balance(
 
 pub async fn query_proposal_result(
     client: &HttpClient,
-    _ctx: Context,
     args: args::QueryProposalResult,
 ) {
     let current_epoch = query_epoch(client).await;
@@ -2266,7 +2272,7 @@ pub async fn query_tx_response(
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
-pub async fn query_result(client: &WebSocketClient, _ctx: Context, args: args::QueryResult) {
+pub async fn query_result(client: &WebSocketClient, args: args::QueryResult) {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
         client,
@@ -2690,8 +2696,8 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
 
 /// Try to find an alias for a given address from the wallet. If not found,
 /// formats the address into a string.
-fn lookup_alias(ctx: &Context, addr: &Address) -> String {
-    match ctx.wallet.find_alias(addr) {
+fn lookup_alias(wallet: &Wallet, addr: &Address) -> String {
+    match wallet.find_alias(addr) {
         Some(alias) => format!("{}", alias),
         None => format!("{}", addr),
     }

@@ -42,6 +42,7 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::{ledger, vm};
+use namada::ledger::masp::ShieldedUtils;
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 use async_trait::async_trait;
@@ -498,10 +499,10 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
 
 
-pub async fn submit_transfer(
+pub async fn submit_transfer<U: ShieldedUtils>(
     client: &HttpClient,
     wallet: &mut Wallet,
-    shielded: &mut ShieldedContext<CLIShieldedUtils>,
+    shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
 ) {
     let transfer_source = args.source;

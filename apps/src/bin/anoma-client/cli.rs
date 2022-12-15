@@ -80,7 +80,7 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_transfers(ctx, args).await;
+                    rpc::query_transfers(&mut ctx.wallet, &mut ctx.shielded, args).await;
                 }
                 Sub::QueryConversions(QueryConversions(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
@@ -94,7 +94,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryBalance(QueryBalance(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_balance(&client, ctx, args).await;
+                    rpc::query_balance(&client, &mut ctx.wallet, &mut ctx.shielded, args).await;
                 }
                 Sub::QueryBonds(QueryBonds(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
@@ -121,7 +121,7 @@ pub async fn main() -> Result<()> {
                     let (client, driver) = WebSocketClient::new(args.query.ledger_address.clone()).await?;
                     let driver_handle = tokio::spawn(async move { driver.run().await });
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_result(&client, ctx, args).await;
+                    rpc::query_result(&client, args).await;
                     // Signal to the driver to terminate.
                     client.close()?;
                     // Await the driver's termination to ensure proper connection closure.
@@ -133,18 +133,18 @@ pub async fn main() -> Result<()> {
                 Sub::QueryRawBytes(QueryRawBytes(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_raw_bytes(&client, ctx, args).await;
+                    rpc::query_raw_bytes(&client, args).await;
                 }
 
                 Sub::QueryProposal(QueryProposal(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_proposal(&client, ctx, args).await;
+                    rpc::query_proposal(&client, args).await;
                 }
                 Sub::QueryProposalResult(QueryProposalResult(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_proposal_result(&client, ctx, args).await;
+                    rpc::query_proposal_result(&client, args).await;
                 }
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
