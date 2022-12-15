@@ -10,7 +10,7 @@ use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 use tendermint_rpc::HttpClient;
 
 use super::rpc;
-use crate::cli::{self, args, Context};
+use crate::cli::{self, args};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::wallet::Wallet;
 

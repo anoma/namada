@@ -23,6 +23,7 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
+use namada::ledger::masp::ShieldedContext;
 use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -497,7 +498,12 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
 
 
-pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::TxTransfer) {
+pub async fn submit_transfer(
+    client: &HttpClient,
+    wallet: &mut Wallet,
+    shielded: &mut ShieldedContext<CLIShieldedUtils>,
+    args: args::TxTransfer,
+) {
     let transfer_source = args.source;
     let source = transfer_source.effective_address();
     let transfer_target = args.target.clone();
@@ -604,7 +610,7 @@ pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer(client, &mut ctx.wallet, &args.tx, default_signer.clone())
+    let chosen_signer = tx_signer(client, wallet, &args.tx, default_signer.clone())
         .await
         .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
@@ -615,7 +621,7 @@ pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::
     };
 
     let stx_result =
-        ctx.shielded.gen_shielded_transfer(
+        shielded.gen_shielded_transfer(
             transfer_source,
             transfer_target,
             args.amount,
@@ -659,7 +665,7 @@ pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
-    process_tx(client, &mut ctx.wallet, &args.tx, tx, signing_address).await;
+    process_tx(client, wallet, &args.tx, tx, signing_address).await;
 }
 
 pub async fn submit_ibc_transfer(client: &HttpClient, wallet: &mut Wallet, args: args::TxIbcTransfer) {

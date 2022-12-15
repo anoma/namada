@@ -3245,7 +3245,7 @@ pub mod args {
     }
 
     impl Query<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
+        pub fn to_sdk(self, _ctx: &mut Context) -> Query<SdkTypes> {
             Query::<SdkTypes> {
                 ledger_address: (),
             }
