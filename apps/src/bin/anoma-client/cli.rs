@@ -16,7 +16,7 @@ pub async fn main() -> Result<()> {
                 Sub::TxCustom(TxCustom(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_custom(&client, ctx, args).await;
+                    tx::submit_custom(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::TxTransfer(TxTransfer(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
@@ -26,17 +26,17 @@ pub async fn main() -> Result<()> {
                 Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_ibc_transfer(&client, ctx, args).await;
+                    tx::submit_ibc_transfer(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp(&client, ctx, args).await;
+                    tx::submit_update_vp(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_account(&client, ctx, args).await;
+                    tx::submit_init_account(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::TxInitValidator(TxInitValidator(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
@@ -51,27 +51,27 @@ pub async fn main() -> Result<()> {
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_vote_proposal(&client, ctx, args).await;
+                    tx::submit_vote_proposal(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_reveal_pk(&client, ctx, args).await;
+                    tx::submit_reveal_pk(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::Bond(Bond(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_bond(&client, ctx, args).await;
+                    tx::submit_bond(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::Unbond(Unbond(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_unbond(&client, ctx, args).await;
+                    tx::submit_unbond(&client, &mut ctx.wallet, args).await;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_withdraw(&client, ctx, args).await;
+                    tx::submit_withdraw(&client, &mut ctx.wallet, args).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {

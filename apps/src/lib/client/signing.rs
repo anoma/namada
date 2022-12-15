@@ -86,7 +86,7 @@ pub enum TxSigningKey {
 /// is given, panics.
 pub async fn tx_signer(
     client: &HttpClient,
-    ctx: &mut Context,
+    wallet: &mut Wallet,
     args: &args::Tx,
     mut default: TxSigningKey,
 ) -> common::SecretKey {
@@ -105,7 +105,7 @@ pub async fn tx_signer(
             let signer = signer;
             let signing_key = find_keypair(
                 client,
-                &mut ctx.wallet,
+                wallet,
                 &signer,
             )
             .await;
@@ -113,14 +113,14 @@ pub async fn tx_signer(
             // PK first
             if matches!(signer, Address::Implicit(_)) {
                 let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed(client, ctx, &pk, args).await;
+                super::tx::reveal_pk_if_needed(client, wallet, &pk, args).await;
             }
             signing_key
         }
         TxSigningKey::SecretKey(signing_key) => {
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed(client, ctx, &pk, args).await;
+            super::tx::reveal_pk_if_needed(client, wallet, &pk, args).await;
             signing_key
         }
         TxSigningKey::None => {
@@ -142,12 +142,12 @@ pub async fn tx_signer(
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
     client: &HttpClient,
-    mut ctx: Context,
+    wallet: &mut Wallet,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-) -> (Context, TxBroadcastData) {
-    let keypair = tx_signer(client, &mut ctx, args, default).await;
+) -> TxBroadcastData {
+    let keypair = tx_signer(client, wallet, args, default).await;
     let tx = tx.sign(&keypair);
 
     let epoch = rpc::query_epoch(client)
@@ -157,7 +157,7 @@ pub async fn sign_tx(
     } else {
         sign_wrapper(args, epoch, tx, &keypair).await
     };
-    (ctx, broadcast_data)
+    broadcast_data
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
