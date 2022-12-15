@@ -1112,7 +1112,7 @@ pub async fn query_proposal_result(
 
 pub async fn query_protocol_parameters(
     client: &HttpClient,
-    args: args::QueryProtocolParameters,
+    _args: args::QueryProtocolParameters,
 ) {
     let gov_parameters = get_governance_parameters(&client).await;
     println!("Governance Parameters\n {:4}", gov_parameters);

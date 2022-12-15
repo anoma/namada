@@ -21,7 +21,7 @@ pub async fn main() -> Result<()> {
                 Sub::TxTransfer(TxTransfer(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_transfer(&client, ctx, args).await;
+                    tx::submit_transfer(&client, &mut ctx.wallet, &mut ctx.shielded, args).await;
                 }
                 Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
@@ -89,7 +89,6 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
-                    let args = args.to_sdk(&mut ctx);
                     rpc::query_block(&client).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
