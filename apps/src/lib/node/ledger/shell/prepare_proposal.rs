@@ -59,7 +59,7 @@ where
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
-            let alloc = BlockSpaceAllocator::from(&req);
+            let alloc = BlockSpaceAllocator::from(&self.storage);
             let mut protocol_tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block

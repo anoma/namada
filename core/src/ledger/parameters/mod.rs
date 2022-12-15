@@ -387,7 +387,7 @@ where
     Ok((epoch_duration, gas))
 }
 
-// Read the all the parameters from storage. Returns the parameters and gas
+/// Read the all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<DB, H>(
     storage: &Storage<DB, H>,

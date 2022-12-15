@@ -11,12 +11,15 @@ use namada_core::types::token;
 use namada_proof_of_stake::PosBase;
 use thiserror::Error;
 
+use crate::ledger::parameters::storage::get_max_proposal_bytes_key;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::pos::types::WeightedValidator;
 use crate::ledger::pos::PosParams;
+use crate::ledger::storage::types::decode;
 use crate::tendermint_proto::google::protobuf;
 use crate::tendermint_proto::types::EvidenceParams;
 use crate::types::address::Address;
+use crate::types::chain::ProposalBytes;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::storage::{BlockHeight, Epoch};
@@ -165,6 +168,9 @@ pub trait QueriesExt {
         &'db self,
         epoch: Option<Epoch>,
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
+
+    /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+    fn get_max_proposal_bytes(&self) -> ProposalBytes;
 }
 
 impl<D, H> QueriesExt for Storage<D, H>
@@ -432,5 +438,15 @@ where
                 )
             },
         ))
+    }
+
+    fn get_max_proposal_bytes(&self) -> ProposalBytes {
+        let key = get_max_proposal_bytes_key();
+        let (maybe_value, _gas) = self
+            .read(&key)
+            .expect("Must be able to read ProposalBytes from storage");
+        let value =
+            maybe_value.expect("ProposalBytes must be present in storage");
+        decode(value).expect("Must be able to decode ProposalBytes in storage")
     }
 }
