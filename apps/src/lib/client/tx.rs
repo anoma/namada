@@ -606,7 +606,7 @@ pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
                 0.into(),
-                ctx.native_token.clone(),
+                args.native_token.clone(),
             )
         } else if source == masp_addr {
             (
@@ -895,7 +895,7 @@ pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: a
 
         let balance = rpc::get_token_balance(
             &client,
-            &ctx.native_token,
+            &args.native_token,
             &proposal.author,
         )
         .await
@@ -1279,7 +1279,7 @@ pub async fn submit_bond(client: &HttpClient, ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&ctx.native_token, bond_source);
+    let balance_key = token::balance_key(&args.native_token, bond_source);
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {

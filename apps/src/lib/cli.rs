@@ -1782,6 +1782,8 @@ pub mod args {
         pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
+        /// Native token address
+        pub native_token: C::NativeAddress,
     }
 
     impl TxTransfer<CliTypes> {
@@ -1793,6 +1795,7 @@ pub mod args {
                 token: ctx.get(&self.token),
                 sub_prefix: self.sub_prefix,
                 amount: self.amount,
+                native_token: ctx.native_token.clone(),
             }
         }
     }
@@ -1805,6 +1808,7 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let native_token = ();
             Self {
                 tx,
                 source,
@@ -1812,6 +1816,7 @@ pub mod args {
                 token,
                 sub_prefix,
                 amount,
+                native_token,
             }
         }
 
@@ -2139,6 +2144,8 @@ pub mod args {
         /// Source address for delegations. For self-bonds, the validator is
         /// also the source.
         pub source: Option<C::Address>,
+        /// Native token address
+        pub native_token: C::NativeAddress,
     }
 
     impl Bond<CliTypes> {
@@ -2148,6 +2155,7 @@ pub mod args {
                 validator: ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
+                native_token: ctx.native_token.clone(),
             }
         }
     }
@@ -2158,11 +2166,13 @@ pub mod args {
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
             let source = SOURCE_OPT.parse(matches);
+            let native_token = ();
             Self {
                 tx,
                 validator,
                 amount,
                 source,
+                native_token,
             }
         }
 
@@ -2240,6 +2250,8 @@ pub mod args {
         pub proposal_data: PathBuf,
         /// Flag if proposal should be run offline
         pub offline: bool,
+        /// Native token address
+        pub native_token: C::NativeAddress,
     }
 
     impl InitProposal<CliTypes> {
@@ -2248,6 +2260,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: self.proposal_data,
                 offline: self.offline,
+                native_token: ctx.native_token.clone(),
             }
         }
     }
@@ -2257,11 +2270,13 @@ pub mod args {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
+            let native_token = ();
 
             Self {
                 tx,
                 proposal_data,
                 offline,
+                native_token,
             }
         }
 
@@ -2961,6 +2976,7 @@ pub mod args {
     /// Abstraction of types being used in Namada
     pub trait NamadaTypes: Clone + std::fmt::Debug {
         type Address: Clone + std::fmt::Debug;
+        type NativeAddress: Clone + std::fmt::Debug;
         type Keypair: Clone + std::fmt::Debug;
         type TendermintAddress: Clone + std::fmt::Debug;
         type ViewingKey: Clone + std::fmt::Debug;
@@ -2976,6 +2992,8 @@ pub mod args {
 
     impl NamadaTypes for SdkTypes {
         type Address = Address;
+
+        type NativeAddress = Address;
 
         type Keypair = common::SecretKey;
 
@@ -2998,6 +3016,8 @@ pub mod args {
 
     impl NamadaTypes for CliTypes {
         type Address = WalletAddress;
+
+        type NativeAddress = ();
 
         type Keypair = WalletKeypair;
 
