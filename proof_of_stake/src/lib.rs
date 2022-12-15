@@ -2570,8 +2570,12 @@ where
     let withdrawable_epoch =
         current_epoch + params.pipeline_len + params.unbonding_len;
     let mut to_decrement = token::Amount::from_change(amount);
-    let mut bond_iter =
-        bond_remain_handle.get_data_handler().rev_iter(storage)?;
+    // We read all matched bonds into memory to do reverse iteration
+    let bonds: Vec<Result<_, _>> = bond_remain_handle
+        .get_data_handler()
+        .iter(storage)?
+        .collect();
+    let mut bond_iter = bonds.into_iter().rev();
 
     // Map: { bond start epoch, (new bond value, unbond value) }
     let mut new_bond_values_map =
