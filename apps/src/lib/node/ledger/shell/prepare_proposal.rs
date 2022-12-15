@@ -12,7 +12,6 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
-#[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -30,14 +29,12 @@ use super::super::*;
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(not(feature = "abcipp"))]
-use crate::node::ledger::shell::process_tx;
-#[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
-use crate::node::ledger::shell::ShellMode;
+use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
@@ -169,7 +166,7 @@ where
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
-        let _txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
+        let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
             validator_set_update,
         })
@@ -181,7 +178,7 @@ where
         // - handle space allocation errors
         // - transition to new allocator state
 
-        todo!()
+        (txs, self.get_encrypted_txs_allocator(alloc))
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
@@ -279,19 +276,6 @@ where
 
     /// Builds a batch of encrypted transactions, retrieved from
     /// Tendermint's mempool.
-    #[cfg(feature = "abcipp")]
-    fn build_encrypted_txs(
-        &mut self,
-        _alloc: EncryptedTxBatchAllocator,
-        _txs: &[TxBytes],
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
-        // TODO(feature = "abcipp"): implement building batch of mempool txs
-        todo!()
-    }
-
-    /// Builds a batch of encrypted transactions, retrieved from
-    /// Tendermint's mempool.
-    #[cfg(not(feature = "abcipp"))]
     fn build_encrypted_txs(
         &mut self,
         mut alloc: EncryptedTxBatchAllocator,
