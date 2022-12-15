@@ -57,20 +57,6 @@ use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 
-const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
-const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
-const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
-const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
-const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_IBC_WASM: &str = "tx_ibc.wasm";
-const VP_USER_WASM: &str = "vp_user.wasm";
-const TX_BOND_WASM: &str = "tx_bond.wasm";
-const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
-
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
 const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
@@ -81,10 +67,8 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(client: &HttpClient, ctx: Context, args: args::TxCustom) {
-    let tx_code = ctx.read_wasm(args.code_path);
-    let data = args.data_path.map(|data_path| {
-        std::fs::read(data_path).expect("Expected a file at given data path")
-    });
+    let tx_code = args.code_path;
+    let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let (ctx, initialized_accounts) =
         process_tx(client, ctx, &args.tx, tx, TxSigningKey::None).await;
@@ -127,7 +111,7 @@ pub async fn submit_update_vp(client: &HttpClient, ctx: Context, args: args::TxU
         }
     }
 
-    let vp_code = ctx.read_wasm(args.vp_code_path);
+    let vp_code = args.vp_code_path;
     // Validate the VP code
     if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
         eprintln!("Validity predicate code validation failed with {}", err);
@@ -136,7 +120,7 @@ pub async fn submit_update_vp(client: &HttpClient, ctx: Context, args: args::TxU
         }
     }
 
-    let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+    let tx_code = args.tx_code_path;
 
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -147,10 +131,7 @@ pub async fn submit_update_vp(client: &HttpClient, ctx: Context, args: args::TxU
 
 pub async fn submit_init_account(client: &HttpClient, ctx: Context, args: args::TxInitAccount) {
     let public_key = args.public_key;
-    let vp_code = args
-        .vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    let vp_code = args.vp_code_path;
     // Validate the VP code
     if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
         eprintln!("Validity predicate code validation failed with {}", err);
@@ -159,7 +140,7 @@ pub async fn submit_init_account(client: &HttpClient, ctx: Context, args: args::
         }
     }
 
-    let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
+    let tx_code = args.tx_code_path;
     let data = InitAccount {
         public_key,
         vp_code,
@@ -187,6 +168,7 @@ pub async fn submit_init_validator(
         max_commission_rate_change,
         validator_vp_code_path,
         unsafe_dont_encrypt,
+        tx_code_path,
     }: args::TxInitValidator,
 ) {
     let alias = tx_args
@@ -246,9 +228,7 @@ pub async fn submit_init_validator(
 
     ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
 
-    let validator_vp_code = validator_vp_code_path
-        .map(|path| ctx.read_wasm(path))
-        .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    let validator_vp_code = validator_vp_code_path;
 
     // Validate the commission rate data
     if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
@@ -281,7 +261,7 @@ pub async fn submit_init_validator(
             safe_exit(1)
         }
     }
-    let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
+    let tx_code = tx_code_path;
 
     let data = InitValidator {
         account_key,
@@ -594,7 +574,7 @@ pub async fn submit_transfer(client: &HttpClient, mut ctx: Context, args: args::
         }
     };
 
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let tx_code = args.tx_code_path;
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -742,7 +722,7 @@ pub async fn submit_ibc_transfer(client: &HttpClient, ctx: Context, args: args::
             }
         }
     }
-    let tx_code = ctx.read_wasm(TX_IBC_WASM);
+    let tx_code = args.tx_code_path;
 
     let denom = match sub_prefix {
         // To parse IbcToken address, remove the address prefix
@@ -920,7 +900,7 @@ pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: a
         let data = init_proposal_data
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
+        let tx_code = args.tx_code_path;
         let tx = Tx::new(tx_code, Some(data));
 
         process_tx(client, ctx, &args.tx, tx, TxSigningKey::WalletAddress(signer))
@@ -1049,7 +1029,7 @@ pub async fn submit_vote_proposal(client: &HttpClient, mut ctx: Context, args: a
                 let data = tx_data
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
-                let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
+                let tx_code = args.tx_code_path;
                 let tx = Tx::new(tx_code, Some(data));
 
                 process_tx(
@@ -1122,7 +1102,7 @@ pub async fn submit_reveal_pk_aux(
     let tx_data = public_key
         .try_to_vec()
         .expect("Encoding a public key shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_REVEAL_PK);
+    let tx_code = args.tx_code_path.clone();
     let tx = Tx::new(tx_code, Some(tx_data));
 
     // submit_tx without signing the inner tx
@@ -1302,7 +1282,7 @@ pub async fn submit_bond(client: &HttpClient, ctx: Context, args: args::Bond) {
             }
         }
     }
-    let tx_code = ctx.read_wasm(TX_BOND_WASM);
+    let tx_code = args.tx_code_path;
     let bond = pos::Bond {
         validator,
         amount: args.amount,
@@ -1338,7 +1318,7 @@ pub async fn submit_unbond(client: &HttpClient, ctx: Context, args: args::Unbond
     }
 
     let source = args.source.clone();
-    let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
+    let tx_code = args.tx_code_path;
 
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -1414,7 +1394,7 @@ pub async fn submit_withdraw(client: &HttpClient, ctx: Context, args: args::With
     }
 
     let source = args.source.clone();
-    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
+    let tx_code = args.tx_code_path;
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -1474,7 +1454,7 @@ pub async fn submit_validator_commission_change(
     let epoch = rpc::query_epoch(client)
     .await;
 
-    let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
+    let tx_code = args.tx_code_path;
 
     let validator = args.validator.clone();
     if rpc::is_validator(client, &validator).await {

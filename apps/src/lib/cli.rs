@@ -1531,6 +1531,20 @@ pub mod args {
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
+    const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+    const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+    const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
+    const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+    const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+    const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+    const TX_IBC_WASM: &str = "tx_ibc.wasm";
+    const VP_USER_WASM: &str = "vp_user.wasm";
+    const TX_BOND_WASM: &str = "tx_bond.wasm";
+    const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+    const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
+
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
@@ -1725,17 +1739,19 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Path to the tx WASM code file
-        pub code_path: PathBuf,
+        pub code_path: C::Data,
         /// Path to the data file
-        pub data_path: Option<PathBuf>,
+        pub data_path: Option<C::Data>,
     }
 
     impl TxCustom<CliTypes> {
         pub fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                code_path: self.code_path,
-                data_path: self.data_path,
+                code_path: ctx.read_wasm(self.code_path),
+                data_path: self.data_path.map(|data_path| {
+                    std::fs::read(data_path).expect("Expected a file at given data path")
+                }),
             }
         }
     }
@@ -1784,6 +1800,8 @@ pub mod args {
         pub amount: token::Amount,
         /// Native token address
         pub native_token: C::NativeAddress,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl TxTransfer<CliTypes> {
@@ -1796,6 +1814,7 @@ pub mod args {
                 sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -1809,6 +1828,7 @@ pub mod args {
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             let native_token = ();
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
                 tx,
                 source,
@@ -1817,6 +1837,7 @@ pub mod args {
                 sub_prefix,
                 amount,
                 native_token,
+                tx_code_path,
             }
         }
 
@@ -1859,6 +1880,8 @@ pub mod args {
         pub timeout_height: Option<u64>,
         /// Timeout timestamp offset
         pub timeout_sec_offset: Option<u64>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl TxIbcTransfer<CliTypes> {
@@ -1874,6 +1897,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -1890,6 +1914,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
                 source,
@@ -1901,6 +1926,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                tx_code_path,
             }
         }
 
@@ -1935,7 +1961,9 @@ pub mod args {
         /// Address of the source account
         pub source: C::Address,
         /// Path to the VP WASM code file for the new account
-        pub vp_code_path: Option<PathBuf>,
+        pub vp_code_path: C::Data,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
         /// Public key for the new account
         pub public_key: C::PublicKey,
     }
@@ -1945,7 +1973,8 @@ pub mod args {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
-                vp_code_path: self.vp_code_path,
+                vp_code_path: ctx.read_wasm(self.vp_code_path),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
                 public_key: ctx.get_cached(&self.public_key),
             }
         }
@@ -1955,13 +1984,16 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
-            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches)
+                .unwrap_or(PathBuf::from(VP_USER_WASM));
+            let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
                 tx,
                 source,
                 vp_code_path,
                 public_key,
+                tx_code_path,
             }
         }
 
@@ -1993,7 +2025,8 @@ pub mod args {
         pub protocol_key: Option<C::PublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
-        pub validator_vp_code_path: Option<PathBuf>,
+        pub validator_vp_code_path: C::Data,
+        pub tx_code_path: C::Data,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -2008,8 +2041,9 @@ pub mod args {
                 protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
-                validator_vp_code_path: self.validator_vp_code_path,
+                validator_vp_code_path: ctx.read_wasm(self.validator_vp_code_path),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2025,8 +2059,10 @@ pub mod args {
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
-            let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
+            let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches)
+                .unwrap_or(PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
             Self {
                 tx,
                 source,
@@ -2038,6 +2074,7 @@ pub mod args {
                 max_commission_rate_change,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
+                tx_code_path,
             }
         }
 
@@ -2091,7 +2128,9 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx<C>,
         /// Path to the VP WASM code file
-        pub vp_code_path: PathBuf,
+        pub vp_code_path: C::Data,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
         /// Address of the account whose VP is to be updated
         pub addr: C::Address,
     }
@@ -2100,7 +2139,8 @@ pub mod args {
         pub fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                vp_code_path: self.vp_code_path,
+                vp_code_path: ctx.read_wasm(self.vp_code_path),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
                 addr: ctx.get(&self.addr),
             }
         }
@@ -2111,10 +2151,12 @@ pub mod args {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH.parse(matches);
             let addr = ADDRESS.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UPDATE_VP_WASM);
             Self {
                 tx,
                 vp_code_path,
                 addr,
+                tx_code_path,
             }
         }
 
@@ -2146,6 +2188,8 @@ pub mod args {
         pub source: Option<C::Address>,
         /// Native token address
         pub native_token: C::NativeAddress,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl Bond<CliTypes> {
@@ -2156,6 +2200,7 @@ pub mod args {
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
                 native_token: ctx.native_token.clone(),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2167,12 +2212,14 @@ pub mod args {
             let amount = AMOUNT.parse(matches);
             let source = SOURCE_OPT.parse(matches);
             let native_token = ();
+            let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
                 tx,
                 validator,
                 amount,
                 source,
                 native_token,
+                tx_code_path,
             }
         }
 
@@ -2199,6 +2246,8 @@ pub mod args {
         /// Source address for unbonding from delegations. For unbonding from
         /// self-bonds, the validator is also the source
         pub source: Option<C::Address>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl Unbond<CliTypes> {
@@ -2208,6 +2257,7 @@ pub mod args {
                 validator: ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| ctx.get(&x)),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2218,11 +2268,13 @@ pub mod args {
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
             let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
                 tx,
                 validator,
                 amount,
                 source,
+                tx_code_path,
             }
         }
 
@@ -2252,6 +2304,8 @@ pub mod args {
         pub offline: bool,
         /// Native token address
         pub native_token: C::NativeAddress,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl InitProposal<CliTypes> {
@@ -2261,6 +2315,7 @@ pub mod args {
                 proposal_data: self.proposal_data,
                 offline: self.offline,
                 native_token: ctx.native_token.clone(),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2271,12 +2326,14 @@ pub mod args {
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let native_token = ();
+            let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
 
             Self {
                 tx,
                 proposal_data,
                 offline,
                 native_token,
+                tx_code_path,
             }
         }
 
@@ -2305,6 +2362,8 @@ pub mod args {
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl VoteProposal<CliTypes> {
@@ -2315,6 +2374,7 @@ pub mod args {
                 vote: self.vote,
                 offline: self.offline,
                 proposal_data: self.proposal_data,
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2326,6 +2386,7 @@ pub mod args {
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
             Self {
                 tx,
@@ -2333,6 +2394,7 @@ pub mod args {
                 vote,
                 offline,
                 proposal_data,
+                tx_code_path,
             }
         }
 
@@ -2530,6 +2592,8 @@ pub mod args {
         /// Source address for withdrawing from delegations. For withdrawing
         /// from self-bonds, the validator is also the source
         pub source: Option<C::Address>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl Withdraw<CliTypes> {
@@ -2538,6 +2602,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 source: self.source.map(|x| ctx.get(&x)),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2547,10 +2612,12 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_WITHDRAW_WASM);
             Self {
                 tx,
                 validator,
                 source,
+                tx_code_path,
             }
         }
 
@@ -2827,6 +2894,8 @@ pub mod args {
         pub validator: C::Address,
         /// Value to which the tx changes the commission rate
         pub rate: Decimal,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl TxCommissionRateChange<CliTypes> {
@@ -2835,6 +2904,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
                 rate: self.rate,
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -2844,10 +2914,12 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let rate = COMMISSION_RATE.parse(matches);
+            let tx_code_path = PathBuf::from(TX_CHANGE_COMMISSION_WASM);
             Self {
                 tx,
                 validator,
                 rate,
+                tx_code_path,
             }
         }
 
@@ -2984,6 +3056,7 @@ pub mod args {
         type PublicKey: Clone + std::fmt::Debug;
         type TransferSource: Clone + std::fmt::Debug;
         type TransferTarget: Clone + std::fmt::Debug;
+        type Data: Clone + std::fmt::Debug;
     }
 
     /// The concrete types being used in Namada SDK
@@ -3008,6 +3081,8 @@ pub mod args {
         type TransferSource = namada::types::masp::TransferSource;
 
         type TransferTarget = namada::types::masp::TransferTarget;
+
+        type Data = Vec<u8>;
     }
 
     /// The concrete types being used in the CLI
@@ -3032,6 +3107,8 @@ pub mod args {
         type TransferSource = WalletTransferSource;
 
         type TransferTarget = WalletTransferTarget;
+
+        type Data = PathBuf;
     }
     
     /// Common transaction arguments
@@ -3058,6 +3135,8 @@ pub mod args {
         pub signing_key: Option<C::Keypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signer: Option<C::Address>,
+        /// Path to the TX WASM code file
+        pub tx_code_path: C::Data,
     }
 
     impl Tx<CliTypes> {
@@ -3073,6 +3152,7 @@ pub mod args {
                 gas_limit: self.gas_limit,
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
+                tx_code_path: ctx.read_wasm(self.tx_code_path),
             }
         }
     }
@@ -3140,6 +3220,7 @@ pub mod args {
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
+            let tx_code_path = PathBuf::from(TX_REVEAL_PK);
             Self {
                 dry_run,
                 force,
@@ -3151,6 +3232,7 @@ pub mod args {
                 gas_limit,
                 signing_key,
                 signer,
+                tx_code_path,
             }
         }
     }
