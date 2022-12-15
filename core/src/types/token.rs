@@ -38,6 +38,9 @@ pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000;
 
+/// The largest value that can be represented by this integer type
+pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
+
 /// A change in tokens amount
 pub type Change = i128;
 
