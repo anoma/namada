@@ -108,7 +108,7 @@ pub mod tm {
         InvalidHeight(BlockHeight),
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl Client for crate::tendermint_rpc::HttpClient {
         type Error = Error;
 
@@ -207,7 +207,7 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,

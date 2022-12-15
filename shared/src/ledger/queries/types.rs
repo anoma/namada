@@ -69,7 +69,7 @@ pub trait Router {
 /// A client with async request dispatcher method, which can be used to invoke
 /// type-safe methods from a root [`Router`], generated via `router!` macro.
 #[cfg(any(test, feature = "async-client"))]
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
