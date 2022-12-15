@@ -1,5 +1,7 @@
 //! Proof of Stake data types
 
+mod rev_order;
+
 use core::fmt::Debug;
 use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
@@ -14,6 +16,7 @@ use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
+pub use rev_order::ReverseOrdTokenAmount;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 
 use crate::epoched::{
@@ -44,12 +47,22 @@ pub type ValidatorStatesNew = crate::epoched_new::Epoched<
 pub type ValidatorPositionAddressesNew = LazyMap<Position, Address>;
 
 /// New validator set construction, keyed by staked token amount
-pub type ValidatorSetNew =
+pub type ActiveValidatorSetNew =
+    NestedMap<ReverseOrdTokenAmount, ValidatorPositionAddressesNew>;
+
+/// New validator set construction, keyed by staked token amount
+pub type InactiveValidatorSetNew =
     NestedMap<token::Amount, ValidatorPositionAddressesNew>;
 
-/// Epoched validator sets.
-pub type ValidatorSetsNew = crate::epoched_new::NestedEpoched<
-    ValidatorSetNew,
+/// Epoched active validator sets.
+pub type ActiveValidatorSetsNew = crate::epoched_new::NestedEpoched<
+    ActiveValidatorSetNew,
+    crate::epoched_new::OffsetPipelineLen,
+>;
+
+/// Epoched inactive validator sets.
+pub type InactiveValidatorSetsNew = crate::epoched_new::NestedEpoched<
+    InactiveValidatorSetNew,
     crate::epoched_new::OffsetPipelineLen,
 >;
 
