@@ -1264,68 +1264,45 @@ mod test_process_proposal {
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         #[cfg(feature = "abcipp")]
-        let response_1 = {
+        let response = {
             let request = ProcessProposal {
-                txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
-            };
-            if let [resp, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed");
-            }
-        };
-        #[cfg(not(feature = "abcipp"))]
-        let response_1 = {
-            let request = ProcessProposal {
-                txs: vec![txs[0].to_bytes()],
-            };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        };
-        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
-
-        #[cfg(feature = "abcipp")]
-        let response_2 = {
-            let request = ProcessProposal {
-                txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    txs[0].to_bytes(),
+                    txs[2].to_bytes(),
+                    txs[1].to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                ],
             };
             if let Err(TestError::RejectProposal(mut resp)) =
                 shell.process_proposal(request)
             {
-                assert_eq!(resp.len(), 2);
-                resp.remove(0)
+                assert_eq!(resp.len(), 4);
+                resp.remove(1)
             } else {
                 panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
-        let response_2 = {
+        let response = {
             let request = ProcessProposal {
-                txs: vec![txs[2].to_bytes()],
+                txs: vec![
+                    txs[0].to_bytes(),
+                    txs[2].to_bytes(),
+                    txs[1].to_bytes(),
+                ],
             };
             if let Err(TestError::RejectProposal(mut resp)) =
                 shell.process_proposal(request)
             {
-                assert_eq!(resp.len(), 1);
-                resp.remove(0)
+                assert_eq!(resp.len(), 3);
+                resp.remove(1)
             } else {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
-            response_2.result.info,
+            response.result.info,
             String::from(
                 "Process proposal rejected a decrypted transaction that \
                  violated the tx order determined in the previous block"
