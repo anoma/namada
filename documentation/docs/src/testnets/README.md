@@ -1,13 +1,13 @@
-# Testnets
+# Namada Testnets
 
-This section describes how to connect to the various testnets and to test selected features.
+Testnets on Namada serve the purpose of allowing users on the internet to test the latest features of the protocol. Beware of bugs :warning: :ant: ! Pest control can be reached through any of our socials, and we greatly appreciate any bug reports :eyes: :airplane_arriving: 
 
-You may need to be using `namada` binaries built from a specific commit in order to interact with specific testnets. Use the below command with the chain ID of the testnet you want to join.
+Testnets are released on a fortnightly cycle (every other Tuesday). Sometimes changes are large, sometimes they are small. The [Github changelog](https://github.com/anoma/namada/tree/main/.changelog) will specify exactly what changes have been made in between versions.
 
-```shell
-namada client utils join-network --chain-id=$NAMADA_CHAIN_ID
-```
+The instructions to join the latest running testnet can be found [HERE](https://hackmd.io/WDhESkCeSWepuki1F1scxg)
 
-## Current testnets
+The block explorer is currently in development. The latest version can be found at [namada.world](https://namada.world/)
 
-- [Namada Close Quarters Testnet 1](./namada-close-quarters-testnet-1.md)
+We much appreciate any feedback, which we would gladly appreciate through either [Twitter](https://twitter.com/namadanetwork), [Reddit](https://www.reddit.com/r/namada), or [Github](https://github.com/anoma/namada/issues). 
+
+We look forward to seeing you there!
