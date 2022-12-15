@@ -1020,6 +1020,7 @@ mod test_utils {
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
+        #[allow(dead_code)]
         pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
         {
             Self::new_at_height(BlockHeight(1))
