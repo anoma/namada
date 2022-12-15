@@ -69,7 +69,11 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
-pub async fn submit_custom(client: &HttpClient, wallet: &mut Wallet, args: args::TxCustom) {
+pub async fn submit_custom(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::TxCustom,
+) {
     let tx_code = args.code_path;
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
@@ -78,7 +82,11 @@ pub async fn submit_custom(client: &HttpClient, wallet: &mut Wallet, args: args:
     save_initialized_accounts(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_update_vp(client: &HttpClient, wallet: &mut Wallet, args: args::TxUpdateVp) {
+pub async fn submit_update_vp(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::TxUpdateVp,
+) {
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -132,7 +140,11 @@ pub async fn submit_update_vp(client: &HttpClient, wallet: &mut Wallet, args: ar
     process_tx(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
-pub async fn submit_init_account(client: &HttpClient, wallet: &mut Wallet, args: args::TxInitAccount) {
+pub async fn submit_init_account(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::TxInitAccount,
+) {
     let public_key = args.public_key;
     let vp_code = args.vp_code_path;
     // Validate the VP code
@@ -229,7 +241,7 @@ pub async fn submit_init_validator(
         .expect("DKG sessions keys should have been created")
         .public();
 
-    ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
 
     let validator_vp_code = validator_vp_code_path;
 
@@ -329,7 +341,7 @@ pub async fn submit_init_validator(
         // add validator address and keys to the wallet
         ctx.wallet
             .add_validator_data(validator_address, validator_keys);
-        ctx.wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+        crate::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
@@ -489,7 +501,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
 pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
 ) {
@@ -658,7 +670,11 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
     process_tx(client, wallet, &args.tx, tx, signing_address).await;
 }
 
-pub async fn submit_ibc_transfer(client: &HttpClient, wallet: &mut Wallet, args: args::TxIbcTransfer) {
+pub async fn submit_ibc_transfer(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::TxIbcTransfer,
+) {
     let source = args.source.clone();
     // Check that the source address exists on chain
     let source_exists =
@@ -905,7 +921,11 @@ pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: a
     }
 }
 
-pub async fn submit_vote_proposal(client: &HttpClient, wallet: &mut Wallet, args: args::VoteProposal) {
+pub async fn submit_vote_proposal(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::VoteProposal,
+) {
     let signer = if let Some(addr) = &args.tx.signer {
         addr
     } else {
@@ -1051,7 +1071,11 @@ pub async fn submit_vote_proposal(client: &HttpClient, wallet: &mut Wallet, args
     }
 }
 
-pub async fn submit_reveal_pk(client: &HttpClient, wallet: &mut Wallet, args: args::RevealPk) {
+pub async fn submit_reveal_pk(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::RevealPk,
+) {
     let args::RevealPk {
         tx: args,
         public_key,
@@ -1065,7 +1089,7 @@ pub async fn submit_reveal_pk(client: &HttpClient, wallet: &mut Wallet, args: ar
 
 pub async fn reveal_pk_if_needed(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> bool {
@@ -1090,7 +1114,7 @@ pub async fn has_revealed_pk(
 
 pub async fn submit_reveal_pk_aux(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) {
@@ -1227,7 +1251,11 @@ async fn filter_delegations(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond(client: &HttpClient, wallet: &mut Wallet, args: args::Bond) {
+pub async fn submit_bond(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::Bond,
+) {
     let validator = args.validator.clone();
     // Check that the validator address exists on chain
     let is_validator =
@@ -1299,7 +1327,11 @@ pub async fn submit_bond(client: &HttpClient, wallet: &mut Wallet, args: args::B
     .await;
 }
 
-pub async fn submit_unbond(client: &HttpClient, wallet: &mut Wallet, args: args::Unbond) {
+pub async fn submit_unbond(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::Unbond,
+) {
     let validator = args.validator.clone();
     // Check that the validator address exists on chain
     let is_validator =
@@ -1372,7 +1404,11 @@ pub async fn submit_unbond(client: &HttpClient, wallet: &mut Wallet, args: args:
     .await;
 }
 
-pub async fn submit_withdraw(client: &HttpClient, wallet: &mut Wallet, args: args::Withdraw) {
+pub async fn submit_withdraw(
+    client: &HttpClient,
+    wallet: &mut Wallet<PathBuf>,
+    args: args::Withdraw,
+) {
     let epoch = rpc::query_epoch(client)
     .await;
 
@@ -1445,7 +1481,7 @@ pub async fn submit_withdraw(client: &HttpClient, wallet: &mut Wallet, args: arg
 
 pub async fn submit_validator_commission_change(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     args: args::TxCommissionRateChange,
 ) {
     let epoch = rpc::query_epoch(client)
@@ -1528,7 +1564,7 @@ pub async fn submit_validator_commission_change(
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
@@ -1587,7 +1623,7 @@ async fn process_tx(
 
 /// Save accounts initialized from a tx into the wallet, if any.
 async fn save_initialized_accounts(
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
 ) {
@@ -1634,11 +1670,6 @@ async fn save_initialized_accounts(
                 }
                 _ => println!("No alias added for address {}.", encoded),
             };
-        }
-        if !args.dry_run {
-            wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-        } else {
-            println!("Transaction dry run. No addresses have been saved.")
         }
     }
 }

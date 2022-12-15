@@ -16,7 +16,13 @@ pub async fn main() -> Result<()> {
                 Sub::TxCustom(TxCustom(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
+                    let dry_run = args.tx.dry_run;
                     tx::submit_custom(&client, &mut ctx.wallet, args).await;
+                    if !dry_run {
+                        namada_apps::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
+                    } else {
+                        println!("Transaction dry run. No addresses have been saved.")
+                    }
                 }
                 Sub::TxTransfer(TxTransfer(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
@@ -36,7 +42,13 @@ pub async fn main() -> Result<()> {
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
+                    let dry_run = args.tx.dry_run;
                     tx::submit_init_account(&client, &mut ctx.wallet, args).await;
+                    if !dry_run {
+                        namada_apps::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
+                    } else {
+                        println!("Transaction dry run. No addresses have been saved.")
+                    }
                 }
                 Sub::TxInitValidator(TxInitValidator(args)) => {
                     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();

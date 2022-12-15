@@ -259,7 +259,7 @@ pub async fn join_network(
 
         let genesis_file_path =
             base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let mut wallet = Wallet::load_or_new_from_genesis(
+        let mut wallet = crate::wallet::load_or_new_from_genesis(
             &chain_dir,
             genesis_config::open_genesis_config(genesis_file_path).unwrap(),
         );
@@ -300,7 +300,7 @@ pub async fn join_network(
             pre_genesis_wallet,
         );
 
-        wallet.save().unwrap();
+        crate::wallet::save(&wallet).unwrap();
 
         // Update the config from the default non-validator settings to
         // validator settings
@@ -479,7 +479,7 @@ pub fn init_network(
 
         // Generate the consensus, account and reward keys, unless they're
         // pre-defined.
-        let mut wallet = Wallet::load_or_new(&chain_dir);
+        let mut wallet = crate::wallet::load_or_new(&chain_dir);
 
         let consensus_pk = try_parse_public_key(
             format!("validator {name} consensus key"),
@@ -571,12 +571,12 @@ pub fn init_network(
         // Write keypairs to wallet
         wallet.add_address(name.clone(), address);
 
-        wallet.save().unwrap();
+        crate::wallet::save(&wallet).unwrap();
     });
 
     // Create a wallet for all accounts other than validators
     let mut wallet =
-        Wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
+        crate::wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
     if let Some(established) = &mut config.established {
         established.iter_mut().for_each(|(name, config)| {
             init_established_account(
@@ -643,7 +643,7 @@ pub fn init_network(
 
     // Add genesis addresses and save the wallet with other account keys
     wallet.add_genesis_addresses(config_clean.clone());
-    wallet.save().unwrap();
+    crate::wallet::save(&wallet).unwrap();
 
     // Write the global config setting the default chain ID
     let global_config = GlobalConfig::new(chain_id.clone());
@@ -692,9 +692,9 @@ pub fn init_network(
         );
         global_config.write(validator_dir).unwrap();
         // Add genesis addresses to the validator's wallet
-        let mut wallet = Wallet::load_or_new(&validator_chain_dir);
+        let mut wallet = crate::wallet::load_or_new(&validator_chain_dir);
         wallet.add_genesis_addresses(config_clean.clone());
-        wallet.save().unwrap();
+        crate::wallet::save(&wallet).unwrap();
     });
 
     // Generate the validators' ledger config
@@ -845,7 +845,7 @@ pub fn init_network(
 
 fn init_established_account(
     name: impl AsRef<str>,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     config: &mut genesis_config::EstablishedAccountConfig,
     unsafe_dont_encrypt: bool,
 ) {
