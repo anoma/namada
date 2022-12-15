@@ -2,6 +2,7 @@
 
 mod block_space_alloc;
 
+#[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
 use namada::ledger::queries_ext::QueriesExt;
@@ -11,6 +12,7 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
 use namada::types::storage::BlockHeight;
+#[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -28,12 +30,14 @@ use super::super::*;
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(not(feature = "abcipp"))]
+use crate::node::ledger::shell::process_tx;
+#[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
-use crate::node::ledger::shell::{process_tx, ShellMode};
+use crate::node::ledger::shell::ShellMode;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
@@ -60,6 +64,7 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = BlockSpaceAllocator::from(&self.storage);
+            #[cfg(not(feature = "abcipp"))]
             let mut protocol_tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
@@ -83,17 +88,24 @@ where
                 self.build_encrypted_txs(alloc, &req.txs);
             txs.append(&mut encrypted_txs);
 
-            // fill up the remaining block space with
-            // protocol transactions that haven't been
-            // selected for inclusion yet, and whose
-            // size allows them to fit in the free
-            // space left
-            let mut remaining_txs = self.build_remaining_batch(
-                alloc,
-                &protocol_tx_indices,
-                req.txs,
-            );
-            txs.append(&mut remaining_txs);
+            #[cfg(feature = "abcipp")]
+            {
+                let _ = alloc;
+            }
+            #[cfg(not(feature = "abcipp"))]
+            {
+                // fill up the remaining block space with
+                // protocol transactions that haven't been
+                // selected for inclusion yet, and whose
+                // size allows them to fit in the free
+                // space left
+                let mut remaining_txs = self.build_remaining_batch(
+                    alloc,
+                    &protocol_tx_indices,
+                    req.txs,
+                );
+                txs.append(&mut remaining_txs);
+            }
 
             txs
         } else {
@@ -114,7 +126,7 @@ where
     #[cfg(feature = "abcipp")]
     fn build_protocol_txs(
         &mut self,
-        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         // genesis should not contain vote extensions
@@ -157,7 +169,7 @@ where
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
-        let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
+        let _txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
             validator_set_update,
         })
@@ -271,8 +283,8 @@ where
     fn build_encrypted_txs(
         &mut self,
         _alloc: EncryptedTxBatchAllocator,
-        txs: &[TxBytes],
-    ) -> (Vec<TxRecord>, BlockSpaceAllocator<FillingRemainingSpace>) {
+        _txs: &[TxBytes],
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
         // TODO(feature = "abcipp"): implement building batch of mempool txs
         todo!()
     }
@@ -395,6 +407,7 @@ where
 
     /// Builds a batch of transactions that can fit in the
     /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(not(feature = "abcipp"))]
     fn build_remaining_batch(
         &mut self,
         mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
@@ -437,6 +450,7 @@ where
 
 /// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
+#[cfg(not(feature = "abcipp"))]
 fn get_remaining_protocol_txs(
     protocol_tx_indices: &VecIndexSet<u128>,
     txs: Vec<TxBytes>,
@@ -503,9 +517,6 @@ mod test_prepare_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
-    // https://github.com/tendermint/tendermint/blob/v0.37.x/spec/abci/abci%2B%2B_app_requirements.md#blockparamsmaxbytes
-    const MAX_TM_BLK_SIZE: i64 = 100 << 20;
-
     /// Extract an [`ethereum_events::SignedVext`], from a set of
     /// serialized [`TxBytes`].
     #[cfg(not(feature = "abcipp"))]
@@ -529,6 +540,7 @@ mod test_prepare_proposal {
 
     /// Test if [`get_remaining_protocol_txs`] is working as expected.
     #[test]
+    #[cfg(not(feature = "abcipp"))]
     fn test_get_remaining_protocol_txs() {
         // TODO(feature = "abcipp"): use a different tx type here
         fn bertha_ext(at_height: u64) -> TxBytes {
@@ -627,7 +639,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![non_wrapper_tx.to_bytes()],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -883,7 +894,6 @@ mod test_prepare_proposal {
 
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             local_last_commit: Some(ExtendedCommitInfo {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 votes: vec![vote],
                 ..Default::default()
             }),
@@ -954,7 +964,6 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![tx],
                 ..Default::default()
             });
@@ -1049,7 +1058,6 @@ mod test_prepare_proposal {
             };
             // this should panic
             shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 local_last_commit: Some(ExtendedCommitInfo {
                     votes: vec![vote],
                     ..Default::default()
@@ -1065,7 +1073,6 @@ mod test_prepare_proposal {
             .sign(&protocol_key)
             .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![vote],
                 ..Default::default()
             });
@@ -1129,7 +1136,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -1150,7 +1156,6 @@ mod test_prepare_proposal {
 
         let mut req = RequestPrepareProposal {
             txs: vec![],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
