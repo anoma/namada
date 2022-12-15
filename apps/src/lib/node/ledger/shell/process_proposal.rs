@@ -48,7 +48,7 @@ where
         let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
             #[cfg(feature = "abcipp")]
-            digest: DigestCounters::default(),
+            digests: DigestCounters::default(),
             decrypted_queue_has_remaining_txs: false,
             encrypted_txs_bin,
             txs_bin,
@@ -146,7 +146,7 @@ where
         }
 
         let has_remaining_decrypted_txs =
-            meta.decrypted_queue_has_remaining_txs;
+            metadata.decrypted_queue_has_remaining_txs;
         if has_remaining_decrypted_txs {
             tracing::warn!(
                 proposer = ?HEXUPPER.encode(&req.proposer_address),
