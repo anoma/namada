@@ -264,14 +264,14 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
 
     /// Query the storage value at the given key
     async fn query_storage_value<T: Send>(
-        &self,
+        client: &Self::C,
         key: &storage::Key,
     ) -> Option<T>
     where
         T: BorshDeserialize;
 
     /// Query the current epoch
-    async fn query_epoch(&self) -> Epoch;
+    async fn query_epoch(client: &Self::C) -> Epoch;
 
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -284,7 +284,7 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
 
     /// Query the designated conversion for the given AssetType
     async fn query_conversion(
-        &self,
+        client: &Self::C,
         asset_type: AssetType,
     ) -> Option<(
         Address,
@@ -294,10 +294,7 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
     )>;
 
     /// Query for all the accepted transactions that have occured to date
-    async fn query_results(&self) -> Vec<BlockResults>;
-
-    /// Get a client object with which to effect Tendermint queries
-    fn client(&self) -> Self::C;
+    async fn query_results(client: &Self::C) -> Vec<BlockResults>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -469,6 +466,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// ShieldedContext
     pub async fn fetch(
         &mut self,
+        client: &U::C,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) {
@@ -493,7 +491,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(&self.utils, 0).await;
+            txs = Self::fetch_shielded_transfers(client, 0).await;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
             let mut tx_ctx = Self { utils: self.utils.clone(), ..Default::default() };
@@ -514,7 +512,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         } else {
             // Load only transactions accepted from last_txid until this point
             txs =
-                Self::fetch_shielded_transfers(&self.utils, self.last_txidx)
+                Self::fetch_shielded_transfers(client, self.last_txidx)
                     .await;
             tx_iter = txs.iter();
         }
@@ -531,7 +529,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// stores the index of the last accepted transaction and each transaction
     /// is stored at a key derived from its index.
     pub async fn fetch_shielded_transfers(
-        utils: &U,
+        client: &U::C,
         last_txidx: u64,
     ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)> {
         // The address of the MASP account
@@ -541,7 +539,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         // Query for the index of the last accepted transaction
-        let head_txidx = utils.query_storage_value::<u64>(&head_tx_key)
+        let head_txidx = U::query_storage_value::<u64>(client, &head_tx_key)
             .await
             .unwrap_or(0);
         let mut shielded_txs = BTreeMap::new();
@@ -553,7 +551,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .expect("Cannot obtain a storage key");
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx) =
-                utils.query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                U::query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                    client,
                     &current_tx_key,
                 )
                 .await
@@ -714,6 +713,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// if it is found.
     pub async fn decode_asset_type(
         &mut self,
+        client: &U::C,
         asset_type: AssetType,
     ) -> Option<(Address, Epoch)> {
         // Try to find the decoding in the cache
@@ -722,7 +722,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         }
         // Query for the ID of the last accepted transaction
         let (addr, ep, _conv, _path): (Address, _, Amount, MerklePath<Node>) =
-            self.utils.query_conversion(asset_type).await?;
+            U::query_conversion(client, asset_type).await?;
         self.asset_types.insert(asset_type, (addr.clone(), ep));
         Some((addr, ep))
     }
@@ -731,6 +731,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// type and cache it.
     async fn query_allowed_conversion<'a>(
         &'a mut self,
+        client: &U::C,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
     ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
@@ -739,7 +740,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             Entry::Vacant(conv_entry) => {
                 // Query for the ID of the last accepted transaction
                 let (addr, ep, conv, path): (Address, _, _, _) =
-                    self.utils.query_conversion(asset_type).await?;
+                    U::query_conversion(client, asset_type).await?;
                 self.asset_types.insert(asset_type, (addr, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
@@ -757,6 +758,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// balance and hence we return None.
     pub async fn compute_exchanged_balance(
         &mut self,
+        client: &U::C,
         vk: &ViewingKey,
         target_epoch: Epoch,
     ) -> Option<Amount> {
@@ -765,6 +767,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // And then exchange balance into current asset types
             Some(
                 self.compute_exchanged_amount(
+                    client,
                     balance,
                     target_epoch,
                     HashMap::new(),
@@ -820,6 +823,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// terms of the latest asset types.
     pub async fn compute_exchanged_amount(
         &mut self,
+        client: &U::C,
         mut input: Amount,
         target_epoch: Epoch,
         mut conversions: Conversions,
@@ -831,13 +835,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             input.components().next().map(cloned_pair)
         {
             let target_asset_type = self
-                .decode_asset_type(asset_type)
+                .decode_asset_type(client, asset_type)
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
+                    client,
                     asset_type,
                     &mut conversions,
                 )
@@ -860,6 +865,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 );
             } else if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
+                    client,
                     target_asset_type,
                     &mut conversions,
                 )
@@ -897,6 +903,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// achieve the total value.
     pub async fn collect_unspent_notes(
         &mut self,
+        client: &U::C,
         vk: &ViewingKey,
         target: Amount,
         target_epoch: Epoch,
@@ -929,6 +936,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     .expect("received note has invalid value or asset type");
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
+                        client,
                         pre_contr,
                         target_epoch,
                         conversions.clone(),
@@ -963,7 +971,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the given payment address fails with
     /// `PinnedBalanceError::NoTransactionPinned`.
     pub async fn compute_pinned_balance(
-        utils: &U,
+        client: &U::C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
@@ -985,7 +993,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
             .expect("Cannot obtain a storage key");
         // Obtain the transaction pointer at the key
-        let txidx = utils.query_storage_value::<u64>(&pin_key)
+        let txidx = U::query_storage_value::<u64>(client, &pin_key)
             .await
             .ok_or(PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
@@ -994,7 +1002,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .expect("Cannot obtain a storage key");
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, tx) =
-            utils.query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+            U::query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                client,
                 &tx_key,
             )
             .await
@@ -1036,16 +1045,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// would have been displayed in the epoch of the transaction.
     pub async fn compute_exchanged_pinned_balance(
         &mut self,
+        client: &U::C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(Amount, Epoch), PinnedBalanceError> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
-            Self::compute_pinned_balance(&self.utils, owner, viewing_key)
+            Self::compute_pinned_balance(client, owner, viewing_key)
                 .await?;
         // Finally, exchange the balance to the transaction's epoch
         Ok((
-            self.compute_exchanged_amount(amt, ep, HashMap::new())
+            self.compute_exchanged_amount(client, amt, ep, HashMap::new())
                 .await
                 .0,
             ep,
@@ -1057,6 +1067,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the given epoch are ignored.
     pub async fn decode_amount(
         &mut self,
+        client: &U::C,
         amt: Amount,
         target_epoch: Epoch,
     ) -> Amount<Address> {
@@ -1064,7 +1075,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
-                self.decode_asset_type(*asset_type).await;
+                self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
                 Some((addr, epoch)) if epoch == target_epoch => {
@@ -1080,13 +1091,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// Addresses that they decode to.
     pub async fn decode_all_amounts(
         &mut self,
+        client: &U::C,
         amt: Amount,
     ) -> Amount<(Address, Epoch)> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
-                self.decode_asset_type(*asset_type).await;
+                self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             if let Some((addr, epoch)) = decoded {
                 res += &Amount::from_pair((addr, epoch), *val).unwrap()
@@ -1105,6 +1117,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     #[cfg(feature = "masp-tx-gen")]
     pub async fn gen_shielded_transfer(
         &mut self,
+        client: &U::C,
         source: TransferSource,
         target: TransferTarget,
         args_amount: token::Amount,
@@ -1125,12 +1138,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
         // Load the current shielded context given the spending key we possess
         let _ = self.load();
-        self.fetch(&spending_keys, &[])
+        self.fetch(client, &spending_keys, &[])
             .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save();
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = self.utils.query_epoch().await;
+        let epoch = U::query_epoch(client).await;
         // Context required for storing which notes are in the source's possesion
         let consensus_branch_id = BranchId::Sapling;
         let amt: u64 = args_amount.into();
@@ -1157,6 +1170,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = self
                 .collect_unspent_notes(
+                    client,
                     &to_viewing_key(&sk).vk,
                     required_amt,
                     epoch,
@@ -1236,7 +1250,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let mut tx = builder.build(consensus_branch_id, &prover);
 
         if epoch_sensitive {
-            let new_epoch = self.utils.query_epoch().await;
+            let new_epoch = U::query_epoch(client).await;
 
             // If epoch has changed, recalculate shielded outputs to match new epoch
             if new_epoch != epoch {
@@ -1295,28 +1309,25 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// restrict set to only transactions involving the given token.
     pub async fn query_tx_deltas(
         &mut self,
+        client: &U::C,
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
         viewing_keys: &HashMap<String, ExtendedViewingKey>,
     ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
     {
         const TXS_PER_PAGE: u8 = 100;
-        // Connect to the Tendermint server holding the transactions
-        //let client = HttpClient::new(ledger_address.clone()).unwrap();
-        // Build up the context that will be queried for transactions
-        //ctx.shielded.utils.ledger_address = Some(ledger_address.clone());
         let _ = self.load();
         let vks = viewing_keys;
         let fvks: Vec<_> = vks
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(&[], &fvks).await;
+        self.fetch(client, &[], &fvks).await;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save();
         // Required for filtering out rejected transactions from Tendermint
         // responses
-        let block_results = self.utils.query_results().await;
+        let block_results = U::query_results(client).await;
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
         let relevant_addrs = match &query_owner {
@@ -1337,7 +1348,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     tx_query = tx_query.and_eq("transfer.token", token.encode());
                 }
                 for page in 1.. {
-                    let txs = &self.utils.client()
+                    let txs = &client
                         .tx_search(
                             tx_query.clone(),
                             true,

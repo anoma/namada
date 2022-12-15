@@ -359,8 +359,6 @@ const TMP_FILE_NAME: &str = "shielded.tmp";
 pub struct CLIShieldedUtils {
     #[borsh_skip]
     context_dir: PathBuf,
-    #[borsh_skip]
-    pub ledger_address: Option<TendermintAddress>,
 }
 
 impl CLIShieldedUtils {
@@ -385,14 +383,14 @@ impl CLIShieldedUtils {
             println!("MASP parameter download complete, resuming execution...");
         }
         // Finally initialize a shielded context with the supplied directory
-        let utils = Self { context_dir, ledger_address: None };
+        let utils = Self { context_dir };
         masp::ShieldedContext { utils, ..Default::default() }
     }
 }
 
 impl Default for CLIShieldedUtils {
     fn default() -> Self {
-        Self { context_dir: PathBuf::from(FILE_NAME), ledger_address: None }
+        Self { context_dir: PathBuf::from(FILE_NAME) }
     }
 }
 
@@ -401,16 +399,15 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = HttpClient;
     
     async fn query_storage_value<T: Send>(
-        &self,
+        client: &HttpClient,
         key: &storage::Key,
     ) -> Option<T>
     where T: BorshDeserialize {
-        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
-        query_storage_value::<T>(&client, &key).await
+        query_storage_value::<T>(client, &key).await
     }
 
-    async fn query_epoch(&self) -> Epoch {
-        rpc::query_epoch(&self.client()).await
+    async fn query_epoch(client: &HttpClient) -> Epoch {
+        rpc::query_epoch(client).await
     }
 
     fn local_tx_prover(&self) -> LocalTxProver {
@@ -472,7 +469,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
     /// Query a conversion.
     async fn query_conversion(
-        &self,
+        client: &HttpClient,
         asset_type: AssetType,
     ) -> Option<(
         Address,
@@ -480,26 +477,17 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         masp_primitives::transaction::components::Amount,
         MerklePath<Node>,
     )> {
-        let client = HttpClient::new(self.ledger_address.clone().unwrap()).unwrap();
-        query_conversion(client, asset_type).await
+        query_conversion(client.clone(), asset_type).await
     }
 
-    fn client(&self) -> Self::C {
-        let ledger_address = self
-            .ledger_address
-            .clone()
-            .expect("ledger address must be set");
-        HttpClient::new(ledger_address).unwrap()
-    }
-
-    async fn query_results(&self) -> Vec<BlockResults> {
-        rpc::query_results(&self.client()).await
+    async fn query_results(client: &HttpClient) -> Vec<BlockResults> {
+        rpc::query_results(client).await
     }
 }
 
 
 
-pub async fn submit_transfer<U: ShieldedUtils>(
+pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
     wallet: &mut Wallet,
     shielded: &mut ShieldedContext<U>,
@@ -623,6 +611,7 @@ pub async fn submit_transfer<U: ShieldedUtils>(
 
     let stx_result =
         shielded.gen_shielded_transfer(
+            client,
             transfer_source,
             transfer_target,
             args.amount,

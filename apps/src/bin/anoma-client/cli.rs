@@ -79,8 +79,9 @@ pub async fn main() -> Result<()> {
                     rpc::query_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
+                    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    rpc::query_transfers(&mut ctx.wallet, &mut ctx.shielded, args).await;
+                    rpc::query_transfers(&client, &mut ctx.wallet, &mut ctx.shielded, args).await;
                 }
                 Sub::QueryConversions(QueryConversions(args)) => {
                     let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
