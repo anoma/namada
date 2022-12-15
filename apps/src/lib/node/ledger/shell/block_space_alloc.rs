@@ -58,6 +58,9 @@ use std::marker::PhantomData;
 use namada::core::ledger::storage::{self, Storage};
 use namada::ledger::queries_ext::QueriesExt;
 
+#[allow(unused_imports)]
+use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+
 /// Block space allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AllocFailure {
