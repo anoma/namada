@@ -8,6 +8,7 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 use tendermint_rpc::HttpClient;
+use std::path::PathBuf;
 
 use super::rpc;
 use crate::cli::{self, args};
@@ -18,7 +19,7 @@ use crate::wallet::Wallet;
 /// for it from the wallet. Panics if the key cannot be found or loaded.
 pub async fn find_keypair(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     addr: &Address,
 ) -> common::SecretKey {
     match addr {
@@ -86,7 +87,7 @@ pub enum TxSigningKey {
 /// is given, panics.
 pub async fn tx_signer(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     mut default: TxSigningKey,
 ) -> common::SecretKey {
@@ -142,7 +143,7 @@ pub async fn tx_signer(
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<PathBuf>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,

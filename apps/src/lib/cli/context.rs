@@ -67,7 +67,7 @@ pub struct Context {
     /// Global arguments
     pub global_args: args::Global,
     /// The wallet
-    pub wallet: Wallet,
+    pub wallet: Wallet<PathBuf>,
     /// The global configuration
     pub global_config: GlobalConfig,
     /// The ledger configuration for a specific chain ID
@@ -100,7 +100,7 @@ impl Context {
         let default_genesis =
             genesis_config::open_genesis_config(genesis_file_path)?;
         let wallet =
-            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
+            crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {

@@ -63,7 +63,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
-use crate::{config, wallet};
+use crate::config;
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -275,7 +275,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let wallet = wallet::Wallet::load_or_new_from_genesis(
+                    let wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -631,7 +631,7 @@ where
         let genesis_path = &self
             .base_dir
             .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet = wallet::Wallet::load_or_new_from_genesis(
+        let mut wallet = crate::wallet::load_or_new_from_genesis(
             wallet_path,
             genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
         );

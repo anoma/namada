@@ -115,79 +115,6 @@ impl Store {
         );
     }
 
-    /// Save the wallet store to a file.
-    pub fn save(&self, store_dir: &Path) -> std::io::Result<()> {
-        let data = self.encode();
-        let wallet_path = wallet_file(store_dir);
-        // Make sure the dir exists
-        let wallet_dir = wallet_path.parent().unwrap();
-        fs::create_dir_all(wallet_dir)?;
-        // Write the file
-        let options =
-            FileOptions::new().create(true).write(true).truncate(true);
-        let mut filelock =
-            FileLock::lock(wallet_path.to_str().unwrap(), true, options)?;
-        filelock.file.write_all(&data)
-    }
-
-    /// Load the store file or create a new one without any keys or addresses.
-    pub fn load_or_new(store_dir: &Path) -> Result<Self, LoadStoreError> {
-        Self::load(store_dir).or_else(|_| {
-            let store = Self::default();
-            store.save(store_dir).map_err(|err| {
-                LoadStoreError::StoreNewWallet(err.to_string())
-            })?;
-            Ok(store)
-        })
-    }
-
-    /// Load the store file or create a new one with the default addresses from
-    /// the genesis file, if not found.
-    pub fn load_or_new_from_genesis(
-        store_dir: &Path,
-        genesis_cfg: GenesisConfig,
-    ) -> Result<Self, LoadStoreError> {
-        Self::load(store_dir).or_else(|_| {
-            #[cfg(not(feature = "dev"))]
-            let store = Self::new(genesis_cfg);
-            #[cfg(feature = "dev")]
-            let store = {
-                // The function is unused in dev
-                let _ = genesis_cfg;
-                Self::new()
-            };
-            store.save(store_dir).map_err(|err| {
-                LoadStoreError::StoreNewWallet(err.to_string())
-            })?;
-            Ok(store)
-        })
-    }
-
-    /// Attempt to load the store file.
-    pub fn load(store_dir: &Path) -> Result<Self, LoadStoreError> {
-        let wallet_file = wallet_file(store_dir);
-        match FileLock::lock(
-            wallet_file.to_str().unwrap(),
-            true,
-            FileOptions::new().read(true).write(false),
-        ) {
-            Ok(mut filelock) => {
-                let mut store = Vec::<u8>::new();
-                filelock.file.read_to_end(&mut store).map_err(|err| {
-                    LoadStoreError::ReadWallet(
-                        store_dir.to_str().unwrap().into(),
-                        err.to_string(),
-                    )
-                })?;
-                Store::decode(store).map_err(LoadStoreError::Decode)
-            }
-            Err(err) => Err(LoadStoreError::ReadWallet(
-                wallet_file.to_string_lossy().into_owned(),
-                err.to_string(),
-            )),
-        }
-    }
-
     /// Find the stored key by an alias, a public key hash or a public key.
     pub fn find_key(
         &self,
@@ -753,6 +680,79 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
         SchemeType::Common => common::SigScheme::generate(&mut csprng)
             .try_to_sk()
             .unwrap(),
+    }
+}
+
+/// Save the wallet store to a file.
+pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
+    let data = store.encode();
+    let wallet_path = wallet_file(store_dir);
+    // Make sure the dir exists
+    let wallet_dir = wallet_path.parent().unwrap();
+    fs::create_dir_all(wallet_dir)?;
+    // Write the file
+    let options =
+        FileOptions::new().create(true).write(true).truncate(true);
+    let mut filelock =
+        FileLock::lock(wallet_path.to_str().unwrap(), true, options)?;
+    filelock.file.write_all(&data)
+}
+
+/// Load the store file or create a new one without any keys or addresses.
+pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
+    load(store_dir).or_else(|_| {
+        let store = Store::default();
+        save(&store, store_dir).map_err(|err| {
+            LoadStoreError::StoreNewWallet(err.to_string())
+        })?;
+        Ok(store)
+    })
+}
+
+/// Load the store file or create a new one with the default addresses from
+/// the genesis file, if not found.
+pub fn load_or_new_from_genesis(
+    store_dir: &Path,
+    genesis_cfg: GenesisConfig,
+) -> Result<Store, LoadStoreError> {
+    load(store_dir).or_else(|_| {
+        #[cfg(not(feature = "dev"))]
+        let store = Store::new(genesis_cfg);
+        #[cfg(feature = "dev")]
+        let store = {
+            // The function is unused in dev
+            let _ = genesis_cfg;
+            Store::new()
+        };
+        save(&store, store_dir).map_err(|err| {
+            LoadStoreError::StoreNewWallet(err.to_string())
+        })?;
+        Ok(store)
+    })
+}
+
+/// Attempt to load the store file.
+pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
+    let wallet_file = wallet_file(store_dir);
+    match FileLock::lock(
+        wallet_file.to_str().unwrap(),
+        true,
+        FileOptions::new().read(true).write(false),
+    ) {
+        Ok(mut filelock) => {
+            let mut store = Vec::<u8>::new();
+            filelock.file.read_to_end(&mut store).map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    store_dir.to_str().unwrap().into(),
+                    err.to_string(),
+                )
+            })?;
+            Store::decode(store).map_err(LoadStoreError::Decode)
+        }
+        Err(err) => Err(LoadStoreError::ReadWallet(
+            wallet_file.to_string_lossy().into_owned(),
+            err.to_string(),
+        )),
     }
 }
 

@@ -141,7 +141,7 @@ pub async fn query_results(client: &HttpClient) -> Vec<BlockResults> {
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<std::path::PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryTransfers
 ) {
@@ -278,7 +278,7 @@ pub async fn query_raw_bytes(client: &HttpClient, args: args::QueryRawBytes) {
 /// Query token balance(s)
 pub async fn query_balance<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<std::path::PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -308,7 +308,7 @@ pub async fn query_balance<U: ShieldedUtils<C = HttpClient>>(
 /// Query token balance(s)
 pub async fn query_transparent_balance(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<std::path::PathBuf>,
     args: args::QueryBalance,
 ) {
     let tokens = address::tokens();
@@ -385,7 +385,7 @@ pub async fn query_transparent_balance(
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<std::path::PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -518,7 +518,7 @@ pub async fn query_pinned_balance<U: ShieldedUtils<C = HttpClient>>(
 }
 
 fn print_balances(
-    wallet: &Wallet,
+    wallet: &Wallet<std::path::PathBuf>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: &Address,
     target: Option<&Address>,
@@ -710,7 +710,7 @@ pub fn value_by_address(
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance<U: ShieldedUtils<C = HttpClient>>(
     client: &HttpClient,
-    wallet: &mut Wallet,
+    wallet: &mut Wallet<std::path::PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -2706,7 +2706,7 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
 
 /// Try to find an alias for a given address from the wallet. If not found,
 /// formats the address into a string.
-fn lookup_alias(wallet: &Wallet, addr: &Address) -> String {
+fn lookup_alias(wallet: &Wallet<std::path::PathBuf>, addr: &Address) -> String {
     match wallet.find_alias(addr) {
         Some(alias) => format!("{}", alias),
         None => format!("{}", addr),

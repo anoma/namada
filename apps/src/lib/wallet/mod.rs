@@ -28,8 +28,8 @@ use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 
 #[derive(Debug)]
-pub struct Wallet {
-    store_dir: PathBuf,
+pub struct Wallet<C> {
+    store_dir: C,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
     decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
@@ -43,87 +43,10 @@ pub enum FindKeyError {
     KeyDecryptionError(keys::DecryptionError),
 }
 
-impl Wallet {
-    /// Load a wallet from the store file.
-    pub fn load(store_dir: &Path) -> Option<Self> {
-        let store = Store::load(store_dir).unwrap_or_else(|err| {
-            eprintln!("Unable to load the wallet: {}", err);
-            cli::safe_exit(1)
-        });
-        Some(Self {
-            store_dir: store_dir.to_path_buf(),
-            store,
-            decrypted_key_cache: HashMap::default(),
-            decrypted_spendkey_cache: HashMap::default(),
-        })
-    }
-
-    /// Load a wallet from the store file or create a new wallet without any
-    /// keys or addresses.
-    pub fn load_or_new(store_dir: &Path) -> Self {
-        let store = Store::load_or_new(store_dir).unwrap_or_else(|err| {
-            eprintln!("Unable to load the wallet: {}", err);
-            cli::safe_exit(1)
-        });
-        Self {
-            store_dir: store_dir.to_path_buf(),
-            store,
-            decrypted_key_cache: HashMap::default(),
-            decrypted_spendkey_cache: HashMap::default(),
-        }
-    }
-
-    /// Load a wallet from the store file or create a new one with the default
-    /// addresses loaded from the genesis file, if not found.
-    pub fn load_or_new_from_genesis(
-        store_dir: &Path,
-        genesis_cfg: GenesisConfig,
-    ) -> Self {
-        let store = Store::load_or_new_from_genesis(store_dir, genesis_cfg)
-            .unwrap_or_else(|err| {
-                eprintln!("Unable to load the wallet: {}", err);
-                cli::safe_exit(1)
-            });
-        Self {
-            store_dir: store_dir.to_path_buf(),
-            store,
-            decrypted_key_cache: HashMap::default(),
-            decrypted_spendkey_cache: HashMap::default(),
-        }
-    }
-
+impl<C> Wallet<C> {
     /// Add addresses from a genesis configuration.
     pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
         self.store.add_genesis_addresses(genesis)
-    }
-
-    /// Save the wallet store to a file.
-    pub fn save(&self) -> std::io::Result<()> {
-        self.store.save(&self.store_dir)
-    }
-
-    /// Prompt for pssword and confirm it if parameter is false
-    fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String> {
-        let password = if unsafe_dont_encrypt {
-            println!("Warning: The keypair will NOT be encrypted.");
-            None
-        } else {
-            Some(read_password("Enter your encryption password: "))
-        };
-        // Bis repetita for confirmation.
-        let pwd = if unsafe_dont_encrypt {
-            None
-        } else {
-            Some(read_password(
-                "To confirm, please enter the same encryption password once \
-                 more: ",
-            ))
-        };
-        if pwd != password {
-            eprintln!("Your two inputs do not match!");
-            cli::safe_exit(1)
-        }
-        password
     }
 
     /// Generate a new keypair and derive an implicit address from its public
@@ -151,7 +74,7 @@ impl Wallet {
         alias: String,
         unsafe_dont_encrypt: bool,
     ) -> (String, ExtendedSpendingKey) {
-        let password = Self::new_password_prompt(unsafe_dont_encrypt);
+        let password = new_password_prompt(unsafe_dont_encrypt);
         let (alias, key) = self.store.gen_spending_key(alias, password);
         // Cache the newly added key
         self.decrypted_spendkey_cache.insert(alias.clone(), key);
@@ -478,7 +401,7 @@ impl Wallet {
         spend_key: ExtendedSpendingKey,
         unsafe_dont_encrypt: bool,
     ) -> Option<String> {
-        let password = Self::new_password_prompt(unsafe_dont_encrypt);
+        let password = new_password_prompt(unsafe_dont_encrypt);
         self.store
             .insert_spending_key(
                 alias.into(),
@@ -511,6 +434,83 @@ impl Wallet {
             other,
         )
     }
+}
+
+/// Save the wallet store to a file.
+pub fn save(wallet: &Wallet<PathBuf>) -> std::io::Result<()> {
+    self::store::save(&wallet.store, &wallet.store_dir)
+}
+
+/// Load a wallet from the store file.
+pub fn load(store_dir: &Path) -> Option<Wallet<PathBuf>> {
+    let store = self::store::load(store_dir).unwrap_or_else(|err| {
+        eprintln!("Unable to load the wallet: {}", err);
+        cli::safe_exit(1)
+    });
+    Some(Wallet::<PathBuf> {
+        store_dir: store_dir.to_path_buf(),
+        store,
+        decrypted_key_cache: HashMap::default(),
+        decrypted_spendkey_cache: HashMap::default(),
+    })
+}
+
+/// Load a wallet from the store file or create a new wallet without any
+/// keys or addresses.
+pub fn load_or_new(store_dir: &Path) -> Wallet<PathBuf> {
+    let store = self::store::load_or_new(store_dir).unwrap_or_else(|err| {
+        eprintln!("Unable to load the wallet: {}", err);
+        cli::safe_exit(1)
+    });
+    Wallet::<PathBuf> {
+        store_dir: store_dir.to_path_buf(),
+        store,
+        decrypted_key_cache: HashMap::default(),
+        decrypted_spendkey_cache: HashMap::default(),
+    }
+}
+
+/// Load a wallet from the store file or create a new one with the default
+/// addresses loaded from the genesis file, if not found.
+pub fn load_or_new_from_genesis(
+    store_dir: &Path,
+    genesis_cfg: GenesisConfig,
+) -> Wallet<PathBuf> {
+    let store = self::store::load_or_new_from_genesis(store_dir, genesis_cfg)
+        .unwrap_or_else(|err| {
+            eprintln!("Unable to load the wallet: {}", err);
+            cli::safe_exit(1)
+        });
+    Wallet::<PathBuf> {
+        store_dir: store_dir.to_path_buf(),
+        store,
+        decrypted_key_cache: HashMap::default(),
+        decrypted_spendkey_cache: HashMap::default(),
+    }
+}
+
+/// Prompt for pssword and confirm it if parameter is false
+fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String> {
+    let password = if unsafe_dont_encrypt {
+        println!("Warning: The keypair will NOT be encrypted.");
+        None
+    } else {
+        Some(read_password("Enter your encryption password: "))
+    };
+    // Bis repetita for confirmation.
+    let pwd = if unsafe_dont_encrypt {
+        None
+    } else {
+        Some(read_password(
+            "To confirm, please enter the same encryption password once \
+             more: ",
+        ))
+    };
+    if pwd != password {
+        eprintln!("Your two inputs do not match!");
+        cli::safe_exit(1)
+    }
+    password
 }
 
 /// Read the password for encryption from the file/env/stdin with confirmation.
