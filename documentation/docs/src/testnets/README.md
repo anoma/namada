@@ -17,7 +17,6 @@ If you found a bug, please submit an issue with the `bug` [issue template](https
   3. [Running your genesis validator](./testnets/run-your-genesis-validator.md)
   4. [Running a full node](./testnets/running-a-full-node.md)
   5. [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
-
 ![testnet_flowchart](../images/testnet_flowchart.png)
 
 ## Testnet versions

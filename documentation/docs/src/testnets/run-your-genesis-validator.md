@@ -1,5 +1,5 @@
 # 3) MANDATORY: Reset your validator node
-- You can skip to 3.1 if you don't need to reset the ledger state
+- **You can skip to 3.1 if you don't need to reset the ledger state**
 - This is the right time to save any logs file you want to share with us!
 - Save your `pre-genesis` folder in the ledger base directory
     - `mkdir backup-pregenesis && cp -r .anoma/pre-genesis backup-pregenesis/`
@@ -31,7 +31,7 @@ With the new update, the folder will be located in the `.namada` folder rather t
 - Wait for the genesis file to be ready, `CHAIN_ID`.
 - Join the network with the `CHAIN_ID`
     ``` bash
-    export CHAIN_ID="qc-testnet-5.1.025a61165acd05e"
+    export CHAIN_ID="TBD"
     namada client utils join-network \
     --chain-id $CHAIN_ID --genesis-validator $ALIAS
     ```
