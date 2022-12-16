@@ -94,4 +94,4 @@ Now, that you have all dependencies installed you can download the latest binary
 
 ## From Docker
 
-The docker image can be found [here](https://github.com/anoma/namada/pkgs/container/namada)
+You can find the Namada docker image [here](https://github.com/anoma/namada/pkgs/container/namada)
