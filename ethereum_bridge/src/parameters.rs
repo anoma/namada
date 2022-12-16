@@ -6,6 +6,8 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::Storage;
 use namada_core::types::ethereum_events::EthAddress;
+use namada_core::ledger::storage_api::StorageRead;
+use namada_core::types::storage::Key;
 use serde::{Deserialize, Serialize};
 
 use crate::{bridge_pool_vp, storage as bridge_storage, vp};
@@ -187,47 +189,24 @@ impl EthereumBridgeConfig {
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
 
-        let (min_confirmations, _) =
-            storage.read(&min_confirmations_key).unwrap_or_else(|err| {
-                panic!("Could not read {min_confirmations_key}: {err:?}")
-            });
-        let min_confirmations = match min_confirmations {
-            Some(bytes) => {
-                MinimumConfirmations::try_from_slice(&bytes).unwrap()
-            }
-            None => return None,
+        let Some(min_confirmations) = StorageRead::read::<MinimumConfirmations>(
+            storage,
+            &min_confirmations_key,
+        )
+        .unwrap_or_else(|err| {
+            panic!("Could not Borsh-deserialize {min_confirmations_key}: {err:?}")
+        }) else {
+            // The bridge has not been configured yet
+            return None;
         };
-        let (native_erc20, _) =
-            storage.read(&native_erc20_key).unwrap_or_else(|err| {
-                panic!("Could not read {native_erc20_key}: {err:?}")
-            });
-        let native_erc20 = match native_erc20 {
-            Some(bytes) => EthAddress::try_from_slice(&bytes).unwrap(),
-            None => panic!(
-                "Ethereum bridge appears to be only partially configured!"
-            ),
-        };
-        let (bridge_contract, _) =
-            storage.read(&bridge_contract_key).unwrap_or_else(|err| {
-                panic!("Could not read {bridge_contract_key}: {err:?}")
-            });
-        let bridge_contract = match bridge_contract {
-            Some(bytes) => UpgradeableContract::try_from_slice(&bytes).unwrap(),
-            None => panic!(
-                "Ethereum bridge appears to be only partially configured!"
-            ),
-        };
-        let (governance_contract, _) = storage
-            .read(&governance_contract_key)
-            .unwrap_or_else(|err| {
-                panic!("Could not read {governance_contract_key}: {err:?}")
-            });
-        let governance_contract = match governance_contract {
-            Some(bytes) => UpgradeableContract::try_from_slice(&bytes).unwrap(),
-            None => panic!(
-                "Ethereum bridge appears to be only partially configured!"
-            ),
-        };
+
+        // These reads must succeed otherwise the storage is corrupt or a
+        // read failed
+        let native_erc20 = must_read_key(storage, &native_erc20_key);
+        let bridge_contract = must_read_key(storage, &bridge_contract_key);
+        let governance_contract =
+            must_read_key(storage, &governance_contract_key);
+
         Some(Self {
             min_confirmations,
             contracts: Contracts {
@@ -239,12 +218,34 @@ impl EthereumBridgeConfig {
     }
 }
 
+fn must_read_key<DB, H, T: BorshDeserialize>(
+    storage: &Storage<DB, H>,
+    key: &Key,
+) -> T
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::traits::StorageHasher,
+{
+    StorageRead::read::<T>(storage, key).map_or_else(
+        |err| panic!("Could not Borsh-deserialize {key}: {err:?}"),
+        |value| {
+            value.unwrap_or_else(|| {
+                panic!(
+                    "Ethereum bridge appears to be only partially configured! \
+                     There was no value for {key}"
+                )
+            })
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use eyre::Result;
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::types::ethereum_events::EthAddress;
 
+    use super::*;
     use crate::parameters::{
         ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
         UpgradeableContract,
@@ -298,5 +299,74 @@ mod tests {
         let read = EthereumBridgeConfig::read(&storage).unwrap();
 
         assert_eq!(config, read);
+    }
+
+    #[test]
+    fn test_ethereum_bridge_config_uninitialized() {
+        let storage = TestStorage::default();
+        let read = EthereumBridgeConfig::read(&storage);
+
+        assert!(read.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "Could not Borsh-deserialize")]
+    fn test_ethereum_bridge_config_storage_corrupt() {
+        let mut storage = TestStorage::default();
+        let config = EthereumBridgeConfig {
+            min_confirmations: MinimumConfirmations::default(),
+            contracts: Contracts {
+                native_erc20: EthAddress([42; 20]),
+                bridge: UpgradeableContract {
+                    address: EthAddress([23; 20]),
+                    version: ContractVersion::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: ContractVersion::default(),
+                },
+            },
+        };
+        config.init_storage(&mut storage);
+        let min_confirmations_key = bridge_storage::min_confirmations_key();
+        storage
+            .write(&min_confirmations_key, vec![42, 1, 2, 3, 4])
+            .unwrap();
+
+        // This should panic because the min_confirmations value is not valid
+        EthereumBridgeConfig::read(&storage);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Ethereum bridge appears to be only partially configured!"
+    )]
+    fn test_ethereum_bridge_config_storage_partially_configured() {
+        let mut storage = TestStorage::default();
+        let config = EthereumBridgeConfig {
+            min_confirmations: MinimumConfirmations::default(),
+            contracts: Contracts {
+                native_erc20: EthAddress([42; 20]),
+                bridge: UpgradeableContract {
+                    address: EthAddress([23; 20]),
+                    version: ContractVersion::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: ContractVersion::default(),
+                },
+            },
+        };
+        // Write a valid min_confirmations value
+        let min_confirmations_key = bridge_storage::min_confirmations_key();
+        storage
+            .write(
+                &min_confirmations_key,
+                MinimumConfirmations::default().try_to_vec().unwrap(),
+            )
+            .unwrap();
+
+        // This should panic as the other config values are not written
+        EthereumBridgeConfig::read(&storage);
     }
 }
