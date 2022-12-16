@@ -1,6 +1,6 @@
 # Overview of binaries
 
-This guide assumes that the Namada binaries are [installed](./install.md) and available on path. These are:
+This guide assumes that the Namada binaries are [installed](./install/README.md) and available on path. These are:
 
 - `namada`: The main binary that can be used to interact with all the components of Namada
 - `namadan`: The ledger node
