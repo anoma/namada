@@ -3,7 +3,7 @@
 - This is the right time to save any logs file you want to share with us!
 - Save your `pre-genesis` folder in the ledger base directory
     - `mkdir backup-pregenesis && cp -r .anoma/pre-genesis backup-pregenesis/`
-- Delete ledger base directory **[WARNING: THIS WILL ALSO DELETE YOUR VALIDATOR KEYS, DO NOT RUN UNLESS YOU'VE BACKED IT UP]**
+- Delete ledger base directory **(WARNING: THIS WILL ALSO DELETE YOUR VALIDATOR KEYS, DO NOT RUN UNLESS YOU'VE BACKED IT UP)**
     - `rm -rf .anoma`
 - Check that namada and tendermint binaries are correct (see step 1)
 - If you have you are a genesis validator from the previous testnet continue with the instructions below otherwise go to step `3.1`

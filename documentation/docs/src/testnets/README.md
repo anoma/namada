@@ -5,18 +5,18 @@ For more context read:
 
 ## Namada protocol versions
 
-A testnet might deploy different versions of the Namada protocol. To see in-detail what each protocol version includes, refer to the [Github changelog](https://github.com/anoma/namada/tree/main/.changelog), which specify what changes have been made in between versions.
+A testnet might deploy different versions of the Namada protocol. To see in-detail what each protocol version includes, refer to the [Github changelog](https://github.com/anoma/namada/tree/main/.changelog), which specifies what changes have been made in between versions.
 
 ## Report a bug
 
-If you found a bug, please submit an issue with the `bug` [issue template](https://github.com/anoma/namada/issues/new/choose).
+If you find a bug, please submit an issue with the `bug` [issue template](https://github.com/anoma/namada/issues/new/choose).
 
 ## How to join a Namada testnet
-  1. [Environment setup](./testnets/environment-setup.md)
-  2. [Pre-genesis validator](./testnets/pre-genesis-validator.md)
-  3. [Running your genesis validator](./testnets/run-your-genesis-validator.md)
-  4. [Running a full node](./testnets/running-a-full-node.md)
-  5. [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
+  1. [Environment setup](./environment-setup.md)
+  2. [Pre-genesis validator](./pre-genesis-validator.md)
+  3. [Running your genesis validator](./run-your-genesis-validator.md)
+  4. [Running a full node](./running-a-full-node.md)
+  5. [Becoming a validator post-genesis](./post-genesis-validator.md)
 ![testnet_flowchart](../images/testnet_flowchart.png)
 
 ## Testnet versions
