@@ -19,6 +19,8 @@
     - [Sending and receiving NAM](./user-guide/wallet.md#send-and-receive-nam-tokens)
   - [Shielded transfers](./user-guide/ledger/masp.md)
   - [Interacting with PoS](./user-guide/ledger/pos.md)
+    - [Staking](./user-guide/ledger/staking.md)
+    - [Validators](./user-guide/ledger/validators.md)
   - [Governance](./user-guide/ledger/governance.md)
 - [Testnets](./testnets/README.md)
   - [Namada Public Testnet 1]()
