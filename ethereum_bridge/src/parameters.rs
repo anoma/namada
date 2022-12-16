@@ -172,6 +172,71 @@ impl EthereumBridgeConfig {
         // Initialize the storage for the Bridge Pool VP.
         bridge_pool_vp::init_storage(storage);
     }
+
+    /// Reads the latest [`EthereumBridgeConfig`] from storage. If it is not
+    /// present, `None` will be returned - this could be the case if the bridge
+    /// has not been bootstrapped yet. Panics if the storage appears to be
+    /// corrupt.
+    pub fn read<DB, H>(storage: &Storage<DB, H>) -> Option<Self>
+    where
+        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+        H: storage::traits::StorageHasher,
+    {
+        let min_confirmations_key = bridge_storage::min_confirmations_key();
+        let native_erc20_key = bridge_storage::native_erc20_key();
+        let bridge_contract_key = bridge_storage::bridge_contract_key();
+        let governance_contract_key = bridge_storage::governance_contract_key();
+
+        let (min_confirmations, _) =
+            storage.read(&min_confirmations_key).unwrap_or_else(|err| {
+                panic!("Could not read {min_confirmations_key}: {err:?}")
+            });
+        let min_confirmations = match min_confirmations {
+            Some(bytes) => {
+                MinimumConfirmations::try_from_slice(&bytes).unwrap()
+            }
+            None => return None,
+        };
+        let (native_erc20, _) =
+            storage.read(&native_erc20_key).unwrap_or_else(|err| {
+                panic!("Could not read {native_erc20_key}: {err:?}")
+            });
+        let native_erc20 = match native_erc20 {
+            Some(bytes) => EthAddress::try_from_slice(&bytes).unwrap(),
+            None => panic!(
+                "Ethereum bridge appears to be only partially configured!"
+            ),
+        };
+        let (bridge_contract, _) =
+            storage.read(&bridge_contract_key).unwrap_or_else(|err| {
+                panic!("Could not read {bridge_contract_key}: {err:?}")
+            });
+        let bridge_contract = match bridge_contract {
+            Some(bytes) => UpgradeableContract::try_from_slice(&bytes).unwrap(),
+            None => panic!(
+                "Ethereum bridge appears to be only partially configured!"
+            ),
+        };
+        let (governance_contract, _) = storage
+            .read(&governance_contract_key)
+            .unwrap_or_else(|err| {
+                panic!("Could not read {governance_contract_key}: {err:?}")
+            });
+        let governance_contract = match governance_contract {
+            Some(bytes) => UpgradeableContract::try_from_slice(&bytes).unwrap(),
+            None => panic!(
+                "Ethereum bridge appears to be only partially configured!"
+            ),
+        };
+        Some(Self {
+            min_confirmations,
+            contracts: Contracts {
+                native_erc20,
+                bridge: bridge_contract,
+                governance: governance_contract,
+            },
+        })
+    }
 }
 
 #[cfg(test)]
