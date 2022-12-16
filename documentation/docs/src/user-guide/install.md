@@ -94,4 +94,4 @@ Now, that you have all dependencies installed you can download the latest binary
 
 ## From Docker
 
-Go to [heliaxdev dockerhub account](https://hub.docker.com/r/heliaxdev/namada) and pull the image.
+You can find the Namada docker image [here](https://github.com/anoma/namada/pkgs/container/namada)
