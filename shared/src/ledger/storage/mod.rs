@@ -2,4 +2,6 @@
 
 #[cfg(any(test, feature = "testing"))]
 pub use namada_core::ledger::storage::mockdb;
-pub use namada_core::ledger::storage::{traits, write_log, *};
+pub use namada_core::ledger::storage::{
+    traits, write_log, PrefixIter, WlStorage, *,
+};

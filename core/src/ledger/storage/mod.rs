@@ -6,6 +6,7 @@ pub mod merkle_tree;
 pub mod mockdb;
 pub mod traits;
 pub mod types;
+mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;
@@ -29,6 +30,9 @@ use rayon::iter::{
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 pub use traits::{Sha256Hasher, StorageHasher};
+pub use wl_storage::{
+    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage,
+};
 
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
@@ -1124,7 +1128,15 @@ pub mod testing {
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::types::address;
-    /// Storage with a mock DB for testing
+
+    /// `WlStorage` with a mock DB for testing
+    pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
+
+    /// Storage with a mock DB for testing.
+    ///
+    /// Prefer to use [`TestWlStorage`], which implements
+    /// `storage_api::StorageRead + StorageWrite` with properly working
+    /// `prefix_iter`.
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
     impl Default for TestStorage {
@@ -1156,6 +1168,16 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+            }
+        }
+    }
+
+    #[allow(clippy::derivable_impls)]
+    impl Default for TestWlStorage {
+        fn default() -> Self {
+            Self {
+                write_log: Default::default(),
+                storage: Default::default(),
             }
         }
     }

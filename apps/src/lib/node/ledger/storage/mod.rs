@@ -52,8 +52,9 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use borsh::BorshSerialize;
     use itertools::Itertools;
+    use namada::ledger::storage::testing::TestWlStorage;
     use namada::ledger::storage::types;
-    use namada::ledger::storage_api;
+    use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::{address, storage};
@@ -353,12 +354,16 @@ mod tests {
     fn test_persistent_storage_prefix_iter() {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
-        let mut storage = PersistentStorage::open(
+        let storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
             address::nam(),
             None,
         );
+        let mut storage = TestWlStorage {
+            storage,
+            write_log: Default::default(),
+        };
 
         let prefix = storage::Key::parse("prefix").unwrap();
         let mismatched_prefix = storage::Key::parse("different").unwrap();
