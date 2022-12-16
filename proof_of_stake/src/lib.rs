@@ -1800,9 +1800,8 @@ where
     {
         total_bonded += tokens;
 
-        let active_val_handle = active_validator_set_handle()
-            .at(&current_epoch)
-            .at(&tokens.into());
+        let active_val_handle =
+            active_validator_set_handle().at(&current_epoch).at(&tokens);
         // Insert the validator into the proper set
         if n_validators < params.max_validator_slots {
             insert_validator_into_set(
@@ -1828,7 +1827,7 @@ where
                 // validator
                 let min_active_handle = active_validator_set_handle()
                     .at(&current_epoch)
-                    .at(&min_active_amount.into());
+                    .at(&min_active_amount);
                 // Remove last min active validator
                 let last_min_active_position =
                     find_next_position(&min_active_handle, storage)?
@@ -1839,7 +1838,7 @@ where
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
-                        .at(&min_active_amount),
+                        .at(&min_active_amount.into()),
                     storage,
                     &current_epoch,
                     &removed.clone().unwrap(),
@@ -1868,7 +1867,7 @@ where
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
-                        .at(&tokens),
+                        .at(&tokens.into()),
                     storage,
                     &current_epoch,
                     &address,
@@ -2337,7 +2336,7 @@ where
     let active_val_handle = active_validator_set.at(&epoch);
     let inactive_val_handle = inactive_validator_set.at(&epoch);
 
-    let active_vals_pre = active_val_handle.at(&tokens_pre.into());
+    let active_vals_pre = active_val_handle.at(&tokens_pre);
     // TODO: consider checking the validator state instead of checking if the
     // position is in the set?
     if active_vals_pre.contains(storage, &position)? {
@@ -2354,7 +2353,7 @@ where
 
             // Remove the max inactive validator first
             let inactive_vals_max =
-                inactive_val_handle.at(&max_inactive_validator_amount);
+                inactive_val_handle.at(&max_inactive_validator_amount.into());
             let lowest_position =
                 find_lowest_position(&inactive_vals_max, storage)?.unwrap();
             let removed_max_inactive =
@@ -2363,14 +2362,14 @@ where
 
             // Insert the previous max inactive validator into the active set
             insert_validator_into_set(
-                &active_val_handle.at(&max_inactive_validator_amount.into()),
+                &active_val_handle.at(&max_inactive_validator_amount),
                 storage,
                 &epoch,
                 &removed_max_inactive.clone().unwrap(),
             )?;
             // Insert the current validator into the inactive set
             insert_validator_into_set(
-                &inactive_val_handle.at(&tokens_post),
+                &inactive_val_handle.at(&tokens_post.into()),
                 storage,
                 &epoch,
                 validator,
@@ -2392,7 +2391,7 @@ where
             // The current validator should remain in the active set - place it
             // into a new position
             insert_validator_into_set(
-                &active_val_handle.at(&tokens_post.into()),
+                &active_val_handle.at(&tokens_post),
                 storage,
                 &epoch,
                 validator,
@@ -2400,7 +2399,7 @@ where
         }
     } else {
         // It's initially inactive
-        let inactive_vals_pre = inactive_val_handle.at(&tokens_pre);
+        let inactive_vals_pre = inactive_val_handle.at(&tokens_pre.into());
         let removed = inactive_vals_pre.remove(storage, &position)?;
         debug_assert!(removed.is_some());
         debug_assert_eq!(&removed.unwrap(), validator);
@@ -2414,7 +2413,7 @@ where
 
             // Remove the min active validator first
             let active_vals_min =
-                active_val_handle.at(&min_active_validator_amount.into());
+                active_val_handle.at(&min_active_validator_amount);
             let last_position_of_min_active_vals =
                 find_next_position(&active_vals_min, storage)? - Position::ONE;
             let removed_min_active = active_vals_min
@@ -2423,7 +2422,7 @@ where
 
             // Insert the min active validator into the inactive set
             insert_validator_into_set(
-                &inactive_val_handle.at(&min_active_validator_amount),
+                &inactive_val_handle.at(&min_active_validator_amount.into()),
                 storage,
                 &epoch,
                 &removed_min_active.clone().unwrap(),
@@ -2431,7 +2430,7 @@ where
 
             // Insert the current validator into the active set
             insert_validator_into_set(
-                &active_val_handle.at(&tokens_post.into()),
+                &active_val_handle.at(&tokens_post),
                 storage,
                 &epoch,
                 validator,
@@ -2452,7 +2451,7 @@ where
         } else {
             // The current validator should remain in the inactive set
             insert_validator_into_set(
-                &inactive_val_handle.at(&tokens_post),
+                &inactive_val_handle.at(&tokens_post.into()),
                 storage,
                 &epoch,
                 validator,
@@ -2540,8 +2539,7 @@ where
                 nested_sub_key: _,
             } => key,
         })
-        .unwrap_or_default()
-        .into())
+        .unwrap_or_default())
 }
 
 fn get_max_inactive_validator_amount<S>(
@@ -2561,7 +2559,8 @@ where
                 nested_sub_key: _,
             } => key,
         })
-        .unwrap_or_default())
+        .unwrap_or_default()
+        .into())
 }
 
 fn insert_validator_into_set<S>(
@@ -2798,7 +2797,7 @@ where
     if num_active_validators < params.max_validator_slots {
         let active_val_handle = active_validator_set_handle()
             .at(&current_epoch)
-            .at(&token::Amount::default().into());
+            .at(&token::Amount::default());
         insert_validator_into_set(
             &active_val_handle,
             storage,
@@ -2809,7 +2808,7 @@ where
         // It belongs in the inactive set since it initially has 0 bonded stake
         let inactive_val_handle = inactive_validator_set_handle()
             .at(&current_epoch)
-            .at(&token::Amount::default());
+            .at(&token::Amount::default().into());
         insert_validator_into_set(
             &inactive_val_handle,
             storage,

@@ -48,11 +48,11 @@ pub type ValidatorPositionAddressesNew = LazyMap<Position, Address>;
 
 /// New validator set construction, keyed by staked token amount
 pub type ActiveValidatorSetNew =
-    NestedMap<ReverseOrdTokenAmount, ValidatorPositionAddressesNew>;
+    NestedMap<token::Amount, ValidatorPositionAddressesNew>;
 
 /// New validator set construction, keyed by staked token amount
 pub type InactiveValidatorSetNew =
-    NestedMap<token::Amount, ValidatorPositionAddressesNew>;
+    NestedMap<ReverseOrdTokenAmount, ValidatorPositionAddressesNew>;
 
 /// Epoched active validator sets.
 pub type ActiveValidatorSetsNew = crate::epoched_new::NestedEpoched<
