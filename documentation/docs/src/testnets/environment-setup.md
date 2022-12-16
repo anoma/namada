@@ -1,4 +1,4 @@
-## 1) Environment setup
+# 1) Environment setup
 <!--  - *NOTE*: if you don't want to build namada you can download the binaries from [HERE](https://github.com/anoma/namada/releases/tag/v0.8.1). -->
 - Export the following variables:
     ```bash

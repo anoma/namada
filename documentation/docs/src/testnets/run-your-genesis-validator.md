@@ -1,4 +1,4 @@
-## 3) MANDATORY: Reset your validator node
+# 3) MANDATORY: Reset your validator node
 - You can skip to 3.1 if you don't need to reset the ledger state
 - This is the right time to save any logs file you want to share with us!
 - Save your `pre-genesis` folder in the ledger base directory

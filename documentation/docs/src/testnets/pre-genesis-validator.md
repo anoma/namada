@@ -1,4 +1,4 @@
-## 2) Generate pre-genesis validator setup
+# 2) Generate pre-genesis validator setup
 
 - Create a pre-genesis file inside the `namada` repository.
     - 
