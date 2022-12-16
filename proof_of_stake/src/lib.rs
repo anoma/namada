@@ -2649,6 +2649,7 @@ where
     let mut to_decrement = token::Amount::from_change(amount);
 
     // We read all matched bonds into memory to do reverse iteration
+    #[allow(clippy::needless_collect)]
     let bonds: Vec<Result<_, _>> = bond_remain_handle
         .get_data_handler()
         .iter(storage)?
