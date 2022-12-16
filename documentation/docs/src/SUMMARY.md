@@ -22,5 +22,7 @@
     - [Staking](./user-guide/ledger/staking.md)
     - [Validators](./user-guide/ledger/validators.md)
   - [Governance](./user-guide/ledger/governance.md)
+    - [On-chain proposals](./user-guide/ledger/on-chain-governance.md)
+    - [Off-chain proposals](./user-guide/ledger/off-chain-governance.md)
 - [Testnets](./testnets/README.md)
   - [Namada Public Testnet 1]()
