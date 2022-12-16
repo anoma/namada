@@ -43,7 +43,7 @@ pub type ValidatorStatesNew = crate::epoched_new::Epoched<
     crate::epoched_new::OffsetPipelineLen,
 >;
 
-/// A map from a position to and address in a Validator Set
+/// A map from a position to an address in a Validator Set
 pub type ValidatorPositionAddressesNew = LazyMap<Position, Address>;
 
 /// New validator set construction, keyed by staked token amount

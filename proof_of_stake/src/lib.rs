@@ -2350,13 +2350,15 @@ where
 
         if tokens_post < max_inactive_validator_amount {
             // Place the validator into the inactive set and promote the
-            // position 0 max inactive validator.
+            // lowest position max inactive validator.
 
             // Remove the max inactive validator first
             let inactive_vals_max =
                 inactive_val_handle.at(&max_inactive_validator_amount);
+            let lowest_position =
+                find_lowest_position(&inactive_vals_max, storage)?.unwrap();
             let removed_max_inactive =
-                inactive_vals_max.remove(storage, &Position::default())?;
+                inactive_vals_max.remove(storage, &lowest_position)?;
             debug_assert!(removed_max_inactive.is_some());
 
             // Insert the previous max inactive validator into the active set
@@ -2483,13 +2485,42 @@ fn find_next_position<S>(
 where
     S: for<'iter> StorageRead<'iter>,
 {
-    let next_position = handle
-        .rev_iter(storage)?
+    // Unless we store Positions in the ReverseOrdTokenFormat way, we should
+    // probably just iterate like this:
+    let mut last_position: Option<Position> = None;
+    let mut position_iter = handle.iter(storage)?;
+    loop {
+        let next_position = position_iter
+            .next()
+            .transpose()?
+            .map(|(position, _addr)| position);
+
+        if next_position.is_some() {
+            last_position = next_position;
+        } else {
+            break;
+        }
+    }
+    match last_position {
+        Some(position) => Ok(position.next()),
+        None => Ok(Position::default()),
+    }
+}
+
+/// Find lowest position in a validator set if it is not empty
+fn find_lowest_position<S>(
+    handle: &ValidatorPositionAddressesNew,
+    storage: &S,
+) -> storage_api::Result<Option<Position>>
+where
+    S: for<'iter> StorageRead<'iter>,
+{
+    let lowest_position = handle
+        .iter(storage)?
         .next()
         .transpose()?
-        .map(|(last_position, _addr)| Position::next(&last_position))
-        .unwrap_or_default();
-    Ok(next_position)
+        .map(|(position, _addr)| position);
+    Ok(lowest_position)
 }
 
 fn get_min_active_validator_amount<S>(
