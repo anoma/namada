@@ -1,4 +1,4 @@
-# Getting started
+# Overview of binaries
 
 This guide assumes that the Namada binaries are [installed](./install.md) and available on path. These are:
 
@@ -20,23 +20,3 @@ The binaries should be added to `$PATH` from the `make install` command. However
 
 `sudo cp namada/target/release/namada* /home/alice/.local/bin/`
 ```
-
-## Join a network
-
-After you install Namada, you will need to join a live network (e.g. testnet) to be able to interact with a chain and execute most available commands. You can join a network with the following command:
-
-```
-namada client utils join-network --chain-id=<network-chain-id>
-```
-
-To join a testnet, head over to the [testnets](../testnets/README.md) section for details on how to do this.
-
-## Start your node
-
-As soon as you are connected to a network, you can start your local node with:
-
-```
-namada ledger
-```
-
-Learn more about the configuration of the Ledger in [The Ledger](./ledger.md) section
