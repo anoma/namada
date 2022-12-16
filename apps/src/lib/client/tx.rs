@@ -722,7 +722,7 @@ impl ShieldedContext {
     /// associated to notes, memos, and diversifiers. And the set of notes that
     /// we have spent are updated. The witness map is maintained to make it
     /// easier to construct note merkle paths in other code. See
-    /// https://zips.z.cash/protocol/protocol.pdf#scan
+    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
     pub fn scan_tx(
         &mut self,
         height: BlockHeight,
