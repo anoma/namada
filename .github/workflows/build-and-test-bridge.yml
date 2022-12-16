@@ -151,7 +151,7 @@ jobs:
             suffix: ''
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
       CARGO_INCREMENTAL: 0
