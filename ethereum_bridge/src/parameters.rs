@@ -34,6 +34,18 @@ impl Default for MinimumConfirmations {
     }
 }
 
+impl From<NonZeroU64> for MinimumConfirmations {
+    fn from(value: NonZeroU64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<MinimumConfirmations> for NonZeroU64 {
+    fn from(value: MinimumConfirmations) -> Self {
+        value.0
+    }
+}
+
 /// Represents a configuration value for the version of a contract that can be
 /// upgraded. Starts from 1.
 #[derive(
