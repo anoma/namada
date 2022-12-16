@@ -1811,6 +1811,11 @@ where
                 &current_epoch,
                 &address,
             )?;
+            validator_state_handle(&address).init_at_genesis(
+                storage,
+                ValidatorState::Candidate,
+                current_epoch,
+            )?;
         } else {
             // Check to see if the current genesis validator should replace one
             // already in the active set
@@ -1837,7 +1842,7 @@ where
                         .at(&min_active_amount),
                     storage,
                     &current_epoch,
-                    &removed.unwrap(),
+                    &removed.clone().unwrap(),
                 )?;
                 // Insert the current genesis validator into the active set
                 insert_validator_into_set(
@@ -1845,6 +1850,18 @@ where
                     storage,
                     &current_epoch,
                     &address,
+                )?;
+                // Update and set the validator states
+                validator_state_handle(&address).init_at_genesis(
+                    storage,
+                    ValidatorState::Candidate,
+                    current_epoch,
+                )?;
+                validator_state_handle(&removed.unwrap()).set(
+                    storage,
+                    ValidatorState::Inactive,
+                    current_epoch,
+                    0,
                 )?;
             } else {
                 // Insert the current genesis validator into the inactive set
@@ -1855,6 +1872,11 @@ where
                     storage,
                     &current_epoch,
                     &address,
+                )?;
+                validator_state_handle(&address).init_at_genesis(
+                    storage,
+                    ValidatorState::Inactive,
+                    current_epoch,
                 )?;
             }
         }
@@ -1868,11 +1890,6 @@ where
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
-            current_epoch,
-        )?;
-        validator_state_handle(&address).init_at_genesis(
-            storage,
-            ValidatorState::Candidate,
             current_epoch,
         )?;
         let delta = token::Change::from(tokens);
@@ -2347,15 +2364,27 @@ where
                 &active_val_handle.at(&max_inactive_validator_amount.into()),
                 storage,
                 &epoch,
-                &removed_max_inactive.unwrap(),
+                &removed_max_inactive.clone().unwrap(),
             )?;
-
             // Insert the current validator into the inactive set
             insert_validator_into_set(
                 &inactive_val_handle.at(&tokens_post),
                 storage,
                 &epoch,
                 validator,
+            )?;
+            // Update the new validator states in storage
+            validator_state_handle(&removed_max_inactive.unwrap()).set(
+                storage,
+                ValidatorState::Candidate,
+                current_epoch,
+                params.pipeline_len,
+            )?;
+            validator_state_handle(validator).set(
+                storage,
+                ValidatorState::Inactive,
+                current_epoch,
+                params.pipeline_len,
             )?;
         } else {
             // The current validator should remain in the active set - place it
@@ -2395,7 +2424,7 @@ where
                 &inactive_val_handle.at(&min_active_validator_amount),
                 storage,
                 &epoch,
-                &removed_min_active.unwrap(),
+                &removed_min_active.clone().unwrap(),
             )?;
 
             // Insert the current validator into the active set
@@ -2404,6 +2433,19 @@ where
                 storage,
                 &epoch,
                 validator,
+            )?;
+            // Update the new validator states in storage
+            validator_state_handle(&removed_min_active.unwrap()).set(
+                storage,
+                ValidatorState::Inactive,
+                current_epoch,
+                params.pipeline_len,
+            )?;
+            validator_state_handle(validator).set(
+                storage,
+                ValidatorState::Candidate,
+                current_epoch,
+                params.pipeline_len,
             )?;
         } else {
             // The current validator should remain in the inactive set
