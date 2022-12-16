@@ -13,6 +13,21 @@ const POS_GAIN_D_KEY: &str = "pos_gain_d";
 const STAKED_RATIO_KEY: &str = "staked_ratio_key";
 const POS_INFLATION_AMOUNT_KEY: &str = "pos_inflation_amount_key";
 
+// keep these keys in sync with the defs above;
+// make sure to store them in sorted order!
+const ALL_KEYS: &[&str] = &[
+    EPOCH_DURATION_KEY,
+    EPOCHS_PER_YEAR_KEY,
+    IMPLICIT_VP_KEY,
+    MAX_EXPECTED_TIME_PER_BLOCK_KEY,
+    POS_GAIN_D_KEY,
+    POS_GAIN_P_KEY,
+    POS_INFLATION_AMOUNT_KEY,
+    STAKED_RATIO_KEY,
+    TX_WHITELIST_KEY,
+    VP_WHITELIST_KEY,
+];
+
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
@@ -20,10 +35,15 @@ pub fn is_parameter_key(key: &Key) -> bool {
 
 /// Returns if the key is a protocol parameter key.
 pub fn is_protocol_parameter_key(key: &Key) -> bool {
-    is_epoch_duration_storage_key(key)
-        || is_max_expected_time_per_block_key(key)
-        || is_tx_whitelist_key(key)
-        || is_vp_whitelist_key(key)
+    let segment = match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(segment)]
+            if addr == &ADDRESS =>
+        {
+            segment.as_str()
+        }
+        _ => return false,
+    };
+    ALL_KEYS.binary_search(&segment).is_ok()
 }
 
 /// Returns if the key is an epoch storage key.
