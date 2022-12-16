@@ -706,38 +706,6 @@ where
     Ok(iterators.insert(iter).id())
 }
 
-/// Storage prefix iterator function exposed to the wasm VM Tx environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, reverse ordered by storage keys.
-pub fn tx_rev_iter_prefix<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    prefix_ptr: u64,
-    prefix_len: u64,
-) -> TxResult<u64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let (prefix, gas) = env
-        .memory
-        .read_string(prefix_ptr, prefix_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
-
-    tracing::debug!("tx_rev_iter_prefix {}, prefix {}", prefix, prefix_ptr);
-
-    let prefix =
-        Key::parse(prefix).map_err(TxRuntimeError::StorageDataError)?;
-
-    let storage = unsafe { env.ctx.storage.get() };
-    let iterators = unsafe { env.ctx.iterators.get() };
-    let (iter, gas) = storage.rev_iter_prefix(&prefix);
-    tx_add_gas(env, gas)?;
-    Ok(iterators.insert(iter).id())
-}
-
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
 /// It will try to read from the write log first and if no entry found then from
 /// the storage.
@@ -1268,38 +1236,6 @@ where
 
     let storage = unsafe { env.ctx.storage.get() };
     let iter = vp_host_fns::iter_prefix(gas_meter, storage, &prefix)?;
-    let iterators = unsafe { env.ctx.iterators.get() };
-    Ok(iterators.insert(iter).id())
-}
-
-/// Storage prefix iterator function exposed to the wasm VM VP environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, reverse ordered by storage keys.
-pub fn vp_rev_iter_prefix<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    prefix_ptr: u64,
-    prefix_len: u64,
-) -> vp_host_fns::EnvResult<u64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let (prefix, gas) = env
-        .memory
-        .read_string(prefix_ptr, prefix_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(gas_meter, gas)?;
-
-    let prefix = Key::parse(prefix)
-        .map_err(vp_host_fns::RuntimeError::StorageDataError)?;
-    tracing::debug!("vp_rev_iter_prefix {}", prefix);
-
-    let storage = unsafe { env.ctx.storage.get() };
-    let iter = vp_host_fns::rev_iter_prefix(gas_meter, storage, &prefix)?;
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
 }

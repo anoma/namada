@@ -70,13 +70,6 @@ pub trait VpEnv<'view> {
         prefix: &Key,
     ) -> Result<Self::PrefixIter, storage_api::Error>;
 
-    /// Storage prefix iterator, reverse ordered by storage keys. It will try to
-    /// get an iterator from the storage.
-    fn rev_iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error>;
-
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
     /// caller's validity predicate.

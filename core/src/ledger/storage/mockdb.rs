@@ -456,20 +456,6 @@ impl<'iter> DBIter<'iter> for MockDB {
         )
     }
 
-    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
-        let db_prefix = "subspace/".to_owned();
-        let prefix = format!("{}{}", db_prefix, prefix);
-        let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(
-            MockIterator {
-                prefix,
-                iter,
-                reverse_order: true,
-            },
-            db_prefix,
-        )
-    }
-
     fn iter_results(&'iter self) -> MockPrefixIterator {
         let db_prefix = "results/".to_owned();
         let prefix = "results".to_owned();

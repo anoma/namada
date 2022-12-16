@@ -387,22 +387,5 @@ mod tests {
             .sorted()
             .map(|i| (prefix.push(i).unwrap(), *i));
         itertools::assert_equal(iter, expected);
-
-        // Try to iterate over their prefix in reverse
-        let iter = storage_api::rev_iter_prefix(&storage, &prefix)
-            .unwrap()
-            .map(|res| {
-                let (key, val): (storage::Key, i32) = Result::unwrap(res);
-                (key, val)
-            });
-
-        // The order has to be reverse sorted by sub-key value
-        let expected = sub_keys
-            .iter()
-            .sorted()
-            .rev()
-            .map(|i| (prefix.push(i).unwrap(), *i / 2));
-
-        itertools::assert_equal(iter, expected);
     }
 }
