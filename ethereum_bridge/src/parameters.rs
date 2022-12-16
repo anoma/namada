@@ -61,6 +61,7 @@ impl Default for ContractVersion {
 
 /// Represents an Ethereum contract that may be upgraded.
 #[derive(
+    Copy,
     Clone,
     Debug,
     Eq,
@@ -80,6 +81,7 @@ pub struct UpgradeableContract {
 /// Represents all the Ethereum contracts that need to be directly know about by
 /// validators.
 #[derive(
+    Copy,
     Clone,
     Debug,
     Eq,
@@ -101,6 +103,7 @@ pub struct Contracts {
 
 /// Represents chain parameters for the Ethereum bridge.
 #[derive(
+    Copy,
     Clone,
     Debug,
     Eq,
