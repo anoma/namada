@@ -301,6 +301,10 @@ pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
@@ -503,7 +507,11 @@ where
         }
     }
 
-    /// Returns a prefix iterator, ordered by storage keys, and the gas cost
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Returns a prefix iterator, ordered by storage keys, and the gas cost.
     pub fn iter_prefix(
         &self,
         prefix: &Key,
