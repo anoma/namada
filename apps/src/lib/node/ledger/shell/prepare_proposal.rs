@@ -83,24 +83,18 @@ where
                 self.build_encrypted_txs(alloc, &req.txs);
             txs.append(&mut encrypted_txs);
 
-            #[cfg(feature = "abcipp")]
-            {
-                let _ = alloc;
-            }
-            #[cfg(not(feature = "abcipp"))]
-            {
-                // fill up the remaining block space with
-                // protocol transactions that haven't been
-                // selected for inclusion yet, and whose
-                // size allows them to fit in the free
-                // space left
-                let mut remaining_txs = self.build_remaining_batch(
-                    alloc,
-                    &protocol_tx_indices,
-                    req.txs,
-                );
-                txs.append(&mut remaining_txs);
-            }
+            // fill up the remaining block space with
+            // protocol transactions that haven't been
+            // selected for inclusion yet, and whose
+            // size allows them to fit in the free
+            // space left
+            let mut remaining_txs = self.build_remaining_batch(
+                alloc,
+                #[cfg(not(feature = "abcipp"))]
+                &protocol_tx_indices,
+                req.txs,
+            );
+            txs.append(&mut remaining_txs);
 
             txs
         } else {
@@ -385,6 +379,17 @@ where
         let alloc = alloc.next_state();
 
         (txs, alloc)
+    }
+
+    /// Builds a batch of transactions that can fit in the
+    /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(feature = "abcipp")]
+    fn build_remaining_batch(
+        &mut self,
+        _alloc: BlockSpaceAllocator<FillingRemainingSpace>,
+        _txs: Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        vec![]
     }
 
     /// Builds a batch of transactions that can fit in the
