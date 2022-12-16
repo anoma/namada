@@ -1803,6 +1803,7 @@ where
         let active_val_handle = active_validator_set_handle()
             .at(&current_epoch)
             .at(&tokens.into());
+        // Insert the validator into the proper set
         if n_validators < params.max_validator_slots {
             insert_validator_into_set(
                 &active_val_handle,
@@ -1829,7 +1830,7 @@ where
                         - Position::ONE;
                 let removed = min_active_handle
                     .remove(storage, &last_min_active_position)?;
-                // Insert last min active validator into inactive set
+                // Insert last min active validator into the inactive set
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
@@ -1857,7 +1858,7 @@ where
                 )?;
             }
         }
-        // Write validator data to storage
+        // Write other validator data to storage
         write_validator_address_raw_hash(storage, &address, &consensus_key)?;
         write_validator_max_commission_rate_change(
             storage,
@@ -1880,7 +1881,6 @@ where
             delta,
             current_epoch,
         )?;
-        // Do we want source to be address or None?
         bond_handle(&address, &address, false).init_at_genesis(
             storage,
             delta,
@@ -1904,7 +1904,7 @@ where
     } else {
         n_validators
     };
-    storage.write(&num_active_validators_key(), n_active_validators)?;
+    write_num_active_validators(storage, n_active_validators)?;
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
         storage,
@@ -2005,7 +2005,7 @@ where
 }
 
 /// Read PoS validator's delta value.
-pub fn read_validator_delta<S>(
+pub fn read_validator_delta_value<S>(
     storage: &S,
     params: &PosParams,
     validator: &Address,
@@ -2081,7 +2081,6 @@ where
     let mut addresses: HashSet<Address> = HashSet::new();
 
     validator_set_handle
-        .get_data_handler()
         .at(&epoch)
         .iter(storage)?
         .for_each(|res| {
@@ -2111,7 +2110,6 @@ where
     let mut addresses: HashSet<Address> = HashSet::new();
 
     validator_set_handle
-        .get_data_handler()
         .at(&epoch)
         .iter(storage)?
         .for_each(|res| {
@@ -2151,7 +2149,7 @@ where
     Ok(addresses)
 }
 
-/// Write PoS total deltas.
+/// Update PoS total deltas.
 /// Note: for EpochedDelta, write the value to change storage by
 pub fn update_total_deltas<S>(
     storage: &mut S,
@@ -2305,7 +2303,9 @@ where
 {
     let epoch = current_epoch + params.pipeline_len;
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
-    let tokens_post = tokens_pre + token::Amount::from_change(token_change);
+    let tokens_post = tokens_pre.change() + token_change;
+    // TODO: handle overflow or negative vals perhaps with TryFrom
+    let tokens_post = token::Amount::from_change(tokens_post);
 
     let position: Position = read_validator_set_position(
         storage, validator, epoch,
@@ -2316,12 +2316,15 @@ where
         return Ok(());
     }
 
+    // Validator sets at the pipeline offset
     let active_val_handle = active_validator_set.at(&epoch);
     let inactive_val_handle = inactive_validator_set.at(&epoch);
 
     let active_vals_pre = active_val_handle.at(&tokens_pre.into());
+    // TODO: consider checking the validator state instead of checking if the
+    // position is in the set?
     if active_vals_pre.contains(storage, &position)? {
-        // It's active
+        // It's initially active
         let removed = active_vals_pre.remove(storage, &position)?;
         debug_assert!(removed.is_some());
 
@@ -2365,10 +2368,11 @@ where
             )?;
         }
     } else {
-        // It's inactive
+        // It's initially inactive
         let inactive_vals_pre = inactive_val_handle.at(&tokens_pre);
         let removed = inactive_vals_pre.remove(storage, &position)?;
         debug_assert!(removed.is_some());
+        debug_assert_eq!(&removed.unwrap(), validator);
 
         let min_active_validator_amount =
             get_min_active_validator_amount(&active_val_handle, storage)?;
@@ -2570,6 +2574,7 @@ where
     let withdrawable_epoch =
         current_epoch + params.pipeline_len + params.unbonding_len;
     let mut to_decrement = token::Amount::from_change(amount);
+
     // We read all matched bonds into memory to do reverse iteration
     let bonds: Vec<Result<_, _>> = bond_remain_handle
         .get_data_handler()
