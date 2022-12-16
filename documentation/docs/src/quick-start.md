@@ -21,8 +21,6 @@ A simple way to add these binaries to one's path is to run
 cp namada/target/release/namada* /usr/local/bin/
 ```
 
-
-
 ## Joining a network
 
 See [the testnets page](testnets) for details of how to join a testnet. The rest of this guide will assume you have joined a testnet chain using the `namadac utils join-network` command.

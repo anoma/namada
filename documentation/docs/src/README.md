@@ -12,9 +12,6 @@ Key innovations include:
 - Interoperability with Ethereum via a custom bridge with trust-minimisation
 - Vertically integrated user interfaces
 
-To learn more, we recommend:
-- Article: [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
-
 ## Overview of features
 - Proof-of-Stake with governance to secure and evolve Namada
 - Fast-finality BFT with 4-second blocks
@@ -25,6 +22,11 @@ To learn more, we recommend:
 - Convert Circuit (shielded set rewards)
 - A reference interface
 - Ledger application
+
+For high-level introductions, we recommend:
+- Article: [Introducing Namada: Shielded Transfers with Any Assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+- Article: [What is Namada?](https://blog.namada.net/what-is-namada/)
+- [Talks & Podcasts](https://namada.net/talks)
 
 To learn more about the protocol, we recommend the following in-depth resources:
 - Talk at ZK8 [Namada: asset-agnostic interchain privacy](https://youtu.be/5K6YxmZPFkE)
