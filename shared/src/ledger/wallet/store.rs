@@ -11,16 +11,19 @@ use crate::types::key::dkg_session_keys::DkgKeypair;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use std::str::FromStr;
 use crate::ledger::wallet::WalletUtils;
-use std::marker::PhantomData;
 #[cfg(feature = "masp-tx-gen")]
 use rand_core::RngCore;
 
 use super::pre_genesis;
-use crate::ledger::wallet::{store, StoredKeypair};
+use crate::ledger::wallet::StoredKeypair;
 
+/// Actions that can be taken when there is an alias conflict
 pub enum ConfirmationResponse {
+    /// Replace the existing alias
     Replace,
+    /// Reselect the alias that is ascribed to a given entity
     Reselect(Alias),
+    /// Skip assigning the given entity an alias
     Skip,
 }
 
@@ -50,6 +53,7 @@ pub struct ValidatorData {
     pub keys: ValidatorKeys,
 }
 
+/// A Storage area for keys and addresses
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
@@ -91,6 +95,7 @@ impl Store {
             })
     }
 
+    /// Find the spending key with the given alias and return it
     pub fn find_spending_key(
         &self,
         alias: impl AsRef<str>,
@@ -98,6 +103,7 @@ impl Store {
         self.spend_keys.get(&alias.into())
     }
 
+    /// Find the viewing key with the given alias and return it
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
@@ -105,6 +111,7 @@ impl Store {
         self.view_keys.get(&alias.into())
     }
 
+    /// Find the payment address with the given alias and return it
     pub fn find_payment_addr(
         &self,
         alias: impl AsRef<str>,
@@ -530,10 +537,12 @@ impl Store {
         });
     }
 
+    /// Decode a Store from the given bytes
     pub fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
         toml::from_slice(&data)
     }
 
+    /// Encode a store into a string of bytes
     pub fn encode(&self) -> Vec<u8> {
         toml::to_vec(self).expect("Serializing of store shouldn't fail")
     }

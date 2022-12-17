@@ -1,17 +1,23 @@
+//! Provides functionality for managing validator keys
 use thiserror::Error;
 use crate::types::key::{common, SchemeType};
 use serde::{Deserialize, Serialize};
 use crate::ledger::wallet;
 use crate::ledger::wallet::{store, StoredKeypair};
 
+/// Ways in which wallet store operations can fail
 #[derive(Error, Debug)]
 pub enum ReadError {
+    /// Failed decoding the wallet store
     #[error("Failed decoding the wallet store: {0}")]
     Decode(toml::de::Error),
+    /// Failed to read the wallet store
     #[error("Failed to read the wallet store from {0}: {1}")]
     ReadWallet(String, String),
+    /// Failed to write the wallet store
     #[error("Failed to write the wallet store: {0}")]
     StoreNewWallet(String),
+    /// Failed to decode a key
     #[error("Failed to decode a key: {0}")]
     Decryption(wallet::keys::DecryptionError),
 }
@@ -57,6 +63,7 @@ impl ValidatorStore {
     }
 }
 
+/// Generate a key and then encrypt it
 pub fn gen_key_to_store(
     scheme: SchemeType,
     password: &Option<String>,

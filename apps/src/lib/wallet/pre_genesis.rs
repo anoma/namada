@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 
 use ark_serialize::{Read, Write};
 use file_lock::{FileLock, FileOptions};
-use namada::types::key::{common, SchemeType};
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
+use namada::types::key::SchemeType;
 use namada::ledger::wallet::pre_genesis::ValidatorWallet;
 use namada::ledger::wallet::pre_genesis::ReadError;
 use namada::ledger::wallet::pre_genesis::ValidatorStore;
@@ -13,9 +11,6 @@ use namada::ledger::wallet::gen_key_to_store;
 use namada::ledger::wallet::WalletUtils;
 use crate::wallet::store::gen_validator_keys;
 use crate::wallet::CliWalletUtils;
-
-use crate::wallet;
-use crate::wallet::{store, StoredKeypair};
 
 /// Validator pre-genesis wallet file name
 const VALIDATOR_FILE_NAME: &str = "wallet.toml";
