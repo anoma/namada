@@ -5,8 +5,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::Storage;
-use namada_core::types::ethereum_events::EthAddress;
 use namada_core::ledger::storage_api::StorageRead;
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::Key;
 use serde::{Deserialize, Serialize};
 
@@ -343,20 +343,6 @@ mod tests {
     )]
     fn test_ethereum_bridge_config_storage_partially_configured() {
         let mut storage = TestStorage::default();
-        let config = EthereumBridgeConfig {
-            min_confirmations: MinimumConfirmations::default(),
-            contracts: Contracts {
-                native_erc20: EthAddress([42; 20]),
-                bridge: UpgradeableContract {
-                    address: EthAddress([23; 20]),
-                    version: ContractVersion::default(),
-                },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
-                    version: ContractVersion::default(),
-                },
-            },
-        };
         // Write a valid min_confirmations value
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         storage
