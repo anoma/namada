@@ -35,6 +35,7 @@ use namada::types::masp::TransferTarget;
 use namada::types::storage::{
     Epoch, BlockResults, RESERVED_ADDRESS_PREFIX,
 };
+use crate::wallet::gen_validator_keys;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -43,6 +44,7 @@ use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::{ledger, vm};
 use namada::ledger::masp::ShieldedUtils;
+use namada::ledger::wallet::WalletUtils;
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 use async_trait::async_trait;
@@ -58,7 +60,7 @@ use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
-use crate::wallet::Wallet;
+use namada::ledger::wallet::Wallet;
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -69,7 +71,7 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
-pub async fn submit_custom(
+pub async fn submit_custom<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxCustom,
@@ -78,11 +80,11 @@ pub async fn submit_custom(
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let initialized_accounts =
-        process_tx(client, wallet, &args.tx, tx, TxSigningKey::None).await;
-    save_initialized_accounts(wallet, &args.tx, initialized_accounts).await;
+        process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_update_vp(
+pub async fn submit_update_vp<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxUpdateVp,
@@ -137,10 +139,10 @@ pub async fn submit_update_vp(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
-pub async fn submit_init_account(
+pub async fn submit_init_account<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxInitAccount,
@@ -164,12 +166,12 @@ pub async fn submit_init_account(
 
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
-        process_tx(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+        process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
             .await;
-    save_initialized_accounts(wallet, &args.tx, initialized_accounts).await;
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_init_validator(
+pub async fn submit_init_validator<U: WalletUtils>(
     client: &HttpClient,
     mut ctx: Context,
     args::TxInitValidator {
@@ -197,7 +199,7 @@ pub async fn submit_init_validator(
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
         ctx.wallet
-            .gen_key(
+            .gen_key::<U>(
                 scheme,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
@@ -217,7 +219,7 @@ pub async fn submit_init_validator(
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
             ctx.wallet
-                .gen_key(
+                .gen_key::<U>(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
@@ -233,7 +235,7 @@ pub async fn submit_init_validator(
     }
     // Generate the validator keys
     let validator_keys =
-        ctx.wallet.gen_validator_keys(protocol_key, scheme).unwrap();
+        gen_validator_keys(&mut ctx.wallet, protocol_key, scheme).unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
     let dkg_key = validator_keys
         .dkg_keypair
@@ -290,7 +292,7 @@ pub async fn submit_init_validator(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
-        process_tx(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
+        process_tx::<U>(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
             .await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) =
@@ -321,7 +323,7 @@ pub async fn submit_init_validator(
                         } else {
                             validator_address_alias
                         };
-                    if let Some(new_alias) = ctx.wallet.add_address(
+                    if let Some(new_alias) = ctx.wallet.add_address::<U>(
                         validator_address_alias.clone(),
                         validator_address.clone(),
                     ) {
@@ -499,7 +501,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
 
 
-pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
+pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     shielded: &mut ShieldedContext<U>,
@@ -611,7 +613,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer(client, wallet, &args.tx, default_signer.clone())
+    let chosen_signer = tx_signer::<V>(client, wallet, &args.tx, default_signer.clone())
         .await
         .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
@@ -667,10 +669,10 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
-    process_tx(client, wallet, &args.tx, tx, signing_address).await;
+    process_tx::<V>(client, wallet, &args.tx, tx, signing_address).await;
 }
 
-pub async fn submit_ibc_transfer(
+pub async fn submit_ibc_transfer<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxIbcTransfer,
@@ -780,11 +782,15 @@ pub async fn submit_ibc_transfer(
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+    process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
         .await;
 }
 
-pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: args::InitProposal) {
+pub async fn submit_init_proposal<U: WalletUtils>(
+    client: &HttpClient,
+    mut ctx: Context,
+    args: args::InitProposal,
+) {
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -850,7 +856,7 @@ pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: a
 
     if args.offline {
         let signer = ctx.get(&signer);
-        let signing_key = find_keypair(
+        let signing_key = find_keypair::<U>(
             client,
             &mut ctx.wallet,
             &signer,
@@ -916,12 +922,12 @@ pub async fn submit_init_proposal(client: &HttpClient, mut ctx: Context, args: a
         let tx_code = args.tx_code_path;
         let tx = Tx::new(tx_code, Some(data));
 
-        process_tx(client, &mut ctx.wallet, &args.tx, tx, TxSigningKey::WalletAddress(signer))
+        process_tx::<U>(client, &mut ctx.wallet, &args.tx, tx, TxSigningKey::WalletAddress(signer))
             .await;
     }
 }
 
-pub async fn submit_vote_proposal(
+pub async fn submit_vote_proposal<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::VoteProposal,
@@ -952,7 +958,7 @@ pub async fn submit_vote_proposal(
             safe_exit(1)
         }
 
-        let signing_key = find_keypair(
+        let signing_key = find_keypair::<U>(
             client,
             wallet,
             &signer,
@@ -1049,7 +1055,7 @@ pub async fn submit_vote_proposal(
                 let tx_code = args.tx_code_path;
                 let tx = Tx::new(tx_code, Some(data));
 
-                process_tx(
+                process_tx::<U>(
                     client,
                     wallet,
                     &args.tx,
@@ -1071,7 +1077,7 @@ pub async fn submit_vote_proposal(
     }
 }
 
-pub async fn submit_reveal_pk(
+pub async fn submit_reveal_pk<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::RevealPk,
@@ -1081,13 +1087,13 @@ pub async fn submit_reveal_pk(
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed(client, wallet, &public_key, &args).await {
+    if !reveal_pk_if_needed::<U>(client, wallet, &public_key, &args).await {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
     }
 }
 
-pub async fn reveal_pk_if_needed(
+pub async fn reveal_pk_if_needed<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
@@ -1098,7 +1104,7 @@ pub async fn reveal_pk_if_needed(
     if args.force || !has_revealed_pk(client, &addr).await
     {
         // If not, submit it
-        submit_reveal_pk_aux(client, wallet, public_key, args).await;
+        submit_reveal_pk_aux::<U>(client, wallet, public_key, args).await;
         true
     } else {
         false
@@ -1112,7 +1118,7 @@ pub async fn has_revealed_pk(
     rpc::get_public_key(client, addr).await.is_some()
 }
 
-pub async fn submit_reveal_pk_aux(
+pub async fn submit_reveal_pk_aux<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
@@ -1131,10 +1137,10 @@ pub async fn submit_reveal_pk_aux(
         signing_key.clone()
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair(client, wallet, &signer)
+        find_keypair::<U>(client, wallet, &signer)
             .await
     } else {
-        find_keypair(client, wallet, &addr).await
+        find_keypair::<U>(client, wallet, &addr).await
     };
     let epoch = rpc::query_epoch(client)
     .await;
@@ -1251,7 +1257,7 @@ async fn filter_delegations(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond(
+pub async fn submit_bond<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::Bond,
@@ -1317,7 +1323,7 @@ pub async fn submit_bond(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+    process_tx::<U>(
         client,
         wallet,
         &args.tx,
@@ -1327,7 +1333,7 @@ pub async fn submit_bond(
     .await;
 }
 
-pub async fn submit_unbond(
+pub async fn submit_unbond<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::Unbond,
@@ -1394,7 +1400,7 @@ pub async fn submit_unbond(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+    process_tx::<U>(
         client,
         wallet,
         &args.tx,
@@ -1404,7 +1410,7 @@ pub async fn submit_unbond(
     .await;
 }
 
-pub async fn submit_withdraw(
+pub async fn submit_withdraw<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::Withdraw,
@@ -1469,7 +1475,7 @@ pub async fn submit_withdraw(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+    process_tx::<U>(
         client,
         wallet,
         &args.tx,
@@ -1479,7 +1485,7 @@ pub async fn submit_withdraw(
     .await;
 }
 
-pub async fn submit_validator_commission_change(
+pub async fn submit_validator_commission_change<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxCommissionRateChange,
@@ -1550,7 +1556,7 @@ pub async fn submit_validator_commission_change(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator.clone();
-    process_tx(
+    process_tx::<U>(
         client,
         wallet,
         &args.tx,
@@ -1562,14 +1568,14 @@ pub async fn submit_validator_commission_change(
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx(
+async fn process_tx<U: WalletUtils>(
     client: &HttpClient,
     wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
 ) -> Vec<Address> {
-    let to_broadcast = sign_tx(client, wallet, tx, args, default_signer).await;
+    let to_broadcast = sign_tx::<U>(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -1622,7 +1628,7 @@ async fn process_tx(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-async fn save_initialized_accounts(
+async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
@@ -1660,7 +1666,7 @@ async fn save_initialized_accounts(
                 }
             };
             let alias = alias.into_owned();
-            let added = wallet.add_address(alias.clone(), address.clone());
+            let added = wallet.add_address::<U>(alias.clone(), address.clone());
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     println!(

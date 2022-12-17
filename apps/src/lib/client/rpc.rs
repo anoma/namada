@@ -51,7 +51,7 @@ use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
-use crate::wallet::Wallet;
+use namada::ledger::wallet::Wallet;
 use crate::cli::{self, args};
 use crate::client::tendermint_rpc_types::TxResponse;
 use namada::ledger::masp::{Conversions, PinnedBalanceError};

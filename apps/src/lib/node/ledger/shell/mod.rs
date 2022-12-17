@@ -49,6 +49,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::wallet::CliWalletUtils;
 
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
@@ -275,7 +276,7 @@ where
                         "{}",
                         wallet_path.as_path().to_str().unwrap()
                     );
-                    let wallet = crate::wallet::load_or_new_from_genesis(
+                    let mut wallet = crate::wallet::load_or_new_from_genesis(
                         wallet_path,
                         genesis::genesis_config::open_genesis_config(
                             genesis_path,
@@ -284,9 +285,11 @@ where
                     );
                     wallet
                         .take_validator_data()
-                        .map(|data| ShellMode::Validator {
-                            data,
-                            broadcast_sender,
+                        .map(|data| {
+                            ShellMode::Validator {
+                                data: data.clone(),
+                                broadcast_sender,
+                            }
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -295,11 +298,11 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys = wallet::defaults::validator_keys();
+                    let validator_keys = crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
+                        data: crate::wallet::ValidatorData {
+                            address: crate::wallet::defaults::validator_address(),
+                            keys: crate::wallet::ValidatorKeys {
                                 protocol_keypair: validator_keys.0,
                                 dkg_keypair: Some(validator_keys.1),
                             },
@@ -651,7 +654,7 @@ where
             let pk = common::SecretKey::deserialize(&mut pk_bytes.as_slice())
                 .expect("Validator's public key should be deserializable")
                 .ref_to();
-            wallet.find_key_by_pk(&pk).expect(
+            wallet.find_key_by_pk::<CliWalletUtils>(&pk).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
             )

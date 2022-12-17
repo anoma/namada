@@ -17,8 +17,9 @@ use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use crate::wallet::Wallet;
+use namada::ledger::wallet::Wallet;
 use crate::wasm_loader;
+use crate::wallet::CliWalletUtils;
 
 /// Env. var to set chain ID
 const ENV_VAR_CHAIN_ID: &str = "ANOMA_CHAIN_ID";
@@ -344,7 +345,7 @@ impl ArgFromMutContext for common::SecretKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it can be an alias
             ctx.wallet
-                .find_key(raw)
+                .find_key::<CliWalletUtils>(raw)
                 .map_err(|_find_err| format!("Unknown key {}", raw))
         })
     }
@@ -361,13 +362,13 @@ impl ArgFromMutContext for common::PublicKey {
             // Or it can be a public key hash in hex string
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
-                    let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
+                    let key = ctx.wallet.find_key_by_pkh::<CliWalletUtils>(&pkh).unwrap();
                     key.ref_to()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {
                     ctx.wallet
-                        .find_key(raw)
+                        .find_key::<CliWalletUtils>(raw)
                         .map(|x| x.ref_to())
                         .map_err(|x| x.to_string())
                 })
@@ -385,7 +386,7 @@ impl ArgFromMutContext for ExtendedSpendingKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
             ctx.wallet
-                .find_spending_key(raw)
+                .find_spending_key::<CliWalletUtils>(raw)
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }
