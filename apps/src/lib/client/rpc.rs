@@ -1819,15 +1819,17 @@ pub async fn is_delegator_at(
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address(
-    client: &HttpClient,
-    address: &Address,
-) -> bool {
+pub async fn known_address<C>(client: &C, address: &Address) -> bool
+where
+    C: namada::ledger::queries::Client<
+            Error = namada::ledger::queries::tm::Error,
+        > + std::marker::Sync,
+{
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = storage::Key::validity_predicate(address);
-            query_has_storage_key(&client, &key).await
+            query_has_storage_key(client, &key).await
         }
         Address::Implicit(_) | Address::Internal(_) => true,
     }
@@ -2138,10 +2140,12 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key(
-    client: &HttpClient,
-    key: &storage::Key,
-) -> bool {
+pub async fn query_has_storage_key<C>(client: &C, key: &storage::Key) -> bool
+where
+    C: namada::ledger::queries::Client<
+            Error = namada::ledger::queries::tm::Error,
+        > + std::marker::Sync,
+{
     unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
 }
 
