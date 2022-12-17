@@ -43,6 +43,7 @@ use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::{ledger, vm};
 use namada::ledger::masp::ShieldedUtils;
+use namada::ledger::queries;
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 use async_trait::async_trait;
@@ -415,7 +416,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         key: &storage::Key,
     ) -> Option<T>
     where T: BorshDeserialize {
-        query_storage_value::<T>(client, &key).await
+        query_storage_value::<T,HttpClient>(client, &key).await
     }
 
     async fn query_epoch(client: &HttpClient) -> Epoch {
@@ -497,14 +498,15 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-
-
-pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
-    client: &HttpClient,
+pub async fn submit_transfer<U: ShieldedUtils>(
+    client: &U::C,
     wallet: &mut Wallet<PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
-) {
+)
+where
+    U::C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let transfer_source = args.source;
     let source = transfer_source.effective_address();
     let transfer_target = args.target.clone();
@@ -556,7 +558,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>>(
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<token::Amount,U::C>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -710,7 +712,7 @@ pub async fn submit_ibc_transfer(
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<token::Amount,HttpClient>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -990,7 +992,7 @@ pub async fn submit_vote_proposal(
         let proposal_id = args.proposal_id.unwrap();
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
-        let proposal_start_epoch = rpc::query_storage_value::<Epoch>(
+        let proposal_start_epoch = rpc::query_storage_value::<Epoch,HttpClient>(
             &client,
             &proposal_start_epoch_key,
         )
@@ -1087,12 +1089,15 @@ pub async fn submit_reveal_pk(
     }
 }
 
-pub async fn reveal_pk_if_needed(
-    client: &HttpClient,
+pub async fn reveal_pk_if_needed<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> bool {
+) -> bool
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let addr: Address = public_key.into();
     // Check if PK revealed
     if args.force || !has_revealed_pk(client, &addr).await
@@ -1105,19 +1110,25 @@ pub async fn reveal_pk_if_needed(
     }
 }
 
-pub async fn has_revealed_pk(
-    client: &HttpClient,
+pub async fn has_revealed_pk<C>(
+    client: &C,
     addr: &Address,
-) -> bool {
+) -> bool
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     rpc::get_public_key(client, addr).await.is_some()
 }
 
-pub async fn submit_reveal_pk_aux(
-    client: &HttpClient,
+pub async fn submit_reveal_pk_aux<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) {
+)
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key
@@ -1196,7 +1207,7 @@ async fn is_safe_voting_window(
     let proposal_end_epoch_key =
         gov_storage::get_voting_end_epoch_key(proposal_id);
     let proposal_end_epoch =
-        rpc::query_storage_value::<Epoch>(client, &proposal_end_epoch_key)
+        rpc::query_storage_value::<Epoch,HttpClient>(client, &proposal_end_epoch_key)
             .await;
 
     match proposal_end_epoch {
@@ -1236,7 +1247,7 @@ async fn filter_delegations(
                 );
 
                 if let Some(validator_vote) =
-                    rpc::query_storage_value::<ProposalVote>(client, &vote_key)
+                    rpc::query_storage_value::<ProposalVote,HttpClient>(client, &vote_key)
                         .await
                 {
                     if &validator_vote == delegator_vote {
@@ -1285,7 +1296,7 @@ pub async fn submit_bond(
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&args.native_token, bond_source);
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<token::Amount,HttpClient>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -1356,7 +1367,7 @@ pub async fn submit_unbond(
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::bond_key(&bond_id);
-    let bonds = rpc::query_storage_value::<Bonds>(&client, &bond_key).await;
+    let bonds = rpc::query_storage_value::<Bonds,HttpClient>(&client, &bond_key).await;
     match bonds {
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
@@ -1436,7 +1447,7 @@ pub async fn submit_withdraw(
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
-    let unbonds = rpc::query_storage_value::<Unbonds>(&client, &bond_key).await;
+    let unbonds = rpc::query_storage_value::<Unbonds,HttpClient>(&client, &bond_key).await;
     match unbonds {
         Some(unbonds) => {
             let mut unbonded_amount: token::Amount = 0.into();
@@ -1502,12 +1513,12 @@ pub async fn submit_validator_commission_change(
             ledger::pos::validator_commission_rate_key(&validator);
         let max_commission_rate_change_key =
             ledger::pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = rpc::query_storage_value::<CommissionRates>(
+        let commission_rates = rpc::query_storage_value::<CommissionRates,HttpClient>(
             &client,
             &commission_rate_key,
         )
         .await;
-        let max_change = rpc::query_storage_value::<Decimal>(
+        let max_change = rpc::query_storage_value::<Decimal,HttpClient>(
             &client,
             &max_commission_rate_change_key,
         )
@@ -1562,13 +1573,16 @@ pub async fn submit_validator_commission_change(
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx(
-    client: &HttpClient,
+async fn process_tx<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
-) -> Vec<Address> {
+) -> Vec<Address>
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let to_broadcast = sign_tx(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
@@ -1678,10 +1692,13 @@ async fn save_initialized_accounts(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx(
-    rpc_cli: &HttpClient,
+pub async fn broadcast_tx<C>(
+    rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, RpcError> {
+) -> Result<Response, RpcError>
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
@@ -1723,10 +1740,13 @@ pub async fn broadcast_tx(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx(
-    client: &HttpClient,
+pub async fn submit_tx<C>(
+    client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, RpcError> {
+) -> Result<TxResponse, RpcError>
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,

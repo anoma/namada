@@ -66,11 +66,14 @@ use crate::facade::tendermint_rpc::{
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status(
-    client: &HttpClient,
+pub async fn query_tx_status<C>(
+    client: &C,
     status: TxEventQuery<'_>,
     deadline: Instant,
-) -> Event {
+) -> Event
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync
+{
     const ONE_SECOND: Duration = Duration::from_secs(1);
     // sleep for the duration of `backoff`,
     // and update the underlying value
@@ -90,7 +93,7 @@ pub async fn query_tx_status(
 
         loop {
             tracing::debug!(query = ?status, "Querying tx status");
-            let maybe_event = match query_tx_events(&client, status).await {
+            let maybe_event = match query_tx_events(client, status).await {
                 Ok(response) => response,
                 Err(err) => {
                     tracing::debug!(%err, "ABCI query failed");
@@ -113,8 +116,11 @@ pub async fn query_tx_status(
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(client: &HttpClient) -> Epoch {
-    let epoch = unwrap_client_response(RPC.shell().epoch(&client.clone()).await);
+pub async fn query_epoch<C>(client: &C) -> Epoch
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync
+{
+    let epoch = unwrap_client_response(RPC.shell().epoch(client.clone()).await);
     println!("Last committed epoch: {}", epoch);
     epoch
 }
@@ -330,7 +336,7 @@ pub async fn query_transparent_balance(
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<token::Amount>(&client, &key).await {
+            match query_storage_value::<token::Amount,HttpClient>(&client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
                         println!(
@@ -594,22 +600,22 @@ pub async fn query_proposal(client: &HttpClient, args: args::QueryProposal) {
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
         let author =
-            query_storage_value::<Address>(client, &author_key).await?;
+            query_storage_value::<Address,HttpClient>(client, &author_key).await?;
         let start_epoch =
-            query_storage_value::<Epoch>(client, &start_epoch_key).await?;
+            query_storage_value::<Epoch,HttpClient>(client, &start_epoch_key).await?;
         let end_epoch =
-            query_storage_value::<Epoch>(client, &end_epoch_key).await?;
+            query_storage_value::<Epoch,HttpClient>(client, &end_epoch_key).await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
             let grace_epoch_key = gov_storage::get_grace_epoch_key(id);
-            let content = query_storage_value::<HashMap<String, String>>(
+            let content = query_storage_value::<HashMap<String, String>,HttpClient>(
                 client,
                 &content_key,
             )
             .await?;
             let grace_epoch =
-                query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
+                query_storage_value::<Epoch,HttpClient>(client, &grace_epoch_key).await?;
 
             println!("Proposal: {}", id);
             println!("{:4}Author: {}", "", author);
@@ -674,7 +680,7 @@ pub async fn query_proposal(client: &HttpClient, args: args::QueryProposal) {
         None => {
             let last_proposal_id_key = gov_storage::get_counter_key();
             let last_proposal_id =
-                query_storage_value::<u64>(&client, &last_proposal_id_key)
+                query_storage_value::<u64,HttpClient>(&client, &last_proposal_id_key)
                     .await
                     .unwrap();
 
@@ -1002,7 +1008,7 @@ pub async fn query_proposal_result(
         Some(id) => {
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
             let end_epoch =
-                query_storage_value::<Epoch>(&client, &end_epoch_key).await;
+                query_storage_value::<Epoch,HttpClient>(&client, &end_epoch_key).await;
 
             match end_epoch {
                 Some(end_epoch) => {
@@ -1135,7 +1141,7 @@ pub async fn query_protocol_parameters(
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
-    let epoch_duration = query_storage_value::<EpochDuration>(&client, &key)
+    let epoch_duration = query_storage_value::<EpochDuration,HttpClient>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1148,26 +1154,26 @@ pub async fn query_protocol_parameters(
     );
 
     let key = param_storage::get_max_expected_time_per_block_key();
-    let max_block_duration = query_storage_value::<u64>(&client, &key)
+    let max_block_duration = query_storage_value::<u64,HttpClient>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Max. block duration: {}", "", max_block_duration);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let vp_whitelist = query_storage_value::<Vec<String>>(&client, &key)
+    let vp_whitelist = query_storage_value::<Vec<String>,HttpClient>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}VP whitelist: {:?}", "", vp_whitelist);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let tx_whitelist = query_storage_value::<Vec<String>>(&client, &key)
+    let tx_whitelist = query_storage_value::<Vec<String>,HttpClient>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
     println!("PoS parameters");
     let key = pos::params_key();
-    let pos_params = query_storage_value::<PosParams>(&client, &key)
+    let pos_params = query_storage_value::<PosParams,HttpClient>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1206,16 +1212,16 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
             let bond_id = pos::BondId { source, validator };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
+                query_storage_value::<pos::Bonds,HttpClient>(&client, &bond_key).await;
             // Find owner's unbonded delegations from the given
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
+                query_storage_value::<pos::Unbonds,HttpClient>(&client, &unbond_key).await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<pos::Slashes,HttpClient>(&client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -1265,15 +1271,15 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
             };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
+                query_storage_value::<pos::Bonds,HttpClient>(&client, &bond_key).await;
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
+                query_storage_value::<pos::Unbonds,HttpClient>(&client, &unbond_key).await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<pos::Slashes,HttpClient>(&client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -1326,7 +1332,7 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<pos::Slashes,HttpClient>(
                                 &client,
                                 &slashes_key,
                             )
@@ -1377,7 +1383,7 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<pos::Slashes,HttpClient>(
                                 &client,
                                 &slashes_key,
                             )
@@ -1441,7 +1447,7 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<pos::Slashes,HttpClient>(
                                 &client,
                                 &slashes_key,
                             )
@@ -1492,7 +1498,7 @@ pub async fn query_bonds(client: &HttpClient, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<pos::Slashes,HttpClient>(
                                 &client,
                                 &slashes_key,
                             )
@@ -1551,7 +1557,7 @@ pub async fn query_bonded_stake(client: &HttpClient, args: args::QueryBondedStak
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
     let validator_sets =
-        query_storage_value::<pos::ValidatorSets>(&client, &validator_set_key)
+        query_storage_value::<pos::ValidatorSets,HttpClient>(&client, &validator_set_key)
             .await
             .expect("Validator set should always be set");
     let validator_set = validator_sets
@@ -1563,7 +1569,7 @@ pub async fn query_bonded_stake(client: &HttpClient, args: args::QueryBondedStak
             let validator = validator;
             // Find bonded stake for the given validator
             let validator_deltas_key = pos::validator_deltas_key(&validator);
-            let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
+            let validator_deltas = query_storage_value::<pos::ValidatorDeltas,HttpClient>(
                 &client,
                 &validator_deltas_key,
             )
@@ -1627,7 +1633,7 @@ pub async fn query_bonded_stake(client: &HttpClient, args: args::QueryBondedStak
     }
     let total_deltas_key = pos::total_deltas_key();
     let total_deltas =
-        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
+        query_storage_value::<pos::TotalDeltas,HttpClient>(&client, &total_deltas_key)
             .await
             .expect("Total bonded stake should always be set");
     let total_bonded_stake = total_deltas
@@ -1658,12 +1664,12 @@ pub async fn query_commission_rate(
             pos::validator_commission_rate_key(&validator);
         let validator_max_commission_change_key =
             pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = query_storage_value::<pos::CommissionRates>(
+        let commission_rates = query_storage_value::<pos::CommissionRates,HttpClient>(
             &client,
             &validator_commission_key,
         )
         .await;
-        let max_rate_change = query_storage_value::<Decimal>(
+        let max_rate_change = query_storage_value::<Decimal,HttpClient>(
             &client,
             &validator_max_commission_change_key,
         )
@@ -1703,7 +1709,7 @@ pub async fn query_slashes(client: &HttpClient, args: args::QuerySlashes) {
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<pos::Slashes,HttpClient>(&client, &slashes_key)
                     .await;
             match slashes {
                 Some(slashes) => {
@@ -1765,7 +1771,10 @@ pub async fn query_slashes(client: &HttpClient, args: args::QuerySlashes) {
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx(client: &HttpClient, tx_bytes: Vec<u8>) {
+pub async fn dry_run_tx<C>(client: &C, tx_bytes: Vec<u8>)
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync
+{
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = unwrap_client_response(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
@@ -1775,12 +1784,15 @@ pub async fn dry_run_tx(client: &HttpClient, tx_bytes: Vec<u8>) {
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key(
-    client: &HttpClient,
+pub async fn get_public_key<C>(
+    client: &C,
     address: &Address,
-) -> Option<common::PublicKey> {
+) -> Option<common::PublicKey>
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync
+{
     let key = pk_key(address);
-    query_storage_value(&client, &key).await
+    query_storage_value(client, &key).await
 }
 
 /// Check if the given address is a known validator.
@@ -1821,9 +1833,7 @@ pub async fn is_delegator_at(
 /// true.
 pub async fn known_address<C>(client: &C, address: &Address) -> bool
 where
-    C: namada::ledger::queries::Client<
-            Error = namada::ledger::queries::tm::Error,
-        > + std::marker::Sync,
+    C: queries::Client<Error = queries::tm::Error> + Sync
 {
     match address {
         Address::Established(_) => {
@@ -1981,7 +1991,7 @@ pub async fn query_conversions(client: &HttpClient, args: args::QueryConversions
         .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
         .unwrap();
     let conv_state =
-        query_storage_value::<ConversionState>(&client, &state_key)
+        query_storage_value::<ConversionState,HttpClient>(&client, &state_key)
             .await
             .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
@@ -2047,12 +2057,13 @@ pub async fn query_conversion(
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<T>(
-    client: &HttpClient,
+pub async fn query_storage_value<T,C>(
+    client: &C,
     key: &storage::Key,
 ) -> Option<T>
 where
     T: BorshDeserialize,
+    C: queries::Client<Error = queries::tm::Error> + Sync,
 {
     // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
     // use `storage_has_key` instead of `storage_value`, because `storage_value`
@@ -2142,9 +2153,7 @@ where
 /// Query to check if the given storage key exists.
 pub async fn query_has_storage_key<C>(client: &C, key: &storage::Key) -> bool
 where
-    C: namada::ledger::queries::Client<
-            Error = namada::ledger::queries::tm::Error,
-        > + std::marker::Sync,
+    C: queries::Client<Error = queries::tm::Error> + Sync
 {
     unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
 }
@@ -2190,10 +2199,13 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transation.
-pub async fn query_tx_events(
-    client: &HttpClient,
+pub async fn query_tx_events<C>(
+    client: &C,
     tx_event_query: TxEventQuery<'_>,
-) -> eyre::Result<Option<Event>> {
+) -> eyre::Result<Option<Event>>
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync
+{
     let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
     match tx_event_query {
         TxEventQuery::Accepted(_) => RPC
@@ -2450,7 +2462,7 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     let slashes_key = pos::validator_slashes_key(&validator);
-                    let slashes = query_storage_value::<pos::Slashes>(
+                    let slashes = query_storage_value::<pos::Slashes,HttpClient>(
                         client,
                         &slashes_key,
                     )
@@ -2580,14 +2592,14 @@ pub async fn get_bond_amount_at(
     epoch: Epoch,
 ) -> Option<token::Amount> {
     let slashes_key = pos::validator_slashes_key(validator);
-    let slashes = query_storage_value::<pos::Slashes>(client, &slashes_key)
+    let slashes = query_storage_value::<pos::Slashes,HttpClient>(client, &slashes_key)
         .await
         .unwrap_or_default();
     let bond_key = pos::bond_key(&BondId {
         source: delegator.clone(),
         validator: validator.clone(),
     });
-    let epoched_bonds = query_storage_value::<Bonds>(client, &bond_key).await;
+    let epoched_bonds = query_storage_value::<Bonds,HttpClient>(client, &bond_key).await;
     match epoched_bonds {
         Some(epoched_bonds) => {
             let mut delegated_amount: token::Amount = 0.into();
@@ -2669,32 +2681,32 @@ pub async fn get_delegators_delegation(
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
     use namada::types::token::Amount;
     let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(client, &key)
+    let max_proposal_code_size = query_storage_value::<u64,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content_size = query_storage_value::<u64>(client, &key)
+    let max_proposal_content_size = query_storage_value::<u64,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(client, &key)
+    let min_proposal_fund = query_storage_value::<Amount,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epochs = query_storage_value::<u64>(client, &key)
+    let min_proposal_grace_epochs = query_storage_value::<u64,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(client, &key)
+    let min_proposal_period = query_storage_value::<u64,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
     let key = gov_storage::get_max_proposal_period_key();
-    let max_proposal_period = query_storage_value::<u64>(client, &key)
+    let max_proposal_period = query_storage_value::<u64,HttpClient>(client, &key)
         .await
         .expect("Parameter should be definied.");
 

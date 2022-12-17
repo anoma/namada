@@ -7,7 +7,8 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-use tendermint_rpc::HttpClient;
+use namada::ledger::queries;
+use tendermint_rpc::{Client,HttpClient};
 use std::path::PathBuf;
 
 use super::rpc;
@@ -17,11 +18,14 @@ use crate::wallet::Wallet;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair(
-    client: &HttpClient,
+pub async fn find_keypair<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     addr: &Address,
-) -> common::SecretKey {
+) -> common::SecretKey
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     match addr {
         Address::Established(_) => {
             println!(
@@ -85,12 +89,15 @@ pub enum TxSigningKey {
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer(
-    client: &HttpClient,
+pub async fn tx_signer<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     mut default: TxSigningKey,
-) -> common::SecretKey {
+) -> common::SecretKey
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     // Override the default signing key source if possible
     if let Some(signing_key) = &args.signing_key {
         default = TxSigningKey::WalletKeypair(signing_key.clone());
@@ -141,13 +148,16 @@ pub async fn tx_signer(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx(
-    client: &HttpClient,
+pub async fn sign_tx<C>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-) -> TxBroadcastData {
+) -> TxBroadcastData
+where
+    C: queries::Client<Error = queries::tm::Error> + Sync + Client
+{
     let keypair = tx_signer(client, wallet, args, default).await;
     let tx = tx.sign(&keypair);
 
