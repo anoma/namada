@@ -4,30 +4,19 @@ mod keys;
 pub mod pre_genesis;
 mod store;
 
-use std::collections::HashMap;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{env, fs};
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::Address;
 use namada::types::key::*;
-use namada::types::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
-};
 pub use store::wallet_file;
-use thiserror::Error;
 use namada::ledger::wallet::ConfirmationResponse;
 
 pub use namada::ledger::wallet::{DecryptionError, StoredKeypair};
-use namada::ledger::wallet::{Store, Wallet};
+use namada::ledger::wallet::Wallet;
 pub use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 use namada::ledger::wallet::{WalletUtils, Alias};
-use std::io::prelude::*;
 use std::io::{self, Write};
 use namada::ledger::wallet::FindKeyError;
 

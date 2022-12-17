@@ -1,30 +1,18 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::prelude::*;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
-use bimap::BiHashMap;
 use file_lock::{FileLock, FileOptions};
-use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::{Address, ImplicitAddress};
-use namada::types::key::dkg_session_keys::DkgKeypair;
+use namada::types::address::Address;
 use namada::types::key::*;
-use namada::types::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
-};
 use namada::types::transaction::EllipticCurve;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use namada::ledger::wallet::ConfirmationResponse;
 use namada::ledger::wallet::Store;
 
-use namada::ledger::wallet::{Alias, StoredKeypair, ValidatorKeys, gen_sk};
-use super::pre_genesis;
-use crate::cli;
+use namada::ledger::wallet::{StoredKeypair, ValidatorKeys, gen_sk};
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
 

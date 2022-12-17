@@ -185,6 +185,7 @@ where
         }
     }
 
+    /// Indicates whether this key has been encrypted or not
     pub fn is_encrypted(&self) -> bool {
         match self {
             StoredKeypair::Encrypted(_) => true,

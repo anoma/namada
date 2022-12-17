@@ -1,3 +1,4 @@
+//! Provides functionality for managing keys and addresses for a user
 mod store;
 mod alias;
 mod keys;
@@ -5,11 +6,8 @@ pub mod pre_genesis;
 
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, fs};
 pub use self::store::{ValidatorData, ValidatorKeys};
-use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
@@ -48,14 +46,18 @@ pub trait WalletUtils {
     fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String>;
 }
 
+/// The error that is produced when a given key cannot be obtained
 #[derive(Error, Debug)]
 pub enum FindKeyError {
+    /// Could not find a given key in the wallet
     #[error("No matching key found")]
     KeyNotFound,
+    /// Could not decrypt a given key in the wallet
     #[error("{0}")]
     KeyDecryptionError(keys::DecryptionError),
 }
 
+/// Represents a collection of keys and addresses while caching key decryptions
 #[derive(Debug)]
 pub struct Wallet<C> {
     store_dir: C,
@@ -65,6 +67,7 @@ pub struct Wallet<C> {
 }
 
 impl<C> Wallet<C> {
+    /// Create a new wallet from the given backing store and storage location
     pub fn new(store_dir: C, store: Store) -> Self {
         Self {
             store_dir,
@@ -94,6 +97,7 @@ impl<C> Wallet<C> {
         (alias.into(), key)
     }
 
+    /// Generate a spending key and store it under the given alias in the wallet
     pub fn gen_spending_key<U: WalletUtils>(
         &mut self,
         alias: String,
@@ -154,6 +158,7 @@ impl<C> Wallet<C> {
         )
     }
 
+    /// Find the spending key with the given alias in the wallet and return it
     pub fn find_spending_key<U: WalletUtils>(
         &mut self,
         alias: impl AsRef<str>,
@@ -176,6 +181,7 @@ impl<C> Wallet<C> {
         )
     }
 
+    /// Find the viewing key with the given alias in the wallet and return it
     pub fn find_viewing_key(
         &mut self,
         alias: impl AsRef<str>,
@@ -185,6 +191,8 @@ impl<C> Wallet<C> {
             .ok_or(FindKeyError::KeyNotFound)
     }
 
+    /// Find the payment address with the given alias in the wallet and return
+    /// it
     pub fn find_payment_addr(
         &self,
         alias: impl AsRef<str>,
@@ -371,6 +379,7 @@ impl<C> Wallet<C> {
             .map(Into::into)
     }
 
+    /// Insert a viewing key into the wallet under the given alias
     pub fn insert_viewing_key<U: WalletUtils>(
         &mut self,
         alias: String,
@@ -381,6 +390,7 @@ impl<C> Wallet<C> {
             .map(Into::into)
     }
 
+    /// Insert a spending key into the wallet under the given alias
     pub fn insert_spending_key<U: WalletUtils>(
         &mut self,
         alias: String,
@@ -392,6 +402,8 @@ impl<C> Wallet<C> {
             .map(Into::into)
     }
 
+    /// Encrypt the given spending key and insert it into the wallet under the
+    /// given alias
     pub fn encrypt_insert_spending_key<U: WalletUtils>(
         &mut self,
         alias: String,
@@ -408,6 +420,7 @@ impl<C> Wallet<C> {
             .map(Into::into)
     }
 
+    /// Insert a payment address into the wallet under the given alias
     pub fn insert_payment_addr<U: WalletUtils>(
         &mut self,
         alias: String,
@@ -432,14 +445,17 @@ impl<C> Wallet<C> {
         )
     }
 
+    /// Provide immutable access to the backing store
     pub fn store(&self) -> &Store {
         &self.store
     }
 
+    /// Provide mutable access to the backing store
     pub fn store_mut(&mut self) -> &mut Store {
         &mut self.store
     }
 
+    /// Access storage location data
     pub fn store_dir(&self) -> &C {
         &self.store_dir
     }
