@@ -20,6 +20,7 @@ use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use crate::wallet::CliWalletUtils;
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config::{
@@ -30,7 +31,8 @@ use crate::config::{self, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{pre_genesis, Wallet};
+use crate::wallet::pre_genesis;
+use namada::ledger::wallet::Wallet;
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -106,7 +108,7 @@ pub async fn join_network(
         validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
             (
                 validator_alias,
-                pre_genesis::ValidatorWallet::load(&pre_genesis_dir)
+                pre_genesis::load(&pre_genesis_dir)
                     .unwrap_or_else(|err| {
                         eprintln!(
                             "Error loading validator pre-genesis wallet {err}",
@@ -488,7 +490,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let (_alias, keypair) = wallet.gen_key(
+            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -507,7 +509,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key(
+            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -522,7 +524,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let (_alias, keypair) = wallet.gen_key(
+            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -546,8 +548,8 @@ pub fn init_network(
                     name
                 );
 
-                let validator_keys = wallet
-                    .gen_validator_keys(
+                let validator_keys = crate::wallet::gen_validator_keys(
+                    &mut wallet,
                         Some(protocol_pk.clone()),
                         SchemeType::Ed25519,
                     )
@@ -569,7 +571,7 @@ pub fn init_network(
             Some(genesis_config::HexString(dkg_pk.to_string()));
 
         // Write keypairs to wallet
-        wallet.add_address(name.clone(), address);
+        wallet.add_address::<CliWalletUtils>(name.clone(), address);
 
         crate::wallet::save(&wallet).unwrap();
     });
@@ -592,7 +594,7 @@ pub fn init_network(
         if config.address.is_none() {
             let address = address::gen_established_address("token");
             config.address = Some(address.to_string());
-            wallet.add_address(name.clone(), address);
+            wallet.add_address::<CliWalletUtils>(name.clone(), address);
         }
         if config.vp.is_none() {
             config.vp = Some("vp_token".to_string());
@@ -606,7 +608,7 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
-                let (_alias, keypair) = wallet.gen_key(
+                let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
                     SchemeType::Ed25519,
                     Some(name.clone()),
                     unsafe_dont_encrypt,
@@ -642,7 +644,7 @@ pub fn init_network(
     genesis_config::write_genesis_config(&config_clean, &genesis_path);
 
     // Add genesis addresses and save the wallet with other account keys
-    wallet.add_genesis_addresses(config_clean.clone());
+    crate::wallet::add_genesis_addresses(&mut wallet, config_clean.clone());
     crate::wallet::save(&wallet).unwrap();
 
     // Write the global config setting the default chain ID
@@ -693,7 +695,7 @@ pub fn init_network(
         global_config.write(validator_dir).unwrap();
         // Add genesis addresses to the validator's wallet
         let mut wallet = crate::wallet::load_or_new(&validator_chain_dir);
-        wallet.add_genesis_addresses(config_clean.clone());
+        crate::wallet::add_genesis_addresses(&mut wallet, config_clean.clone());
         crate::wallet::save(&wallet).unwrap();
     });
 
@@ -852,11 +854,11 @@ fn init_established_account(
     if config.address.is_none() {
         let address = address::gen_established_address("established");
         config.address = Some(address.to_string());
-        wallet.add_address(&name, address);
+        wallet.add_address::<CliWalletUtils>(&name, address);
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
-        let (_alias, keypair) = wallet.gen_key(
+        let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
             SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
             unsafe_dont_encrypt,
@@ -903,7 +905,7 @@ pub fn init_genesis_validator(
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
     println!("Generating validator keys...");
-    let pre_genesis = pre_genesis::ValidatorWallet::gen_and_store(
+    let pre_genesis = pre_genesis::gen_and_store(
         key_scheme,
         unsafe_dont_encrypt,
         &pre_genesis_dir,

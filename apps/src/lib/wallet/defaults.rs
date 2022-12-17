@@ -11,7 +11,7 @@ use namada::types::address::Address;
 use namada::types::key::*;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
-use crate::wallet::alias::Alias;
+use namada::ledger::wallet::Alias;
 
 /// The default addresses with their aliases.
 pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
@@ -76,7 +76,7 @@ mod dev {
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
 
-    use crate::wallet::alias::Alias;
+    use namada::ledger::wallet::Alias;
 
     /// Generate a new protocol signing keypair and DKG session keypair
     pub fn validator_keys() -> (common::SecretKey, DkgKeypair) {
