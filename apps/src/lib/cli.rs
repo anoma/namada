@@ -1520,8 +1520,8 @@ pub mod args {
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
     use namada::types::token;
-    use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
+    pub use namada::ledger::args::*;
 
     use super::context::*;
     use super::utils::*;
@@ -1699,17 +1699,12 @@ pub mod args {
         }
     }
 
-    /// Transaction associated results arguments
-    #[derive(Clone, Debug)]
-    pub struct QueryResult<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Hash of transaction to lookup
-        pub tx_hash: String,
+    pub trait CliToSdk<X>: Args {
+        fn to_sdk(self, ctx: &mut Context) -> X;
     }
 
-    impl QueryResult<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
+    impl CliToSdk<QueryResult<SdkTypes>> for QueryResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
             QueryResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tx_hash: self.tx_hash,
@@ -1733,19 +1728,8 @@ pub mod args {
         }
     }
 
-    /// Custom transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxCustom<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Path to the tx WASM code file
-        pub code_path: C::Data,
-        /// Path to the data file
-        pub data_path: Option<C::Data>,
-    }
-
-    impl TxCustom<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+    impl CliToSdk<TxCustom<SdkTypes>> for TxCustom<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 code_path: ctx.read_wasm(self.code_path),
@@ -1783,29 +1767,8 @@ pub mod args {
         }
     }
 
-    /// Transfer transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Transfer source address
-        pub source: C::TransferSource,
-        /// Transfer target address
-        pub target: C::TransferTarget,
-        /// Transferred token address
-        pub token: C::Address,
-        /// Transferred token address
-        pub sub_prefix: Option<String>,
-        /// Transferred token amount
-        pub amount: token::Amount,
-        /// Native token address
-        pub native_token: C::NativeAddress,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl TxTransfer<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+    impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
             TxTransfer::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get_cached(&self.source),
@@ -1857,35 +1820,8 @@ pub mod args {
         }
     }
 
-    /// IBC transfer transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Transfer source address
-        pub source: C::Address,
-        /// Transfer target address
-        pub receiver: String,
-        /// Transferred token address
-        pub token: C::Address,
-        /// Transferred token address
-        pub sub_prefix: Option<String>,
-        /// Transferred token amount
-        pub amount: token::Amount,
-        /// Port ID
-        pub port_id: PortId,
-        /// Channel ID
-        pub channel_id: ChannelId,
-        /// Timeout height of the destination chain
-        pub timeout_height: Option<u64>,
-        /// Timeout timestamp offset
-        pub timeout_sec_offset: Option<u64>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl TxIbcTransfer<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+    impl CliToSdk<TxIbcTransfer<SdkTypes>> for TxIbcTransfer<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
             TxIbcTransfer::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -1953,23 +1889,8 @@ pub mod args {
         }
     }
 
-    /// Transaction to initialize a new account
-    #[derive(Clone, Debug)]
-    pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Address of the source account
-        pub source: C::Address,
-        /// Path to the VP WASM code file for the new account
-        pub vp_code_path: C::Data,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-        /// Public key for the new account
-        pub public_key: C::PublicKey,
-    }
-
-    impl TxInitAccount<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+    impl CliToSdk<TxInitAccount<SdkTypes>> for TxInitAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -2014,24 +1935,8 @@ pub mod args {
         }
     }
 
-    /// Transaction to initialize a new account
-    #[derive(Clone, Debug)]
-    pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
-        pub tx: Tx<C>,
-        pub source: C::Address,
-        pub scheme: SchemeType,
-        pub account_key: Option<C::PublicKey>,
-        pub consensus_key: Option<C::Keypair>,
-        pub protocol_key: Option<C::PublicKey>,
-        pub commission_rate: Decimal,
-        pub max_commission_rate_change: Decimal,
-        pub validator_vp_code_path: C::Data,
-        pub tx_code_path: C::Data,
-        pub unsafe_dont_encrypt: bool,
-    }
-
-    impl TxInitValidator<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+    impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             TxInitValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 source: ctx.get(&self.source),
@@ -2122,21 +2027,8 @@ pub mod args {
         }
     }
 
-    /// Transaction to update a VP arguments
-    #[derive(Clone, Debug)]
-    pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Path to the VP WASM code file
-        pub vp_code_path: C::Data,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-        /// Address of the account whose VP is to be updated
-        pub addr: C::Address,
-    }
-
-    impl TxUpdateVp<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
+    impl CliToSdk<TxUpdateVp<SdkTypes>> for TxUpdateVp<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
             TxUpdateVp::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 vp_code_path: ctx.read_wasm(self.vp_code_path),
@@ -2174,26 +2066,8 @@ pub mod args {
         }
     }
 
-    /// Bond arguments
-    #[derive(Clone, Debug)]
-    pub struct Bond<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Validator address
-        pub validator: C::Address,
-        /// Amount of tokens to stake in a bond
-        pub amount: token::Amount,
-        /// Source address for delegations. For self-bonds, the validator is
-        /// also the source.
-        pub source: Option<C::Address>,
-        /// Native token address
-        pub native_token: C::NativeAddress,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl Bond<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+    impl CliToSdk<Bond<SdkTypes>> for Bond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
             Bond::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2234,24 +2108,8 @@ pub mod args {
         }
     }
 
-    /// Unbond arguments
-    #[derive(Clone, Debug)]
-    pub struct Unbond<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Validator address
-        pub validator: C::Address,
-        /// Amount of tokens to unbond from a bond
-        pub amount: token::Amount,
-        /// Source address for unbonding from delegations. For unbonding from
-        /// self-bonds, the validator is also the source
-        pub source: Option<C::Address>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl Unbond<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+    impl CliToSdk<Unbond<SdkTypes>> for Unbond<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
             Unbond::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2308,8 +2166,8 @@ pub mod args {
         pub tx_code_path: C::Data,
     }
 
-    impl InitProposal<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
+    impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: self.proposal_data,
@@ -2366,8 +2224,8 @@ pub mod args {
         pub tx_code_path: C::Data,
     }
 
-    impl VoteProposal<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
+    impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
             VoteProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2432,16 +2290,8 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct RevealPk<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// A public key to be revealed on-chain
-        pub public_key: C::PublicKey,
-    }
-
-    impl RevealPk<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+    impl CliToSdk<RevealPk<SdkTypes>> for RevealPk<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
             RevealPk::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 public_key: ctx.get_cached(&self.public_key),
@@ -2463,16 +2313,8 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Proposal id
-        pub proposal_id: Option<u64>,
-    }
-
-    impl QueryProposal<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
+    impl CliToSdk<QueryProposal<SdkTypes>> for QueryProposal<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
             QueryProposal::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2506,8 +2348,8 @@ pub mod args {
         pub proposal_folder: Option<PathBuf>,
     }
 
-    impl QueryProposalResult<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
+    impl CliToSdk<QueryProposalResult<SdkTypes>> for QueryProposalResult<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
             QueryProposalResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -2556,14 +2398,8 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct QueryProtocolParameters<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-    }
-
-    impl QueryProtocolParameters<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryProtocolParameters<SdkTypes> {
+    impl CliToSdk<QueryProtocolParameters<SdkTypes>> for QueryProtocolParameters<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProtocolParameters<SdkTypes> {
             QueryProtocolParameters::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
             }
@@ -2582,22 +2418,8 @@ pub mod args {
         }
     }
 
-    /// Withdraw arguments
-    #[derive(Clone, Debug)]
-    pub struct Withdraw<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Validator address
-        pub validator: C::Address,
-        /// Source address for withdrawing from delegations. For withdrawing
-        /// from self-bonds, the validator is also the source
-        pub source: Option<C::Address>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl Withdraw<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+    impl CliToSdk<Withdraw<SdkTypes>> for Withdraw<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
             Withdraw::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2632,19 +2454,8 @@ pub mod args {
         }
     }
 
-    /// Query asset conversions
-    #[derive(Clone, Debug)]
-    pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of a token
-        pub token: Option<C::Address>,
-        /// Epoch of the asset
-        pub epoch: Option<Epoch>,
-    }
-
-    impl QueryConversions<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
+    impl CliToSdk<QueryConversions<SdkTypes>> for QueryConversions<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
             QueryConversions::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 token: self.token.map(|x| ctx.get(&x)),
@@ -2680,23 +2491,8 @@ pub mod args {
         }
     }
 
-    /// Query token balance(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of an owner
-        pub owner: Option<C::BalanceOwner>,
-        /// Address of a token
-        pub token: Option<C::Address>,
-        /// Whether not to convert balances
-        pub no_conversions: bool,
-        /// Sub prefix of an account
-        pub sub_prefix: Option<String>,
-    }
-
-    impl QueryBalance<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+    impl CliToSdk<QueryBalance<SdkTypes>> for QueryBalance<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
             QueryBalance::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
@@ -2748,19 +2544,8 @@ pub mod args {
         }
     }
 
-    /// Query historical transfer(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of an owner
-        pub owner: Option<C::BalanceOwner>,
-        /// Address of a token
-        pub token: Option<C::Address>,
-    }
-
-    impl QueryTransfers<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+    impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
             QueryTransfers::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
@@ -2792,19 +2577,8 @@ pub mod args {
         }
     }
 
-    /// Query PoS bond(s)
-    #[derive(Clone, Debug)]
-    pub struct QueryBonds<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of an owner
-        pub owner: Option<C::Address>,
-        /// Address of a validator
-        pub validator: Option<C::Address>,
-    }
-
-    impl QueryBonds<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+    impl CliToSdk<QueryBonds<SdkTypes>> for QueryBonds<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
             QueryBonds::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get(&x)),
@@ -2840,19 +2614,8 @@ pub mod args {
         }
     }
 
-    /// Query PoS bonded stake
-    #[derive(Clone, Debug)]
-    pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of a validator
-        pub validator: Option<C::Address>,
-        /// Epoch in which to find bonded stake
-        pub epoch: Option<Epoch>,
-    }
-
-    impl QueryBondedStake<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
+    impl CliToSdk<QueryBondedStake<SdkTypes>> for QueryBondedStake<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
             QueryBondedStake::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self.validator.map(|x| ctx.get(&x)),
@@ -2885,21 +2648,8 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    /// Commission rate change args
-    pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Validator address (should be self)
-        pub validator: C::Address,
-        /// Value to which the tx changes the commission rate
-        pub rate: Decimal,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
-
-    impl TxCommissionRateChange<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
+    impl CliToSdk<TxCommissionRateChange<SdkTypes>> for TxCommissionRateChange<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxCommissionRateChange<SdkTypes> {
             TxCommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2936,19 +2686,8 @@ pub mod args {
         }
     }
 
-    /// Query PoS commission rate
-    #[derive(Clone, Debug)]
-    pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of a validator
-        pub validator: C::Address,
-        /// Epoch in which to find commission rate
-        pub epoch: Option<Epoch>,
-    }
-
-    impl QueryCommissionRate<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
+    impl CliToSdk<QueryCommissionRate<SdkTypes>> for QueryCommissionRate<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
             QueryCommissionRate::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
@@ -2981,17 +2720,8 @@ pub mod args {
         }
     }
 
-    /// Query PoS slashes
-    #[derive(Clone, Debug)]
-    pub struct QuerySlashes<C: NamadaTypes = SdkTypes> {
-        /// Common query args
-        pub query: Query<C>,
-        /// Address of a validator
-        pub validator: Option<C::Address>,
-    }
-
-    impl QuerySlashes<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
+    impl CliToSdk<QuerySlashes<SdkTypes>> for QuerySlashes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
             QuerySlashes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self.validator.map(|x| ctx.get(&x)),
@@ -3014,17 +2744,9 @@ pub mod args {
             )
         }
     }
-    /// Query the raw bytes of given storage key
-    #[derive(Clone, Debug)]
-    pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
-        /// The storage key to query
-        pub storage_key: storage::Key,
-        /// Common query args
-        pub query: Query<C>,
-    }
 
-    impl QueryRawBytes<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
+    impl CliToSdk<QueryRawBytes<SdkTypes>> for QueryRawBytes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
             QueryRawBytes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 storage_key: self.storage_key,
@@ -3043,46 +2765,6 @@ pub mod args {
             app.add_args::<Query::<CliTypes>>()
                 .arg(STORAGE_KEY.def().about("Storage key"))
         }
-    }
-
-    /// Abstraction of types being used in Namada
-    pub trait NamadaTypes: Clone + std::fmt::Debug {
-        type Address: Clone + std::fmt::Debug;
-        type NativeAddress: Clone + std::fmt::Debug;
-        type Keypair: Clone + std::fmt::Debug;
-        type TendermintAddress: Clone + std::fmt::Debug;
-        type ViewingKey: Clone + std::fmt::Debug;
-        type BalanceOwner: Clone + std::fmt::Debug;
-        type PublicKey: Clone + std::fmt::Debug;
-        type TransferSource: Clone + std::fmt::Debug;
-        type TransferTarget: Clone + std::fmt::Debug;
-        type Data: Clone + std::fmt::Debug;
-    }
-
-    /// The concrete types being used in Namada SDK
-    #[derive(Clone, Debug)]
-    pub struct SdkTypes;
-
-    impl NamadaTypes for SdkTypes {
-        type Address = Address;
-
-        type NativeAddress = Address;
-
-        type Keypair = common::SecretKey;
-
-        type TendermintAddress = ();
-
-        type ViewingKey = namada::types::masp::ExtendedViewingKey;
-
-        type BalanceOwner = namada::types::masp::BalanceOwner;
-
-        type PublicKey = common::PublicKey;
-
-        type TransferSource = namada::types::masp::TransferSource;
-
-        type TransferTarget = namada::types::masp::TransferTarget;
-
-        type Data = Vec<u8>;
     }
 
     /// The concrete types being used in the CLI
@@ -3110,37 +2792,9 @@ pub mod args {
 
         type Data = PathBuf;
     }
-    
-    /// Common transaction arguments
-    #[derive(Clone, Debug)]
-    pub struct Tx<C: NamadaTypes = SdkTypes> {
-        /// Simulate applying the transaction
-        pub dry_run: bool,
-        /// Submit the transaction even if it doesn't pass client checks
-        pub force: bool,
-        /// Do not wait for the transaction to be added to the blockchain
-        pub broadcast_only: bool,
-        /// The address of the ledger node as host:port
-        pub ledger_address: C::TendermintAddress,
-        /// If any new account is initialized by the tx, use the given alias to
-        /// save it in the wallet.
-        pub initialized_account_alias: Option<String>,
-        /// The amount being payed to include the transaction
-        pub fee_amount: token::Amount,
-        /// The token in which the fee is being paid
-        pub fee_token: C::Address,
-        /// The max amount of gas used to process tx
-        pub gas_limit: GasLimit,
-        /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<C::Keypair>,
-        /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<C::Address>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: C::Data,
-    }
 
-    impl Tx<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+    impl CliToSdk<Tx<SdkTypes>> for Tx<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
                 force: self.force,
@@ -3237,15 +2891,8 @@ pub mod args {
         }
     }
 
-    /// Common query arguments
-    #[derive(Clone, Debug)]
-    pub struct Query<C: NamadaTypes = SdkTypes> {
-        /// The address of the ledger node as host:port
-        pub ledger_address: C::TendermintAddress,
-    }
-
-    impl Query<CliTypes> {
-        pub fn to_sdk(self, _ctx: &mut Context) -> Query<SdkTypes> {
+    impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
+        fn to_sdk(self, _ctx: &mut Context) -> Query<SdkTypes> {
             Query::<SdkTypes> {
                 ledger_address: (),
             }
@@ -3261,17 +2908,6 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             Self { ledger_address }
         }
-    }
-
-    /// MASP add key or address arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspAddrKeyAdd {
-        /// Key alias
-        pub alias: String,
-        /// Any MASP value
-        pub value: MaspValue,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
     }
 
     impl Args for MaspAddrKeyAdd {
@@ -3304,15 +2940,6 @@ pub mod args {
         }
     }
 
-    /// MASP generate spending key arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspSpendKeyGen {
-        /// Key alias
-        pub alias: String,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
-    }
-
     impl Args for MaspSpendKeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -3336,19 +2963,8 @@ pub mod args {
         }
     }
 
-    /// MASP generate payment address arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
-        /// Key alias
-        pub alias: String,
-        /// Viewing key
-        pub viewing_key: C::ViewingKey,
-        /// Pin
-        pub pin: bool,
-    }
-
-    impl MaspPayAddrGen<CliTypes> {
-        pub fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+    impl CliToSdk<MaspPayAddrGen<SdkTypes>> for MaspPayAddrGen<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
             MaspPayAddrGen::<SdkTypes> {
                 alias: self.alias,
                 viewing_key: ctx.get_cached(&self.viewing_key),
@@ -3383,17 +2999,6 @@ pub mod args {
         }
     }
 
-    /// Wallet generate key and implicit address arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyAndAddressGen {
-        /// Scheme type
-        pub scheme: SchemeType,
-        /// Key alias
-        pub alias: Option<String>,
-        /// Don't encrypt the keypair
-        pub unsafe_dont_encrypt: bool,
-    }
-
     impl Args for KeyAndAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
@@ -3421,15 +3026,6 @@ pub mod args {
                  used in a live network.",
             ))
         }
-    }
-
-    /// Wallet key lookup arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyFind {
-        pub public_key: Option<common::PublicKey>,
-        pub alias: Option<String>,
-        pub value: Option<String>,
-        pub unsafe_show_secret: bool,
     }
 
     impl Args for KeyFind {
@@ -3473,13 +3069,6 @@ pub mod args {
         }
     }
 
-    /// Wallet find shielded address or key arguments
-    #[derive(Clone, Debug)]
-    pub struct AddrKeyFind {
-        pub alias: String,
-        pub unsafe_show_secret: bool,
-    }
-
     impl Args for AddrKeyFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -3498,13 +3087,6 @@ pub mod args {
                         .about("UNSAFE: Print the spending key values."),
                 )
         }
-    }
-
-    /// Wallet list shielded keys arguments
-    #[derive(Clone, Debug)]
-    pub struct MaspKeysList {
-        pub decrypt: bool,
-        pub unsafe_show_secret: bool,
     }
 
     impl Args for MaspKeysList {
@@ -3527,13 +3109,6 @@ pub mod args {
         }
     }
 
-    /// Wallet list keys arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyList {
-        pub decrypt: bool,
-        pub unsafe_show_secret: bool,
-    }
-
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
@@ -3554,12 +3129,6 @@ pub mod args {
         }
     }
 
-    /// Wallet key export arguments
-    #[derive(Clone, Debug)]
-    pub struct KeyExport {
-        pub alias: String,
-    }
-
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -3574,13 +3143,6 @@ pub mod args {
                     .about("The alias of the key you wish to export."),
             )
         }
-    }
-
-    /// Wallet address lookup arguments
-    #[derive(Clone, Debug)]
-    pub struct AddressOrAliasFind {
-        pub alias: Option<String>,
-        pub address: Option<Address>,
     }
 
     impl Args for AddressOrAliasFind {
@@ -3607,13 +3169,6 @@ pub mod args {
                     .required(true),
             )
         }
-    }
-
-    /// Wallet address add arguments
-    #[derive(Clone, Debug)]
-    pub struct AddressAdd {
-        pub alias: String,
-        pub address: Address,
     }
 
     impl Args for AddressAdd {
