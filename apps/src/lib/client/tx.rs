@@ -71,8 +71,8 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
-pub async fn submit_custom<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_custom<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxCustom,
 ) {
@@ -80,12 +80,12 @@ pub async fn submit_custom<U: WalletUtils>(
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let initialized_accounts =
-        process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_update_vp<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_update_vp<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxUpdateVp,
 ) {
@@ -95,7 +95,7 @@ pub async fn submit_update_vp<U: WalletUtils>(
     match &addr {
         Address::Established(_) => {
             let exists =
-                rpc::known_address(client, &addr).await;
+                rpc::known_address::<C>(client, &addr).await;
             if !exists {
                 eprintln!("The address {} doesn't exist on chain.", addr);
                 if !args.tx.force {
@@ -139,11 +139,11 @@ pub async fn submit_update_vp<U: WalletUtils>(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
-pub async fn submit_init_account<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_init_account<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxInitAccount,
 ) {
@@ -166,13 +166,13 @@ pub async fn submit_init_account<U: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
-        process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
             .await;
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_init_validator<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     mut ctx: Context,
     args::TxInitValidator {
         tx: tx_args,
@@ -292,7 +292,7 @@ pub async fn submit_init_validator<U: WalletUtils>(
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
-        process_tx::<U>(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
+        process_tx::<C, U>(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
             .await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) =
@@ -413,14 +413,14 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = HttpClient;
     
     async fn query_storage_value<T: Send>(
-        client: &HttpClient,
+        client: &Self::C,
         key: &storage::Key,
     ) -> Option<T>
     where T: BorshDeserialize {
-        query_storage_value::<T>(client, &key).await
+        query_storage_value::<Self::C, T>(client, &key).await
     }
 
-    async fn query_epoch(client: &HttpClient) -> Epoch {
+    async fn query_epoch(client: &Self::C) -> Epoch {
         rpc::query_epoch(client).await
     }
 
@@ -483,7 +483,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 
     /// Query a conversion.
     async fn query_conversion(
-        client: &HttpClient,
+        client: &Self::C,
         asset_type: AssetType,
     ) -> Option<(
         Address,
@@ -491,18 +491,18 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         masp_primitives::transaction::components::Amount,
         MerklePath<Node>,
     )> {
-        query_conversion(client.clone(), asset_type).await
+        query_conversion(client, asset_type).await
     }
 
-    async fn query_results(client: &HttpClient) -> Vec<BlockResults> {
+    async fn query_results(client: &Self::C) -> Vec<BlockResults> {
         rpc::query_results(client).await
     }
 }
 
 
 
-pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_transfer<C: Client + namada::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
@@ -513,7 +513,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
     let target = transfer_target.effective_address();
     // Check that the source address exists on chain
     let source_exists =
-        rpc::known_address(client, &source).await;
+        rpc::known_address::<C>(client, &source).await;
     if !source_exists {
         eprintln!("The source address {} doesn't exist on chain.", source);
         if !args.tx.force {
@@ -522,7 +522,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
     }
     // Check that the target address exists on chain
     let target_exists =
-        rpc::known_address(client, &target).await;
+        rpc::known_address::<C>(client, &target).await;
     if !target_exists {
         eprintln!("The target address {} doesn't exist on chain.", target);
         if !args.tx.force {
@@ -532,7 +532,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
     let token = &args.token;
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(client, &token)
+        rpc::known_address::<C>(client, &token)
             .await;
     if !token_exists {
         eprintln!(
@@ -558,7 +558,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -613,7 +613,7 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer::<V>(client, wallet, &args.tx, default_signer.clone())
+    let chosen_signer = tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
         .await
         .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
@@ -669,18 +669,18 @@ pub async fn submit_transfer<U: ShieldedUtils<C = HttpClient>, V: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
-    process_tx::<V>(client, wallet, &args.tx, tx, signing_address).await;
+    process_tx::<C, V>(client, wallet, &args.tx, tx, signing_address).await;
 }
 
-pub async fn submit_ibc_transfer<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_ibc_transfer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxIbcTransfer,
 ) {
     let source = args.source.clone();
     // Check that the source address exists on chain
     let source_exists =
-        rpc::known_address(client, &source).await;
+        rpc::known_address::<C>(client, &source).await;
     if !source_exists {
         eprintln!("The source address {} doesn't exist on chain.", source);
         if !args.tx.force {
@@ -693,7 +693,7 @@ pub async fn submit_ibc_transfer<U: WalletUtils>(
     let token = args.token;
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(client, &token).await;
+        rpc::known_address::<C>(client, &token).await;
     if !token_exists {
         eprintln!("The token address {} doesn't exist on chain.", token);
         if !args.tx.force {
@@ -712,7 +712,7 @@ pub async fn submit_ibc_transfer<U: WalletUtils>(
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -782,12 +782,12 @@ pub async fn submit_ibc_transfer<U: WalletUtils>(
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
         .await;
 }
 
-pub async fn submit_init_proposal<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_init_proposal<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     mut ctx: Context,
     args: args::InitProposal,
 ) {
@@ -796,7 +796,7 @@ pub async fn submit_init_proposal<U: WalletUtils>(
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let governance_parameters = rpc::get_governance_parameters(&client).await;
+    let governance_parameters = rpc::get_governance_parameters(client).await;
     let current_epoch = rpc::query_epoch(client)
     .await;
 
@@ -856,7 +856,7 @@ pub async fn submit_init_proposal<U: WalletUtils>(
 
     if args.offline {
         let signer = ctx.get(&signer);
-        let signing_key = find_keypair::<U>(
+        let signing_key = find_keypair::<C, U>(
             client,
             &mut ctx.wallet,
             &signer,
@@ -893,7 +893,7 @@ pub async fn submit_init_proposal<U: WalletUtils>(
         };
 
         let balance = rpc::get_token_balance(
-            &client,
+            client,
             &args.native_token,
             &proposal.author,
         )
@@ -922,13 +922,13 @@ pub async fn submit_init_proposal<U: WalletUtils>(
         let tx_code = args.tx_code_path;
         let tx = Tx::new(tx_code, Some(data));
 
-        process_tx::<U>(client, &mut ctx.wallet, &args.tx, tx, TxSigningKey::WalletAddress(signer))
+        process_tx::<C, U>(client, &mut ctx.wallet, &args.tx, tx, TxSigningKey::WalletAddress(signer))
             .await;
     }
 }
 
-pub async fn submit_vote_proposal<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::VoteProposal,
 ) {
@@ -958,7 +958,7 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<U>(
+        let signing_key = find_keypair::<C, U>(
             client,
             wallet,
             &signer,
@@ -996,7 +996,7 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
         let proposal_id = args.proposal_id.unwrap();
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
-        let proposal_start_epoch = rpc::query_storage_value::<Epoch>(
+        let proposal_start_epoch = rpc::query_storage_value::<C, Epoch>(
             &client,
             &proposal_start_epoch_key,
         )
@@ -1016,7 +1016,7 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
                     }
                 }
                 let mut delegations =
-                    rpc::get_delegators_delegation(&client, &voter_address)
+                    rpc::get_delegators_delegation(client, &voter_address)
                         .await;
 
                 // Optimize by quering if a vote from a validator
@@ -1034,7 +1034,7 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
                     .await
                 {
                     delegations = filter_delegations(
-                        &client,
+                        client,
                         delegations,
                         proposal_id,
                         &args.vote,
@@ -1055,7 +1055,7 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
                 let tx_code = args.tx_code_path;
                 let tx = Tx::new(tx_code, Some(data));
 
-                process_tx::<U>(
+                process_tx::<C, U>(
                     client,
                     wallet,
                     &args.tx,
@@ -1077,8 +1077,8 @@ pub async fn submit_vote_proposal<U: WalletUtils>(
     }
 }
 
-pub async fn submit_reveal_pk<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_reveal_pk<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::RevealPk,
 ) {
@@ -1087,14 +1087,14 @@ pub async fn submit_reveal_pk<U: WalletUtils>(
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed::<U>(client, wallet, &public_key, &args).await {
+    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
     }
 }
 
-pub async fn reveal_pk_if_needed<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn reveal_pk_if_needed<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
@@ -1104,22 +1104,22 @@ pub async fn reveal_pk_if_needed<U: WalletUtils>(
     if args.force || !has_revealed_pk(client, &addr).await
     {
         // If not, submit it
-        submit_reveal_pk_aux::<U>(client, wallet, public_key, args).await;
+        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await;
         true
     } else {
         false
     }
 }
 
-pub async fn has_revealed_pk(
-    client: &HttpClient,
+pub async fn has_revealed_pk<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
     addr: &Address,
 ) -> bool {
     rpc::get_public_key(client, addr).await.is_some()
 }
 
-pub async fn submit_reveal_pk_aux<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_reveal_pk_aux<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     public_key: &common::PublicKey,
     args: &args::Tx,
@@ -1137,10 +1137,10 @@ pub async fn submit_reveal_pk_aux<U: WalletUtils>(
         signing_key.clone()
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair::<U>(client, wallet, &signer)
+        find_keypair::<C, U>(client, wallet, &signer)
             .await
     } else {
-        find_keypair::<U>(client, wallet, &addr).await
+        find_keypair::<C, U>(client, wallet, &addr).await
     };
     let epoch = rpc::query_epoch(client)
     .await;
@@ -1192,8 +1192,8 @@ pub async fn submit_reveal_pk_aux<U: WalletUtils>(
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window(
-    client: &HttpClient,
+async fn is_safe_voting_window<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
 ) -> bool {
@@ -1202,7 +1202,7 @@ async fn is_safe_voting_window(
     let proposal_end_epoch_key =
         gov_storage::get_voting_end_epoch_key(proposal_id);
     let proposal_end_epoch =
-        rpc::query_storage_value::<Epoch>(client, &proposal_end_epoch_key)
+        rpc::query_storage_value::<C, Epoch>(client, &proposal_end_epoch_key)
             .await;
 
     match proposal_end_epoch {
@@ -1222,8 +1222,8 @@ async fn is_safe_voting_window(
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations(
-    client: &HttpClient,
+async fn filter_delegations<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
     delegator_vote: &ProposalVote,
@@ -1242,7 +1242,7 @@ async fn filter_delegations(
                 );
 
                 if let Some(validator_vote) =
-                    rpc::query_storage_value::<ProposalVote>(client, &vote_key)
+                    rpc::query_storage_value::<C, ProposalVote>(client, &vote_key)
                         .await
                 {
                     if &validator_vote == delegator_vote {
@@ -1257,8 +1257,8 @@ async fn filter_delegations(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_bond<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::Bond,
 ) {
@@ -1279,7 +1279,7 @@ pub async fn submit_bond<U: WalletUtils>(
     // Check that the source address exists on chain
     if let Some(source) = &source {
         let source_exists =
-            rpc::known_address(client, source).await;
+            rpc::known_address::<C>(client, source).await;
         if !source_exists {
             eprintln!("The source address {} doesn't exist on chain.", source);
             if !args.tx.force {
@@ -1291,7 +1291,7 @@ pub async fn submit_bond<U: WalletUtils>(
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&args.native_token, bond_source);
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
             if balance < args.amount {
@@ -1323,7 +1323,7 @@ pub async fn submit_bond<U: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<U>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -1333,8 +1333,8 @@ pub async fn submit_bond<U: WalletUtils>(
     .await;
 }
 
-pub async fn submit_unbond<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_unbond<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::Unbond,
 ) {
@@ -1362,7 +1362,7 @@ pub async fn submit_unbond<U: WalletUtils>(
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::bond_key(&bond_id);
-    let bonds = rpc::query_storage_value::<Bonds>(&client, &bond_key).await;
+    let bonds = rpc::query_storage_value::<C, Bonds>(&client, &bond_key).await;
     match bonds {
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
@@ -1400,7 +1400,7 @@ pub async fn submit_unbond<U: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<U>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -1410,8 +1410,8 @@ pub async fn submit_unbond<U: WalletUtils>(
     .await;
 }
 
-pub async fn submit_withdraw<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_withdraw<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::Withdraw,
 ) {
@@ -1442,7 +1442,7 @@ pub async fn submit_withdraw<U: WalletUtils>(
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
-    let unbonds = rpc::query_storage_value::<Unbonds>(&client, &bond_key).await;
+    let unbonds = rpc::query_storage_value::<C, Unbonds>(&client, &bond_key).await;
     match unbonds {
         Some(unbonds) => {
             let mut unbonded_amount: token::Amount = 0.into();
@@ -1475,7 +1475,7 @@ pub async fn submit_withdraw<U: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<U>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -1485,8 +1485,8 @@ pub async fn submit_withdraw<U: WalletUtils>(
     .await;
 }
 
-pub async fn submit_validator_commission_change<U: WalletUtils>(
-    client: &HttpClient,
+pub async fn submit_validator_commission_change<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: args::TxCommissionRateChange,
 ) {
@@ -1508,12 +1508,12 @@ pub async fn submit_validator_commission_change<U: WalletUtils>(
             ledger::pos::validator_commission_rate_key(&validator);
         let max_commission_rate_change_key =
             ledger::pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = rpc::query_storage_value::<CommissionRates>(
+        let commission_rates = rpc::query_storage_value::<C, CommissionRates>(
             &client,
             &commission_rate_key,
         )
         .await;
-        let max_change = rpc::query_storage_value::<Decimal>(
+        let max_change = rpc::query_storage_value::<C, Decimal>(
             &client,
             &max_commission_rate_change_key,
         )
@@ -1556,7 +1556,7 @@ pub async fn submit_validator_commission_change<U: WalletUtils>(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator.clone();
-    process_tx::<U>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -1568,14 +1568,14 @@ pub async fn submit_validator_commission_change<U: WalletUtils>(
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx<U: WalletUtils>(
-    client: &HttpClient,
+async fn process_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+    client: &C,
     wallet: &mut Wallet<PathBuf>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
 ) -> Vec<Address> {
-    let to_broadcast = sign_tx::<U>(client, wallet, tx, args, default_signer).await;
+    let to_broadcast = sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -1684,8 +1684,8 @@ async fn save_initialized_accounts<U: WalletUtils>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx(
-    rpc_cli: &HttpClient,
+pub async fn broadcast_tx<C: Client + Sync>(
+    rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, RpcError> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
@@ -1729,8 +1729,8 @@ pub async fn broadcast_tx(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx(
-    client: &HttpClient,
+pub async fn submit_tx<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, RpcError> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
