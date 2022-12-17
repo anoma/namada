@@ -16,6 +16,7 @@ use namada_apps::wallet::DecryptionError;
 use rand_core::OsRng;
 use namada_apps::wallet::CliWalletUtils;
 use namada::ledger::wallet::FindKeyError;
+use namada_apps::cli::args::CliToSdk;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::anoma_wallet_cli()?;

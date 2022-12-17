@@ -6,6 +6,7 @@ use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
 use tendermint_rpc::{HttpClient, WebSocketClient, SubscriptionClient};
 use namada_apps::wallet::CliWalletUtils;
+use namada_apps::cli::args::CliToSdk;
 
 pub async fn main() -> Result<()> {
     match cli::anoma_client_cli()? {
