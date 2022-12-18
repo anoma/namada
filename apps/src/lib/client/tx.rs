@@ -1506,51 +1506,7 @@ async fn save_initialized_accounts<U: WalletUtils, P>(
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
 ) {
-    let len = initialized_accounts.len();
-    if len != 0 {
-        // Store newly initialized account addresses in the wallet
-        println!(
-            "The transaction initialized {} new account{}",
-            len,
-            if len == 1 { "" } else { "s" }
-        );
-        // Store newly initialized account addresses in the wallet
-        for (ix, address) in initialized_accounts.iter().enumerate() {
-            let encoded = address.encode();
-            let alias: Cow<str> = match &args.initialized_account_alias {
-                Some(initialized_account_alias) => {
-                    if len == 1 {
-                        // If there's only one account, use the
-                        // alias as is
-                        initialized_account_alias.into()
-                    } else {
-                        // If there're multiple accounts, use
-                        // the alias as prefix, followed by
-                        // index number
-                        format!("{}{}", initialized_account_alias, ix).into()
-                    }
-                }
-                None => {
-                    print!("Choose an alias for {}: ", encoded);
-                    io::stdout().flush().await.unwrap();
-                    let mut alias = String::new();
-                    io::stdin().read_line(&mut alias).await.unwrap();
-                    alias.trim().to_owned().into()
-                }
-            };
-            let alias = alias.into_owned();
-            let added = wallet.add_address::<U>(alias.clone(), address.clone());
-            match added {
-                Some(new_alias) if new_alias != encoded => {
-                    println!(
-                        "Added alias {} for address {}.",
-                        new_alias, encoded
-                    );
-                }
-                _ => println!("No alias added for address {}.", encoded),
-            };
-        }
-    }
+    namada::ledger::tx::save_initialized_accounts::<U, P>(wallet, args, initialized_accounts).await
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that

@@ -89,6 +89,15 @@ impl WalletUtils for CliWalletUtils {
         pwd
     }
 
+    /// Read an alias from the file/env/stdin.
+    fn read_alias(prompt_msg: &str) -> String {
+        print!("Choose an alias for {}: ", prompt_msg);
+        io::stdout().flush().unwrap();
+        let mut alias = String::new();
+        io::stdin().read_line(&mut alias).unwrap();
+        alias.trim().to_owned()
+    }
+
     /// The given alias has been selected but conflicts with another alias in
     /// the store. Offer the user to either replace existing mapping, alter the
     /// chosen alias to a name of their chosing, or cancel the aliasing.
