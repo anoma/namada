@@ -51,4 +51,4 @@
 - Make sure you are using the correct tendermint version
     - `tendermint version` should output `0.1.4-abciplus`
 - Make sure you are using the correct Namada version
-    - `namada --version` should output `Namada v0.11.0`
+    - `namada --version` should output `Namada v0.12.0`
