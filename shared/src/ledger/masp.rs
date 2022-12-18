@@ -71,6 +71,7 @@ use namada_core::types::transaction::AffineCurve;
 use tendermint_rpc::Client;
 use crate::types::masp::ExtendedViewingKey;
 use itertools::Either;
+use crate::ledger::rpc;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -260,18 +261,7 @@ pub fn get_params_dir() -> PathBuf {
 #[async_trait]
 pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + Clone {
     /// The type of the Tendermint client to make queries with
-    type C: tendermint_rpc::Client + std::marker::Sync;
-
-    /// Query the storage value at the given key
-    async fn query_storage_value<T: Send>(
-        client: &Self::C,
-        key: &storage::Key,
-    ) -> Option<T>
-    where
-        T: BorshDeserialize;
-
-    /// Query the current epoch
-    async fn query_epoch(client: &Self::C) -> Epoch;
+    type C: crate::ledger::queries::Client + tendermint_rpc::Client + std::marker::Sync;
 
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -281,20 +271,6 @@ pub trait ShieldedUtils : Sized + BorshDeserialize + BorshSerialize + Default + 
 
     /// Sace the given ShieldedContext for future loads
     fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
-
-    /// Query the designated conversion for the given AssetType
-    async fn query_conversion(
-        client: &Self::C,
-        asset_type: AssetType,
-    ) -> Option<(
-        Address,
-        Epoch,
-        masp_primitives::transaction::components::Amount,
-        MerklePath<Node>,
-    )>;
-
-    /// Query for all the accepted transactions that have occured to date
-    async fn query_results(client: &Self::C) -> Vec<BlockResults>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -539,7 +515,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         // Query for the index of the last accepted transaction
-        let head_txidx = U::query_storage_value::<u64>(client, &head_tx_key)
+        let head_txidx = rpc::query_storage_value::<U::C, u64>(client, &head_tx_key)
             .await
             .unwrap_or(0);
         let mut shielded_txs = BTreeMap::new();
@@ -551,7 +527,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .expect("Cannot obtain a storage key");
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx) =
-                U::query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+                rpc::query_storage_value::<U::C, (Epoch, BlockHeight, TxIndex, Transfer)>(
                     client,
                     &current_tx_key,
                 )
@@ -722,7 +698,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         }
         // Query for the ID of the last accepted transaction
         let (addr, ep, _conv, _path): (Address, _, Amount, MerklePath<Node>) =
-            U::query_conversion(client, asset_type).await?;
+            rpc::query_conversion(client, asset_type).await?;
         self.asset_types.insert(asset_type, (addr.clone(), ep));
         Some((addr, ep))
     }
@@ -740,7 +716,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             Entry::Vacant(conv_entry) => {
                 // Query for the ID of the last accepted transaction
                 let (addr, ep, conv, path): (Address, _, _, _) =
-                    U::query_conversion(client, asset_type).await?;
+                    rpc::query_conversion(client, asset_type).await?;
                 self.asset_types.insert(asset_type, (addr, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
@@ -993,7 +969,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
             .expect("Cannot obtain a storage key");
         // Obtain the transaction pointer at the key
-        let txidx = U::query_storage_value::<u64>(client, &pin_key)
+        let txidx = rpc::query_storage_value::<U::C, u64>(client, &pin_key)
             .await
             .ok_or(PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
@@ -1002,7 +978,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .expect("Cannot obtain a storage key");
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, tx) =
-            U::query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
+            rpc::query_storage_value::<U::C, (Epoch, BlockHeight, TxIndex, Transfer)>(
                 client,
                 &tx_key,
             )
@@ -1143,7 +1119,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save();
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = U::query_epoch(client).await;
+        let epoch = rpc::query_epoch(client).await;
         // Context required for storing which notes are in the source's possesion
         let consensus_branch_id = BranchId::Sapling;
         let amt: u64 = args_amount.into();
@@ -1250,7 +1226,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let mut tx = builder.build(consensus_branch_id, &prover);
 
         if epoch_sensitive {
-            let new_epoch = U::query_epoch(client).await;
+            let new_epoch = rpc::query_epoch(client).await;
 
             // If epoch has changed, recalculate shielded outputs to match new epoch
             if new_epoch != epoch {
@@ -1327,7 +1303,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let _ = self.save();
         // Required for filtering out rejected transactions from Tendermint
         // responses
-        let block_results = U::query_results(client).await;
+        let block_results = rpc::query_results(client).await;
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
         let relevant_addrs = match &query_owner {

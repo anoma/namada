@@ -325,21 +325,8 @@ impl Default for CLIShieldedUtils {
     }
 }
 
-#[async_trait]
 impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = HttpClient;
-    
-    async fn query_storage_value<T: Send>(
-        client: &Self::C,
-        key: &storage::Key,
-    ) -> Option<T>
-    where T: BorshDeserialize {
-        query_storage_value::<Self::C, T>(client, &key).await
-    }
-
-    async fn query_epoch(client: &Self::C) -> Epoch {
-        rpc::query_epoch(client).await
-    }
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
@@ -396,23 +383,6 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
         // contexts.
         std::fs::remove_file(tmp_path)?;
         Ok(())
-    }
-
-    /// Query a conversion.
-    async fn query_conversion(
-        client: &Self::C,
-        asset_type: AssetType,
-    ) -> Option<(
-        Address,
-        Epoch,
-        masp_primitives::transaction::components::Amount,
-        MerklePath<Node>,
-    )> {
-        query_conversion(client, asset_type).await
-    }
-
-    async fn query_results(client: &Self::C) -> Vec<BlockResults> {
-        rpc::query_results(client).await
     }
 }
 
