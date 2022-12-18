@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use super::rpc;
 use crate::cli::{self, args};
-use crate::client::tendermint_rpc_types::TxBroadcastData;
+use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::wallet::Wallet;
 use namada::ledger::wallet::WalletUtils;
 use crate::facade::tendermint_rpc::Client;

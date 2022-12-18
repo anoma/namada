@@ -54,7 +54,7 @@ use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
-use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
+use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -1760,7 +1760,7 @@ pub async fn submit_tx<C: Client + namada::ledger::queries::Client + Sync>(
     );
 
     let parsed = {
-        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let wrapper_query = namada::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event =
             rpc::query_tx_status(client, wrapper_query, deadline)
                 .await;
@@ -1776,7 +1776,7 @@ pub async fn submit_tx<C: Client + namada::ledger::queries::Client + Sync>(
             // We also listen to the event emitted when the encrypted
             // payload makes its way onto the blockchain
             let decrypted_query =
-                rpc::TxEventQuery::Applied(decrypted_hash.as_str());
+                namada::ledger::rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event =
                 rpc::query_tx_status(client, decrypted_query, deadline).await;
             let parsed = TxResponse::from_event(event);
