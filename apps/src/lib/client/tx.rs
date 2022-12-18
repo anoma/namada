@@ -53,7 +53,8 @@ use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
-use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::client::signing::{find_keypair, sign_tx, tx_signer};
+use namada::ledger::signing::TxSigningKey;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -1082,15 +1083,7 @@ pub async fn submit_reveal_pk<C: Client + namada::ledger::queries::Client + Sync
     wallet: &mut Wallet<P>,
     args: args::RevealPk,
 ) {
-    let args::RevealPk {
-        tx: args,
-        public_key,
-    } = args;
-    let public_key = public_key;
-    if !reveal_pk_if_needed::<C, U, P>(client, wallet, &public_key, &args).await {
-        let addr: Address = (&public_key).into();
-        println!("PK for {addr} is already revealed, nothing to do.");
-    }
+    namada::ledger::tx::submit_reveal_pk::<C, U, P>(client, wallet, args).await;
 }
 
 pub async fn reveal_pk_if_needed<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
@@ -1099,23 +1092,14 @@ pub async fn reveal_pk_if_needed<C: Client + namada::ledger::queries::Client + S
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> bool {
-    let addr: Address = public_key.into();
-    // Check if PK revealed
-    if args.force || !has_revealed_pk(client, &addr).await
-    {
-        // If not, submit it
-        submit_reveal_pk_aux::<C, U, P>(client, wallet, public_key, args).await;
-        true
-    } else {
-        false
-    }
+    namada::ledger::tx::reveal_pk_if_needed::<C, U, P>(client, wallet, public_key, args).await
 }
 
 pub async fn has_revealed_pk<C: Client + namada::ledger::queries::Client + Sync>(
     client: &C,
     addr: &Address,
 ) -> bool {
-    rpc::get_public_key(client, addr).await.is_some()
+    namada::ledger::tx::has_revealed_pk(client, addr).await
 }
 
 pub async fn submit_reveal_pk_aux<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
@@ -1124,69 +1108,7 @@ pub async fn submit_reveal_pk_aux<C: Client + namada::ledger::queries::Client + 
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) {
-    let addr: Address = public_key.into();
-    println!("Submitting a tx to reveal the public key for address {addr}...");
-    let tx_data = public_key
-        .try_to_vec()
-        .expect("Encoding a public key shouldn't fail");
-    let tx_code = args.tx_code_path.clone();
-    let tx = Tx::new(tx_code, Some(tx_data));
-
-    // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_key {
-        signing_key.clone()
-    } else if let Some(signer) = args.signer.as_ref() {
-        let signer = signer;
-        find_keypair::<C, U, P>(client, wallet, &signer)
-            .await
-    } else {
-        find_keypair::<C, U, P>(client, wallet, &addr).await
-    };
-    let epoch = rpc::query_epoch(client)
-    .await;
-    let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
-    } else {
-        super::signing::sign_wrapper(args, epoch, tx, &keypair).await
-    };
-
-    if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
-        }
-    } else {
-        // Either broadcast or submit transaction and collect result into
-        // sum type
-        let result = if args.broadcast_only {
-            Left(broadcast_tx(client, &to_broadcast).await)
-        } else {
-            Right(submit_tx(client, to_broadcast).await)
-        };
-        // Return result based on executed operation, otherwise deal with
-        // the encountered errors uniformly
-        match result {
-            Right(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-            Left(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-            _ => {}
-        }
-    }
+    namada::ledger::tx::submit_reveal_pk_aux::<C, U, P>(client, wallet, public_key, args);
 }
 
 /// Check if current epoch is in the last third of the voting period of the
@@ -1575,56 +1497,7 @@ async fn process_tx<C: Client + namada::ledger::queries::Client + Sync, U: Walle
     tx: Tx,
     default_signer: TxSigningKey,
 ) -> Vec<Address> {
-    let to_broadcast = sign_tx::<C, U, P>(client, wallet, tx, args, default_signer).await;
-    // NOTE: use this to print the request JSON body:
-
-    // let request =
-    // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
-    //     tx_bytes.clone().into(),
-    // );
-    // use tendermint_rpc::Request;
-    // let request_body = request.into_json();
-    // println!("HTTP request body: {}", request_body);
-
-    if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
-            vec![]
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
-        }
-    } else {
-        // Either broadcast or submit transaction and collect result into
-        // sum type
-        let result = if args.broadcast_only {
-            Left(broadcast_tx(client, &to_broadcast).await)
-        } else {
-            Right(submit_tx(client, to_broadcast).await)
-        };
-        // Return result based on executed operation, otherwise deal with
-        // the encountered errors uniformly
-        match result {
-            Right(Ok(result)) => result.initialized_accounts,
-            Left(Ok(_)) => Vec::default(),
-            Right(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-            Left(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-        }
-    }
+    namada::ledger::tx::process_tx::<C, U, P>(client, wallet, args, tx, default_signer).await
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
@@ -1688,37 +1561,7 @@ pub async fn broadcast_tx<C: Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, RpcError> {
-    let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
-        TxBroadcastData::Wrapper {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => (tx, wrapper_hash, decrypted_hash),
-        _ => panic!("Cannot broadcast a dry-run transaction"),
-    };
-
-    tracing::debug!(
-        transaction = ?to_broadcast,
-        "Broadcasting transaction",
-    );
-
-    // TODO: configure an explicit timeout value? we need to hack away at
-    // `tendermint-rs` for this, which is currently using a hard-coded 30s
-    // timeout.
-    let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
-
-    if response.code == 0.into() {
-        println!("Transaction added to mempool: {:?}", response);
-        // Print the transaction identifiers to enable the extraction of
-        // acceptance/application results later
-        {
-            println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
-        }
-        Ok(response)
-    } else {
-        Err(RpcError::server(serde_json::to_string(&response).unwrap()))
-    }
+    namada::ledger::tx::broadcast_tx(rpc_cli, to_broadcast).await
 }
 
 /// Broadcast a transaction to be included in the blockchain.
@@ -1733,67 +1576,5 @@ pub async fn submit_tx<C: Client + namada::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, RpcError> {
-    let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
-        TxBroadcastData::Wrapper {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => (tx, wrapper_hash, decrypted_hash),
-        _ => panic!("Cannot broadcast a dry-run transaction"),
-    };
-
-    // Broadcast the supplied transaction
-    broadcast_tx(client, &to_broadcast).await?;
-
-    let max_wait_time = Duration::from_secs(
-        env::var(ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS)
-            .ok()
-            .and_then(|val| val.parse().ok())
-            .unwrap_or(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS),
-    );
-    let deadline = Instant::now() + max_wait_time;
-
-    tracing::debug!(
-        transaction = ?to_broadcast,
-        ?deadline,
-        "Awaiting transaction approval",
-    );
-
-    let parsed = {
-        let wrapper_query = namada::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event =
-            rpc::query_tx_status(client, wrapper_query, deadline)
-                .await;
-        let parsed = TxResponse::from_event(event);
-
-        println!(
-            "Transaction accepted with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
-        // The transaction is now on chain. We wait for it to be decrypted
-        // and applied
-        if parsed.code == 0.to_string() {
-            // We also listen to the event emitted when the encrypted
-            // payload makes its way onto the blockchain
-            let decrypted_query =
-                namada::ledger::rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event =
-                rpc::query_tx_status(client, decrypted_query, deadline).await;
-            let parsed = TxResponse::from_event(event);
-            println!(
-                "Transaction applied with result: {}",
-                serde_json::to_string_pretty(&parsed).unwrap()
-            );
-            Ok(parsed)
-        } else {
-            Ok(parsed)
-        }
-    };
-
-    tracing::debug!(
-        transaction = ?to_broadcast,
-        "Transaction approved",
-    );
-
-    parsed
+    namada::ledger::tx::submit_tx(client, to_broadcast).await
 }
