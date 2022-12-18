@@ -61,6 +61,7 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, WebSocketClient,
 };
+use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
 ///
@@ -94,7 +95,7 @@ pub async fn query_results<C: Client + namada::ledger::queries::Client + Sync>(c
 /// Query the specified accepted transfers from the ledger
 pub async fn query_transfers<C: Client, U: ShieldedUtils<C = C>>(
     client: &C,
-    wallet: &mut Wallet<std::path::PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryTransfers
 ) {
@@ -231,7 +232,7 @@ pub async fn query_raw_bytes<C: Client + namada::ledger::queries::Client + Sync>
 /// Query token balance(s)
 pub async fn query_balance<C: Client + namada::ledger::queries::Client + Sync, U: ShieldedUtils<C = C>>(
     client: &C,
-    wallet: &mut Wallet<std::path::PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -261,7 +262,7 @@ pub async fn query_balance<C: Client + namada::ledger::queries::Client + Sync, U
 /// Query token balance(s)
 pub async fn query_transparent_balance<C: Client + namada::ledger::queries::Client + Sync>(
     client: &C,
-    wallet: &mut Wallet<std::path::PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBalance,
 ) {
     let tokens = address::tokens();
@@ -338,7 +339,7 @@ pub async fn query_transparent_balance<C: Client + namada::ledger::queries::Clie
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
     client: &C,
-    wallet: &mut Wallet<std::path::PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -471,7 +472,7 @@ pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
 }
 
 fn print_balances(
-    wallet: &Wallet<std::path::PathBuf>,
+    wallet: &Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: &Address,
     target: Option<&Address>,
@@ -663,7 +664,7 @@ pub fn value_by_address(
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client + Sync, U: ShieldedUtils<C = C>>(
     client: &C,
-    wallet: &mut Wallet<std::path::PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
@@ -2263,7 +2264,7 @@ pub async fn get_governance_parameters<C: Client + namada::ledger::queries::Clie
 
 /// Try to find an alias for a given address from the wallet. If not found,
 /// formats the address into a string.
-fn lookup_alias(wallet: &Wallet<std::path::PathBuf>, addr: &Address) -> String {
+fn lookup_alias(wallet: &Wallet<CliWalletUtils>, addr: &Address) -> String {
     match wallet.find_alias(addr) {
         Some(alias) => format!("{}", alias),
         None => format!("{}", addr),

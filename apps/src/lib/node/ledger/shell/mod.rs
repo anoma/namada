@@ -654,7 +654,7 @@ where
             let pk = common::SecretKey::deserialize(&mut pk_bytes.as_slice())
                 .expect("Validator's public key should be deserializable")
                 .ref_to();
-            wallet.find_key_by_pk::<CliWalletUtils>(&pk).expect(
+            wallet.find_key_by_pk(&pk).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
             )

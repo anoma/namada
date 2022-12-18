@@ -20,9 +20,12 @@ use namada::ledger::wallet::{WalletUtils, Alias};
 use std::io::{self, Write};
 use namada::ledger::wallet::FindKeyError;
 
+#[derive(Debug)]
 pub struct CliWalletUtils;
 
 impl WalletUtils for CliWalletUtils {
+    type Storage = PathBuf;
+    
     /// Prompt for pssword and confirm it if parameter is false
     fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String> {
         let password = if unsafe_dont_encrypt {
@@ -150,12 +153,12 @@ impl WalletUtils for CliWalletUtils {
 /// A protocol keypair may be optionally provided, indicating that
 /// we should re-use a keypair already in the wallet
 pub fn gen_validator_keys(
-    wallet: &mut Wallet<PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     protocol_pk: Option<common::PublicKey>,
     scheme: SchemeType,
 ) -> Result<ValidatorKeys, FindKeyError> {
     let protocol_keypair = protocol_pk.map(|pk| {
-        wallet.find_key_by_pkh::<CliWalletUtils>(&PublicKeyHash::from(&pk))
+        wallet.find_key_by_pkh(&PublicKeyHash::from(&pk))
             .ok()
             .or_else(|| {
                 wallet.store_mut()
@@ -175,34 +178,34 @@ pub fn gen_validator_keys(
 }
 
 /// Add addresses from a genesis configuration.
-pub fn add_genesis_addresses(wallet: &mut Wallet<PathBuf>, genesis: GenesisConfig) {
+pub fn add_genesis_addresses(wallet: &mut Wallet<CliWalletUtils>, genesis: GenesisConfig) {
     for (alias, addr) in defaults::addresses_from_genesis(genesis) {
-        wallet.add_address::<CliWalletUtils>(alias.normalize(), addr);
+        wallet.add_address(alias.normalize(), addr);
     }
 }
 
 /// Save the wallet store to a file.
-pub fn save(wallet: &Wallet<PathBuf>) -> std::io::Result<()> {
+pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
     self::store::save(&wallet.store(), &wallet.store_dir())
 }
 
 /// Load a wallet from the store file.
-pub fn load(store_dir: &Path) -> Option<Wallet<PathBuf>> {
+pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
     let store = self::store::load(store_dir).unwrap_or_else(|err| {
         eprintln!("Unable to load the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Some(Wallet::<PathBuf>::new(store_dir.to_path_buf(), store))
+    Some(Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store))
 }
 
 /// Load a wallet from the store file or create a new wallet without any
 /// keys or addresses.
-pub fn load_or_new(store_dir: &Path) -> Wallet<PathBuf> {
+pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
     let store = self::store::load_or_new(store_dir).unwrap_or_else(|err| {
         eprintln!("Unable to load the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Wallet::<PathBuf>::new(store_dir.to_path_buf(), store)
+    Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
 
 /// Load a wallet from the store file or create a new one with the default
@@ -210,11 +213,12 @@ pub fn load_or_new(store_dir: &Path) -> Wallet<PathBuf> {
 pub fn load_or_new_from_genesis(
     store_dir: &Path,
     genesis_cfg: GenesisConfig,
-) -> Wallet<PathBuf> {
+) -> Wallet<CliWalletUtils> {
     let store = self::store::load_or_new_from_genesis(store_dir, genesis_cfg)
         .unwrap_or_else(|err| {
             eprintln!("Unable to load the wallet: {}", err);
             cli::safe_exit(1)
         });
-    Wallet::<PathBuf>::new(store_dir.to_path_buf(), store)
+    Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
+

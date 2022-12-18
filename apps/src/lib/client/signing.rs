@@ -20,25 +20,25 @@ use namada::ledger::signing::TxSigningKey;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn find_keypair<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     addr: &Address,
 ) -> common::SecretKey {
-    namada::ledger::signing::find_keypair::<C, U, P>(client, wallet, addr).await
+    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr).await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     mut default: TxSigningKey,
 ) -> common::SecretKey {
-    namada::ledger::signing::tx_signer::<C, U, P>(client, wallet, args, default).await
+    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default).await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -49,14 +49,14 @@ pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: Wa
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn sign_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> TxBroadcastData {
-    namada::ledger::signing::sign_tx::<C, U, P>(client, wallet, tx, args, default).await
+    namada::ledger::signing::sign_tx::<C, U>(client, wallet, tx, args, default).await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -70,3 +70,4 @@ pub async fn sign_wrapper(
 ) -> TxBroadcastData {
     namada::ledger::signing::sign_wrapper(args, epoch, tx, keypair).await
 }
+
