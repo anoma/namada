@@ -19,9 +19,9 @@ use crate::facade::tendermint_rpc::Client;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_keypair<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn find_keypair<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
     client: &C,
-    wallet: &mut Wallet<PathBuf>,
+    wallet: &mut Wallet<P>,
     addr: &Address,
 ) -> common::SecretKey {
     match addr {
@@ -87,9 +87,9 @@ pub enum TxSigningKey {
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
     client: &C,
-    wallet: &mut Wallet<PathBuf>,
+    wallet: &mut Wallet<P>,
     args: &args::Tx,
     mut default: TxSigningKey,
 ) -> common::SecretKey {
@@ -106,7 +106,7 @@ pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: Wa
         }
         TxSigningKey::WalletAddress(signer) => {
             let signer = signer;
-            let signing_key = find_keypair::<C, U>(
+            let signing_key = find_keypair::<C, U, P>(
                 client,
                 wallet,
                 &signer,
@@ -116,14 +116,14 @@ pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: Wa
             // PK first
             if matches!(signer, Address::Implicit(_)) {
                 let pk: common::PublicKey = signing_key.ref_to();
-                super::tx::reveal_pk_if_needed::<C, U>(client, wallet, &pk, args).await;
+                super::tx::reveal_pk_if_needed::<C, U, P>(client, wallet, &pk, args).await;
             }
             signing_key
         }
         TxSigningKey::SecretKey(signing_key) => {
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
-            super::tx::reveal_pk_if_needed::<C, U>(client, wallet, &pk, args).await;
+            super::tx::reveal_pk_if_needed::<C, U, P>(client, wallet, &pk, args).await;
             signing_key
         }
         TxSigningKey::None => {
@@ -143,14 +143,14 @@ pub async fn tx_signer<C: Client + namada::ledger::queries::Client + Sync, U: Wa
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn sign_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
     client: &C,
-    wallet: &mut Wallet<PathBuf>,
+    wallet: &mut Wallet<P>,
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> TxBroadcastData {
-    let keypair = tx_signer::<C, U>(client, wallet, args, default).await;
+    let keypair = tx_signer::<C, U, P>(client, wallet, args, default).await;
     let tx = tx.sign(&keypair);
 
     let epoch = rpc::query_epoch(client)
