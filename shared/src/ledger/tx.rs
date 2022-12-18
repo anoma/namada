@@ -39,6 +39,7 @@ use namada_core::types::address::masp_tx_key;
 use crate::ledger::signing::tx_signer;
 use masp_primitives::transaction::builder;
 use crate::types::masp::TransferTarget;
+use crate::vm;
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -1067,4 +1068,116 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
     process_tx::<C, V, P>(client, wallet, &args.tx, tx, signing_address).await;
+}
+
+pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::TxInitAccount,
+) {
+    let public_key = args.public_key;
+    let vp_code = args.vp_code_path;
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        if args.tx.force {
+            eprintln!("Validity predicate code validation failed with {}", err);
+        } else {
+            panic!("Validity predicate code validation failed with {}", err);
+        }
+    }
+
+    let tx_code = args.tx_code_path;
+    let data = InitAccount {
+        public_key,
+        vp_code,
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let initialized_accounts =
+        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+            .await;
+    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
+}
+
+pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::TxUpdateVp,
+) {
+    let addr = args.addr.clone();
+
+    // Check that the address is established and exists on chain
+    match &addr {
+        Address::Established(_) => {
+            let exists =
+                rpc::known_address::<C>(client, &addr).await;
+            if !exists {
+                if args.tx.force {
+                    eprintln!("The address {} doesn't exist on chain.", addr);
+                } else {
+                    panic!("The address {} doesn't exist on chain.", addr);
+                }
+            }
+        }
+        Address::Implicit(_) => {
+            if args.tx.force {
+                eprintln!(
+                    "A validity predicate of an implicit address cannot be \
+                     directly updated. You can use an established address for \
+                     this purpose."
+                );
+            } else {
+                panic!(
+                    "A validity predicate of an implicit address cannot be \
+                     directly updated. You can use an established address for \
+                     this purpose."
+                );
+            }
+        }
+        Address::Internal(_) => {
+            if args.tx.force {
+                eprintln!(
+                    "A validity predicate of an internal address cannot be \
+                     directly updated."
+                );
+            } else {
+                panic!(
+                    "A validity predicate of an internal address cannot be \
+                     directly updated."
+                );
+            }
+        }
+    }
+
+    let vp_code = args.vp_code_path;
+    // Validate the VP code
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        if args.tx.force {
+            eprintln!("Validity predicate code validation failed with {}", err);
+        } else {
+            panic!("Validity predicate code validation failed with {}", err);
+        }
+    }
+
+    let tx_code = args.tx_code_path;
+
+    let data = UpdateVp { addr, vp_code };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+}
+
+pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::TxCustom,
+) {
+    let tx_code = args.code_path;
+    let data = args.data_path;
+    let tx = Tx::new(tx_code, data);
+    let initialized_accounts =
+        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
+    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
 }

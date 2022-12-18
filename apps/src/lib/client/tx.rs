@@ -63,26 +63,12 @@ use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 use namada::ledger::wallet::Wallet;
 
-/// Timeout for requests to the `/accepted` and `/applied`
-/// ABCI query endpoints.
-const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
-    "ANOMA_EVENTS_MAX_WAIT_TIME_SECONDS";
-
-/// Default timeout in seconds for requests to the `/accepted`
-/// and `/applied` ABCI query endpoints.
-const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
-
 pub async fn submit_custom<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
     client: &C,
     wallet: &mut Wallet<P>,
     args: args::TxCustom,
 ) {
-    let tx_code = args.code_path;
-    let data = args.data_path;
-    let tx = Tx::new(tx_code, data);
-    let initialized_accounts =
-        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
-    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
+    namada::ledger::tx::submit_custom::<C, U, P>(client, wallet, args).await;
 }
 
 pub async fn submit_update_vp<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
@@ -90,57 +76,7 @@ pub async fn submit_update_vp<C: Client + namada::ledger::queries::Client + Sync
     wallet: &mut Wallet<P>,
     args: args::TxUpdateVp,
 ) {
-    let addr = args.addr.clone();
-
-    // Check that the address is established and exists on chain
-    match &addr {
-        Address::Established(_) => {
-            let exists =
-                rpc::known_address::<C>(client, &addr).await;
-            if !exists {
-                eprintln!("The address {} doesn't exist on chain.", addr);
-                if !args.tx.force {
-                    safe_exit(1)
-                }
-            }
-        }
-        Address::Implicit(_) => {
-            eprintln!(
-                "A validity predicate of an implicit address cannot be \
-                 directly updated. You can use an established address for \
-                 this purpose."
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-        Address::Internal(_) => {
-            eprintln!(
-                "A validity predicate of an internal address cannot be \
-                 directly updated."
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-    }
-
-    let vp_code = args.vp_code_path;
-    // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        eprintln!("Validity predicate code validation failed with {}", err);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
-
-    let tx_code = args.tx_code_path;
-
-    let data = UpdateVp { addr, vp_code };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
-    let tx = Tx::new(tx_code, Some(data));
-    process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    namada::ledger::tx::submit_update_vp::<C, U, P>(client, wallet, args).await;
 }
 
 pub async fn submit_init_account<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils, P>(
@@ -148,28 +84,7 @@ pub async fn submit_init_account<C: Client + namada::ledger::queries::Client + S
     wallet: &mut Wallet<P>,
     args: args::TxInitAccount,
 ) {
-    let public_key = args.public_key;
-    let vp_code = args.vp_code_path;
-    // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        eprintln!("Validity predicate code validation failed with {}", err);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
-
-    let tx_code = args.tx_code_path;
-    let data = InitAccount {
-        public_key,
-        vp_code,
-    };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
-    let tx = Tx::new(tx_code, Some(data));
-    let initialized_accounts =
-        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-            .await;
-    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
+    namada::ledger::tx::submit_init_account::<C, U, P>(client, wallet, args).await;
 }
 
 pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
