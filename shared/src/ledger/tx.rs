@@ -20,6 +20,25 @@ use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use crate::ledger;
 use crate::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use crate::types::{storage, token};
+use crate::types::storage::Epoch;
+use crate::ledger::governance::storage as gov_storage;
+use crate::ibc::signer::Signer;
+use crate::ibc::timestamp::Timestamp as IbcTimestamp;
+use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use crate::types::time::DateTimeUtc;
+use crate::ibc_proto::cosmos::base::v1beta1::Coin;
+use crate::types::storage::{
+    BlockResults, RESERVED_ADDRESS_PREFIX,
+};
+use crate::ibc::Height as IbcHeight;
+use crate::ibc::tx_msg::Msg;
+use crate::ledger::masp::ShieldedUtils;
+use crate::ledger::masp::ShieldedContext;
+use namada_core::types::address::masp;
+use namada_core::types::address::masp_tx_key;
+use crate::ledger::signing::tx_signer;
+use masp_primitives::transaction::builder;
+use crate::types::masp::TransferTarget;
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -706,4 +725,346 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
         TxSigningKey::WalletAddress(default_signer),
     )
     .await;
+}
+
+/// Check if current epoch is in the last third of the voting period of the
+/// proposal. This ensures that it is safe to optimize the vote writing to
+/// storage.
+pub async fn is_safe_voting_window<C: Client + crate::ledger::queries::Client + Sync>(
+    client: &C,
+    proposal_id: u64,
+    proposal_start_epoch: Epoch,
+) -> bool {
+    let current_epoch = rpc::query_epoch(client).await;
+
+    let proposal_end_epoch_key =
+        gov_storage::get_voting_end_epoch_key(proposal_id);
+    let proposal_end_epoch =
+        rpc::query_storage_value::<C, Epoch>(client, &proposal_end_epoch_key)
+            .await;
+
+    match proposal_end_epoch {
+        Some(proposal_end_epoch) => {
+            !crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
+                current_epoch,
+                proposal_start_epoch,
+                proposal_end_epoch,
+            )
+        }
+        None => {
+            panic!("Proposal end epoch is not in the storage.");
+        }
+    }
+}
+
+pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::TxIbcTransfer,
+) {
+    let source = args.source.clone();
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address::<C>(client, &source).await;
+    if !source_exists {
+        if args.tx.force {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+        } else {
+            panic!("The source address {} doesn't exist on chain.", source);
+        }
+    }
+
+    // We cannot check the receiver
+
+    let token = args.token;
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address::<C>(client, &token).await;
+    if !token_exists {
+        if args.tx.force {
+            eprintln!("The token address {} doesn't exist on chain.", token);
+        } else {
+            panic!("The token address {} doesn't exist on chain.", token);
+        }
+    }
+    // Check source balance
+    let (sub_prefix, balance_key) = match args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    {
+        Some(balance) => {
+            if balance < args.amount {
+                if args.tx.force {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower than \
+                         the amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                } else {
+                    panic!(
+                        "The balance of the source {} of token {} is lower than \
+                         the amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                }
+            }
+        }
+        None => { 
+            if args.tx.force {
+                eprintln!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
+            } else {
+                panic!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
+            }
+        }
+    }
+    let tx_code = args.tx_code_path;
+
+    let denom = match sub_prefix {
+        // To parse IbcToken address, remove the address prefix
+        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
+        None => token.to_string(),
+    };
+    let token = Some(Coin {
+        denom,
+        amount: args.amount.to_string(),
+    });
+
+    // this height should be that of the destination chain, not this chain
+    let timeout_height = match args.timeout_height {
+        Some(h) => IbcHeight::new(0, h),
+        None => IbcHeight::zero(),
+    };
+
+    let now: crate::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: IbcTimestamp = now.into();
+    let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
+        (now + Duration::new(offset, 0)).unwrap()
+    } else if timeout_height.is_zero() {
+        // we cannot set 0 to both the height and the timestamp
+        (now + Duration::new(3600, 0)).unwrap()
+    } else {
+        IbcTimestamp::none()
+    };
+
+    let msg = MsgTransfer {
+        source_port: args.port_id,
+        source_channel: args.channel_id,
+        token,
+        sender: Signer::new(source.to_string()),
+        receiver: Signer::new(args.receiver),
+        timeout_height,
+        timeout_timestamp,
+    };
+    tracing::debug!("IBC transfer message {:?}", msg);
+    let any_msg = msg.to_any();
+    let mut data = vec![];
+    prost::Message::encode(&any_msg, &mut data)
+        .expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+        .await;
+}
+
+pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    shielded: &mut ShieldedContext<U>,
+    args: args::TxTransfer,
+) {
+    let transfer_source = args.source;
+    let source = transfer_source.effective_address();
+    let transfer_target = args.target.clone();
+    let target = transfer_target.effective_address();
+    // Check that the source address exists on chain
+    let source_exists =
+        rpc::known_address::<C>(client, &source).await;
+    if !source_exists {
+        if args.tx.force {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+        } else {
+            panic!("The source address {} doesn't exist on chain.", source);
+        }
+    }
+    // Check that the target address exists on chain
+    let target_exists =
+        rpc::known_address::<C>(client, &target).await;
+    if !target_exists {
+        if args.tx.force {
+            eprintln!("The target address {} doesn't exist on chain.", target);
+        } else {
+            panic!("The target address {} doesn't exist on chain.", target);
+        }
+    }
+    let token = &args.token;
+    // Check that the token address exists on chain
+    let token_exists =
+        rpc::known_address::<C>(client, &token)
+            .await;
+    if !token_exists {
+        if args.tx.force {
+            eprintln!(
+                "The token address {} doesn't exist on chain.",
+                token
+            );
+        } else {
+            panic!(
+                "The token address {} doesn't exist on chain.",
+                token
+            );
+        }
+    }
+    // Check source balance
+    let (sub_prefix, balance_key) = match &args.sub_prefix {
+        Some(sub_prefix) => {
+            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
+            let prefix = token::multitoken_balance_prefix(
+                &token,
+                &sub_prefix,
+            );
+            (
+                Some(sub_prefix),
+                token::multitoken_balance_key(&prefix, &source),
+            )
+        }
+        None => (None, token::balance_key(&token, &source)),
+    };
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    {
+        Some(balance) => {
+            if balance < args.amount {
+                if args.tx.force {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower than \
+                         the amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                } else {
+                    panic!(
+                        "The balance of the source {} of token {} is lower than \
+                         the amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                }
+            }
+        }
+        None => {
+            if args.tx.force {
+                eprintln!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
+            } else {
+                panic!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
+            }
+        }
+    };
+
+    let tx_code = args.tx_code_path;
+    let masp_addr = masp();
+    // For MASP sources, use a special sentinel key recognized by VPs as default
+    // signer. Also, if the transaction is shielded, redact the amount and token
+    // types by setting the transparent value to 0 and token type to a constant.
+    // This has no side-effect because transaction is to self.
+    let (default_signer, amount, token) =
+        if source == masp_addr && target == masp_addr {
+            // TODO Refactor me, we shouldn't rely on any specific token here.
+            (
+                TxSigningKey::SecretKey(masp_tx_key()),
+                0.into(),
+                args.native_token.clone(),
+            )
+        } else if source == masp_addr {
+            (
+                TxSigningKey::SecretKey(masp_tx_key()),
+                args.amount,
+                token.clone(),
+            )
+        } else {
+            (
+                TxSigningKey::WalletAddress(source.clone()),
+                args.amount,
+                token.clone(),
+            )
+        };
+    // If our chosen signer is the MASP sentinel key, then our shielded inputs
+    // will need to cover the gas fees.
+    let chosen_signer = tx_signer::<C, V, P>(client, wallet, &args.tx, default_signer.clone())
+        .await
+        .ref_to();
+    let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
+    // Determine whether to pin this transaction to a storage key
+    let key = match &args.target {
+        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
+        _ => None,
+    };
+
+    let stx_result =
+        shielded.gen_shielded_transfer(
+            client,
+            transfer_source,
+            transfer_target,
+            args.amount,
+            args.token,
+            args.tx.fee_amount,
+            args.tx.fee_token.clone(),
+            shielded_gas,
+        )
+        .await;
+    let shielded = match stx_result {
+        Ok(stx) => stx.map(|x| x.0),
+        Err(builder::Error::ChangeIsNegative(_)) => {
+            panic!(
+                "The balance of the source {} is lower than the \
+                 amount to be transferred and fees. Amount to \
+                 transfer is {} {} and fees are {} {}.",
+                source,
+                args.amount,
+                token,
+                args.tx.fee_amount,
+                &args.tx.fee_token,
+            );
+        }
+        Err(err) => panic!("{}", err),
+    };
+
+    let transfer = token::Transfer {
+        source: source.clone(),
+        target,
+        token,
+        sub_prefix,
+        amount,
+        key,
+        shielded,
+    };
+    tracing::debug!("Transfer data {:?}", transfer);
+    let data = transfer
+        .try_to_vec()
+        .expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let signing_address = TxSigningKey::WalletAddress(source);
+    process_tx::<C, V, P>(client, wallet, &args.tx, tx, signing_address).await;
 }
