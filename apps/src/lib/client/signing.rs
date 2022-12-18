@@ -8,7 +8,7 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 use namada::ledger::queries;
-use tendermint_rpc::{Client,HttpClient};
+use tendermint_rpc::Client;
 use std::path::PathBuf;
 
 use super::rpc;

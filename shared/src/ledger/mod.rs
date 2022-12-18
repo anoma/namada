@@ -11,6 +11,7 @@ pub mod protocol;
 pub mod queries;
 pub mod storage;
 pub mod vp_host_fns;
+pub mod command;
 
 pub use namada_core::ledger::{
     gas, governance, parameters, storage_api, tx_env, vp_env,
