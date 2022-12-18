@@ -14,6 +14,7 @@ use crate::tendermint_rpc::error::Error as RpcError;
 use crate::ledger::rpc::TxResponse;
 use tokio::time::{Duration, Instant};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use std::borrow::Cow;
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -303,3 +304,51 @@ pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
     parsed
 }
 
+/// Save accounts initialized from a tx into the wallet, if any.
+pub async fn save_initialized_accounts<U: WalletUtils, P>(
+    wallet: &mut Wallet<P>,
+    args: &args::Tx,
+    initialized_accounts: Vec<Address>,
+) {
+    let len = initialized_accounts.len();
+    if len != 0 {
+        // Store newly initialized account addresses in the wallet
+        println!(
+            "The transaction initialized {} new account{}",
+            len,
+            if len == 1 { "" } else { "s" }
+        );
+        // Store newly initialized account addresses in the wallet
+        for (ix, address) in initialized_accounts.iter().enumerate() {
+            let encoded = address.encode();
+            let alias: Cow<str> = match &args.initialized_account_alias {
+                Some(initialized_account_alias) => {
+                    if len == 1 {
+                        // If there's only one account, use the
+                        // alias as is
+                        initialized_account_alias.into()
+                    } else {
+                        // If there're multiple accounts, use
+                        // the alias as prefix, followed by
+                        // index number
+                        format!("{}{}", initialized_account_alias, ix).into()
+                    }
+                }
+                None => {
+                    U::read_alias(&encoded).into()
+                }
+            };
+            let alias = alias.into_owned();
+            let added = wallet.add_address::<U>(alias.clone(), address.clone());
+            match added {
+                Some(new_alias) if new_alias != encoded => {
+                    println!(
+                        "Added alias {} for address {}.",
+                        new_alias, encoded
+                    );
+                }
+                _ => println!("No alias added for address {}.", encoded),
+            };
+        }
+    }
+}
