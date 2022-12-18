@@ -6,6 +6,6 @@ This section covers the minimum and recommended hardware requirements for engagi
 
 | Hardware | Minimal Specifications |
 | -------- | -------- |
-| CPU     | x86_64 or arm64 processor with at least 4 physical cores     |
-| RAM     | 16GB DDR4     |
-| Storage     | at least 60GB SSD (NVMe SSD is recommended. HDD will be enough for localnet only)    |
+| CPU     | x86_64 or arm64 processor with at least 4 physical cores  (must support AVX/SSE instruction set)   |
+| RAM     | 8GB DDR4     |
+| Storage     | at least 500GB SSD (NVMe SSD is recommended. HDD will also work.)    |
