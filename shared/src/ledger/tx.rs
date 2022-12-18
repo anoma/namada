@@ -15,6 +15,11 @@ use crate::ledger::rpc::TxResponse;
 use tokio::time::{Duration, Instant};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use std::borrow::Cow;
+use rust_decimal::Decimal;
+use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
+use crate::ledger;
+use crate::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use crate::types::{storage, token};
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -351,4 +356,354 @@ pub async fn save_initialized_accounts<U: WalletUtils, P>(
             };
         }
     }
+}
+
+pub async fn submit_validator_commission_change<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::TxCommissionRateChange,
+) {
+    let epoch = rpc::query_epoch(client)
+    .await;
+
+    let tx_code = args.tx_code_path;
+
+    let validator = args.validator.clone();
+    if rpc::is_validator(client, &validator).await {
+        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+            if args.tx.force {
+                eprintln!("Invalid new commission rate, received {}", args.rate);
+            } else {
+                panic!("Invalid new commission rate, received {}", args.rate);
+            }
+        }
+
+        let commission_rate_key =
+            ledger::pos::validator_commission_rate_key(&validator);
+        let max_commission_rate_change_key =
+            ledger::pos::validator_max_commission_rate_change_key(&validator);
+        let commission_rates = rpc::query_storage_value::<C, CommissionRates>(
+            &client,
+            &commission_rate_key,
+        )
+        .await;
+        let max_change = rpc::query_storage_value::<C, Decimal>(
+            &client,
+            &max_commission_rate_change_key,
+        )
+        .await;
+
+        match (commission_rates, max_change) {
+            (Some(rates), Some(max_change)) => {
+                // Assuming that pipeline length = 2
+                let rate_next_epoch = rates.get(epoch.next()).unwrap();
+                if (args.rate - rate_next_epoch).abs() > max_change {
+                    if args.tx.force {
+                        eprintln!(
+                            "New rate is too large of a change with respect to \
+                             the predecessor epoch in which the rate will take \
+                             effect."
+                        );
+                    } else {
+                        panic!(
+                            "New rate is too large of a change with respect to \
+                             the predecessor epoch in which the rate will take \
+                             effect."
+                        );
+                    }
+                }
+            }
+            _ => {
+                if args.tx.force {
+                    eprintln!("Error retrieving from storage");
+                } else {
+                    panic!("Error retrieving from storage");
+                }
+            }
+        }
+    } else {
+        if args.tx.force {
+            eprintln!("The given address {validator} is not a validator.");
+        } else {
+            panic!("The given address {validator} is not a validator.");
+        }
+    }
+
+    let data = pos::CommissionChange {
+        validator: args.validator.clone(),
+        new_rate: args.rate,
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.validator.clone();
+    process_tx::<C, U, P>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
+}
+
+pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::Withdraw,
+) {
+    let epoch = rpc::query_epoch(client)
+    .await;
+
+    let validator = args.validator.clone();
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(client, &validator).await;
+    if !is_validator {
+        if args.tx.force {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        } else {
+            panic!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        }
+    }
+
+    let source = args.source.clone();
+    let tx_code = args.tx_code_path;
+
+    // Check the source's current unbond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::unbond_key(&bond_id);
+    let unbonds = rpc::query_storage_value::<C, Unbonds>(&client, &bond_key).await;
+    match unbonds {
+        Some(unbonds) => {
+            let mut unbonded_amount: token::Amount = 0.into();
+            if let Some(unbond) = unbonds.get(epoch) {
+                for delta in unbond.deltas.values() {
+                    unbonded_amount += *delta;
+                }
+            }
+            if unbonded_amount == 0.into() {
+                if args.tx.force {
+                    eprintln!(
+                        "There are no unbonded bonds ready to withdraw in the \
+                         current epoch {}.",
+                        epoch
+                    );
+                } else {
+                    panic!(
+                        "There are no unbonded bonds ready to withdraw in the \
+                         current epoch {}.",
+                        epoch
+                    );
+                }
+            }
+        }
+        None => {
+            if args.tx.force {
+                eprintln!("No unbonded bonds found");
+            } else {
+                panic!("No unbonded bonds found");
+            }
+        }
+    }
+
+    let data = pos::Withdraw { validator, source };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx::<C, U, P>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
+}
+
+pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::Unbond,
+) {
+    let validator = args.validator.clone();
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(client, &validator).await;
+    if !is_validator {
+        if args.tx.force {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        } else {
+            panic!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        }
+    }
+
+    let source = args.source.clone();
+    let tx_code = args.tx_code_path;
+
+    // Check the source's current bond amount
+    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    let bond_id = BondId {
+        source: bond_source.clone(),
+        validator: validator.clone(),
+    };
+    let bond_key = ledger::pos::bond_key(&bond_id);
+    let bonds = rpc::query_storage_value::<C, Bonds>(&client, &bond_key).await;
+    match bonds {
+        Some(bonds) => {
+            let mut bond_amount: token::Amount = 0.into();
+            for bond in bonds.iter() {
+                for delta in bond.pos_deltas.values() {
+                    bond_amount += *delta;
+                }
+            }
+            if args.amount > bond_amount {
+                if args.tx.force {
+                    eprintln!(
+                        "The total bonds of the source {} is lower than the \
+                         amount to be unbonded. Amount to unbond is {} and the \
+                         total bonds is {}.",
+                        bond_source, args.amount, bond_amount
+                    );
+                } else {
+                    panic!(
+                        "The total bonds of the source {} is lower than the \
+                         amount to be unbonded. Amount to unbond is {} and the \
+                         total bonds is {}.",
+                        bond_source, args.amount, bond_amount
+                    );
+                }
+            }
+        }
+        None => {
+            if args.tx.force {
+                eprintln!("No bonds found");
+            } else {
+                panic!("No bonds found");
+            }
+        }
+    }
+
+    let data = pos::Unbond {
+        validator,
+        amount: args.amount,
+        source,
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx::<C, U, P>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
+}
+
+pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+    client: &C,
+    wallet: &mut Wallet<P>,
+    args: args::Bond,
+) {
+    let validator = args.validator.clone();
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(client, &validator).await;
+    if !is_validator {
+        if args.tx.force {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        } else {
+            panic!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+        }
+    }
+    let source = args.source.clone();
+    // Check that the source address exists on chain
+    if let Some(source) = &source {
+        let source_exists =
+            rpc::known_address::<C>(client, source).await;
+        if !source_exists {
+            if args.tx.force {
+                eprintln!("The source address {} doesn't exist on chain.", source);
+            } else {
+                panic!("The source address {} doesn't exist on chain.", source);
+            }
+        }
+    }
+    // Check bond's source (source for delegation or validator for self-bonds)
+    // balance
+    let bond_source = source.as_ref().unwrap_or(&validator);
+    let balance_key = token::balance_key(&args.native_token, bond_source);
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    {
+        Some(balance) => {
+            if balance < args.amount {
+                if args.tx.force {
+                    eprintln!(
+                        "The balance of the source {} is lower than the amount to \
+                         be transferred. Amount to transfer is {} and the balance \
+                         is {}.",
+                        bond_source, args.amount, balance
+                    );
+                } else {
+                    panic!(
+                        "The balance of the source {} is lower than the amount to \
+                         be transferred. Amount to transfer is {} and the balance \
+                         is {}.",
+                        bond_source, args.amount, balance
+                    );
+                }
+            }
+        }
+        None => {
+            if args.tx.force {
+                eprintln!("No balance found for the source {}", bond_source);
+            } else {
+                panic!("No balance found for the source {}", bond_source);
+            }
+        }
+    }
+    let tx_code = args.tx_code_path;
+    let bond = pos::Bond {
+        validator,
+        amount: args.amount,
+        source,
+    };
+    let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(tx_code, Some(data));
+    let default_signer = args.source.unwrap_or(args.validator);
+    process_tx::<C, U, P>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+    )
+    .await;
 }
