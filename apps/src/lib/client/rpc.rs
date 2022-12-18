@@ -71,45 +71,7 @@ pub async fn query_tx_status<C: Client + namada::ledger::queries::Client + Sync>
     status: namada::ledger::rpc::TxEventQuery<'_>,
     deadline: Instant,
 ) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: namada::ledger::rpc::TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        tokio::time::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
-    }
-    tokio::time::timeout_at(deadline, async move {
-        let mut backoff = ONE_SECOND;
-
-        loop {
-            tracing::debug!(query = ?status, "Querying tx status");
-            let maybe_event = match query_tx_events(client, status).await {
-                Ok(response) => response,
-                Err(err) => {
-                    //tracing::debug!(%err, "ABCI query failed");
-                    sleep_update(status, &mut backoff).await;
-                    continue;
-                }
-            };
-            if let Some(e) = maybe_event {
-                break Ok(e);
-            }
-            sleep_update(status, &mut backoff).await;
-        }
-    })
-    .await
-    .map_err(|_| {
-        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
-    })
-    .and_then(|result| result)
-    .unwrap_or_else(|_| cli::safe_exit(1))
+    namada::ledger::rpc::query_tx_status(client, status, deadline).await
 }
 
 /// Query the epoch of the last committed block
@@ -1756,12 +1718,7 @@ pub async fn query_slashes<C: Client + namada::ledger::queries::Client + Sync>(c
 
 /// Dry run a transaction
 pub async fn dry_run_tx<C: Client + namada::ledger::queries::Client + Sync>(client: &C, tx_bytes: Vec<u8>) {
-    let (data, height, prove) = (Some(tx_bytes), None, false);
-    let result = unwrap_client_response::<C, _>(
-        RPC.shell().dry_run_tx(client, data, height, prove).await,
-    )
-    .data;
-    println!("Dry-run result: {}", result);
+    println!("Dry-run result: {}", namada::ledger::rpc::dry_run_tx(client, tx_bytes).await);
 }
 
 /// Get account's public key stored in its storage sub-space

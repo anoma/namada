@@ -50,6 +50,57 @@ use crate::types::governance::{
 };
 use itertools::{Itertools};
 use crate::ledger::pos::types::decimal_mult_u64;
+use tokio::time::{Duration, Instant};
+
+/// Query the status of a given transaction.
+///
+/// If a response is not delivered until `deadline`, we exit the cli with an
+/// error.
+pub async fn query_tx_status<C: Client + crate::ledger::queries::Client + Sync>(
+    client: &C,
+    status: TxEventQuery<'_>,
+    deadline: Instant,
+) -> Event {
+    const ONE_SECOND: Duration = Duration::from_secs(1);
+    // sleep for the duration of `backoff`,
+    // and update the underlying value
+    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
+        tracing::debug!(
+            ?query,
+            duration = ?backoff,
+            "Retrying tx status query after timeout",
+        );
+        // simple linear backoff - if an event is not available,
+        // increase the backoff duration by one second
+        tokio::time::sleep(*backoff).await;
+        *backoff += ONE_SECOND;
+    }
+    tokio::time::timeout_at(deadline, async move {
+        let mut backoff = ONE_SECOND;
+
+        loop {
+            tracing::debug!(query = ?status, "Querying tx status");
+            let maybe_event = match query_tx_events(client, status).await {
+                Ok(response) => response,
+                Err(err) => {
+                    //tracing::debug!(%err, "ABCI query failed");
+                    sleep_update(status, &mut backoff).await;
+                    continue;
+                }
+            };
+            if let Some(e) = maybe_event {
+                break Ok(e);
+            }
+            sleep_update(status, &mut backoff).await;
+        }
+    })
+    .await
+    .map_err(|_| {
+        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
+    })
+    .and_then(|result| result)
+    .unwrap_or_else(|_| panic!())
+}
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch<C: Client + crate::ledger::queries::Client + Sync>(client: &C) -> Epoch {
@@ -330,6 +381,15 @@ pub async fn query_tx_events<C: Client + crate::ledger::queries::Client + Sync>(
                 eyre!("Error querying whether a transaction was applied")
             })*/,
     }
+}
+
+/// Dry run a transaction
+pub async fn dry_run_tx<C: Client + crate::ledger::queries::Client + Sync>(client: &C, tx_bytes: Vec<u8>) -> namada_core::types::transaction::TxResult {
+    let (data, height, prove) = (Some(tx_bytes), None, false);
+    unwrap_client_response::<C, _>(
+        RPC.shell().dry_run_tx(client, data, height, prove).await,
+    )
+    .data
 }
 
 /// Data needed for broadcasting a tx and
