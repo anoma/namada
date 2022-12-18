@@ -27,6 +27,8 @@ pub use pre_genesis::gen_key_to_store;
 
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletUtils {
+    /// The location where the wallet is stored
+    type Storage;
     /// Read the password for encryption from the file/env/stdin with confirmation.
     fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String>;
 
@@ -34,8 +36,7 @@ pub trait WalletUtils {
     /// if all options are empty/invalid.
     fn read_password(prompt_msg: &str) -> String;
 
-    /// Read an alias from the file/env/stdin. Panics if all options are empty/
-    /// invalid.
+    /// Read an alias from the file/env/stdin.
     fn read_alias(prompt_msg: &str) -> String;
 
     /// The given alias has been selected but conflicts with another alias in
@@ -63,16 +64,16 @@ pub enum FindKeyError {
 
 /// Represents a collection of keys and addresses while caching key decryptions
 #[derive(Debug)]
-pub struct Wallet<C> {
-    store_dir: C,
+pub struct Wallet<U: WalletUtils> {
+    store_dir: U::Storage,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
     decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
 }
 
-impl<C> Wallet<C> {
+impl<U: WalletUtils> Wallet<U> {
     /// Create a new wallet from the given backing store and storage location
-    pub fn new(store_dir: C, store: Store) -> Self {
+    pub fn new(store_dir: U::Storage, store: Store) -> Self {
         Self {
             store_dir,
             store,
@@ -88,7 +89,7 @@ impl<C> Wallet<C> {
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
     /// key.
-    pub fn gen_key<U: WalletUtils>(
+    pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
@@ -102,7 +103,7 @@ impl<C> Wallet<C> {
     }
 
     /// Generate a spending key and store it under the given alias in the wallet
-    pub fn gen_spending_key<U: WalletUtils>(
+    pub fn gen_spending_key(
         &mut self,
         alias: String,
         unsafe_dont_encrypt: bool,
@@ -139,7 +140,7 @@ impl<C> Wallet<C> {
     /// If the key is encrypted, will prompt for password from stdin.
     /// Any keys that are decrypted are stored in and read from a cache to avoid
     /// prompting for password multiple times.
-    pub fn find_key<U: WalletUtils>(
+    pub fn find_key(
         &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
     ) -> Result<common::SecretKey, FindKeyError> {
@@ -155,7 +156,7 @@ impl<C> Wallet<C> {
             .store
             .find_key(alias_pkh_or_pk.as_ref())
             .ok_or(FindKeyError::KeyNotFound)?;
-        Self::decrypt_stored_key::<_, U>(
+        Self::decrypt_stored_key::<_>(
             &mut self.decrypted_key_cache,
             stored_key,
             alias_pkh_or_pk.into(),
@@ -163,7 +164,7 @@ impl<C> Wallet<C> {
     }
 
     /// Find the spending key with the given alias in the wallet and return it
-    pub fn find_spending_key<U: WalletUtils>(
+    pub fn find_spending_key(
         &mut self,
         alias: impl AsRef<str>,
     ) -> Result<ExtendedSpendingKey, FindKeyError> {
@@ -178,7 +179,7 @@ impl<C> Wallet<C> {
             .store
             .find_spending_key(alias.as_ref())
             .ok_or(FindKeyError::KeyNotFound)?;
-        Self::decrypt_stored_key::<_, U>(
+        Self::decrypt_stored_key::<_>(
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
             alias.into(),
@@ -208,7 +209,7 @@ impl<C> Wallet<C> {
     /// If the key is encrypted, will prompt for password from stdin.
     /// Any keys that are decrypted are stored in and read from a cache to avoid
     /// prompting for password multiple times.
-    pub fn find_key_by_pk<U: WalletUtils>(
+    pub fn find_key_by_pk(
         &mut self,
         pk: &common::PublicKey,
     ) -> Result<common::SecretKey, FindKeyError> {
@@ -227,7 +228,7 @@ impl<C> Wallet<C> {
             .store
             .find_key_by_pk(pk)
             .ok_or(FindKeyError::KeyNotFound)?;
-        Self::decrypt_stored_key::<_, U>(
+        Self::decrypt_stored_key::<_>(
             &mut self.decrypted_key_cache,
             stored_key,
             alias,
@@ -238,7 +239,7 @@ impl<C> Wallet<C> {
     /// If the key is encrypted, will prompt for password from stdin.
     /// Any keys that are decrypted are stored in and read from a cache to avoid
     /// prompting for password multiple times.
-    pub fn find_key_by_pkh<U: WalletUtils>(
+    pub fn find_key_by_pkh(
         &mut self,
         pkh: &PublicKeyHash,
     ) -> Result<common::SecretKey, FindKeyError> {
@@ -256,7 +257,7 @@ impl<C> Wallet<C> {
             .store
             .find_key_by_pkh(pkh)
             .ok_or(FindKeyError::KeyNotFound)?;
-        Self::decrypt_stored_key::<_, U>(
+        Self::decrypt_stored_key::<_>(
             &mut self.decrypted_key_cache,
             stored_key,
             alias,
@@ -268,7 +269,6 @@ impl<C> Wallet<C> {
     /// stdin and if successfully decrypted, store it in a cache.
     fn decrypt_stored_key<
             T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
-        U: WalletUtils,
     >(
         decrypted_key_cache: &mut HashMap<Alias, T>,
         stored_key: &StoredKeypair<T>,
@@ -360,7 +360,7 @@ impl<C> Wallet<C> {
     /// alias is desired, or the alias creation should be cancelled. Return
     /// the chosen alias if the address has been added, otherwise return
     /// nothing.
-    pub fn add_address<U: WalletUtils>(
+    pub fn add_address(
         &mut self,
         alias: impl AsRef<str>,
         address: Address,
@@ -372,7 +372,7 @@ impl<C> Wallet<C> {
 
     /// Insert a new key with the given alias. If the alias is already used,
     /// will prompt for overwrite confirmation.
-    pub fn insert_keypair<U: WalletUtils>(
+    pub fn insert_keypair(
         &mut self,
         alias: String,
         keypair: StoredKeypair<common::SecretKey>,
@@ -384,7 +384,7 @@ impl<C> Wallet<C> {
     }
 
     /// Insert a viewing key into the wallet under the given alias
-    pub fn insert_viewing_key<U: WalletUtils>(
+    pub fn insert_viewing_key(
         &mut self,
         alias: String,
         view_key: ExtendedViewingKey,
@@ -395,7 +395,7 @@ impl<C> Wallet<C> {
     }
 
     /// Insert a spending key into the wallet under the given alias
-    pub fn insert_spending_key<U: WalletUtils>(
+    pub fn insert_spending_key(
         &mut self,
         alias: String,
         spend_key: StoredKeypair<ExtendedSpendingKey>,
@@ -408,7 +408,7 @@ impl<C> Wallet<C> {
 
     /// Encrypt the given spending key and insert it into the wallet under the
     /// given alias
-    pub fn encrypt_insert_spending_key<U: WalletUtils>(
+    pub fn encrypt_insert_spending_key(
         &mut self,
         alias: String,
         spend_key: ExtendedSpendingKey,
@@ -425,7 +425,7 @@ impl<C> Wallet<C> {
     }
 
     /// Insert a payment address into the wallet under the given alias
-    pub fn insert_payment_addr<U: WalletUtils>(
+    pub fn insert_payment_addr(
         &mut self,
         alias: String,
         payment_addr: PaymentAddress,
@@ -460,7 +460,7 @@ impl<C> Wallet<C> {
     }
 
     /// Access storage location data
-    pub fn store_dir(&self) -> &C {
+    pub fn store_dir(&self) -> &U::Storage {
         &self.store_dir
     }
 }

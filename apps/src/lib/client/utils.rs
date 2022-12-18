@@ -490,7 +490,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
+            let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -509,7 +509,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
+            let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -524,7 +524,7 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
+            let (_alias, keypair) = wallet.gen_key(
                 SchemeType::Ed25519,
                 Some(alias),
                 unsafe_dont_encrypt,
@@ -571,7 +571,7 @@ pub fn init_network(
             Some(genesis_config::HexString(dkg_pk.to_string()));
 
         // Write keypairs to wallet
-        wallet.add_address::<CliWalletUtils>(name.clone(), address);
+        wallet.add_address(name.clone(), address);
 
         crate::wallet::save(&wallet).unwrap();
     });
@@ -594,7 +594,7 @@ pub fn init_network(
         if config.address.is_none() {
             let address = address::gen_established_address("token");
             config.address = Some(address.to_string());
-            wallet.add_address::<CliWalletUtils>(name.clone(), address);
+            wallet.add_address(name.clone(), address);
         }
         if config.vp.is_none() {
             config.vp = Some("vp_token".to_string());
@@ -608,7 +608,7 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
-                let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
+                let (_alias, keypair) = wallet.gen_key(
                     SchemeType::Ed25519,
                     Some(name.clone()),
                     unsafe_dont_encrypt,
@@ -847,18 +847,18 @@ pub fn init_network(
 
 fn init_established_account(
     name: impl AsRef<str>,
-    wallet: &mut Wallet<PathBuf>,
+    wallet: &mut Wallet<CliWalletUtils>,
     config: &mut genesis_config::EstablishedAccountConfig,
     unsafe_dont_encrypt: bool,
 ) {
     if config.address.is_none() {
         let address = address::gen_established_address("established");
         config.address = Some(address.to_string());
-        wallet.add_address::<CliWalletUtils>(&name, address);
+        wallet.add_address(&name, address);
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
-        let (_alias, keypair) = wallet.gen_key::<CliWalletUtils>(
+        let (_alias, keypair) = wallet.gen_key(
             SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
             unsafe_dont_encrypt,

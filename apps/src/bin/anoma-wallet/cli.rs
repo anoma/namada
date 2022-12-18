@@ -83,7 +83,7 @@ fn address_key_find(
         println!("Viewing key: {}", viewing_key);
         if unsafe_show_secret {
             // Check if alias is also a spending key
-            match wallet.find_spending_key::<CliWalletUtils>(&alias) {
+            match wallet.find_spending_key(&alias) {
                 Ok(spending_key) => println!("Spending key: {}", spending_key),
                 Err(FindKeyError::KeyNotFound) => {}
                 Err(err) => eprintln!("{}", err),
@@ -203,7 +203,7 @@ fn spending_key_gen(
 ) {
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
-    let (alias, _key) = wallet.gen_spending_key::<CliWalletUtils>(alias, unsafe_dont_encrypt);
+    let (alias, _key) = wallet.gen_spending_key(alias, unsafe_dont_encrypt);
     namada_apps::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a spending key with alias: \"{}\"",
@@ -231,7 +231,7 @@ fn payment_address_gen(
         .expect("a PaymentAddress");
     let mut wallet = ctx.wallet;
     let alias = wallet
-        .insert_payment_addr::<CliWalletUtils>(
+        .insert_payment_addr(
             alias,
             PaymentAddress::from(payment_addr).pinned(pin),
         )
@@ -260,7 +260,7 @@ fn address_key_add(
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = ctx
                 .wallet
-                .insert_viewing_key::<CliWalletUtils>(alias, viewing_key)
+                .insert_viewing_key(alias, viewing_key)
                 .unwrap_or_else(|| {
                     eprintln!("Viewing key not added");
                     cli::safe_exit(1);
@@ -270,7 +270,7 @@ fn address_key_add(
         MaspValue::ExtendedSpendingKey(spending_key) => {
             let alias = ctx
                 .wallet
-                .encrypt_insert_spending_key::<CliWalletUtils>(
+                .encrypt_insert_spending_key(
                     alias,
                     spending_key,
                     unsafe_dont_encrypt,
@@ -284,7 +284,7 @@ fn address_key_add(
         MaspValue::PaymentAddress(payment_addr) => {
             let alias = ctx
                 .wallet
-                .insert_payment_addr::<CliWalletUtils>(alias, payment_addr)
+                .insert_payment_addr(alias, payment_addr)
                 .unwrap_or_else(|| {
                     eprintln!("Payment address not added");
                     cli::safe_exit(1);
@@ -310,7 +310,7 @@ fn key_and_address_gen(
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let (alias, _key) = wallet.gen_key::<CliWalletUtils>(scheme, alias, unsafe_dont_encrypt);
+    let (alias, _key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
     namada_apps::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
@@ -330,7 +330,7 @@ fn key_find(
 ) {
     let mut wallet = ctx.wallet;
     let found_keypair = match public_key {
-        Some(pk) => wallet.find_key_by_pk::<CliWalletUtils>(&pk),
+        Some(pk) => wallet.find_key_by_pk(&pk),
         None => {
             let alias = alias.or(value);
             match alias {
@@ -341,7 +341,7 @@ fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_key::<CliWalletUtils>(alias.to_lowercase()),
+                Some(alias) => wallet.find_key(alias.to_lowercase()),
             }
         }
     };
@@ -413,7 +413,7 @@ fn key_list(
 fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     let mut wallet = ctx.wallet;
     wallet
-        .find_key::<CliWalletUtils>(alias.to_lowercase())
+        .find_key(alias.to_lowercase())
         .map(|keypair| {
             let file_data = keypair
                 .try_to_vec()
@@ -486,7 +486,7 @@ fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
 fn address_add(ctx: Context, args: args::AddressAdd) {
     let mut wallet = ctx.wallet;
     if wallet
-        .add_address::<CliWalletUtils>(args.alias.clone().to_lowercase(), args.address)
+        .add_address(args.alias.clone().to_lowercase(), args.address)
         .is_none()
     {
         eprintln!("Address not added");

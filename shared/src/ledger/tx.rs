@@ -47,14 +47,14 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
 ) -> Vec<Address> {
-    let to_broadcast = sign_tx::<C, U, P>(client, wallet, tx, args, default_signer).await;
+    let to_broadcast = sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -104,9 +104,9 @@ pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: Wa
     }
 }
 
-pub async fn submit_reveal_pk<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_reveal_pk<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::RevealPk,
 ) {
     let args::RevealPk {
@@ -114,15 +114,15 @@ pub async fn submit_reveal_pk<C: Client + crate::ledger::queries::Client + Sync,
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed::<C, U, P>(client, wallet, &public_key, &args).await {
+    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
     }
 }
 
-pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> bool {
@@ -131,7 +131,7 @@ pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sy
     if args.force || !has_revealed_pk(client, &addr).await
     {
         // If not, submit it
-        submit_reveal_pk_aux::<C, U, P>(client, wallet, public_key, args).await;
+        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await;
         true
     } else {
         false
@@ -145,9 +145,9 @@ pub async fn has_revealed_pk<C: Client + crate::ledger::queries::Client + Sync>(
     rpc::get_public_key(client, addr).await.is_some()
 }
 
-pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) {
@@ -164,10 +164,10 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
         signing_key.clone()
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair::<C, U, P>(client, wallet, &signer)
+        find_keypair::<C, U>(client, wallet, &signer)
             .await
     } else {
-        find_keypair::<C, U, P>(client, wallet, &addr).await
+        find_keypair::<C, U>(client, wallet, &addr).await
     };
     let epoch = rpc::query_epoch(client)
     .await;
@@ -330,8 +330,8 @@ pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils, P>(
-    wallet: &mut Wallet<P>,
+pub async fn save_initialized_accounts<U: WalletUtils>(
+    wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
 ) {
@@ -364,7 +364,7 @@ pub async fn save_initialized_accounts<U: WalletUtils, P>(
                 }
             };
             let alias = alias.into_owned();
-            let added = wallet.add_address::<U>(alias.clone(), address.clone());
+            let added = wallet.add_address(alias.clone(), address.clone());
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     println!(
@@ -378,9 +378,9 @@ pub async fn save_initialized_accounts<U: WalletUtils, P>(
     }
 }
 
-pub async fn submit_validator_commission_change<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_validator_commission_change<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
 ) {
     let epoch = rpc::query_epoch(client)
@@ -457,7 +457,7 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator.clone();
-    process_tx::<C, U, P>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -467,9 +467,9 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
     .await;
 }
 
-pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::Withdraw,
 ) {
     let epoch = rpc::query_epoch(client)
@@ -542,7 +542,7 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<C, U, P>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -552,9 +552,9 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
     .await;
 }
 
-pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::Unbond,
 ) {
     let validator = args.validator.clone();
@@ -630,7 +630,7 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<C, U, P>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -640,9 +640,9 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
     .await;
 }
 
-pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::Bond,
 ) {
     let validator = args.validator.clone();
@@ -718,7 +718,7 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx::<C, U, P>(
+    process_tx::<C, U>(
         client,
         wallet,
         &args.tx,
@@ -758,9 +758,9 @@ pub async fn is_safe_voting_window<C: Client + crate::ledger::queries::Client + 
     }
 }
 
-pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
 ) {
     let source = args.source.clone();
@@ -880,13 +880,13 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
         .await;
 }
 
-pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>, P>(
+pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
 ) {
@@ -1012,7 +1012,7 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer::<C, V, P>(client, wallet, &args.tx, default_signer.clone())
+    let chosen_signer = tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
         .await
         .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
@@ -1067,12 +1067,12 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
-    process_tx::<C, V, P>(client, wallet, &args.tx, tx, signing_address).await;
+    process_tx::<C, V>(client, wallet, &args.tx, tx, signing_address).await;
 }
 
-pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
 ) {
     let public_key = args.public_key;
@@ -1095,14 +1095,14 @@ pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sy
 
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
-        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
             .await;
-    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
-pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
 ) {
     let addr = args.addr.clone();
@@ -1166,18 +1166,19 @@ pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync,
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
 }
 
-pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils, P>(
+pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
-    wallet: &mut Wallet<P>,
+    wallet: &mut Wallet<U>,
     args: args::TxCustom,
 ) {
     let tx_code = args.code_path;
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let initialized_accounts =
-        process_tx::<C, U, P>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
-    save_initialized_accounts::<U, P>(wallet, &args.tx, initialized_accounts).await;
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
+
