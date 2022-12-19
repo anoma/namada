@@ -2543,6 +2543,7 @@ dependencies = [
 name = "namada_macros"
 version = "0.12.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
