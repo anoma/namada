@@ -173,7 +173,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
             field.ty.to_tokens(&mut toks);
             toks.to_string()
         };
-        if field_type != "&'static str" {
+        if field_type != "& 'static str" {
             panic!(
                 "Expected `&'static str` field type in StorageKeys derive, \
                  but got {field_type} instead"
