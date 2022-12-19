@@ -31,4 +31,4 @@ All public testnets will be listed here:
 The block explorer is currently in development. The latest version can be found at [namada.world](https://namada.world/)
 
 ## Community
-For questions or feedback, feel free to post or comment on [Reddit](https://www.reddit.com/r/namada) or [Github](https://github.com/anoma/namada/issues). Don't forget to [follow Namada](https://twitter.com/namadanetwork) on Twitter for testnet relevant updates.S
+For questions or feedback, feel free to post or comment on [Reddit](https://www.reddit.com/r/namada) or [Github](https://github.com/anoma/namada/issues). Don't forget to [follow Namada](https://twitter.com/namadanetwork) on Twitter for testnet relevant updates.
