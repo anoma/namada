@@ -2,6 +2,7 @@
 
 mod block_space_alloc;
 
+#[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
 use namada::ledger::queries_ext::QueriesExt;
@@ -60,6 +61,7 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = BlockSpaceAllocator::from(&self.storage);
+            #[cfg(not(feature = "abcipp"))]
             let mut protocol_tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
@@ -90,6 +92,7 @@ where
             // space left
             let mut remaining_txs = self.build_remaining_batch(
                 alloc,
+                #[cfg(not(feature = "abcipp"))]
                 &protocol_tx_indices,
                 req.txs,
             );
@@ -114,7 +117,7 @@ where
     #[cfg(feature = "abcipp")]
     fn build_protocol_txs(
         &mut self,
-        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         // genesis should not contain vote extensions
@@ -169,7 +172,7 @@ where
         // - handle space allocation errors
         // - transition to new allocator state
 
-        todo!()
+        (txs, self.get_encrypted_txs_allocator(alloc))
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
@@ -267,19 +270,6 @@ where
 
     /// Builds a batch of encrypted transactions, retrieved from
     /// Tendermint's mempool.
-    #[cfg(feature = "abcipp")]
-    fn build_encrypted_txs(
-        &mut self,
-        _alloc: EncryptedTxBatchAllocator,
-        txs: &[TxBytes],
-    ) -> (Vec<TxRecord>, BlockSpaceAllocator<FillingRemainingSpace>) {
-        // TODO(feature = "abcipp"): implement building batch of mempool txs
-        todo!()
-    }
-
-    /// Builds a batch of encrypted transactions, retrieved from
-    /// Tendermint's mempool.
-    #[cfg(not(feature = "abcipp"))]
     fn build_encrypted_txs(
         &mut self,
         mut alloc: EncryptedTxBatchAllocator,
@@ -395,6 +385,18 @@ where
 
     /// Builds a batch of transactions that can fit in the
     /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(feature = "abcipp")]
+    fn build_remaining_batch(
+        &mut self,
+        _alloc: BlockSpaceAllocator<FillingRemainingSpace>,
+        _txs: Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        vec![]
+    }
+
+    /// Builds a batch of transactions that can fit in the
+    /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(not(feature = "abcipp"))]
     fn build_remaining_batch(
         &mut self,
         mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
@@ -437,6 +439,7 @@ where
 
 /// Return a list of the protocol transactions that haven't
 /// been marked for inclusion in the block, yet.
+#[cfg(not(feature = "abcipp"))]
 fn get_remaining_protocol_txs(
     protocol_tx_indices: &VecIndexSet<u128>,
     txs: Vec<TxBytes>,
@@ -503,9 +506,6 @@ mod test_prepare_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
-    // https://github.com/tendermint/tendermint/blob/v0.37.x/spec/abci/abci%2B%2B_app_requirements.md#blockparamsmaxbytes
-    const MAX_TM_BLK_SIZE: i64 = 100 << 20;
-
     /// Extract an [`ethereum_events::SignedVext`], from a set of
     /// serialized [`TxBytes`].
     #[cfg(not(feature = "abcipp"))]
@@ -529,6 +529,7 @@ mod test_prepare_proposal {
 
     /// Test if [`get_remaining_protocol_txs`] is working as expected.
     #[test]
+    #[cfg(not(feature = "abcipp"))]
     fn test_get_remaining_protocol_txs() {
         // TODO(feature = "abcipp"): use a different tx type here
         fn bertha_ext(at_height: u64) -> TxBytes {
@@ -627,7 +628,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![non_wrapper_tx.to_bytes()],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -883,7 +883,6 @@ mod test_prepare_proposal {
 
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             local_last_commit: Some(ExtendedCommitInfo {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 votes: vec![vote],
                 ..Default::default()
             }),
@@ -954,7 +953,6 @@ mod test_prepare_proposal {
                 .sign(&protocol_key)
                 .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![tx],
                 ..Default::default()
             });
@@ -1049,7 +1047,6 @@ mod test_prepare_proposal {
             };
             // this should panic
             shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 local_last_commit: Some(ExtendedCommitInfo {
                     votes: vec![vote],
                     ..Default::default()
@@ -1065,7 +1062,6 @@ mod test_prepare_proposal {
             .sign(&protocol_key)
             .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                max_tx_bytes: MAX_TM_BLK_SIZE,
                 txs: vec![vote],
                 ..Default::default()
             });
@@ -1129,7 +1125,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -1150,7 +1145,6 @@ mod test_prepare_proposal {
 
         let mut req = RequestPrepareProposal {
             txs: vec![],
-            max_tx_bytes: MAX_TM_BLK_SIZE,
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
