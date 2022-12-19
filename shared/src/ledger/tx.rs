@@ -78,7 +78,43 @@ pub enum Error {
     NoUnbondReady(Epoch),
     /// No unbonded bonds found
     #[error("No unbonded bonds found")]
-    NoUnbondFound
+    NoUnbondFound,
+    /// No bonds found
+    #[error("No bonds found")]
+    NoBondFound,
+    /// Lower bond amount than the unbond
+    #[error("The total bonds of the source {0} is lower than the \
+             amount to be unbonded. Amount to unbond is {1} and the \
+             total bonds is {2}.")]
+    LowerBondThanUnbond(Address, token::Amount, token::Amount),
+    /// Balance is too low
+    #[error("The balance of the source {0} of token {1} is lower than \
+             the amount to be transferred. Amount to transfer is {2} \
+             and the balance is {3}.")]
+    BalanceTooLow(Address, Address, token::Amount, token::Amount),
+    /// Source address does not exist on chain
+    #[error("The source address {0} doesn't exist on chain.")]
+    SourceDoesNotExist(Address),
+    /// Token Address does not exist on chain
+    #[error("The token address {0} doesn't exist on chain.")]
+    TokenDoesNotExist(Address),
+    /// Source Address does not exist on chain
+    #[error("The source address {0} doesn't exist on chain.")]
+    SourceLocationDoesNotExist(Address),
+    /// Target Address does not exist on chain
+    #[error("The target address {0} doesn't exist on chain.")]
+    TargetLocationDoesNotExist(Address),
+    /// No Balance found for token
+    #[error("No balance found for the source {0} of token {1}")]
+    NoBalanceForToken(Address, Address),
+    /// Negative balance after transfer
+    #[error("The balance of the source {0} is lower than the \
+             amount to be transferred and fees. Amount to \
+             transfer is {1} {2} and fees are {3} {4}.")]
+    NegativeBalanceAfterTransfer(Address, token::Amount, Address, token::Amount, Address),
+    /// No Balance found for token
+    #[error("{0}")]
+    MaspError(builder::Error)
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -580,24 +616,23 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
                          total bonds is {}.",
                         bond_source, args.amount, bond_amount
                     );
+                    Ok(())
                 } else {
-                    panic!(
-                        "The total bonds of the source {} is lower than the \
-                         amount to be unbonded. Amount to unbond is {} and the \
-                         total bonds is {}.",
-                        bond_source, args.amount, bond_amount
-                    );
+                    Err(Error::LowerBondThanUnbond(bond_source, args.amount, bond_amount))
                 }
+            } else {
+                Ok(())
             }
         }
         None => {
             if args.tx.force {
                 eprintln!("No bonds found");
+                Ok(())
             } else {
-                panic!("No bonds found");
+                Err(Error::NoBondFound)
             }
         }
-    }
+    }?;
 
     let data = pos::Unbond {
         validator,
@@ -623,37 +658,18 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
-) {
-    let validator = args.validator.clone();
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(client, &validator).await;
-    if !is_validator {
-        if args.tx.force {
-            eprintln!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        } else {
-            panic!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        }
-    }
-    let source = args.source.clone();
+) -> Result<(), Error> {
+    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
+        .await?;
+
     // Check that the source address exists on chain
-    if let Some(source) = &source {
-        let source_exists =
-            rpc::known_address::<C>(client, source).await;
-        if !source_exists {
-            if args.tx.force {
-                eprintln!("The source address {} doesn't exist on chain.", source);
-            } else {
-                panic!("The source address {} doesn't exist on chain.", source);
-            }
-        }
-    }
+    let source = args.source.clone();
+    let source = match args.source.clone() {
+        Some(source) => source_exists_or_err(source, args.tx.force, client)
+            .await
+            .map(Some),
+        None => Ok(source)
+    }?;
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
@@ -705,6 +721,7 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
         TxSigningKey::WalletAddress(default_signer),
     )
     .await;
+    Ok(())
 }
 
 /// Check if current epoch is in the last third of the voting period of the
@@ -741,32 +758,14 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
-) {
-    let source = args.source.clone();
+) -> Result<(), Error> {
     // Check that the source address exists on chain
-    let source_exists =
-        rpc::known_address::<C>(client, &source).await;
-    if !source_exists {
-        if args.tx.force {
-            eprintln!("The source address {} doesn't exist on chain.", source);
-        } else {
-            panic!("The source address {} doesn't exist on chain.", source);
-        }
-    }
-
+    let source = source_exists_or_err(args.source.clone(), args.tx.force, client).await?;
     // We cannot check the receiver
 
-    let token = args.token;
-    // Check that the token address exists on chain
-    let token_exists =
-        rpc::known_address::<C>(client, &token).await;
-    if !token_exists {
-        if args.tx.force {
-            eprintln!("The token address {} doesn't exist on chain.", token);
-        } else {
-            panic!("The token address {} doesn't exist on chain.", token);
-        }
-    }
+
+    let token = token_exists_or_err(args.token, args.tx.force, client).await?;
+
     // Check source balance
     let (sub_prefix, balance_key) = match args.sub_prefix {
         Some(sub_prefix) => {
@@ -860,7 +859,8 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-        .await;
+        .await?;
+    Ok(())
 }
 
 pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>>(
@@ -868,49 +868,18 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
-) {
-    let transfer_source = args.source;
-    let source = transfer_source.effective_address();
-    let transfer_target = args.target.clone();
-    let target = transfer_target.effective_address();
+) -> Result<(), Error> {
     // Check that the source address exists on chain
-    let source_exists =
-        rpc::known_address::<C>(client, &source).await;
-    if !source_exists {
-        if args.tx.force {
-            eprintln!("The source address {} doesn't exist on chain.", source);
-        } else {
-            panic!("The source address {} doesn't exist on chain.", source);
-        }
-    }
+    let force = args.tx.force;
+    let transfer_source = args.source;
+    let source = source_exists_or_err(transfer_source.effective_address(), force, client).await?;
     // Check that the target address exists on chain
-    let target_exists =
-        rpc::known_address::<C>(client, &target).await;
-    if !target_exists {
-        if args.tx.force {
-            eprintln!("The target address {} doesn't exist on chain.", target);
-        } else {
-            panic!("The target address {} doesn't exist on chain.", target);
-        }
-    }
-    let token = &args.token;
+    let transfer_target = args.target.clone();
+    let target = target_exists_or_err(transfer_target.effective_address(), force, client).await?;
+
     // Check that the token address exists on chain
-    let token_exists =
-        rpc::known_address::<C>(client, &token)
-            .await;
-    if !token_exists {
-        if args.tx.force {
-            eprintln!(
-                "The token address {} doesn't exist on chain.",
-                token
-            );
-        } else {
-            panic!(
-                "The token address {} doesn't exist on chain.",
-                token
-            );
-        }
-    }
+    let token = &(token_exists_or_err(args.token.clone(), force, client).await?);
+
     // Check source balance
     let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
@@ -937,14 +906,12 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
                          and the balance is {}.",
                         source, token, args.amount, balance
                     );
+                    Ok(())
                 } else {
-                    panic!(
-                        "The balance of the source {} of token {} is lower than \
-                         the amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
-                        source, token, args.amount, balance
-                    );
+                    Err(Error::BalanceTooLow(source.clone(), token.clone(), args.amount, balance))
                 }
+            } else {
+                Ok(())
             }
         }
         None => {
@@ -953,11 +920,9 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
                     "No balance found for the source {} of token {}",
                     source, token
                 );
+                Ok(())
             } else {
-                panic!(
-                    "No balance found for the source {} of token {}",
-                    source, token
-                );
+                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
             }
         }
     };
@@ -1014,21 +979,12 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
         )
         .await;
     let shielded = match stx_result {
-        Ok(stx) => stx.map(|x| x.0),
+        Ok(stx) => Ok(stx.map(|x| x.0)),
         Err(builder::Error::ChangeIsNegative(_)) => {
-            panic!(
-                "The balance of the source {} is lower than the \
-                 amount to be transferred and fees. Amount to \
-                 transfer is {} {} and fees are {} {}.",
-                source,
-                args.amount,
-                token,
-                args.tx.fee_amount,
-                &args.tx.fee_token,
-            );
+            Err(Error::NegativeBalanceAfterTransfer(source.clone(), args.amount, token.clone(), args.tx.fee_amount, args.tx.fee_token.clone()))
         }
-        Err(err) => panic!("{}", err),
-    };
+        Err(err) => Err(Error::MaspError(err)),
+    }?;
 
     let transfer = token::Transfer {
         source: source.clone(),
@@ -1046,7 +1002,8 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
-    process_tx::<C, V>(client, wallet, &args.tx, tx, signing_address).await;
+    process_tx::<C, V>(client, wallet, &args.tx, tx, signing_address).await?;
+    Ok(())
 }
 
 pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
@@ -1182,9 +1139,9 @@ fn lift_rpc_error<T>(res: Result<T,RpcError>) -> Result<T,Error> {
     res.map_err(Error::TxBroadcast)
 }
 
-/// Returns Ok if the given address is a validator, otherwise returns
-/// an error, force forces the address through even if it isn't a
-/// validator
+/// Returns the given validator if the given address is a validator,
+/// otherwise returns an error, force forces the address through even
+/// if it isn't a validator
 async fn known_validator_or_err<C: Client + crate::ledger::queries::Client + Sync>(
     validator: Address,
     force: bool,
@@ -1206,4 +1163,68 @@ async fn known_validator_or_err<C: Client + crate::ledger::queries::Client + Syn
     } else {
         Ok(validator)
     }
+}
+
+/// general pattern for checking if an address exists on the chain, or
+/// throwing an error if it's not forced. Takes a generic error
+/// message and the error type.
+async fn address_exists_or_err<C,F>(
+    addr: Address,
+    force: bool,
+    client: &C,
+    message: String,
+    err: F
+) -> Result<Address, Error>
+where
+    C: Client + crate::ledger::queries::Client + Sync,
+    F: FnOnce(Address) -> Error
+{
+    let addr_exists =
+        rpc::known_address::<C>(client, &addr).await;
+    if !addr_exists {
+        if force {
+            eprintln!("{}", message);
+            Ok(addr)
+        } else {
+            Err(err(addr))
+        }
+    } else {
+        Ok(addr)
+    }
+}
+
+/// Returns the given token if the given address exists on chain
+/// otherwise returns an error, force forces the address through even
+/// if it isn't on chain
+async fn token_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+    token: Address,
+    force: bool,
+    client: &C
+) -> Result<Address, Error> {
+    let message = format!("The token address {} doesn't exist on chain.", token);
+    address_exists_or_err(token, force, client, message, Error::TokenDoesNotExist).await
+}
+
+/// Returns the given source address if the given address exists on chain
+/// otherwise returns an error, force forces the address through even
+/// if it isn't on chain
+async fn source_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+    token: Address,
+    force: bool,
+    client: &C
+) -> Result<Address, Error> {
+    let message = format!("The source address {} doesn't exist on chain.", token);
+    address_exists_or_err(token, force, client, message, Error::SourceDoesNotExist).await
+}
+
+/// Returns the given target address if the given address exists on chain
+/// otherwise returns an error, force forces the address through even
+/// if it isn't on chain
+async fn target_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+    token: Address,
+    force: bool,
+    client: &C
+) -> Result<Address, Error> {
+    let message = format!("The target address {} doesn't exist on chain.", token);
+    address_exists_or_err(token, force, client, message, Error::TargetLocationDoesNotExist).await
 }
