@@ -192,7 +192,10 @@ pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client +
     let tx = Tx::new(tx_code, Some(data));
     let initialized_accounts =
         process_tx::<C, CliWalletUtils>(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
-            .await;
+        .await.unwrap_or_else(|err| {
+            eprintln!("Processing transaction failed with {}", err);
+            safe_exit(1)
+        });
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) =
             match &initialized_accounts[..] {
@@ -817,7 +820,7 @@ async fn save_initialized_accounts<U: WalletUtils>(
 pub async fn broadcast_tx<C: Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, RpcError> {
+) -> Result<Response, tx::Error> {
     tx::broadcast_tx(rpc_cli, to_broadcast).await
 }
 
@@ -832,6 +835,6 @@ pub async fn broadcast_tx<C: Client + Sync>(
 pub async fn submit_tx<C: Client + namada::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, RpcError> {
+) -> Result<TxResponse, tx::Error> {
     tx::submit_tx(client, to_broadcast).await
 }

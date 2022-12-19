@@ -10,6 +10,7 @@ use crate::ledger::rpc::{self, TxBroadcastData};
 use crate::ledger::signing::find_keypair;
 use crate::types::key::*;
 use borsh::BorshSerialize;
+use thiserror::Error;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::ledger::rpc::TxResponse;
 use tokio::time::{Duration, Instant};
@@ -43,6 +44,22 @@ use crate::vm;
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
+
+/// Errors to do with transaction events.
+#[derive(Error, Debug)]
+pub enum Error {
+    /// Expect a dry running transaction
+    #[error("Expected a dry-run transaction, received a wrapper \
+             transaction instead: {0:?}")]
+    ExpectDryRun(Tx),
+    /// Expect a wrapped encrypted running transaction
+    #[error("Cannot broadcast a dry-run transaction")]
+    ExpectWrappedRun(Tx),
+    /// Error during broadcasting a transaction
+    #[error("Encountered error while broadcasting transaction: {0}")]
+    TxBroadcast(RpcError)
+}
+
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
@@ -51,7 +68,7 @@ pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: Wa
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
-) -> Vec<Address> {
+) -> Result<Vec<Address>,Error> {
     let to_broadcast = sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
@@ -64,15 +81,7 @@ pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: Wa
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
-            vec![]
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
-        }
+        expect_dry_broadcast(to_broadcast, client, vec![]).await
     } else {
         // Either broadcast or submit transaction and collect result into
         // sum type
@@ -84,20 +93,10 @@ pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: Wa
         // Return result based on executed operation, otherwise deal with
         // the encountered errors uniformly
         match result {
-            Right(Ok(result)) => result.initialized_accounts,
-            Left(Ok(_)) => Vec::default(),
-            Right(Err(err)) => {
-                panic!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-            }
-            Left(Err(err)) => {
-                panic!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-            }
+            Right(Ok(result)) => Ok(result.initialized_accounts),
+            Left(Ok(_)) => Ok(Vec::default()),
+            Right(Err(err)) => Err(err),
+            Left(Err(err)) => Err(err)
         }
     }
 }
@@ -148,7 +147,7 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) {
+) -> Result<(),Error> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key
@@ -175,15 +174,9 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
         super::signing::sign_wrapper(args, epoch, tx, &keypair).await
     };
 
+    // Logic is the same as process_tx
     if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
-        }
+        expect_dry_broadcast(to_broadcast, client, ()).await
     } else {
         // Either broadcast or submit transaction and collect result into
         // sum type
@@ -195,19 +188,9 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
         // Return result based on executed operation, otherwise deal with
         // the encountered errors uniformly
         match result {
-            Right(Err(err)) => {
-                panic!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-            }
-            Left(Err(err)) => {
-                panic!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-            }
-            _ => {}
+            Right(Err(err)) => Err(err),
+            Left(Err(err)) => Err(err),
+            _ => Ok({})
         }
     }
 }
@@ -219,15 +202,15 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
 pub async fn broadcast_tx<C: Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, RpcError> {
+) -> Result<Response, Error> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
             decrypted_hash,
-        } => (tx, wrapper_hash, decrypted_hash),
-        _ => panic!("Cannot broadcast a dry-run transaction"),
-    };
+        } => Ok((tx, wrapper_hash, decrypted_hash)),
+        TxBroadcastData::DryRun(tx) => Err(Error::ExpectWrappedRun(tx.clone())),
+    }?;
 
     tracing::debug!(
         transaction = ?to_broadcast,
@@ -237,7 +220,7 @@ pub async fn broadcast_tx<C: Client + Sync>(
     // TODO: configure an explicit timeout value? we need to hack away at
     // `tendermint-rs` for this, which is currently using a hard-coded 30s
     // timeout.
-    let response = rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await?;
+    let response = lift_rpc_error(rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await)?;
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -249,7 +232,7 @@ pub async fn broadcast_tx<C: Client + Sync>(
         }
         Ok(response)
     } else {
-        Err(RpcError::server(serde_json::to_string(&response).unwrap()))
+        Err(Error::TxBroadcast(RpcError::server(serde_json::to_string(&response).unwrap())))
     }
 }
 
@@ -264,15 +247,15 @@ pub async fn broadcast_tx<C: Client + Sync>(
 pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, RpcError> {
+) -> Result<TxResponse, Error> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Wrapper {
             tx,
             wrapper_hash,
             decrypted_hash,
-        } => (tx, wrapper_hash, decrypted_hash),
-        _ => panic!("Cannot broadcast a dry-run transaction"),
-    };
+        } => Ok((tx, wrapper_hash, decrypted_hash)),
+        TxBroadcastData::DryRun(tx) => Err(Error::ExpectWrappedRun(tx.clone())),
+    }?;
 
     // Broadcast the supplied transaction
     broadcast_tx(client, &to_broadcast).await?;
@@ -819,7 +802,7 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
                 }
             }
         }
-        None => { 
+        None => {
             if args.tx.force {
                 eprintln!(
                     "No balance found for the source {} of token {}",
@@ -1092,9 +1075,10 @@ pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sy
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
+    // TODO Move unwrap to an either
     let initialized_accounts =
         process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-            .await;
+            .await.unwrap();
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
 }
 
@@ -1171,12 +1155,31 @@ pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U:
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
-) {
+) -> Result<(), Error> {
     let tx_code = args.code_path;
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let initialized_accounts =
-        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None).await;
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None).await?;
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
+    Ok(())
 }
 
+async fn expect_dry_broadcast<T, C: Client + crate::ledger::queries::Client + Sync>(
+    to_broadcast: TxBroadcastData,
+    client: &C,
+    ret:T
+) -> Result<T,Error> {
+    match to_broadcast {
+        TxBroadcastData::DryRun(tx) => {
+            rpc::dry_run_tx(client, tx.to_bytes()).await;
+            Ok(ret)
+        }
+        TxBroadcastData::Wrapper { tx, wrapper_hash: _, decrypted_hash: _ } =>
+            Err(Error::ExpectDryRun(tx))
+    }
+}
+
+fn lift_rpc_error<T>(res: Result<T,RpcError>) -> Result<T,Error> {
+    res.map_err(Error::TxBroadcast)
+}
