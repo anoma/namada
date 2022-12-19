@@ -1,9 +1,9 @@
 //! Functionality to do with checking whether a transaction is authorized by the
 //! "owner" of some key under this account
 use eyre::Result;
+use namada_core::types::address::Address;
 
 use crate::ledger::native_vp::StorageReader;
-use crate::types::address::Address;
 
 pub(super) fn is_authorized(
     _reader: impl StorageReader,

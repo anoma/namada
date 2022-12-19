@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use namada::ledger::eth_bridge::parameters::{
+use namada::ledger::eth_bridge::{
     Contracts, EthereumBridgeConfig, UpgradeableContract,
 };
 use namada::types::address::wnam;

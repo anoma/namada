@@ -1,27 +1,25 @@
-//! API for querying the blockchain state.
-
+//! Storage API for querying data about Proof-of-stake related
+//! data. This includes validator and epoch related data.
 use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
-use namada_core::ledger::storage::{self, Storage};
-use namada_core::ledger::storage_api;
+use namada_core::ledger::parameters::EpochDuration;
+use namada_core::ledger::storage::Storage;
+use namada_core::ledger::{storage, storage_api};
+use namada_core::types::address::Address;
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::dkg_session_keys::DkgPublicKey;
-use namada_core::types::token;
-use namada_proof_of_stake::PosBase;
+use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::transaction::EllipticCurve;
+use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
+use namada_core::types::{key, token};
 use thiserror::Error;
 
-use crate::ledger::parameters::EpochDuration;
-use crate::ledger::pos::types::WeightedValidator;
-use crate::ledger::pos::PosParams;
 use crate::tendermint_proto::google::protobuf;
 use crate::tendermint_proto::types::EvidenceParams;
-use crate::types::address::Address;
-use crate::types::ethereum_events::EthAddress;
-use crate::types::key;
-use crate::types::storage::{BlockHeight, Epoch};
-use crate::types::transaction::EllipticCurve;
-use crate::types::vote_extensions::validator_set_update::EthAddrBook;
+use crate::types::WeightedValidator;
+use crate::{PosBase, PosParams};
 
 /// Errors returned by [`QueriesExt`] operations.
 #[derive(Error, Debug)]
@@ -66,21 +64,9 @@ pub enum SendValsetUpd {
     AtPrevHeight,
 }
 
-/// Methods used to query blockchain state, such as the currently
-/// active set of validators.
-pub trait QueriesExt {
-    // TODO: when Rust 1.65 becomes available in Namada, we should return this
-    // iterator type from [`QueriesExt::get_active_eth_addresses`], to
-    // avoid a heap allocation; `F` will be the closure used to process the
-    // iterator we currently return in the `Storage` impl
-    // ```ignore
-    // type ActiveEthAddressesIter<'db, F>: Iterator<(EthAddrBook, Address, token::Amount)>;
-    // ```
-    // a similar strategy can be used for [`QueriesExt::get_active_validators`]:
-    // ```ignore
-    // type ActiveValidatorsIter<'db, F>: Iterator<WeightedValidator>;
-    // ```
-
+/// Methods used to query blockchain proof-of-stake related state,
+/// such as the currently active set of validators.
+pub trait PosQueries {
     /// Get the set of active validators for a given epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     fn get_active_validators(
@@ -91,7 +77,6 @@ pub trait QueriesExt {
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     fn get_total_voting_power(&self, epoch: Option<Epoch>) -> token::Amount;
-
     /// Simple helper function for the ledger to get balances
     /// of the specified token at the specified address.
     fn get_balance(&self, token: &Address, owner: &Address) -> token::Amount;
@@ -165,7 +150,7 @@ pub trait QueriesExt {
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
 }
 
-impl<D, H> QueriesExt for Storage<D, H>
+impl<D, H> PosQueries for Storage<D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
@@ -236,7 +221,7 @@ where
             .expect("Serializing public key should not fail");
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
-            .iter()
+            .into_iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
                 match self.read(&pk_key) {
@@ -275,7 +260,7 @@ where
     ) -> Result<(token::Amount, key::common::PublicKey)> {
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
-            .iter()
+            .into_iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
                 let protocol_pk_key = key::protocol_pk_key(&validator.address);

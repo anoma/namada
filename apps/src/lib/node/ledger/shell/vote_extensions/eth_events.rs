@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::queries_ext::QueriesExt;
+use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
@@ -294,7 +294,7 @@ mod test_vote_extensions {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::queries_ext::QueriesExt;
+    use namada::ledger::pos::PosQueries;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };

@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "apps",
   "core",
+  "ethereum_bridge",
   "proof_of_stake",
   "shared",
   "tests",

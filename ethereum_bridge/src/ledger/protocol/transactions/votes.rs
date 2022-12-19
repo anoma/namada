@@ -5,12 +5,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
+use namada_core::types::address::Address;
+use namada_core::types::storage::BlockHeight;
+use namada_core::types::voting_power::FractionalVotingPower;
 
-use super::ChangedKeys;
-use crate::ledger::protocol::transactions::read;
-use crate::types::address::Address;
-use crate::types::storage::BlockHeight;
-use crate::types::voting_power::FractionalVotingPower;
+use super::{read, ChangedKeys};
 
 pub(super) mod storage;
 pub(super) mod update;
@@ -82,9 +81,10 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 mod tests {
     use std::collections::BTreeSet;
 
+    use namada_core::types::address;
+    use namada_core::types::storage::BlockHeight;
+
     use super::*;
-    use crate::types::address;
-    use crate::types::storage::BlockHeight;
 
     #[test]
     fn test_dedupe_empty() {

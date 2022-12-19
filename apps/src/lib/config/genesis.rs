@@ -6,7 +6,7 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::ledger::eth_bridge::parameters::{
+use namada::ledger::eth_bridge::{
     Contracts, EthereumBridgeConfig, UpgradeableContract,
 };
 use namada::ledger::governance::parameters::GovParams;

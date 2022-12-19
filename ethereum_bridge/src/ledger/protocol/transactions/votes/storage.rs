@@ -1,10 +1,10 @@
 use borsh::BorshSerialize;
 use eyre::Result;
+use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{Tally, Votes};
-use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use crate::types::voting_power::FractionalVotingPower;
+use crate::ledger::storage::vote_tallies;
 
 pub fn write<D, H, T>(
     storage: &mut Storage<D, H>,
@@ -49,11 +49,12 @@ where
 mod tests {
     use std::collections::BTreeMap;
 
+    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::types::address;
+    use namada_core::types::ethereum_events::EthereumEvent;
+    use namada_core::types::voting_power::FractionalVotingPower;
+
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::types::address;
-    use crate::types::ethereum_events::EthereumEvent;
-    use crate::types::voting_power::FractionalVotingPower;
 
     #[test]
     fn test_write_tally() {

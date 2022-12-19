@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
-use namada::ledger::queries_ext::QueriesExt;
+use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::types::storage::BlockHeight;
@@ -308,7 +308,7 @@ mod test_vote_extensions {
     use borsh::BorshSerialize;
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::queries_ext::QueriesExt;
+    use namada::ledger::pos::PosQueries;
     use namada::types::key::RefTo;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events;

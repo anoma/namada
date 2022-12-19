@@ -2,14 +2,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
+use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::types::address::Address;
+use namada_core::types::storage::BlockHeight;
+use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{ChangedKeys, Tally, Votes};
-use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::types::address::Address;
-use crate::types::storage::BlockHeight;
-use crate::types::voting_power::FractionalVotingPower;
+use crate::ledger::storage::vote_tallies;
 
 /// Wraps all the information about new votes to be applied to some existing
 /// tally in storage.
@@ -193,12 +192,13 @@ fn keys_changed<T>(
 mod tests {
     use std::collections::BTreeMap;
 
+    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::types::address;
+    use namada_core::types::ethereum_events::EthereumEvent;
+
     use super::*;
     use crate::ledger::protocol::transactions::votes;
     use crate::ledger::protocol::transactions::votes::update::tests::helpers::{arbitrary_event, setup_tally};
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::types::address;
-    use crate::types::ethereum_events::EthereumEvent;
 
     mod helpers {
         use super::*;
