@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
 use std::fmt::Debug;
@@ -9,60 +8,42 @@ use std::path::PathBuf;
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
-use itertools::Either::*;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::Node;
-use masp_primitives::transaction::builder;
 use masp_proofs::prover::LocalTxProver;
-use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::signer::Signer;
-use namada::ibc::timestamp::Timestamp as IbcTimestamp;
-use namada::ibc::tx_msg::Msg;
-use namada::ibc::Height as IbcHeight;
-use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::masp::ShieldedContext;
-use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::Tx;
-use namada::types::address::{masp, masp_tx_key, Address};
+use namada::types::address::Address;
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
 use namada::types::key::*;
-use namada::types::masp::TransferTarget;
-use namada::types::storage::{
-    Epoch, BlockResults, RESERVED_ADDRESS_PREFIX,
-};
+use namada::types::storage::Epoch;
 use crate::wallet::gen_validator_keys;
-use namada::types::time::DateTimeUtc;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{storage, token};
-use namada::{ledger, vm};
+use namada::types::transaction::InitValidator;
+use namada::types::token;
+use namada::vm;
 use namada::ledger::masp::ShieldedUtils;
 use namada::ledger::wallet::WalletUtils;
 use rust_decimal::Decimal;
-use tokio::time::{Duration, Instant};
-use async_trait::async_trait;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{query_conversion, query_storage_value};
-use crate::client::signing::{find_keypair, sign_tx, tx_signer};
+use crate::client::signing::find_keypair;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 use namada::ledger::wallet::Wallet;
 use crate::wallet::CliWalletUtils;
+
 
 pub async fn submit_custom<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,

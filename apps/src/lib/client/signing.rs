@@ -1,17 +1,12 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
-use borsh::BorshSerialize;
 use namada::proto::Tx;
-use namada::types::address::{Address, ImplicitAddress};
+use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
-use namada::types::transaction::{hash_tx, Fee, WrapperTx};
-use tendermint_rpc::HttpClient;
-use std::path::PathBuf;
 
-use super::rpc;
-use crate::cli::{self, args};
+use crate::cli::args;
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::wallet::Wallet;
 use namada::ledger::wallet::WalletUtils;

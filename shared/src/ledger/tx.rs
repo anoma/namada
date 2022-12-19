@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use rust_decimal::Decimal;
 use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use crate::ledger;
-use crate::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
+use crate::types::transaction::{pos, InitAccount, UpdateVp};
 use crate::types::{storage, token};
 use crate::types::storage::Epoch;
 use crate::ledger::governance::storage as gov_storage;
@@ -27,9 +27,7 @@ use crate::ibc::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::types::time::DateTimeUtc;
 use crate::ibc_proto::cosmos::base::v1beta1::Coin;
-use crate::types::storage::{
-    BlockResults, RESERVED_ADDRESS_PREFIX,
-};
+use crate::types::storage::RESERVED_ADDRESS_PREFIX;
 use crate::ibc::Height as IbcHeight;
 use crate::ibc::tx_msg::Msg;
 use crate::ledger::masp::ShieldedUtils;
