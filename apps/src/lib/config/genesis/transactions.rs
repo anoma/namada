@@ -391,12 +391,60 @@ fn sign_tx<T: BorshSerialize>(
     StringEncoded::new(tx.standalone_signature(keypair))
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 pub struct Transactions {
     pub established_account: Option<Vec<SignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<SignedValidatorAccountTx>>,
     pub transfer: Option<Vec<SignedTransferTx>>,
     pub bond: Option<Vec<SignedBondTx>>,
+}
+impl Transactions {
+    /// Check that there is at least one validator.
+    pub fn has_at_least_one_validator(&self) -> bool {
+        self.validator_account
+            .as_ref()
+            .map(|txs| !txs.is_empty())
+            .unwrap_or_default()
+    }
+
+    /// Check if there is at least one validator with positive Tendermint voting
+    /// power. The voting power is converted from `token::Amount` of the
+    /// validator's stake using the `tm_votes_per_token` PoS parameter.
+    pub fn has_validator_with_positive_voting_power(
+        &self,
+        votes_per_token: Decimal,
+    ) -> bool {
+        self.bond
+            .as_ref()
+            .map(|txs| {
+                let mut stakes: HashMap<&Alias, token::Amount> = HashMap::new();
+                for tx in txs {
+                    let entry = stakes.entry(&tx.data.validator).or_default();
+                    *entry += tx.data.amount;
+                }
+
+                stakes.into_iter().any(|(_validator, stake)| {
+                    let tendermint_voting_power =
+                        namada::ledger::pos::into_tm_voting_power(
+                            votes_per_token,
+                            stake,
+                        );
+                    if tendermint_voting_power > 0 {
+                        return true;
+                    }
+                    false
+                })
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -558,9 +606,9 @@ pub struct SignedPk {
 
 pub fn validate(
     transactions: &Transactions,
-    vps: Result<&ValidityPredicates, &eyre::Report>,
-    balances: Result<&Balances, &eyre::Report>,
-    parameters: Result<&Parameters, &eyre::Report>,
+    vps: Option<&ValidityPredicates>,
+    balances: Option<&Balances>,
+    parameters: Option<&Parameters>,
 ) -> bool {
     let mut is_valid = true;
 
@@ -636,7 +684,7 @@ pub fn validate(
     if let Some(txs) = bond {
         if !txs.is_empty() {
             match parameters {
-                Ok(parameters) => {
+                Some(parameters) => {
                     for tx in txs {
                         if !validate_bond(
                             tx,
@@ -649,7 +697,7 @@ pub fn validate(
                         }
                     }
                 }
-                Err(_) => {
+                None => {
                     eprintln!(
                         "Unable to validate bonds without a valid parameters \
                          file."
@@ -782,7 +830,7 @@ pub struct TokenBalancesForValidation {
 
 pub fn validate_established_account(
     tx: &SignedEstablishedAccountTx,
-    vps: Result<&ValidityPredicates, &eyre::Report>,
+    vps: Option<&ValidityPredicates>,
     all_used_aliases: &mut HashSet<Alias>,
     established_accounts: &mut HashMap<Alias, Option<common::PublicKey>>,
 ) -> bool {
@@ -837,7 +885,7 @@ fn validate_established_account_sig(
 
 pub fn validate_validator_account(
     tx: &ValidatorAccountTx<SignedPk>,
-    vps: Result<&ValidityPredicates, &color_eyre::Report>,
+    vps: Option<&ValidityPredicates>,
     all_used_aliases: &mut HashSet<Alias>,
     validator_accounts: &mut HashMap<Alias, common::PublicKey>,
 ) -> bool {

@@ -3,14 +3,14 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use eyre::{self, Context};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::types::key::common;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::core::types::token;
 use rust_decimal::Decimal;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use super::toml_utils::{read_toml, write_toml};
 use super::transactions::{self, Transactions};
 use crate::wallet::Alias;
 
@@ -45,47 +45,63 @@ pub fn read_transactions(path: &Path) -> eyre::Result<Transactions> {
 }
 
 /// Genesis balances of all tokens
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct Balances {
     pub token: HashMap<Alias, TokenBalances>,
 }
 
 /// Genesis balances for a given token
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct TokenBalances(
     pub HashMap<StringEncoded<common::PublicKey>, token::Amount>,
 );
 
 /// Genesis validity predicates
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct ValidityPredicates {
     // Wasm definitions
     pub wasm: HashMap<String, WasmVpConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct WasmVpConfig {
     pub filename: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct Tokens {
     pub token: HashMap<Alias, TokenConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct TokenConfig {
     pub vp: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct Parameters {
     pub parameters: ChainParams,
     pub pos_params: PosParams,
     pub gov_params: GovernanceParams,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct ChainParams {
     /// Name of the native token - this must one of the tokens from
     /// `tokens.toml` file
@@ -112,7 +128,9 @@ pub struct ChainParams {
     pub pos_gain_d: Decimal,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct PosParams {
     /// Maximum number of active validators.
     pub max_validator_slots: u64,
@@ -138,7 +156,9 @@ pub struct PosParams {
     pub light_client_attack_min_slash_rate: Decimal,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
 pub struct GovernanceParams {
     /// Min funds to stake to submit a proposal
     pub min_proposal_fund: u64,
@@ -161,31 +181,77 @@ impl TokenBalances {
     }
 }
 
-pub fn read_toml<T: DeserializeOwned>(
-    path: &Path,
-    which_file: &str,
-) -> eyre::Result<T> {
-    let file_contents = std::fs::read_to_string(path).wrap_err_with(|| {
-        format!(
-            "couldn't read {which_file} config file from {}",
-            path.to_string_lossy()
-        )
-    })?;
-    toml::from_str(&file_contents).wrap_err_with(|| {
-        format!(
-            "couldn't parse {which_file} TOML from {}",
-            path.to_string_lossy()
-        )
-    })
+#[derive(
+    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+)]
+pub struct All {
+    pub vps: ValidityPredicates,
+    pub tokens: Tokens,
+    pub balances: Balances,
+    pub parameters: Parameters,
+    pub transactions: Transactions,
 }
 
-/// Validate genesis templates.
-pub fn validate(templates_dir: &Path) -> bool {
+impl All {
+    pub fn write_toml_files(&self, output_dir: &Path) -> eyre::Result<()> {
+        let All {
+            vps,
+            tokens,
+            balances,
+            parameters,
+            transactions,
+        } = self;
+
+        let vps_file = output_dir.join(VPS_FILE_NAME);
+        let tokens_file = output_dir.join(TOKENS_FILE_NAME);
+        let balances_file = output_dir.join(BALANCES_FILE_NAME);
+        let parameters_file = output_dir.join(PARAMETERS_FILE_NAME);
+        let transactions_file = output_dir.join(TRANSACTIONS_FILE_NAME);
+
+        write_toml(vps, &vps_file, "Validity predicates")?;
+        write_toml(tokens, &tokens_file, "Tokens")?;
+        write_toml(balances, &balances_file, "Balances")?;
+        write_toml(parameters, &parameters_file, "Parameters")?;
+        write_toml(transactions, &transactions_file, "Transactions")?;
+        Ok(())
+    }
+
+    pub fn read_toml_files(input_dir: &Path) -> eyre::Result<Self> {
+        let vps_file = input_dir.join(VPS_FILE_NAME);
+        let tokens_file = input_dir.join(TOKENS_FILE_NAME);
+        let balances_file = input_dir.join(BALANCES_FILE_NAME);
+        let parameters_file = input_dir.join(PARAMETERS_FILE_NAME);
+        let transactions_file = input_dir.join(TRANSACTIONS_FILE_NAME);
+
+        let vps = read_toml(&vps_file, "Validity predicates")?;
+        let tokens = read_toml(&tokens_file, "Tokens")?;
+        let balances = read_toml(&balances_file, "Balances")?;
+        let parameters = read_toml(&parameters_file, "Parameters")?;
+        let transactions = read_toml(&transactions_file, "Transactions")?;
+        Ok(Self {
+            vps,
+            tokens,
+            balances,
+            parameters,
+            transactions,
+        })
+    }
+}
+
+/// Load genesis templates from the given directory and validate them. Returns
+/// `None` when there are some validation issues.
+///
+/// Note that the validation rules for these templates won't enforce that there
+/// is at least one validator with positive voting power. This must be checked
+/// when the templates are being used to `init-network`.
+pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
     let mut is_valid = true;
+    // We don't reuse `All::read_toml_files` here to allow to validate config
+    // without all files present.
+    let vps_file = templates_dir.join(VPS_FILE_NAME);
     let tokens_file = templates_dir.join(TOKENS_FILE_NAME);
     let balances_file = templates_dir.join(BALANCES_FILE_NAME);
     let parameters_file = templates_dir.join(PARAMETERS_FILE_NAME);
-    let vps_file = templates_dir.join(VPS_FILE_NAME);
     let transactions_file = templates_dir.join(TRANSACTIONS_FILE_NAME);
 
     // Check that all required files are present
@@ -201,93 +267,112 @@ pub fn validate(templates_dir: &Path) -> bool {
     check_file_exists(&parameters_file, "Parameters");
     check_file_exists(&transactions_file, "Transactions");
 
+    // Load and parse the files
+    let vps = read_validity_predicates(&vps_file);
+    let tokens = read_tokens(&tokens_file);
+    let balances = read_balances(&balances_file);
+    let parameters = read_parameters(&parameters_file);
+    let transactions = read_transactions(&transactions_file);
+
     let eprintln_invalid_file = |err: &eyre::Report, name: &str| {
         eprintln!("{name} file is NOT valid. Failed to read with: {err}");
     };
-    let tokens = read_tokens(&tokens_file);
-    match tokens.as_ref() {
-        Ok(tokens) => {
-            if tokens.token.is_empty() {
-                is_valid = false;
-                eprintln!(
-                    "Tokens file is invalid. There has to be at least one \
-                     token."
-                );
-            }
-            println!("Tokens file is valid.");
-        }
-        Err(err) => {
-            is_valid = false;
-            eprintln_invalid_file(err, "Tokens");
-        }
-    }
 
-    let vps = read_validity_predicates(&vps_file);
-    match vps.as_ref() {
-        Ok(vps) => {
-            if validate_vps(vps) {
-                println!("Validity predicates file is valid.");
-            } else {
-                is_valid = false;
-            }
-        }
-        Err(err) => {
-            is_valid = false;
-            eprintln_invalid_file(err, "Validity predicates");
-        }
-    }
-
-    let balances = read_balances(&balances_file);
-    match balances.as_ref() {
-        Ok(balances) => {
-            if validate_balances(balances, tokens.as_ref()) {
-                println!("Balances file is valid.");
-            } else {
-                is_valid = false;
-            }
-        }
-        Err(err) => {
-            is_valid = false;
-            eprintln_invalid_file(err, "Balances");
-        }
-    }
-
-    let parameters = read_parameters(&parameters_file);
-    match parameters.as_ref() {
-        Ok(parameters) => {
-            if validate_parameters(parameters, vps.as_ref()) {
-                println!("Parameters file is valid.");
-            } else {
-                is_valid = false;
-            }
-        }
-        Err(err) => {
-            is_valid = false;
-            eprintln_invalid_file(err, "Parameters");
-        }
-    }
-
-    let transactions = read_transactions(&transactions_file);
-    match transactions {
-        Ok(transactions) => {
-            if transactions::validate(
-                &transactions,
-                vps.as_ref(),
-                balances.as_ref(),
-                parameters.as_ref(),
-            ) {
-                println!("Transactions file is valid.");
-            } else {
-                is_valid = false;
-            }
-        }
-        Err(err) => {
-            is_valid = false;
+    // Check the parsing results
+    let vps = vps.map_or_else(
+        |err| {
+            eprintln_invalid_file(&err, "Validity predicates");
+            None
+        },
+        Some,
+    );
+    let tokens = tokens.map_or_else(
+        |err| {
+            eprintln_invalid_file(&err, "Tokens");
+            None
+        },
+        Some,
+    );
+    let balances = balances.map_or_else(
+        |err| {
+            eprintln_invalid_file(&err, "Balances");
+            None
+        },
+        Some,
+    );
+    let parameters = parameters.map_or_else(
+        |err| {
+            eprintln_invalid_file(&err, "Parameters");
+            None
+        },
+        Some,
+    );
+    let transactions = transactions.map_or_else(
+        |err| {
             eprintln_invalid_file(&err, "Transactions");
+            None
+        },
+        Some,
+    );
+
+    // Validate each file that could be loaded
+    if let Some(vps) = vps.as_ref() {
+        if validate_vps(vps) {
+            println!("Validity predicates file is valid.");
+        } else {
+            is_valid = false;
         }
     }
 
-    is_valid
+    if let Some(tokens) = tokens.as_ref() {
+        if tokens.token.is_empty() {
+            is_valid = false;
+            eprintln!(
+                "Tokens file is invalid. There has to be at least one token."
+            );
+        }
+        println!("Tokens file is valid.");
+    }
+
+    if let Some(balances) = balances.as_ref() {
+        if validate_balances(balances, tokens.as_ref()) {
+            println!("Balances file is valid.");
+        } else {
+            is_valid = false;
+        }
+    }
+
+    if let Some(parameters) = parameters.as_ref() {
+        if validate_parameters(parameters, vps.as_ref()) {
+            println!("Parameters file is valid.");
+        } else {
+            is_valid = false;
+        }
+    }
+
+    if let Some(transactions) = transactions.as_ref() {
+        if transactions::validate(
+            transactions,
+            vps.as_ref(),
+            balances.as_ref(),
+            parameters.as_ref(),
+        ) {
+            println!("Transactions file is valid.");
+        } else {
+            is_valid = false;
+        }
+    }
+
+    match vps {
+        Some(vps) if is_valid => Some(All {
+            vps: vps,
+            tokens: tokens.unwrap(),
+            balances: balances.unwrap(),
+            parameters: parameters.unwrap(),
+            transactions: transactions.unwrap(),
+        }),
+        _ => None,
+    }
 }
 
 pub fn validate_vps(vps: &ValidityPredicates) -> bool {
@@ -306,7 +391,7 @@ pub fn validate_vps(vps: &ValidityPredicates) -> bool {
 
 pub fn validate_parameters(
     parameters: &Parameters,
-    vps: Result<&ValidityPredicates, &eyre::Report>,
+    vps: Option<&ValidityPredicates>,
 ) -> bool {
     let mut is_valid = true;
     let implicit_vp = &parameters.parameters.implicit_vp;
@@ -323,10 +408,7 @@ pub fn validate_parameters(
     is_valid
 }
 
-pub fn validate_balances(
-    balances: &Balances,
-    tokens: Result<&Tokens, &eyre::Report>,
-) -> bool {
+pub fn validate_balances(balances: &Balances, tokens: Option<&Tokens>) -> bool {
     let mut is_valid = true;
     balances.token.iter().for_each(|(token, next)| {
         // Every token alias used in Balances file must be present in
@@ -387,7 +469,7 @@ mod tests {
             .unwrap()
             .join("genesis/localnet");
         assert!(
-            validate(&templates_dir),
+            load_and_validate(&templates_dir).is_some(),
             "Localnet genesis templates must be valid"
         );
     }
@@ -400,7 +482,7 @@ mod tests {
             .unwrap()
             .join("genesis/starter");
         assert!(
-            validate(&templates_dir),
+            load_and_validate(&templates_dir).is_some(),
             "Starter genesis templates must be valid"
         );
     }

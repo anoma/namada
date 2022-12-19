@@ -1,6 +1,8 @@
 //! The parameters used for the chain's genesis
 
+pub mod chain;
 pub mod templates;
+pub mod toml_utils;
 pub mod transactions;
 
 use std::collections::HashMap;

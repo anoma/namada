@@ -1679,7 +1679,7 @@ pub mod args {
         arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
     const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
-    const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
+    const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
@@ -1691,7 +1691,6 @@ pub mod args {
         }));
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
-    const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
@@ -1732,6 +1731,7 @@ pub mod args {
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -3546,6 +3546,7 @@ pub mod args {
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
+        pub allow_duplicate_ip: bool,
     }
 
     impl Args for JoinNetwork {
@@ -3554,11 +3555,13 @@ pub mod args {
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
+            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
                 dont_prefetch_wasm,
+                allow_duplicate_ip,
             }
         }
 
@@ -3568,6 +3571,10 @@ pub mod args {
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(
                 "Do not pre-fetch WASM.",
+            ))
+            .arg(ALLOW_DUPLICATE_IP.def().about(
+                "Toggle to disable guard against peers connecting from the \
+                 same IP. This option shouldn't be used in mainnet.",
             ))
         }
     }
@@ -3590,48 +3597,41 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitNetwork {
-        pub genesis_path: PathBuf,
+        pub templates_path: PathBuf,
         pub wasm_checksums_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
-        pub unsafe_dont_encrypt: bool,
+        pub genesis_time: DateTimeUtc,
         pub consensus_timeout_commit: Timeout,
-        pub localhost: bool,
-        pub allow_duplicate_ip: bool,
         pub dont_archive: bool,
         pub archive_dir: Option<PathBuf>,
     }
 
     impl Args for InitNetwork {
         fn parse(matches: &ArgMatches) -> Self {
-            let genesis_path = GENESIS_PATH.parse(matches);
+            let templates_path = TEMPLATES_PATH.parse(matches);
             let wasm_checksums_path = WASM_CHECKSUMS_PATH.parse(matches);
             let chain_id_prefix = CHAIN_ID_PREFIX.parse(matches);
-            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let genesis_time = GENESIS_TIME.parse(matches);
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
-            let localhost = LOCALHOST.parse(matches);
-            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             let dont_archive = DONT_ARCHIVE.parse(matches);
             let archive_dir = ARCHIVE_DIR.parse(matches);
             Self {
-                genesis_path,
+                templates_path,
                 wasm_checksums_path,
                 chain_id_prefix,
-                unsafe_dont_encrypt,
+                genesis_time,
                 consensus_timeout_commit,
-                localhost,
-                allow_duplicate_ip,
                 dont_archive,
                 archive_dir,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                GENESIS_PATH.def().about(
-                    "Path to the preliminary genesis configuration file.",
-                ),
-            )
+            app.arg(TEMPLATES_PATH.def().about(
+                "Path to the directory with genesis templates to be used to \
+                 initialize the network.",
+            ))
             .arg(
                 WASM_CHECKSUMS_PATH
                     .def()
@@ -3641,21 +3641,13 @@ pub mod args {
                 "The chain ID prefix. Up to 19 alphanumeric, '.', '-' or '_' \
                  characters.",
             ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().about(
-                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
-                 this for keys used in a live network.",
+            .arg(GENESIS_TIME.def().about(
+                "The start time of the network in RFC 3339 and ISO 8601 \
+                 format. For example: \"2021-12-31T00:00:00Z\".",
             ))
             .arg(CONSENSUS_TIMEOUT_COMMIT.def().about(
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
-            ))
-            .arg(LOCALHOST.def().about(
-                "Use localhost address for P2P and RPC connections for the \
-                 validators ledger",
-            ))
-            .arg(ALLOW_DUPLICATE_IP.def().about(
-                "Toggle to disable guard against peers connecting from the \
-                 same IP. This option shouldn't be used in mainnet.",
             ))
             .arg(
                 DONT_ARCHIVE
