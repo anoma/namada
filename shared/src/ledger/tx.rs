@@ -57,7 +57,28 @@ pub enum Error {
     ExpectWrappedRun(Tx),
     /// Error during broadcasting a transaction
     #[error("Encountered error while broadcasting transaction: {0}")]
-    TxBroadcast(RpcError)
+    TxBroadcast(RpcError),
+    /// Invalid comission rate set
+    #[error("Invalid new commission rate, received {0}")]
+    InvalidCommisionRate(Decimal),
+    /// Invalid validator address
+    #[error("The address {0} doesn't belong to any known validator account.")]
+    InvalidValidatorAddress(Address),
+    /// Rate of epoch change too large for current epoch
+    #[error("New rate, {0}, is too large of a change with respect to \
+             the predecessor epoch in which the rate will take \
+             effect.")]
+    TooLargeOfChange(Decimal),
+    /// Error retrieving from storage
+    #[error("Error retrieving from storage")]
+    Retrival,
+    /// No unbonded bonds ready to withdraw in the current epoch
+    #[error("There are no unbonded bonds ready to withdraw in the \
+             current epoch {0}.")]
+    NoUnbondReady(Epoch),
+    /// No unbonded bonds found
+    #[error("No unbonded bonds found")]
+    NoUnbondFound
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -363,9 +384,8 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
-) {
-    let epoch = rpc::query_epoch(client)
-    .await;
+) -> Result<(), Error> {
+    let epoch = rpc::query_epoch(client).await;
 
     let tx_code = args.tx_code_path;
 
@@ -374,10 +394,13 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
         if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
             if args.tx.force {
                 eprintln!("Invalid new commission rate, received {}", args.rate);
+                Ok(())
             } else {
-                panic!("Invalid new commission rate, received {}", args.rate);
+                Err(Error::InvalidCommisionRate(args.rate))
             }
-        }
+        } else {
+            Ok(())
+        }?;
 
         let commission_rate_key =
             ledger::pos::validator_commission_rate_key(&validator);
@@ -387,48 +410,51 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
             &client,
             &commission_rate_key,
         )
-        .await;
+            .await;
         let max_change = rpc::query_storage_value::<C, Decimal>(
             &client,
             &max_commission_rate_change_key,
         )
-        .await;
+            .await;
 
         match (commission_rates, max_change) {
             (Some(rates), Some(max_change)) => {
                 // Assuming that pipeline length = 2
                 let rate_next_epoch = rates.get(epoch.next()).unwrap();
-                if (args.rate - rate_next_epoch).abs() > max_change {
+                let epoch_change = (args.rate - rate_next_epoch).abs();
+                if epoch_change > max_change {
                     if args.tx.force {
                         eprintln!(
-                            "New rate is too large of a change with respect to \
-                             the predecessor epoch in which the rate will take \
-                             effect."
+                            "New rate, {epoch_change}, is too large of a change \
+                             with respect to the predecessor epoch in which the rate \
+                             will take effect."
                         );
+                        Ok(())
                     } else {
-                        panic!(
-                            "New rate is too large of a change with respect to \
-                             the predecessor epoch in which the rate will take \
-                             effect."
-                        );
+                        Err(Error::TooLargeOfChange(epoch_change))
                     }
+                } else {
+                    Ok(())
                 }
             }
             _ => {
                 if args.tx.force {
                     eprintln!("Error retrieving from storage");
+                    Ok(())
                 } else {
-                    panic!("Error retrieving from storage");
+                    Err(Error::Retrival)
                 }
             }
-        }
+        }?;
+        Ok(())
     } else {
         if args.tx.force {
             eprintln!("The given address {validator} is not a validator.");
+            Ok(())
         } else {
-            panic!("The given address {validator} is not a validator.");
+            Err(Error::InvalidValidatorAddress(validator))
         }
-    }
+    }?;
 
     let data = pos::CommissionChange {
         validator: args.validator.clone(),
@@ -446,33 +472,18 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
         TxSigningKey::WalletAddress(default_signer),
     )
     .await;
+    Ok(())
 }
 
 pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
-) {
-    let epoch = rpc::query_epoch(client)
-    .await;
+) -> Result<(),Error> {
+    let epoch = rpc::query_epoch(client).await;
 
-    let validator = args.validator.clone();
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(client, &validator).await;
-    if !is_validator {
-        if args.tx.force {
-            eprintln!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        } else {
-            panic!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        }
-    }
+    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
+        .await?;
 
     let source = args.source.clone();
     let tx_code = args.tx_code_path;
@@ -500,23 +511,24 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
                          current epoch {}.",
                         epoch
                     );
+                    Ok(())
                 } else {
-                    panic!(
-                        "There are no unbonded bonds ready to withdraw in the \
-                         current epoch {}.",
-                        epoch
-                    );
+                    Err(Error::NoUnbondReady(epoch))
                 }
+            }
+            else {
+                Ok(())
             }
         }
         None => {
             if args.tx.force {
                 eprintln!("No unbonded bonds found");
+                Ok(())
             } else {
-                panic!("No unbonded bonds found");
+                Err(Error::NoUnbondFound)
             }
         }
-    }
+    }?;
 
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
@@ -530,32 +542,17 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+        .await;
+    Ok(())
 }
 
 pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) {
-    let validator = args.validator.clone();
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(client, &validator).await;
-    if !is_validator {
-        if args.tx.force {
-            eprintln!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        } else {
-            panic!(
-                "The address {} doesn't belong to any known validator account.",
-                validator
-            );
-        }
-    }
-
+) -> Result<(),Error> {
+    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
+        .await?;
     let source = args.source.clone();
     let tx_code = args.tx_code_path;
 
@@ -619,6 +616,7 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
         TxSigningKey::WalletAddress(default_signer),
     )
     .await;
+    Ok(())
 }
 
 pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
@@ -1182,4 +1180,30 @@ async fn expect_dry_broadcast<T, C: Client + crate::ledger::queries::Client + Sy
 
 fn lift_rpc_error<T>(res: Result<T,RpcError>) -> Result<T,Error> {
     res.map_err(Error::TxBroadcast)
+}
+
+/// Returns Ok if the given address is a validator, otherwise returns
+/// an error, force forces the address through even if it isn't a
+/// validator
+async fn known_validator_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+    validator: Address,
+    force: bool,
+    client: &C
+) -> Result<Address, Error> {
+    // Check that the validator address exists on chain
+    let is_validator =
+        rpc::is_validator(client, &validator).await;
+    if !is_validator {
+        if force {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+            Ok(validator)
+        } else {
+            Err(Error::InvalidValidatorAddress(validator))
+        }
+    } else {
+        Ok(validator)
+    }
 }
