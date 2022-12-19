@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada::proto::Tx;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
@@ -22,7 +23,11 @@ use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
 #[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::abci::RequestBeginBlock;
+use crate::facade::tendermint_proto::abci::{
+    RequestBeginBlock, ResponseDeliverTx,
+};
+#[cfg(not(feature = "abcipp"))]
+use crate::facade::tower_abci::response::DeliverTx;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
 
 /// The shim wraps the shell, which implements ABCI++.
@@ -132,8 +137,14 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::DeliverTx(tx) => {
+                    let mut deliver: DeliverTx = Default::default();
+                    // Attach events to this transaction if possible
+                    if let Ok(tx) = Tx::try_from(&tx.tx[..]) {
+                        let resp: ResponseDeliverTx = tx.into();
+                        deliver.events = resp.events;
+                    }
                     self.delivered_txs.push(tx.tx);
-                    Ok(Resp::DeliverTx(Default::default()))
+                    Ok(Resp::DeliverTx(deliver))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {

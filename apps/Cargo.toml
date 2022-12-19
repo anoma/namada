@@ -67,7 +67,7 @@ abciplus = [
 ]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
+namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke", "masp-tx-gen"]}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"

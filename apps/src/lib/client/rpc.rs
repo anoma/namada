@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, Write};
@@ -15,7 +15,7 @@ use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use eyre::{eyre, Context as EyreContext};
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
@@ -25,6 +25,9 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::masp::{
+    Conversions, PinnedBalanceError, ShieldedContext, ShieldedUtils,
+};
 use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
@@ -32,8 +35,9 @@ use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
 use namada::ledger::queries::{self, RPC};
+use namada::ledger::rpc::TxResponse;
 use namada::ledger::storage::ConversionState;
-use namada::proto::{SignedTxData, Tx};
+use namada::ledger::wallet::Wallet;
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
@@ -43,276 +47,116 @@ use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
+    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue,
 };
-use namada::types::token::{balance_key, Transfer};
-use namada::types::transaction::{
-    process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
-    WrapperTx,
-};
+use namada::types::token::balance_key;
 use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
-use crate::cli::{self, args, Context};
-use crate::client::tendermint_rpc_types::TxResponse;
-use crate::client::tx::{
-    Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
-};
+use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
-    Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
+    Client, HttpClient, Order, WebSocketClient,
 };
+use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status(
-    status: TxEventQuery<'_>,
-    address: TendermintAddress,
+pub async fn query_tx_status<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    status: namada::ledger::rpc::TxEventQuery<'_>,
     deadline: Instant,
 ) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        tokio::time::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
-    }
-    tokio::time::timeout_at(deadline, async move {
-        let client = HttpClient::new(address).unwrap();
-        let mut backoff = ONE_SECOND;
-
-        loop {
-            tracing::debug!(query = ?status, "Querying tx status");
-            let maybe_event = match query_tx_events(&client, status).await {
-                Ok(response) => response,
-                Err(err) => {
-                    tracing::debug!(%err, "ABCI query failed");
-                    sleep_update(status, &mut backoff).await;
-                    continue;
-                }
-            };
-            if let Some(e) = maybe_event {
-                break Ok(e);
-            }
-            sleep_update(status, &mut backoff).await;
-        }
-    })
-    .await
-    .map_err(|_| {
-        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
-    })
-    .and_then(|result| result)
-    .unwrap_or_else(|_| cli::safe_exit(1))
+    namada::ledger::rpc::query_tx_status(client, status, deadline).await
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(args: args::Query) -> Epoch {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
-    println!("Last committed epoch: {}", epoch);
-    epoch
+pub async fn query_epoch<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+) -> Epoch {
+    namada::ledger::rpc::query_epoch(client).await
 }
 
 /// Query the last committed block
-pub async fn query_block(
-    args: args::Query,
+pub async fn query_block<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
 ) -> crate::facade::tendermint_rpc::endpoint::block::Response {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    let response = client.latest_block().await.unwrap();
-    println!(
-        "Last committed block ID: {}, height: {}, time: {}",
-        response.block_id,
-        response.block.header.height,
-        response.block.header.time
-    );
-    response
+    namada::ledger::rpc::query_block(client).await
 }
 
 /// Query the results of the last committed block
-pub async fn query_results(args: args::Query) -> Vec<BlockResults> {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    unwrap_client_response(RPC.shell().read_results(&client).await)
-}
-
-/// Obtain the known effects of all accepted shielded and transparent
-/// transactions. If an owner is specified, then restrict the set to only
-/// transactions crediting/debiting the given owner. If token is specified, then
-/// restrict set to only transactions involving the given token.
-pub async fn query_tx_deltas(
-    ctx: &mut Context,
-    ledger_address: TendermintAddress,
-    query_owner: &Option<BalanceOwner>,
-    query_token: &Option<Address>,
-) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, TransferDelta, TransactionDelta)>
-{
-    const TXS_PER_PAGE: u8 = 100;
-    // Connect to the Tendermint server holding the transactions
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    // Build up the context that will be queried for transactions
-    let _ = ctx.shielded.load();
-    let vks = ctx.wallet.get_viewing_keys();
-    let fvks: Vec<_> = vks
-        .values()
-        .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-        .collect();
-    ctx.shielded.fetch(&ledger_address, &[], &fvks).await;
-    // Save the update state so that future fetches can be short-circuited
-    let _ = ctx.shielded.save();
-    // Required for filtering out rejected transactions from Tendermint
-    // responses
-    let block_results = query_results(args::Query { ledger_address }).await;
-    let mut transfers = ctx.shielded.get_tx_deltas().clone();
-    // Construct the set of addresses relevant to user's query
-    let relevant_addrs = match &query_owner {
-        Some(BalanceOwner::Address(owner)) => vec![owner.clone()],
-        // MASP objects are dealt with outside of tx_search
-        Some(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
-        Some(BalanceOwner::PaymentAddress(_owner)) => vec![],
-        // Unspecified owner means all known addresses are considered relevant
-        None => ctx.wallet.get_addresses().into_values().collect(),
-    };
-    // Find all transactions to or from the relevant address set
-    for addr in relevant_addrs {
-        for prop in ["transfer.source", "transfer.target"] {
-            // Query transactions involving the current address
-            let mut tx_query = Query::eq(prop, addr.encode());
-            // Elaborate the query if requested by the user
-            if let Some(token) = &query_token {
-                tx_query = tx_query.and_eq("transfer.token", token.encode());
-            }
-            for page in 1.. {
-                let txs = &client
-                    .tx_search(
-                        tx_query.clone(),
-                        true,
-                        page,
-                        TXS_PER_PAGE,
-                        Order::Ascending,
-                    )
-                    .await
-                    .expect("Unable to query for transactions")
-                    .txs;
-                for response_tx in txs {
-                    let height = BlockHeight(response_tx.height.value());
-                    let idx = TxIndex(response_tx.index);
-                    // Only process yet unprocessed transactions which have been
-                    // accepted by node VPs
-                    let should_process = !transfers
-                        .contains_key(&(height, idx))
-                        && block_results[u64::from(height) as usize]
-                            .is_accepted(idx.0 as usize);
-                    if !should_process {
-                        continue;
-                    }
-                    let tx = Tx::try_from(response_tx.tx.as_ref())
-                        .expect("Ill-formed Tx");
-                    let mut wrapper = None;
-                    let mut transfer = None;
-                    extract_payload(tx, &mut wrapper, &mut transfer);
-                    // Epoch data is not needed for transparent transactions
-                    let epoch = wrapper.map(|x| x.epoch).unwrap_or_default();
-                    if let Some(transfer) = transfer {
-                        // Skip MASP addresses as they are already handled by
-                        // ShieldedContext
-                        if transfer.source == masp()
-                            || transfer.target == masp()
-                        {
-                            continue;
-                        }
-                        // Describe how a Transfer simply subtracts from one
-                        // account and adds the same to another
-                        let mut delta = TransferDelta::default();
-                        let tfer_delta = Amount::from_nonnegative(
-                            transfer.token.clone(),
-                            u64::from(transfer.amount),
-                        )
-                        .expect("invalid value for amount");
-                        delta.insert(
-                            transfer.source,
-                            Amount::zero() - &tfer_delta,
-                        );
-                        delta.insert(transfer.target, tfer_delta);
-                        // No shielded accounts are affected by this Transfer
-                        transfers.insert(
-                            (height, idx),
-                            (epoch, delta, TransactionDelta::new()),
-                        );
-                    }
-                }
-                // An incomplete page signifies no more transactions
-                if (txs.len() as u8) < TXS_PER_PAGE {
-                    break;
-                }
-            }
-        }
-    }
-    transfers
+pub async fn query_results<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> Vec<BlockResults> {
+    namada::ledger::rpc::query_results(client).await
 }
 
 /// Query the specified accepted transfers from the ledger
-pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
-    let query_token = args.token.as_ref().map(|x| ctx.get(x));
-    let query_owner = args.owner.as_ref().map(|x| ctx.get_cached(x));
+pub async fn query_transfers<C: Client, U: ShieldedUtils<C = C>>(
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryTransfers,
+) {
+    let query_token = args.token;
+    let query_owner = args.owner.map_or_else(
+        || Either::Right(wallet.get_addresses().into_values().collect()),
+        Either::Left,
+    );
+    let _ = shielded.load();
     // Obtain the effects of all shielded and transparent transactions
-    let transfers = query_tx_deltas(
-        &mut ctx,
-        args.query.ledger_address.clone(),
-        &query_owner,
-        &query_token,
-    )
-    .await;
+    let transfers = shielded
+        .query_tx_deltas(
+            client,
+            &query_owner,
+            &query_token,
+            &wallet.get_viewing_keys(),
+        )
+        .await;
     // To facilitate lookups of human-readable token names
     let tokens = tokens();
-    let vks = ctx.wallet.get_viewing_keys();
+    let vks = wallet.get_viewing_keys();
     // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
     let fvk_map: HashMap<_, _> = vks
         .values()
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
-    // Connect to the Tendermint server holding the transactions
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Now display historical shielded and transparent transactions
     for ((height, idx), (epoch, tfer_delta, tx_delta)) in transfers {
         // Check if this transfer pertains to the supplied owner
         let mut relevant = match &query_owner {
-            Some(BalanceOwner::FullViewingKey(fvk)) => tx_delta
+            Either::Left(BalanceOwner::FullViewingKey(fvk)) => tx_delta
                 .contains_key(&ExtendedFullViewingKey::from(*fvk).fvk.vk),
-            Some(BalanceOwner::Address(owner)) => {
+            Either::Left(BalanceOwner::Address(owner)) => {
                 tfer_delta.contains_key(owner)
             }
-            Some(BalanceOwner::PaymentAddress(_owner)) => false,
-            None => true,
+            Either::Left(BalanceOwner::PaymentAddress(_owner)) => false,
+            Either::Right(_) => true,
         };
         // Realize and decode the shielded changes to enable relevance check
         let mut shielded_accounts = HashMap::new();
         for (acc, amt) in tx_delta {
             // Realize the rewards that would have been attained upon the
             // transaction's reception
-            let amt = ctx
-                .shielded
+            let amt = shielded
                 .compute_exchanged_amount(
-                    client.clone(),
+                    client,
                     amt,
                     epoch,
                     Conversions::new(),
                 )
                 .await
                 .0;
-            let dec =
-                ctx.shielded.decode_amount(client.clone(), amt, epoch).await;
+            let dec = shielded.decode_amount(client, amt, epoch).await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -378,43 +222,16 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
     }
 }
 
-/// Extract the payload from the given Tx object
-fn extract_payload(
-    tx: Tx,
-    wrapper: &mut Option<WrapperTx>,
-    transfer: &mut Option<Transfer>,
-) {
-    match process_tx(tx) {
-        Ok(TxType::Wrapper(wrapper_tx)) => {
-            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            extract_payload(
-                Tx::from(match wrapper_tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(wrapper_tx.clone()),
-                }),
-                wrapper,
-                transfer,
-            );
-            *wrapper = Some(wrapper_tx);
-        }
-        Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
-            let empty_vec = vec![];
-            let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
-            let _ = SignedTxData::try_from_slice(tx_data).map(|signed| {
-                Transfer::try_from_slice(&signed.data.unwrap()[..])
-                    .map(|tfer| *transfer = Some(tfer))
-            });
-        }
-        _ => {}
-    }
-}
-
 /// Query the raw bytes of given storage key
-pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let response = unwrap_client_response(
+pub async fn query_raw_bytes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryRawBytes,
+) {
+    let response = unwrap_client_response::<C, _>(
         RPC.shell()
-            .storage_value(&client, None, None, false, &args.storage_key)
+            .storage_value(client, None, None, false, &args.storage_key)
             .await,
     );
     if !response.data.is_empty() {
@@ -425,41 +242,50 @@ pub async fn query_raw_bytes(_ctx: Context, args: args::QueryRawBytes) {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(mut ctx: Context, args: args::QueryBalance) {
+pub async fn query_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: ShieldedUtils<C = C>,
+>(
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryBalance,
+) {
     // Query the balances of shielded or transparent account types depending on
     // the CLI arguments
-    match args.owner.as_ref().map(|x| ctx.get_cached(x)) {
+    match &args.owner {
         Some(BalanceOwner::FullViewingKey(_viewing_key)) => {
-            query_shielded_balance(&mut ctx, args).await
+            query_shielded_balance(client, wallet, shielded, args).await
         }
         Some(BalanceOwner::Address(_owner)) => {
-            query_transparent_balance(&mut ctx, args).await
+            query_transparent_balance(client, wallet, args).await
         }
         Some(BalanceOwner::PaymentAddress(_owner)) => {
-            query_pinned_balance(&mut ctx, args).await
+            query_pinned_balance(client, wallet, shielded, args).await
         }
         None => {
             // Print pinned balance
-            query_pinned_balance(&mut ctx, args.clone()).await;
+            query_pinned_balance(client, wallet, shielded, args.clone()).await;
             // Print shielded balance
-            query_shielded_balance(&mut ctx, args.clone()).await;
+            query_shielded_balance(client, wallet, shielded, args.clone())
+                .await;
             // Then print transparent balance
-            query_transparent_balance(&mut ctx, args).await;
+            query_transparent_balance(client, wallet, args).await;
         }
     };
 }
 
 /// Query token balance(s)
-pub async fn query_transparent_balance(
-    ctx: &mut Context,
+pub async fn query_transparent_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBalance,
 ) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
     let tokens = address::tokens();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let token = ctx.get(&token);
-            let owner = ctx.get_cached(&owner);
             let key = match &args.sub_prefix {
                 Some(sub_prefix) => {
                     let sub_prefix = Key::parse(sub_prefix).unwrap();
@@ -476,7 +302,7 @@ pub async fn query_transparent_balance(
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<token::Amount>(&client, &key).await {
+            match query_storage_value::<C, token::Amount>(&client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
                         println!(
@@ -492,15 +318,14 @@ pub async fn query_transparent_balance(
             }
         }
         (None, Some(owner)) => {
-            let owner = ctx.get_cached(&owner);
             for (token, _) in tokens {
                 let prefix = token.to_db_key().into();
                 let balances =
-                    query_storage_prefix::<token::Amount>(&client, &prefix)
+                    query_storage_prefix::<C, token::Amount>(&client, &prefix)
                         .await;
                 if let Some(balances) = balances {
                     print_balances(
-                        ctx,
+                        wallet,
                         balances,
                         &token,
                         owner.address().as_ref(),
@@ -509,21 +334,21 @@ pub async fn query_transparent_balance(
             }
         }
         (Some(token), None) => {
-            let token = ctx.get(&token);
             let prefix = token.to_db_key().into();
             let balances =
-                query_storage_prefix::<token::Amount>(&client, &prefix).await;
+                query_storage_prefix::<C, token::Amount>(client, &prefix).await;
             if let Some(balances) = balances {
-                print_balances(ctx, balances, &token, None);
+                print_balances(wallet, balances, &token, None);
             }
         }
         (None, None) => {
             for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
-                    query_storage_prefix::<token::Amount>(&client, &key).await;
+                    query_storage_prefix::<C, token::Amount>(client, &key)
+                        .await;
                 if let Some(balances) = balances {
-                    print_balances(ctx, balances, &token, None);
+                    print_balances(wallet, balances, &token, None);
                 }
             }
         }
@@ -531,45 +356,39 @@ pub async fn query_transparent_balance(
 }
 
 /// Query the token pinned balance(s)
-pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
+pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
+    shielded: &mut ShieldedContext<U>,
+    args: args::QueryBalance,
+) {
     // Map addresses to token names
     let tokens = address::tokens();
-    let owners = if let Some(pa) = args
-        .owner
-        .and_then(|x| ctx.get_cached(&x).payment_address())
+    let owners = if let Some(pa) = args.owner.and_then(|x| x.payment_address())
     {
         vec![pa]
     } else {
-        ctx.wallet
+        wallet
             .get_payment_addrs()
             .into_values()
             .filter(PaymentAddress::is_pinned)
             .collect()
     };
     // Get the viewing keys with which to try note decryptions
-    let viewing_keys: Vec<ViewingKey> = ctx
-        .wallet
+    let viewing_keys: Vec<ViewingKey> = wallet
         .get_viewing_keys()
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    // Build up the context that will be queried for asset decodings
-    let _ = ctx.shielded.load();
-    // Establish connection with which to do exchange rate queries
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    let _ = shielded.load();
     // Print the token balances by payment address
     for owner in owners {
         let mut balance = Err(PinnedBalanceError::InvalidViewingKey);
         // Find the viewing key that can recognize payments the current payment
         // address
         for vk in &viewing_keys {
-            balance = ctx
-                .shielded
-                .compute_exchanged_pinned_balance(
-                    &args.query.ledger_address,
-                    owner,
-                    vk,
-                )
+            balance = shielded
+                .compute_exchanged_pinned_balance(client, owner, vk)
                 .await;
             if balance != Err(PinnedBalanceError::InvalidViewingKey) {
                 break;
@@ -590,13 +409,8 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             };
             let vk = ExtendedFullViewingKey::from(fvk).fvk.vk;
             // Use the given viewing key to decrypt pinned transaction data
-            balance = ctx
-                .shielded
-                .compute_exchanged_pinned_balance(
-                    &args.query.ledger_address,
-                    owner,
-                    &vk,
-                )
+            balance = shielded
+                .compute_exchanged_pinned_balance(client, owner, &vk)
                 .await
         }
         // Now print out the received quantities according to CLI arguments
@@ -609,7 +423,6 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
                 println!("Payment address {} has not yet been consumed.", owner)
             }
             (Ok((balance, epoch)), Some(token)) => {
-                let token = ctx.get(token);
                 // Extract and print only the specified token from the total
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
@@ -635,10 +448,8 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             (Ok((balance, epoch)), None) => {
                 let mut found_any = false;
                 // Print balances by human-readable token names
-                let balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
+                let balance =
+                    shielded.decode_amount(client, balance, epoch).await;
                 for (addr, value) in balance.components() {
                     let asset_value = token::Amount::from(*value as u64);
                     if !found_any {
@@ -669,7 +480,7 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
 }
 
 fn print_balances(
-    ctx: &Context,
+    wallet: &Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: &Address,
     target: Option<&Address>,
@@ -694,7 +505,7 @@ fn print_balances(
                         "with {}: {}, owned by {}",
                         sub_prefix,
                         balance,
-                        lookup_alias(ctx, owner)
+                        lookup_alias(wallet, owner)
                     ),
                 )),
                 None => token::is_any_token_balance_key(&key).map(|owner| {
@@ -703,7 +514,7 @@ fn print_balances(
                         format!(
                             ": {}, owned by {}",
                             balance,
-                            lookup_alias(ctx, owner)
+                            lookup_alias(wallet, owner)
                         ),
                     )
                 }),
@@ -722,7 +533,7 @@ fn print_balances(
     if print_num == 0 {
         match target {
             Some(t) => {
-                writeln!(w, "No balances owned by {}", lookup_alias(ctx, t))
+                writeln!(w, "No balances owned by {}", lookup_alias(wallet, t))
                     .unwrap()
             }
             None => {
@@ -733,9 +544,16 @@ fn print_balances(
 }
 
 /// Query Proposals
-pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
-    async fn print_proposal(
-        client: &HttpClient,
+pub async fn query_proposal<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryProposal,
+) {
+    async fn print_proposal<
+        C: Client + namada::ledger::queries::Client + Sync,
+    >(
+        client: &C,
         id: u64,
         current_epoch: Epoch,
         details: bool,
@@ -745,22 +563,23 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
         let author =
-            query_storage_value::<Address>(client, &author_key).await?;
+            query_storage_value::<C, Address>(client, &author_key).await?;
         let start_epoch =
-            query_storage_value::<Epoch>(client, &start_epoch_key).await?;
+            query_storage_value::<C, Epoch>(client, &start_epoch_key).await?;
         let end_epoch =
-            query_storage_value::<Epoch>(client, &end_epoch_key).await?;
+            query_storage_value::<C, Epoch>(client, &end_epoch_key).await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
             let grace_epoch_key = gov_storage::get_grace_epoch_key(id);
-            let content = query_storage_value::<HashMap<String, String>>(
+            let content = query_storage_value::<C, HashMap<String, String>>(
                 client,
                 &content_key,
             )
             .await?;
             let grace_epoch =
-                query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
+                query_storage_value::<C, Epoch>(client, &grace_epoch_key)
+                    .await?;
 
             println!("Proposal: {}", id);
             println!("{:4}Author: {}", "", author);
@@ -812,11 +631,10 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         Some(())
     }
 
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_epoch(client).await;
     match args.proposal_id {
         Some(id) => {
-            if print_proposal(&client, id, current_epoch, true)
+            if print_proposal::<C>(&client, id, current_epoch, true)
                 .await
                 .is_none()
             {
@@ -826,12 +644,12 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         None => {
             let last_proposal_id_key = gov_storage::get_counter_key();
             let last_proposal_id =
-                query_storage_value::<u64>(&client, &last_proposal_id_key)
+                query_storage_value::<C, u64>(&client, &last_proposal_id_key)
                     .await
                     .unwrap();
 
             for id in 0..last_proposal_id {
-                if print_proposal(&client, id, current_epoch, false)
+                if print_proposal::<C>(&client, id, current_epoch, false)
                     .await
                     .is_none()
                 {
@@ -860,38 +678,36 @@ pub fn value_by_address(
 }
 
 /// Query token shielded balance(s)
-pub async fn query_shielded_balance(
-    ctx: &mut Context,
+pub async fn query_shielded_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: ShieldedUtils<C = C>,
+>(
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
+    shielded: &mut ShieldedContext<U>,
     args: args::QueryBalance,
 ) {
     // Used to control whether balances for all keys or a specific key are
     // printed
-    let owner = args
-        .owner
-        .and_then(|x| ctx.get_cached(&x).full_viewing_key());
+    let owner = args.owner.and_then(|x| x.full_viewing_key());
     // Used to control whether conversions are automatically performed
     let no_conversions = args.no_conversions;
     // Viewing keys are used to query shielded balances. If a spending key is
     // provided, then convert to a viewing key first.
     let viewing_keys = match owner {
         Some(viewing_key) => vec![viewing_key],
-        None => ctx.wallet.get_viewing_keys().values().copied().collect(),
+        None => wallet.get_viewing_keys().values().copied().collect(),
     };
-    // Build up the context that will be queried for balances
-    let _ = ctx.shielded.load();
+    let _ = shielded.load();
     let fvks: Vec<_> = viewing_keys
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded
-        .fetch(&args.query.ledger_address, &[], &fvks)
-        .await;
+    shielded.fetch(client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
-    let _ = ctx.shielded.save();
+    let _ = shielded.save();
     // The epoch is required to identify timestamped tokens
-    let epoch = query_epoch(args.query.clone()).await;
-    // Establish connection with which to do exchange rate queries
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    let epoch = query_epoch(client).await;
     // Map addresses to token names
     let tokens = address::tokens();
     match (args.token, owner.is_some()) {
@@ -901,21 +717,17 @@ pub async fn query_shielded_balance(
             let viewing_key =
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance: Amount<AssetType> = if no_conversions {
-                ctx.shielded
+                shielded
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key")
             } else {
-                ctx.shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
+                shielded
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key")
             };
             // Compute the unique asset identifier from the token address
-            let token = ctx.get(&token);
+            let token = token;
             let asset_type = AssetType::new(
                 (token.clone(), epoch.0)
                     .try_to_vec()
@@ -946,16 +758,12 @@ pub async fn query_shielded_balance(
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
-                    ctx.shielded
+                    shielded
                         .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key")
                 } else {
-                    ctx.shielded
-                        .compute_exchanged_balance(
-                            client.clone(),
-                            &viewing_key,
-                            epoch,
-                        )
+                    shielded
+                        .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
                         .expect("context should contain viewing key")
                 };
@@ -972,10 +780,8 @@ pub async fn query_shielded_balance(
             // Print non-zero balances whose asset types can be decoded
             for (asset_type, balances) in balances {
                 // Decode the asset type
-                let decoded = ctx
-                    .shielded
-                    .decode_asset_type(client.clone(), asset_type)
-                    .await;
+                let decoded =
+                    shielded.decode_asset_type(client, asset_type).await;
                 match decoded {
                     Some((addr, asset_epoch)) if asset_epoch == epoch => {
                         // Only assets with the current timestamp count
@@ -1020,7 +826,7 @@ pub async fn query_shielded_balance(
         // users
         (Some(token), false) => {
             // Compute the unique asset identifier from the token address
-            let token = ctx.get(&token);
+            let token = token;
             let asset_type = AssetType::new(
                 (token.clone(), epoch.0)
                     .try_to_vec()
@@ -1038,16 +844,12 @@ pub async fn query_shielded_balance(
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
                 let balance = if no_conversions {
-                    ctx.shielded
+                    shielded
                         .compute_shielded_balance(&viewing_key)
                         .expect("context should contain viewing key")
                 } else {
-                    ctx.shielded
-                        .compute_exchanged_balance(
-                            client.clone(),
-                            &viewing_key,
-                            epoch,
-                        )
+                    shielded
+                        .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
                         .expect("context should contain viewing key")
                 };
@@ -1072,31 +874,21 @@ pub async fn query_shielded_balance(
                 ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
             let balance;
             if no_conversions {
-                balance = ctx
-                    .shielded
+                balance = shielded
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
-                    .decode_all_amounts(client.clone(), balance)
-                    .await;
+                let decoded_balance =
+                    shielded.decode_all_amounts(client, balance).await;
                 print_decoded_balance_with_epoch(decoded_balance);
             } else {
-                balance = ctx
-                    .shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
+                balance = shielded
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
+                let decoded_balance =
+                    shielded.decode_amount(client, balance, epoch).await;
                 print_decoded_balance(decoded_balance);
             }
         }
@@ -1143,35 +935,37 @@ pub fn print_decoded_balance_with_epoch(
 }
 
 /// Query token amount of owner.
-pub async fn get_token_balance(
-    client: &HttpClient,
+pub async fn get_token_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     token: &Address,
     owner: &Address,
 ) -> Option<token::Amount> {
-    let balance_key = balance_key(token, owner);
-    query_storage_value(client, &balance_key).await
+    namada::ledger::rpc::get_token_balance(client, token, owner).await
 }
 
-pub async fn query_proposal_result(
-    _ctx: Context,
+pub async fn query_proposal_result<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     args: args::QueryProposalResult,
 ) {
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let current_epoch = query_epoch(args.query.clone()).await;
+    let current_epoch = query_epoch(client).await;
 
     match args.proposal_id {
         Some(id) => {
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
             let end_epoch =
-                query_storage_value::<Epoch>(&client, &end_epoch_key).await;
+                query_storage_value::<C, Epoch>(&client, &end_epoch_key).await;
 
             match end_epoch {
                 Some(end_epoch) => {
                     if current_epoch > end_epoch {
                         let votes =
-                            get_proposal_votes(&client, end_epoch, id).await;
+                            get_proposal_votes(client, end_epoch, id).await;
                         let proposal_result =
-                            compute_tally(&client, end_epoch, votes).await;
+                            compute_tally(client, end_epoch, votes).await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -1245,12 +1039,10 @@ pub async fn query_proposal_result(
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let public_key = get_public_key(
-                            &proposal.address,
-                            args.query.ledger_address.clone(),
-                        )
-                        .await
-                        .expect("Public key should exist.");
+                        let public_key =
+                            get_public_key(client, &proposal.address)
+                                .await
+                                .expect("Public key should exist.");
 
                         if !proposal.check_signature(&public_key) {
                             eprintln!("Bad proposal signature.");
@@ -1258,13 +1050,13 @@ pub async fn query_proposal_result(
                         }
 
                         let votes = get_proposal_offline_votes(
-                            &client,
+                            client,
                             proposal.clone(),
                             files,
                         )
                         .await;
                         let proposal_result =
-                            compute_tally(&client, proposal.tally_epoch, votes)
+                            compute_tally(client, proposal.tally_epoch, votes)
                                 .await;
 
                         println!("{:4}Result: {}", "", proposal_result);
@@ -1287,18 +1079,18 @@ pub async fn query_proposal_result(
     }
 }
 
-pub async fn query_protocol_parameters(
-    _ctx: Context,
-    args: args::QueryProtocolParameters,
+pub async fn query_protocol_parameters<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    _args: args::QueryProtocolParameters,
 ) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-
-    let gov_parameters = get_governance_parameters(&client).await;
+    let gov_parameters = get_governance_parameters(client).await;
     println!("Governance Parameters\n {:4}", gov_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
-    let epoch_duration = query_storage_value::<EpochDuration>(&client, &key)
+    let epoch_duration = query_storage_value::<C, EpochDuration>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1311,26 +1103,26 @@ pub async fn query_protocol_parameters(
     );
 
     let key = param_storage::get_max_expected_time_per_block_key();
-    let max_block_duration = query_storage_value::<u64>(&client, &key)
+    let max_block_duration = query_storage_value::<C, u64>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Max. block duration: {}", "", max_block_duration);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let vp_whitelist = query_storage_value::<Vec<String>>(&client, &key)
+    let vp_whitelist = query_storage_value::<C, Vec<String>>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}VP whitelist: {:?}", "", vp_whitelist);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let tx_whitelist = query_storage_value::<Vec<String>>(&client, &key)
+    let tx_whitelist = query_storage_value::<C, Vec<String>>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
     println!("PoS parameters");
     let key = pos::params_key();
-    let pos_params = query_storage_value::<PosParams>(&client, &key)
+    let pos_params = query_storage_value::<C, PosParams>(&client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1359,27 +1151,30 @@ pub async fn query_protocol_parameters(
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let epoch = query_epoch(args.query.clone()).await;
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryBonds,
+) {
+    let epoch = query_epoch(client).await;
     match (args.owner, args.validator) {
         (Some(owner), Some(validator)) => {
-            let source = ctx.get(&owner);
-            let validator = ctx.get(&validator);
+            let source = owner;
+            let validator = validator;
             // Find owner's delegations to the given validator
             let bond_id = pos::BondId { source, validator };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
+                query_storage_value::<C, pos::Bonds>(client, &bond_key).await;
             // Find owner's unbonded delegations from the given
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
+                query_storage_value::<C, pos::Unbonds>(client, &unbond_key)
+                    .await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<C, pos::Slashes>(client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -1421,7 +1216,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             }
         }
         (None, Some(validator)) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find validator's self-bonds
             let bond_id = pos::BondId {
                 source: validator.clone(),
@@ -1429,15 +1224,16 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(&client, &bond_key).await;
+                query_storage_value::<C, pos::Bonds>(client, &bond_key).await;
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(&client, &unbond_key).await;
+                query_storage_value::<C, pos::Unbonds>(client, &unbond_key)
+                    .await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<C, pos::Slashes>(client, &slashes_key)
                     .await
                     .unwrap_or_default();
 
@@ -1468,17 +1264,19 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             }
         }
         (Some(owner), None) => {
-            let owner = ctx.get(&owner);
+            let owner = owner;
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
             let bonds =
-                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                query_storage_prefix::<C, pos::Bonds>(client, &bonds_prefix)
                     .await;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds =
-                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
-                    .await;
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
+                client,
+                &unbonds_prefix,
+            )
+            .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1490,12 +1288,13 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1541,12 +1340,13 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1588,13 +1388,15 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             // Find all the bonds
             let bonds_prefix = pos::bonds_prefix();
             let bonds =
-                query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix)
+                query_storage_prefix::<C, pos::Bonds>(client, &bonds_prefix)
                     .await;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds =
-                query_storage_prefix::<pos::Unbonds>(&client, &unbonds_prefix)
-                    .await;
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
+                client,
+                &unbonds_prefix,
+            )
+            .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1605,12 +1407,13 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1656,12 +1459,13 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
-                                &client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1706,33 +1510,40 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
 }
 
 /// Query PoS bonded stake
-pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
+pub async fn query_bonded_stake<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryBondedStake,
+) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_epoch(client).await,
     };
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
-    let validator_sets =
-        query_storage_value::<pos::ValidatorSets>(&client, &validator_set_key)
-            .await
-            .expect("Validator set should always be set");
+    let validator_sets = query_storage_value::<C, pos::ValidatorSets>(
+        client,
+        &validator_set_key,
+    )
+    .await
+    .expect("Validator set should always be set");
     let validator_set = validator_sets
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
 
     match args.validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find bonded stake for the given validator
             let validator_deltas_key = pos::validator_deltas_key(&validator);
-            let validator_deltas = query_storage_value::<pos::ValidatorDeltas>(
-                &client,
-                &validator_deltas_key,
-            )
-            .await;
+            let validator_deltas =
+                query_storage_value::<C, pos::ValidatorDeltas>(
+                    client,
+                    &validator_deltas_key,
+                )
+                .await;
             match validator_deltas.and_then(|data| data.get(epoch)) {
                 Some(val_stake) => {
                     let bonded_stake: u64 = val_stake.try_into().expect(
@@ -1792,7 +1603,7 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
     }
     let total_deltas_key = pos::total_deltas_key();
     let total_deltas =
-        query_storage_value::<pos::TotalDeltas>(&client, &total_deltas_key)
+        query_storage_value::<C, pos::TotalDeltas>(client, &total_deltas_key)
             .await
             .expect("Total bonded stake should always be set");
     let total_bonded_stake = total_deltas
@@ -1806,31 +1617,31 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
 }
 
 /// Query PoS validator's commission rate
-pub async fn query_commission_rate(
-    ctx: Context,
+pub async fn query_commission_rate<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     args: args::QueryCommissionRate,
 ) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_epoch(client).await,
     };
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
-    let validator = ctx.get(&args.validator);
-    let is_validator =
-        is_validator(&validator, args.query.ledger_address).await;
+    let validator = args.validator;
+    let is_validator = is_validator(client, &validator).await;
 
     if is_validator {
         let validator_commission_key =
             pos::validator_commission_rate_key(&validator);
         let validator_max_commission_change_key =
             pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = query_storage_value::<pos::CommissionRates>(
-            &client,
+        let commission_rates = query_storage_value::<C, pos::CommissionRates>(
+            client,
             &validator_commission_key,
         )
         .await;
-        let max_rate_change = query_storage_value::<Decimal>(
-            &client,
+        let max_rate_change = query_storage_value::<C, Decimal>(
+            client,
             &validator_max_commission_change_key,
         )
         .await;
@@ -1862,15 +1673,19 @@ pub async fn query_commission_rate(
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn query_slashes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QuerySlashes,
+) {
     match args.validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
+            let validator = validator;
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<C, pos::Slashes>(&client, &slashes_key)
                     .await;
             match slashes {
                 Some(slashes) => {
@@ -1893,9 +1708,11 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes =
-                query_storage_prefix::<pos::Slashes>(&client, &slashes_prefix)
-                    .await;
+            let slashes = query_storage_prefix::<C, pos::Slashes>(
+                &client,
+                &slashes_prefix,
+            )
+            .await;
 
             match slashes {
                 Some(slashes) => {
@@ -1932,77 +1749,66 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let (data, height, prove) = (Some(tx_bytes), None, false);
-    let result = unwrap_client_response(
-        RPC.shell().dry_run_tx(&client, data, height, prove).await,
-    )
-    .data;
-    println!("Dry-run result: {}", result);
+pub async fn dry_run_tx<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+    tx_bytes: Vec<u8>,
+) {
+    println!(
+        "Dry-run result: {}",
+        namada::ledger::rpc::dry_run_tx(client, tx_bytes).await
+    );
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key(
+pub async fn get_public_key<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> Option<common::PublicKey> {
-    let client = HttpClient::new(ledger_address).unwrap();
-    let key = pk_key(address);
-    query_storage_value(&client, &key).await
+    namada::ledger::rpc::get_public_key(client, address).await
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator(
+pub async fn is_validator<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    unwrap_client_response(RPC.vp().pos().is_validator(&client, address).await)
+    namada::ledger::rpc::is_validator(client, address).await
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator(
+pub async fn is_delegator<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    let bonds_prefix = pos::bonds_for_source_prefix(address);
-    let bonds =
-        query_storage_prefix::<pos::Bonds>(&client, &bonds_prefix).await;
-    bonds.is_some() && bonds.unwrap().count() > 0
+    namada::ledger::rpc::is_delegator(client, address).await
 }
 
-pub async fn is_delegator_at(
-    client: &HttpClient,
+pub async fn is_delegator_at<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
     epoch: Epoch,
 ) -> bool {
-    let key = pos::bonds_for_source_prefix(address);
-    let bonds_iter = query_storage_prefix::<pos::Bonds>(client, &key).await;
-    if let Some(mut bonds) = bonds_iter {
-        bonds.any(|(_, bond)| bond.get(epoch).is_some())
-    } else {
-        false
-    }
+    namada::ledger::rpc::is_delegator_at(client, address, epoch).await
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address(
+pub async fn known_address<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
-    ledger_address: TendermintAddress,
 ) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
-    match address {
-        Address::Established(_) => {
-            // Established account exists if it has a VP
-            let key = storage::Key::validity_predicate(address);
-            query_has_storage_key(&client, &key).await
-        }
-        Address::Implicit(_) | Address::Internal(_) => true,
-    }
+    namada::ledger::rpc::known_address(client, address).await
 }
 
 /// Accumulate slashes starting from `epoch_start` until (optionally)
@@ -2140,19 +1946,23 @@ fn process_unbonds_query(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
+pub async fn query_conversions<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryConversions,
+) {
     // The chosen token type of the conversions
-    let target_token = args.token.as_ref().map(|x| ctx.get(x));
+    let target_token = args.token;
     // To facilitate human readable token addresses
     let tokens = address::tokens();
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
     let masp_addr = masp();
     let key_prefix: Key = masp_addr.to_db_key().into();
     let state_key = key_prefix
         .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
         .unwrap();
     let conv_state =
-        query_storage_value::<ConversionState>(&client, &state_key)
+        query_storage_value::<C, ConversionState>(&client, &state_key)
             .await
             .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
@@ -2203,8 +2013,10 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
 }
 
 /// Query a conversion.
-pub async fn query_conversion(
-    client: HttpClient,
+pub async fn query_conversion<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     asset_type: AssetType,
 ) -> Option<(
     Address,
@@ -2212,264 +2024,95 @@ pub async fn query_conversion(
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
 )> {
-    Some(unwrap_client_response(
-        RPC.shell().read_conversion(&client, &asset_type).await,
-    ))
+    namada::ledger::rpc::query_conversion(client, asset_type).await
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<T>(
-    client: &HttpClient,
+pub async fn query_storage_value<
+    C: Client + namada::ledger::queries::Client + Sync,
+    T,
+>(
+    client: &C,
     key: &storage::Key,
 ) -> Option<T>
 where
     T: BorshDeserialize,
 {
-    // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
-    // use `storage_has_key` instead of `storage_value`, because `storage_value`
-    // returns 0 bytes when the key is not found.
-    let maybe_unit = T::try_from_slice(&[]);
-    if let Ok(unit) = maybe_unit {
-        return if unwrap_client_response(
-            RPC.shell().storage_has_key(client, key).await,
-        ) {
-            Some(unit)
-        } else {
-            None
-        };
-    }
-
-    let response = unwrap_client_response(
-        RPC.shell()
-            .storage_value(client, None, None, false, key)
-            .await,
-    );
-    if response.data.is_empty() {
-        return None;
-    }
-    T::try_from_slice(&response.data[..])
-        .map(Some)
-        .unwrap_or_else(|err| {
-            eprintln!("Error decoding the value: {}", err);
-            cli::safe_exit(1)
-        })
+    namada::ledger::rpc::query_storage_value(client, key).await
 }
 
 /// Query a storage value and the proof without decoding.
-pub async fn query_storage_value_bytes(
-    client: &HttpClient,
+pub async fn query_storage_value_bytes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     key: &storage::Key,
     height: Option<BlockHeight>,
     prove: bool,
 ) -> (Option<Vec<u8>>, Option<Proof>) {
-    let data = None;
-    let response = unwrap_client_response(
-        RPC.shell()
-            .storage_value(client, data, height, prove, key)
-            .await,
-    );
-    if response.data.is_empty() {
-        (None, response.proof)
-    } else {
-        (Some(response.data), response.proof)
-    }
+    namada::ledger::rpc::query_storage_value_bytes(client, key, height, prove)
+        .await
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<T>(
-    client: &HttpClient,
+pub async fn query_storage_prefix<
+    C: Client + namada::ledger::queries::Client + Sync,
+    T,
+>(
+    client: &C,
     key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
 where
     T: BorshDeserialize,
 {
-    let values = unwrap_client_response(
-        RPC.shell()
-            .storage_prefix(client, None, None, false, key)
-            .await,
-    );
-    let decode =
-        |PrefixValue { key, value }: PrefixValue| match T::try_from_slice(
-            &value[..],
-        ) {
-            Err(err) => {
-                eprintln!(
-                    "Skipping a value for key {}. Error in decoding: {}",
-                    key, err
-                );
-                None
-            }
-            Ok(value) => Some((key, value)),
-        };
-    if values.data.is_empty() {
-        None
-    } else {
-        Some(values.data.into_iter().filter_map(decode))
-    }
+    namada::ledger::rpc::query_storage_prefix(client, key).await
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key(
-    client: &HttpClient,
+pub async fn query_has_storage_key<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     key: &storage::Key,
 ) -> bool {
-    unwrap_client_response(RPC.shell().storage_has_key(client, key).await)
-}
-
-/// Represents a query for an event pertaining to the specified transaction
-#[derive(Debug, Copy, Clone)]
-pub enum TxEventQuery<'a> {
-    Accepted(&'a str),
-    Applied(&'a str),
-}
-
-impl<'a> TxEventQuery<'a> {
-    /// The event type to which this event query pertains
-    fn event_type(self) -> &'static str {
-        match self {
-            TxEventQuery::Accepted(_) => "accepted",
-            TxEventQuery::Applied(_) => "applied",
-        }
-    }
-
-    /// The transaction to which this event query pertains
-    fn tx_hash(self) -> &'a str {
-        match self {
-            TxEventQuery::Accepted(tx_hash) => tx_hash,
-            TxEventQuery::Applied(tx_hash) => tx_hash,
-        }
-    }
-}
-
-/// Transaction event queries are semantically a subset of general queries
-impl<'a> From<TxEventQuery<'a>> for Query {
-    fn from(tx_query: TxEventQuery<'a>) -> Self {
-        match tx_query {
-            TxEventQuery::Accepted(tx_hash) => {
-                Query::default().and_eq("accepted.hash", tx_hash)
-            }
-            TxEventQuery::Applied(tx_hash) => {
-                Query::default().and_eq("applied.hash", tx_hash)
-            }
-        }
-    }
+    namada::ledger::rpc::query_has_storage_key(client, key).await
 }
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transation.
-pub async fn query_tx_events(
-    client: &HttpClient,
-    tx_event_query: TxEventQuery<'_>,
-) -> eyre::Result<Option<Event>> {
-    let tx_hash: Hash = tx_event_query.tx_hash().try_into()?;
-    match tx_event_query {
-        TxEventQuery::Accepted(_) => RPC
-            .shell()
-            .accepted(client, &tx_hash)
-            .await
-            .wrap_err_with(|| {
-                eyre!("Failed querying whether a transaction was accepted")
-            }),
-        TxEventQuery::Applied(_) => RPC
-            .shell()
-            .applied(client, &tx_hash)
-            .await
-            .wrap_err_with(|| {
-                eyre!("Error querying whether a transaction was applied")
-            }),
-    }
+pub async fn query_tx_events<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    tx_event_query: namada::ledger::rpc::TxEventQuery<'_>,
+) -> std::result::Result<
+    Option<Event>,
+    <C as namada::ledger::queries::Client>::Error,
+> {
+    namada::ledger::rpc::query_tx_events(client, tx_event_query).await
 }
 
 /// Lookup the full response accompanying the specified transaction event
 // TODO: maybe remove this in favor of `query_tx_status`
-pub async fn query_tx_response(
-    ledger_address: &TendermintAddress,
-    tx_query: TxEventQuery<'_>,
+pub async fn query_tx_response<C: Client + Sync>(
+    client: &C,
+    tx_query: namada::ledger::rpc::TxEventQuery<'_>,
 ) -> Result<TxResponse, TError> {
-    // Connect to the Tendermint server holding the transactions
-    let (client, driver) = WebSocketClient::new(ledger_address.clone()).await?;
-    let driver_handle = tokio::spawn(async move { driver.run().await });
-    // Find all blocks that apply a transaction with the specified hash
-    let blocks = &client
-        .block_search(tx_query.into(), 1, 255, Order::Ascending)
-        .await
-        .expect("Unable to query for transaction with given hash")
-        .blocks;
-    // Get the block results corresponding to a block to which
-    // the specified transaction belongs
-    let block = &blocks
-        .get(0)
-        .ok_or_else(|| {
-            TError::server(
-                "Unable to find a block applying the given transaction"
-                    .to_string(),
-            )
-        })?
-        .block;
-    let response_block_results = client
-        .block_results(block.header.height)
-        .await
-        .expect("Unable to retrieve block containing transaction");
-    // Search for the event where the specified transaction is
-    // applied to the blockchain
-    let query_event_opt =
-        response_block_results.end_block_events.and_then(|events| {
-            events
-                .iter()
-                .find(|event| {
-                    event.type_str == tx_query.event_type()
-                        && event.attributes.iter().any(|tag| {
-                            tag.key.as_ref() == "hash"
-                                && tag.value.as_ref() == tx_query.tx_hash()
-                        })
-                })
-                .cloned()
-        });
-    let query_event = query_event_opt.ok_or_else(|| {
-        TError::server(
-            "Unable to find the event corresponding to the specified \
-             transaction"
-                .to_string(),
-        )
-    })?;
-    // Reformat the event attributes so as to ease value extraction
-    let event_map: std::collections::HashMap<&str, &str> = query_event
-        .attributes
-        .iter()
-        .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
-        .collect();
-    // Summarize the transaction results that we were searching for
-    let result = TxResponse {
-        info: event_map["info"].to_string(),
-        log: event_map["log"].to_string(),
-        height: event_map["height"].to_string(),
-        hash: event_map["hash"].to_string(),
-        code: event_map["code"].to_string(),
-        gas_used: event_map["gas_used"].to_string(),
-        initialized_accounts: serde_json::from_str(
-            event_map["initialized_accounts"],
-        )
-        .unwrap_or_default(),
-    };
-    // Signal to the driver to terminate.
-    client.close()?;
-    // Await the driver's termination to ensure proper connection closure.
-    let _ = driver_handle.await.unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        cli::safe_exit(1)
-    });
-    Ok(result)
+    namada::ledger::rpc::query_tx_response(client, tx_query).await
 }
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
-pub async fn query_result(_ctx: Context, args: args::QueryResult) {
+pub async fn query_result<C: Client + Sync>(
+    client: &C,
+    args: args::QueryResult,
+) {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
-        &args.query.ledger_address,
-        TxEventQuery::Applied(&args.tx_hash),
+        client,
+        namada::ledger::rpc::TxEventQuery::Applied(&args.tx_hash),
     )
     .await;
     match tx_response {
@@ -2482,8 +2125,8 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
         Err(err1) => {
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
-                &args.query.ledger_address,
-                TxEventQuery::Accepted(&args.tx_hash),
+                client,
+                namada::ledger::rpc::TxEventQuery::Accepted(&args.tx_hash),
             )
             .await;
             match tx_response {
@@ -2501,75 +2144,20 @@ pub async fn query_result(_ctx: Context, args: args::QueryResult) {
     }
 }
 
-pub async fn get_proposal_votes(
-    client: &HttpClient,
+pub async fn get_proposal_votes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     epoch: Epoch,
     proposal_id: u64,
 ) -> Votes {
-    let validators = get_all_validators(client, epoch).await;
-
-    let vote_prefix_key =
-        gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter =
-        query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
-
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
-
-    if let Some(vote_iter) = vote_iter {
-        for (key, vote) in vote_iter {
-            let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contain the voting address.")
-                .clone();
-            if vote.is_yay() && validators.contains(&voter_address) {
-                let amount: VotePower =
-                    get_validator_stake(client, epoch, &voter_address)
-                        .await
-                        .into();
-                yay_validators.insert(voter_address, amount);
-            } else if !validators.contains(&voter_address) {
-                let validator_address =
-                    gov_storage::get_vote_delegation_address(&key)
-                        .expect(
-                            "Vote key should contain the delegation address.",
-                        )
-                        .clone();
-                let delegator_token_amount = get_bond_amount_at(
-                    client,
-                    &voter_address,
-                    &validator_address,
-                    epoch,
-                )
-                .await;
-                if let Some(amount) = delegator_token_amount {
-                    if vote.is_yay() {
-                        let entry =
-                            yay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    } else {
-                        let entry =
-                            nay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
-                    }
-                }
-            }
-        }
-    }
-
-    Votes {
-        yay_validators,
-        yay_delegators,
-        nay_delegators,
-    }
+    namada::ledger::rpc::get_proposal_votes(client, epoch, proposal_id).await
 }
 
-pub async fn get_proposal_offline_votes(
-    client: &HttpClient,
+pub async fn get_proposal_offline_votes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     proposal: OfflineProposal,
     files: HashSet<PathBuf>,
 ) -> Votes {
@@ -2619,7 +2207,7 @@ pub async fn get_proposal_offline_votes(
         {
             let key = pos::bonds_for_source_prefix(&proposal_vote.address);
             let bonds_iter =
-                query_storage_prefix::<pos::Bonds>(client, &key).await;
+                query_storage_prefix::<C, pos::Bonds>(client, &key).await;
             if let Some(bonds) = bonds_iter {
                 for (key, epoched_bonds) in bonds {
                     // Look-up slashes for the validator in this key and
@@ -2629,7 +2217,7 @@ pub async fn get_proposal_offline_votes(
                             "Delegation key should contain validator address.",
                         );
                     let slashes_key = pos::validator_slashes_key(&validator);
-                    let slashes = query_storage_value::<pos::Slashes>(
+                    let slashes = query_storage_value::<C, pos::Slashes>(
                         client,
                         &slashes_key,
                     )
@@ -2698,208 +2286,88 @@ pub async fn get_proposal_offline_votes(
 }
 
 // Compute the result of a proposal
-pub async fn compute_tally(
-    client: &HttpClient,
+pub async fn compute_tally<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     epoch: Epoch,
     votes: Votes,
 ) -> ProposalResult {
-    let total_staked_tokens: VotePower =
-        get_total_staked_tokens(client, epoch).await.into();
-
-    let Votes {
-        yay_validators,
-        yay_delegators,
-        nay_delegators,
-    } = votes;
-
-    let mut total_yay_staked_tokens = VotePower::from(0_u64);
-    for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_staked_tokens += amount;
-    }
-
-    // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if !yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens += vote_power;
-            }
-        }
-    }
-
-    // NAY: Remove delegator amount whose validator validator vote yay
-    for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens -= vote_power;
-            }
-        }
-    }
-
-    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
-        ProposalResult {
-            result: TallyResult::Passed,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
-    }
+    namada::ledger::rpc::compute_tally(client, epoch, votes).await
 }
 
-pub async fn get_bond_amount_at(
-    client: &HttpClient,
+pub async fn get_bond_amount_at<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     delegator: &Address,
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    let slashes_key = pos::validator_slashes_key(validator);
-    let slashes = query_storage_value::<pos::Slashes>(client, &slashes_key)
+    namada::ledger::rpc::get_bond_amount_at(client, delegator, validator, epoch)
         .await
-        .unwrap_or_default();
-    let bond_key = pos::bond_key(&BondId {
-        source: delegator.clone(),
-        validator: validator.clone(),
-    });
-    let epoched_bonds = query_storage_value::<Bonds>(client, &bond_key).await;
-    match epoched_bonds {
-        Some(epoched_bonds) => {
-            let mut delegated_amount: token::Amount = 0.into();
-            for bond in epoched_bonds.iter() {
-                let mut to_deduct = bond.neg_deltas;
-                for (epoch_start, &(mut delta)) in
-                    bond.pos_deltas.iter().sorted()
-                {
-                    // deduct bond's neg_deltas
-                    if to_deduct > delta {
-                        to_deduct -= delta;
-                        // If the whole bond was deducted, continue to
-                        // the next one
-                        continue;
-                    } else {
-                        delta -= to_deduct;
-                        to_deduct = token::Amount::default();
-                    }
-
-                    delta = apply_slashes(
-                        &slashes,
-                        delta,
-                        *epoch_start,
-                        None,
-                        None,
-                    );
-                    if epoch >= *epoch_start {
-                        delegated_amount += delta;
-                    }
-                }
-            }
-            Some(delegated_amount)
-        }
-        None => None,
-    }
 }
 
-pub async fn get_all_validators(
-    client: &HttpClient,
+pub async fn get_all_validators<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
-    unwrap_client_response(
-        RPC.vp()
-            .pos()
-            .validator_addresses(client, &Some(epoch))
-            .await,
-    )
+    namada::ledger::rpc::get_all_validators(client, epoch).await
 }
 
-pub async fn get_total_staked_tokens(
-    client: &HttpClient,
+pub async fn get_total_staked_tokens<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     epoch: Epoch,
 ) -> token::Amount {
-    unwrap_client_response(
-        RPC.vp().pos().total_stake(client, &Some(epoch)).await,
-    )
+    namada::ledger::rpc::get_total_staked_tokens(client, epoch).await
 }
 
-async fn get_validator_stake(
-    client: &HttpClient,
+async fn get_validator_stake<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     epoch: Epoch,
     validator: &Address,
 ) -> token::Amount {
-    unwrap_client_response(
-        RPC.vp()
-            .pos()
-            .validator_stake(client, validator, &Some(epoch))
-            .await,
-    )
+    namada::ledger::rpc::get_validator_stake(client, epoch, validator).await
 }
 
-pub async fn get_delegators_delegation(
-    client: &HttpClient,
+pub async fn get_delegators_delegation<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     address: &Address,
 ) -> HashSet<Address> {
-    unwrap_client_response(RPC.vp().pos().delegations(client, address).await)
+    namada::ledger::rpc::get_delegators_delegation(client, address).await
 }
 
-pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
-    use namada::types::token::Amount;
-    let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content_size = query_storage_value::<u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<Amount>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epochs = query_storage_value::<u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_max_proposal_period_key();
-    let max_proposal_period = query_storage_value::<u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    GovParams {
-        min_proposal_fund: u64::from(min_proposal_fund),
-        max_proposal_code_size,
-        min_proposal_period,
-        max_proposal_period,
-        max_proposal_content_size,
-        min_proposal_grace_epochs,
-    }
+pub async fn get_governance_parameters<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> GovParams {
+    namada::ledger::rpc::get_governance_parameters(client).await
 }
 
 /// Try to find an alias for a given address from the wallet. If not found,
 /// formats the address into a string.
-fn lookup_alias(ctx: &Context, addr: &Address) -> String {
-    match ctx.wallet.find_alias(addr) {
+fn lookup_alias(wallet: &Wallet<CliWalletUtils>, addr: &Address) -> String {
+    match wallet.find_alias(addr) {
         Some(alias) => format!("{}", alias),
         None => format!("{}", addr),
     }
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
+fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> T {
     response.unwrap_or_else(|err| {
-        eprintln!("Error in the query {}", err);
+        eprintln!("Error in the query");
         cli::safe_exit(1)
     })
 }

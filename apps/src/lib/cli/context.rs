@@ -6,17 +6,19 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::ledger::masp::ShieldedContext;
+use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
-use crate::client::tx::ShieldedContext;
+use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use crate::wallet::Wallet;
+use crate::wallet::CliWalletUtils;
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
@@ -66,13 +68,13 @@ pub struct Context {
     /// Global arguments
     pub global_args: args::Global,
     /// The wallet
-    pub wallet: Wallet,
+    pub wallet: Wallet<CliWalletUtils>,
     /// The global configuration
     pub global_config: GlobalConfig,
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
-    pub shielded: ShieldedContext,
+    pub shielded: ShieldedContext<CLIShieldedUtils>,
     /// Native token's address
     pub native_token: Address,
 }
@@ -98,8 +100,10 @@ impl Context {
         let native_token = genesis.native_token;
         let default_genesis =
             genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet =
-            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
+        let wallet = crate::wallet::load_or_new_from_genesis(
+            &chain_dir,
+            default_genesis,
+        );
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
@@ -118,7 +122,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: ShieldedContext::new(chain_dir),
+            shielded: CLIShieldedUtils::new(chain_dir),
             native_token,
         })
     }
