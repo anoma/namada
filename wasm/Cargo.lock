@@ -2519,6 +2519,7 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "namada_macros",
  "proptest",
  "prost",
  "prost-types",

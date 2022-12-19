@@ -2519,6 +2519,7 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "namada_macros",
  "proptest",
  "prost",
  "prost-types",
@@ -2543,6 +2544,7 @@ dependencies = [
 name = "namada_macros"
 version = "0.12.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
