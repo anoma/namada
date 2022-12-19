@@ -1,9 +1,10 @@
 //! Provides functionality for managing validator keys
-use thiserror::Error;
-use crate::types::key::{common, SchemeType};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
 use crate::ledger::wallet;
 use crate::ledger::wallet::{store, StoredKeypair};
+use crate::types::key::{common, SchemeType};
 
 /// Ways in which wallet store operations can fail
 #[derive(Error, Debug)]
@@ -77,4 +78,3 @@ impl From<wallet::keys::DecryptionError> for ReadError {
         ReadError::Decryption(err)
     }
 }
-

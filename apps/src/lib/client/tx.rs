@@ -9,10 +9,12 @@ use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_proofs::prover::LocalTxProver;
-
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp;
-use namada::ledger::masp::ShieldedContext;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
+use namada::ledger::rpc::{TxBroadcastData, TxResponse};
+use namada::ledger::signing::TxSigningKey;
+use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::ledger::{masp, tx};
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::governance::{
@@ -20,33 +22,28 @@ use namada::types::governance::{
 };
 use namada::types::key::*;
 use namada::types::storage::Epoch;
-use crate::wallet::gen_validator_keys;
+use namada::types::token;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::InitValidator;
-use namada::types::token;
 use namada::vm;
-use namada::ledger::masp::ShieldedUtils;
-use namada::ledger::wallet::WalletUtils;
 use rust_decimal::Decimal;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
-use namada::ledger::signing::TxSigningKey;
-use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use namada::ledger::tx;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
-use namada::ledger::wallet::Wallet;
-use crate::wallet::CliWalletUtils;
+use crate::wallet::{gen_validator_keys, CliWalletUtils};
 
-
-pub async fn submit_custom<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_custom<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
@@ -54,7 +51,10 @@ pub async fn submit_custom<C: Client + namada::ledger::queries::Client + Sync, U
     tx::submit_custom::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_update_vp<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_update_vp<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
@@ -62,7 +62,10 @@ pub async fn submit_update_vp<C: Client + namada::ledger::queries::Client + Sync
     tx::submit_update_vp::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_init_account<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_init_account<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
@@ -70,7 +73,9 @@ pub async fn submit_init_account<C: Client + namada::ledger::queries::Client + S
     tx::submit_init_account::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn submit_init_validator<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     mut ctx: Context,
     args::TxInitValidator {
@@ -190,12 +195,18 @@ pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client +
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
-    let initialized_accounts =
-        process_tx::<C, CliWalletUtils>(client, &mut ctx.wallet, &tx_args, tx, TxSigningKey::WalletAddress(source))
-        .await.unwrap_or_else(|err| {
-            eprintln!("Processing transaction failed with {}", err);
-            safe_exit(1)
-        });
+    let initialized_accounts = process_tx::<C, CliWalletUtils>(
+        client,
+        &mut ctx.wallet,
+        &tx_args,
+        tx,
+        TxSigningKey::WalletAddress(source),
+    )
+    .await
+    .unwrap_or_else(|err| {
+        eprintln!("Processing transaction failed with {}", err);
+        safe_exit(1)
+    });
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) =
             match &initialized_accounts[..] {
@@ -245,7 +256,8 @@ pub async fn submit_init_validator<C: Client + namada::ledger::queries::Client +
         // add validator address and keys to the wallet
         ctx.wallet
             .add_validator_data(validator_address, validator_keys);
-        crate::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
+        crate::wallet::save(&ctx.wallet)
+            .unwrap_or_else(|err| eprintln!("{}", err));
 
         let tendermint_home = ctx.config.ledger.tendermint_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
@@ -280,9 +292,7 @@ pub struct CLIShieldedUtils {
 impl CLIShieldedUtils {
     /// Initialize a shielded transaction context that identifies notes
     /// decryptable by any viewing key in the given set
-    pub fn new(
-        context_dir: PathBuf,
-    ) -> masp::ShieldedContext<Self> {
+    pub fn new(context_dir: PathBuf) -> masp::ShieldedContext<Self> {
         // Make sure that MASP parameters are downloaded to enable MASP
         // transaction building and verification later on
         let params_dir = masp::get_params_dir();
@@ -300,13 +310,18 @@ impl CLIShieldedUtils {
         }
         // Finally initialize a shielded context with the supplied directory
         let utils = Self { context_dir };
-        masp::ShieldedContext { utils, ..Default::default() }
+        masp::ShieldedContext {
+            utils,
+            ..Default::default()
+        }
     }
 }
 
 impl Default for CLIShieldedUtils {
     fn default() -> Self {
-        Self { context_dir: PathBuf::from(FILE_NAME) }
+        Self {
+            context_dir: PathBuf::from(FILE_NAME),
+        }
     }
 }
 
@@ -314,8 +329,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     type C = HttpClient;
 
     fn local_tx_prover(&self) -> LocalTxProver {
-        if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
-        {
+        if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
             let params_dir = PathBuf::from(params_dir);
             let spend_path = params_dir.join(masp::SPEND_NAME);
             let convert_path = params_dir.join(masp::CONVERT_NAME);
@@ -371,7 +385,11 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-pub async fn submit_transfer<C: Client + namada::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>>(
+pub async fn submit_transfer<
+    C: Client + namada::ledger::queries::Client + Sync,
+    V: WalletUtils,
+    U: ShieldedUtils<C = C>,
+>(
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
@@ -380,7 +398,10 @@ pub async fn submit_transfer<C: Client + namada::ledger::queries::Client + Sync,
     tx::submit_transfer::<C, V, U>(client, wallet, shielded, args).await;
 }
 
-pub async fn submit_ibc_transfer<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_ibc_transfer<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
@@ -388,7 +409,9 @@ pub async fn submit_ibc_transfer<C: Client + namada::ledger::queries::Client + S
     tx::submit_ibc_transfer::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_init_proposal<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn submit_init_proposal<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
@@ -399,8 +422,7 @@ pub async fn submit_init_proposal<C: Client + namada::ledger::queries::Client + 
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
     let governance_parameters = rpc::get_governance_parameters(client).await;
-    let current_epoch = rpc::query_epoch(client)
-    .await;
+    let current_epoch = rpc::query_epoch(client).await;
 
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
@@ -458,12 +480,9 @@ pub async fn submit_init_proposal<C: Client + namada::ledger::queries::Client + 
 
     if args.offline {
         let signer = ctx.get(&signer);
-        let signing_key = find_keypair::<C, CliWalletUtils>(
-            client,
-            &mut ctx.wallet,
-            &signer,
-        )
-        .await;
+        let signing_key =
+            find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, &signer)
+                .await;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
         let proposal_filename = args
@@ -524,12 +543,21 @@ pub async fn submit_init_proposal<C: Client + namada::ledger::queries::Client + 
         let tx_code = args.tx_code_path;
         let tx = Tx::new(tx_code, Some(data));
 
-        process_tx::<C, CliWalletUtils>(client, &mut ctx.wallet, &args.tx, tx, TxSigningKey::WalletAddress(signer))
-            .await;
+        process_tx::<C, CliWalletUtils>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            tx,
+            TxSigningKey::WalletAddress(signer),
+        )
+        .await;
     }
 }
 
-pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_vote_proposal<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::VoteProposal,
@@ -549,23 +577,15 @@ pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + 
 
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = rpc::get_public_key(
-            client,
-            &proposal.address,
-        )
-        .await
-        .expect("Public key should exist.");
+        let public_key = rpc::get_public_key(client, &proposal.address)
+            .await
+            .expect("Public key should exist.");
         if !proposal.check_signature(&public_key) {
             eprintln!("Proposal signature mismatch!");
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<C, U>(
-            client,
-            wallet,
-            &signer,
-        )
-        .await;
+        let signing_key = find_keypair::<C, U>(client, wallet, &signer).await;
         let offline_vote = OfflineVote::new(
             &proposal,
             args.vote,
@@ -591,8 +611,7 @@ pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + 
             }
         }
     } else {
-        let current_epoch = rpc::query_epoch(client)
-        .await;
+        let current_epoch = rpc::query_epoch(client).await;
 
         let voter_address = signer.clone();
         let proposal_id = args.proposal_id.unwrap();
@@ -628,12 +647,7 @@ pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + 
                 // validator changing his vote and, effectively, invalidating
                 // the delgator's vote
                 if !args.tx.force
-                    && is_safe_voting_window(
-                        client,
-                        proposal_id,
-                        epoch,
-                    )
-                    .await
+                    && is_safe_voting_window(client, proposal_id, epoch).await
                 {
                     delegations = filter_delegations(
                         client,
@@ -679,7 +693,10 @@ pub async fn submit_vote_proposal<C: Client + namada::ledger::queries::Client + 
     }
 }
 
-pub async fn submit_reveal_pk<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_reveal_pk<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
@@ -687,7 +704,10 @@ pub async fn submit_reveal_pk<C: Client + namada::ledger::queries::Client + Sync
     tx::submit_reveal_pk::<C, U>(client, wallet, args).await;
 }
 
-pub async fn reveal_pk_if_needed<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn reveal_pk_if_needed<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
@@ -696,14 +716,19 @@ pub async fn reveal_pk_if_needed<C: Client + namada::ledger::queries::Client + S
     tx::reveal_pk_if_needed::<C, U>(client, wallet, public_key, args).await
 }
 
-pub async fn has_revealed_pk<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn has_revealed_pk<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     addr: &Address,
 ) -> bool {
     tx::has_revealed_pk(client, addr).await
 }
 
-pub async fn submit_reveal_pk_aux<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_reveal_pk_aux<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
@@ -715,7 +740,9 @@ pub async fn submit_reveal_pk_aux<C: Client + namada::ledger::queries::Client + 
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window<C: Client + namada::ledger::queries::Client + Sync>(
+async fn is_safe_voting_window<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
@@ -725,7 +752,9 @@ async fn is_safe_voting_window<C: Client + namada::ledger::queries::Client + Syn
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations<C: Client + namada::ledger::queries::Client + Sync>(
+async fn filter_delegations<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
@@ -745,8 +774,10 @@ async fn filter_delegations<C: Client + namada::ledger::queries::Client + Sync>(
                 );
 
                 if let Some(validator_vote) =
-                    rpc::query_storage_value::<C, ProposalVote>(client, &vote_key)
-                        .await
+                    rpc::query_storage_value::<C, ProposalVote>(
+                        client, &vote_key,
+                    )
+                    .await
                 {
                     if &validator_vote == delegator_vote {
                         return None;
@@ -760,7 +791,10 @@ async fn filter_delegations<C: Client + namada::ledger::queries::Client + Sync>(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_bond<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
@@ -768,7 +802,10 @@ pub async fn submit_bond<C: Client + namada::ledger::queries::Client + Sync, U: 
     tx::submit_bond::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_unbond<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_unbond<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
@@ -776,7 +813,10 @@ pub async fn submit_unbond<C: Client + namada::ledger::queries::Client + Sync, U
     tx::submit_unbond::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_withdraw<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_withdraw<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
@@ -784,7 +824,10 @@ pub async fn submit_withdraw<C: Client + namada::ledger::queries::Client + Sync,
     tx::submit_withdraw::<C, U>(client, wallet, args).await;
 }
 
-pub async fn submit_validator_commission_change<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_validator_commission_change<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
@@ -794,7 +837,10 @@ pub async fn submit_validator_commission_change<C: Client + namada::ledger::quer
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx<C: Client + namada::ledger::queries::Client + Sync, U: WalletUtils>(
+async fn process_tx<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,

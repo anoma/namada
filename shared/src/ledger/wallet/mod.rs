@@ -1,39 +1,38 @@
 //! Provides functionality for managing keys and addresses for a user
-mod store;
 mod alias;
 mod keys;
 pub mod pre_genesis;
+mod store;
 
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
-pub use self::store::{ValidatorData, ValidatorKeys};
 
+pub use alias::Alias;
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
+pub use pre_genesis::gen_key_to_store;
+pub use store::{gen_sk, Store};
+use thiserror::Error;
+
+pub use self::keys::{DecryptionError, StoredKeypair};
+pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::types::address::Address;
 use crate::types::key::*;
 use crate::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
-use thiserror::Error;
-
-pub use self::keys::{DecryptionError, StoredKeypair};
-pub use self::store::ConfirmationResponse;
-
-pub use store::{Store, gen_sk};
-pub use alias::Alias;
-pub use pre_genesis::gen_key_to_store;
 
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletUtils {
     /// The location where the wallet is stored
     type Storage;
-    /// Read the password for encryption from the file/env/stdin with confirmation.
+    /// Read the password for encryption from the file/env/stdin with
+    /// confirmation.
     fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String>;
 
-    /// Read the password for encryption/decryption from the file/env/stdin. Panics
-    /// if all options are empty/invalid.
+    /// Read the password for encryption/decryption from the file/env/stdin.
+    /// Panics if all options are empty/invalid.
     fn read_password(prompt_msg: &str) -> String;
 
     /// Read an alias from the file/env/stdin.
@@ -81,7 +80,7 @@ impl<U: WalletUtils> Wallet<U> {
             decrypted_spendkey_cache: HashMap::default(),
         }
     }
-    
+
     /// Generate a new keypair and derive an implicit address from its public
     /// and insert them into the store with the provided alias, converted to
     /// lower case. If none provided, the alias will be the public key hash (in
@@ -268,7 +267,7 @@ impl<U: WalletUtils> Wallet<U> {
     /// If a given storage key needs to be decrypted, prompt for password from
     /// stdin and if successfully decrypted, store it in a cache.
     fn decrypt_stored_key<
-            T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
+        T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
     >(
         decrypted_key_cache: &mut HashMap<Alias, T>,
         stored_key: &StoredKeypair<T>,

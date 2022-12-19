@@ -1,21 +1,21 @@
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use bimap::BiHashMap;
+use masp_primitives::zip32::ExtendedFullViewingKey;
+#[cfg(feature = "masp-tx-gen")]
+use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
+
+use super::alias::{self, Alias};
+use super::pre_genesis;
+use crate::ledger::wallet::{StoredKeypair, WalletUtils};
+use crate::types::address::{Address, ImplicitAddress};
+use crate::types::key::dkg_session_keys::DkgKeypair;
 use crate::types::key::*;
 use crate::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
-use std::collections::HashMap;
-use super::alias::{self, Alias};
-use crate::types::address::{Address, ImplicitAddress};
-use bimap::BiHashMap;
-use crate::types::key::dkg_session_keys::DkgKeypair;
-use masp_primitives::zip32::ExtendedFullViewingKey;
-use std::str::FromStr;
-use crate::ledger::wallet::WalletUtils;
-#[cfg(feature = "masp-tx-gen")]
-use rand_core::RngCore;
-
-use super::pre_genesis;
-use crate::ledger::wallet::StoredKeypair;
 
 /// Actions that can be taken when there is an alias conflict
 pub enum ConfirmationResponse {
@@ -339,8 +339,9 @@ impl Store {
             match U::show_overwrite_confirmation(&alias, "a spending key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self
-                        .insert_spending_key::<U>(new_alias, spendkey, viewkey);
+                    return self.insert_spending_key::<U>(
+                        new_alias, spendkey, viewkey,
+                    );
                 }
                 ConfirmationResponse::Skip => return None,
             }
@@ -409,7 +410,8 @@ impl Store {
             match U::show_overwrite_confirmation(&alias, "a payment address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self.insert_payment_addr::<U>(new_alias, payment_addr);
+                    return self
+                        .insert_payment_addr::<U>(new_alias, payment_addr);
                 }
                 ConfirmationResponse::Skip => return None,
             }

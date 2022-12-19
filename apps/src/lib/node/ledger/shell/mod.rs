@@ -49,8 +49,8 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
-use crate::wallet::CliWalletUtils;
 
+use crate::config;
 use crate::config::{genesis, TendermintMode};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -62,9 +62,9 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
+use crate::wallet::CliWalletUtils;
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
-use crate::config;
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -285,11 +285,9 @@ where
                     );
                     wallet
                         .take_validator_data()
-                        .map(|data| {
-                            ShellMode::Validator {
-                                data: data.clone(),
-                                broadcast_sender,
-                            }
+                        .map(|data| ShellMode::Validator {
+                            data: data.clone(),
+                            broadcast_sender,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -298,10 +296,12 @@ where
                 }
                 #[cfg(feature = "dev")]
                 {
-                    let validator_keys = crate::wallet::defaults::validator_keys();
+                    let validator_keys =
+                        crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
                         data: crate::wallet::ValidatorData {
-                            address: crate::wallet::defaults::validator_address(),
+                            address: crate::wallet::defaults::validator_address(
+                            ),
                             keys: crate::wallet::ValidatorKeys {
                                 protocol_keypair: validator_keys.0,
                                 dkg_keypair: Some(validator_keys.1),

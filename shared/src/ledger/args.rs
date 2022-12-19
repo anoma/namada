@@ -1,14 +1,12 @@
+use rust_decimal::Decimal;
+
+use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
-use crate::types::transaction::GasLimit;
+use crate::types::key::{common, SchemeType};
 use crate::types::masp::MaspValue;
 use crate::types::storage::Epoch;
-use crate::types::token;
-use crate::types::storage;
-use crate::types::key::common;
-use rust_decimal::Decimal;
-use crate::types::key::SchemeType;
-use crate::ibc::core::ics24_host::identifier::ChannelId;
-use crate::ibc::core::ics24_host::identifier::PortId;
+use crate::types::transaction::GasLimit;
+use crate::types::{storage, token};
 
 /// Abstraction of types being used in Namada
 pub trait NamadaTypes: Clone + std::fmt::Debug {
@@ -40,24 +38,15 @@ pub struct SdkTypes;
 
 impl NamadaTypes for SdkTypes {
     type Address = Address;
-
-    type NativeAddress = Address;
-
-    type Keypair = namada_core::types::key::common::SecretKey;
-
-    type TendermintAddress = ();
-
-    type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
-
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
-
-    type PublicKey = namada_core::types::key::common::PublicKey;
-
-    type TransferSource = namada_core::types::masp::TransferSource;
-
-    type TransferTarget = namada_core::types::masp::TransferTarget;
-
     type Data = Vec<u8>;
+    type Keypair = namada_core::types::key::common::SecretKey;
+    type NativeAddress = Address;
+    type PublicKey = namada_core::types::key::common::PublicKey;
+    type TendermintAddress = ();
+    type TransferSource = namada_core::types::masp::TransferSource;
+    type TransferTarget = namada_core::types::masp::TransferTarget;
+    type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
 }
 
 /// Common query arguments

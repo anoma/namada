@@ -15,7 +15,7 @@ use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use eyre::{eyre, Context as EyreContext};
-use itertools::{Itertools, Either};
+use itertools::{Either, Itertools};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::ViewingKey;
@@ -25,21 +25,24 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::masp::{
+    Conversions, PinnedBalanceError, ShieldedContext, ShieldedUtils,
+};
 use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
     self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::masp::ShieldedUtils;
 use namada::ledger::queries::{self, RPC};
+use namada::ledger::rpc::TxResponse;
 use namada::ledger::storage::ConversionState;
+use namada::ledger::wallet::Wallet;
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
     VotePower,
 };
-use namada::ledger::masp::ShieldedContext;
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -51,10 +54,7 @@ use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::{Duration, Instant};
 
-use namada::ledger::wallet::Wallet;
 use crate::cli::{self, args};
-use namada::ledger::rpc::TxResponse;
-use namada::ledger::masp::{Conversions, PinnedBalanceError};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
 use crate::facade::tendermint_rpc::query::Query;
@@ -67,7 +67,9 @@ use crate::wallet::CliWalletUtils;
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_tx_status<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     status: namada::ledger::rpc::TxEventQuery<'_>,
     deadline: Instant,
@@ -76,7 +78,9 @@ pub async fn query_tx_status<C: Client + namada::ledger::queries::Client + Sync>
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch<C: Client + namada::ledger::queries::Client + Sync>(client: &C) -> Epoch {
+pub async fn query_epoch<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+) -> Epoch {
     namada::ledger::rpc::query_epoch(client).await
 }
 
@@ -88,7 +92,11 @@ pub async fn query_block<C: Client + namada::ledger::queries::Client + Sync>(
 }
 
 /// Query the results of the last committed block
-pub async fn query_results<C: Client + namada::ledger::queries::Client + Sync>(client: &C) -> Vec<BlockResults> {
+pub async fn query_results<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> Vec<BlockResults> {
     namada::ledger::rpc::query_results(client).await
 }
 
@@ -97,23 +105,23 @@ pub async fn query_transfers<C: Client, U: ShieldedUtils<C = C>>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
-    args: args::QueryTransfers
+    args: args::QueryTransfers,
 ) {
     let query_token = args.token;
-    let query_owner = args.owner
-        .map_or_else(
-            || Either::Right(wallet.get_addresses().into_values().collect()),
-            Either::Left,
-        );
+    let query_owner = args.owner.map_or_else(
+        || Either::Right(wallet.get_addresses().into_values().collect()),
+        Either::Left,
+    );
     let _ = shielded.load();
     // Obtain the effects of all shielded and transparent transactions
-    let transfers = shielded.query_tx_deltas(
-        client,
-        &query_owner,
-        &query_token,
-        &wallet.get_viewing_keys(),
-    )
-    .await;
+    let transfers = shielded
+        .query_tx_deltas(
+            client,
+            &query_owner,
+            &query_token,
+            &wallet.get_viewing_keys(),
+        )
+        .await;
     // To facilitate lookups of human-readable token names
     let tokens = tokens();
     let vks = wallet.get_viewing_keys();
@@ -148,8 +156,7 @@ pub async fn query_transfers<C: Client, U: ShieldedUtils<C = C>>(
                 )
                 .await
                 .0;
-            let dec =
-                shielded.decode_amount(client, amt, epoch).await;
+            let dec = shielded.decode_amount(client, amt, epoch).await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -216,7 +223,12 @@ pub async fn query_transfers<C: Client, U: ShieldedUtils<C = C>>(
 }
 
 /// Query the raw bytes of given storage key
-pub async fn query_raw_bytes<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QueryRawBytes) {
+pub async fn query_raw_bytes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryRawBytes,
+) {
     let response = unwrap_client_response::<C, _>(
         RPC.shell()
             .storage_value(client, None, None, false, &args.storage_key)
@@ -230,7 +242,10 @@ pub async fn query_raw_bytes<C: Client + namada::ledger::queries::Client + Sync>
 }
 
 /// Query token balance(s)
-pub async fn query_balance<C: Client + namada::ledger::queries::Client + Sync, U: ShieldedUtils<C = C>>(
+pub async fn query_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: ShieldedUtils<C = C>,
+>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
@@ -252,7 +267,8 @@ pub async fn query_balance<C: Client + namada::ledger::queries::Client + Sync, U
             // Print pinned balance
             query_pinned_balance(client, wallet, shielded, args.clone()).await;
             // Print shielded balance
-            query_shielded_balance(client, wallet, shielded, args.clone()).await;
+            query_shielded_balance(client, wallet, shielded, args.clone())
+                .await;
             // Then print transparent balance
             query_transparent_balance(client, wallet, args).await;
         }
@@ -260,7 +276,9 @@ pub async fn query_balance<C: Client + namada::ledger::queries::Client + Sync, U
 }
 
 /// Query token balance(s)
-pub async fn query_transparent_balance<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_transparent_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBalance,
@@ -327,7 +345,8 @@ pub async fn query_transparent_balance<C: Client + namada::ledger::queries::Clie
             for (token, _) in tokens {
                 let key = token::balance_prefix(&token);
                 let balances =
-                    query_storage_prefix::<C, token::Amount>(client, &key).await;
+                    query_storage_prefix::<C, token::Amount>(client, &key)
+                        .await;
                 if let Some(balances) = balances {
                     print_balances(wallet, balances, &token, None);
                 }
@@ -345,9 +364,7 @@ pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
 ) {
     // Map addresses to token names
     let tokens = address::tokens();
-    let owners = if let Some(pa) = args
-        .owner
-        .and_then(|x| x.payment_address())
+    let owners = if let Some(pa) = args.owner.and_then(|x| x.payment_address())
     {
         vec![pa]
     } else {
@@ -371,11 +388,7 @@ pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
         // address
         for vk in &viewing_keys {
             balance = shielded
-                .compute_exchanged_pinned_balance(
-                    client,
-                    owner,
-                    vk,
-                )
+                .compute_exchanged_pinned_balance(client, owner, vk)
                 .await;
             if balance != Err(PinnedBalanceError::InvalidViewingKey) {
                 break;
@@ -397,11 +410,7 @@ pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
             let vk = ExtendedFullViewingKey::from(fvk).fvk.vk;
             // Use the given viewing key to decrypt pinned transaction data
             balance = shielded
-                .compute_exchanged_pinned_balance(
-                    client,
-                    owner,
-                    &vk,
-                )
+                .compute_exchanged_pinned_balance(client, owner, &vk)
                 .await
         }
         // Now print out the received quantities according to CLI arguments
@@ -439,9 +448,8 @@ pub async fn query_pinned_balance<C: Client, U: ShieldedUtils<C = C>>(
             (Ok((balance, epoch)), None) => {
                 let mut found_any = false;
                 // Print balances by human-readable token names
-                let balance = shielded
-                    .decode_amount(client, balance, epoch)
-                    .await;
+                let balance =
+                    shielded.decode_amount(client, balance, epoch).await;
                 for (addr, value) in balance.components() {
                     let asset_value = token::Amount::from(*value as u64);
                     if !found_any {
@@ -536,8 +544,15 @@ fn print_balances(
 }
 
 /// Query Proposals
-pub async fn query_proposal<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QueryProposal) {
-    async fn print_proposal<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_proposal<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryProposal,
+) {
+    async fn print_proposal<
+        C: Client + namada::ledger::queries::Client + Sync,
+    >(
         client: &C,
         id: u64,
         current_epoch: Epoch,
@@ -563,7 +578,8 @@ pub async fn query_proposal<C: Client + namada::ledger::queries::Client + Sync>(
             )
             .await?;
             let grace_epoch =
-                query_storage_value::<C, Epoch>(client, &grace_epoch_key).await?;
+                query_storage_value::<C, Epoch>(client, &grace_epoch_key)
+                    .await?;
 
             println!("Proposal: {}", id);
             println!("{:4}Author: {}", "", author);
@@ -662,7 +678,10 @@ pub fn value_by_address(
 }
 
 /// Query token shielded balance(s)
-pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client + Sync, U: ShieldedUtils<C = C>>(
+pub async fn query_shielded_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+    U: ShieldedUtils<C = C>,
+>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     shielded: &mut ShieldedContext<U>,
@@ -670,9 +689,7 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
 ) {
     // Used to control whether balances for all keys or a specific key are
     // printed
-    let owner = args
-        .owner
-        .and_then(|x| x.full_viewing_key());
+    let owner = args.owner.and_then(|x| x.full_viewing_key());
     // Used to control whether conversions are automatically performed
     let no_conversions = args.no_conversions;
     // Viewing keys are used to query shielded balances. If a spending key is
@@ -705,11 +722,7 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
                     .expect("context should contain viewing key")
             } else {
                 shielded
-                    .compute_exchanged_balance(
-                        client,
-                        &viewing_key,
-                        epoch,
-                    )
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key")
             };
@@ -750,11 +763,7 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
                         .expect("context should contain viewing key")
                 } else {
                     shielded
-                        .compute_exchanged_balance(
-                            client,
-                            &viewing_key,
-                            epoch,
-                        )
+                        .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
                         .expect("context should contain viewing key")
                 };
@@ -771,9 +780,8 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
             // Print non-zero balances whose asset types can be decoded
             for (asset_type, balances) in balances {
                 // Decode the asset type
-                let decoded = shielded
-                    .decode_asset_type(client, asset_type)
-                    .await;
+                let decoded =
+                    shielded.decode_asset_type(client, asset_type).await;
                 match decoded {
                     Some((addr, asset_epoch)) if asset_epoch == epoch => {
                         // Only assets with the current timestamp count
@@ -841,11 +849,7 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
                         .expect("context should contain viewing key")
                 } else {
                     shielded
-                        .compute_exchanged_balance(
-                            client,
-                            &viewing_key,
-                            epoch,
-                        )
+                        .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
                         .expect("context should contain viewing key")
                 };
@@ -874,23 +878,17 @@ pub async fn query_shielded_balance<C: Client + namada::ledger::queries::Client 
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = shielded
-                    .decode_all_amounts(client, balance)
-                    .await;
+                let decoded_balance =
+                    shielded.decode_all_amounts(client, balance).await;
                 print_decoded_balance_with_epoch(decoded_balance);
             } else {
                 balance = shielded
-                    .compute_exchanged_balance(
-                        client,
-                        &viewing_key,
-                        epoch,
-                    )
+                    .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = shielded
-                    .decode_amount(client, balance, epoch)
-                    .await;
+                let decoded_balance =
+                    shielded.decode_amount(client, balance, epoch).await;
                 print_decoded_balance(decoded_balance);
             }
         }
@@ -937,7 +935,9 @@ pub fn print_decoded_balance_with_epoch(
 }
 
 /// Query token amount of owner.
-pub async fn get_token_balance<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_token_balance<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     token: &Address,
     owner: &Address,
@@ -945,7 +945,9 @@ pub async fn get_token_balance<C: Client + namada::ledger::queries::Client + Syn
     namada::ledger::rpc::get_token_balance(client, token, owner).await
 }
 
-pub async fn query_proposal_result<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_proposal_result<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     args: args::QueryProposalResult,
 ) {
@@ -1037,12 +1039,10 @@ pub async fn query_proposal_result<C: Client + namada::ledger::queries::Client +
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let public_key = get_public_key(
-                            client,
-                            &proposal.address,
-                        )
-                        .await
-                        .expect("Public key should exist.");
+                        let public_key =
+                            get_public_key(client, &proposal.address)
+                                .await
+                                .expect("Public key should exist.");
 
                         if !proposal.check_signature(&public_key) {
                             eprintln!("Bad proposal signature.");
@@ -1079,7 +1079,9 @@ pub async fn query_proposal_result<C: Client + namada::ledger::queries::Client +
     }
 }
 
-pub async fn query_protocol_parameters<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_protocol_parameters<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     _args: args::QueryProtocolParameters,
 ) {
@@ -1149,7 +1151,10 @@ pub async fn query_protocol_parameters<C: Client + namada::ledger::queries::Clie
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QueryBonds) {
+pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryBonds,
+) {
     let epoch = query_epoch(client).await;
     match (args.owner, args.validator) {
         (Some(owner), Some(validator)) => {
@@ -1164,7 +1169,8 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<C, pos::Unbonds>(client, &unbond_key).await;
+                query_storage_value::<C, pos::Unbonds>(client, &unbond_key)
+                    .await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
@@ -1222,7 +1228,8 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<C, pos::Unbonds>(client, &unbond_key).await;
+                query_storage_value::<C, pos::Unbonds>(client, &unbond_key)
+                    .await;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
@@ -1265,9 +1272,11 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                     .await;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds =
-                query_storage_prefix::<C, pos::Unbonds>(client, &unbonds_prefix)
-                    .await;
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
+                client,
+                &unbonds_prefix,
+            )
+            .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1279,12 +1288,13 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<C, pos::Slashes>(
-                                client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1330,12 +1340,13 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<C, pos::Slashes>(
-                                client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1381,9 +1392,11 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                     .await;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds =
-                query_storage_prefix::<C, pos::Unbonds>(client, &unbonds_prefix)
-                    .await;
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
+                client,
+                &unbonds_prefix,
+            )
+            .await;
 
             let mut total: token::Amount = 0.into();
             let mut total_active: token::Amount = 0.into();
@@ -1394,12 +1407,13 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<C, pos::Slashes>(
-                                client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1445,12 +1459,13 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<C, pos::Slashes>(
-                                client,
-                                &slashes_key,
-                            )
-                            .await
-                            .unwrap_or_default();
+                            let slashes =
+                                query_storage_value::<C, pos::Slashes>(
+                                    client,
+                                    &slashes_key,
+                                )
+                                .await
+                                .unwrap_or_default();
 
                             let stdout = io::stdout();
                             let mut w = stdout.lock();
@@ -1495,7 +1510,12 @@ pub async fn query_bonds<C: Client + namada::ledger::queries::Client + Sync>(cli
 }
 
 /// Query PoS bonded stake
-pub async fn query_bonded_stake<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QueryBondedStake) {
+pub async fn query_bonded_stake<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryBondedStake,
+) {
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(client).await,
@@ -1503,10 +1523,12 @@ pub async fn query_bonded_stake<C: Client + namada::ledger::queries::Client + Sy
 
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
-    let validator_sets =
-        query_storage_value::<C, pos::ValidatorSets>(client, &validator_set_key)
-            .await
-            .expect("Validator set should always be set");
+    let validator_sets = query_storage_value::<C, pos::ValidatorSets>(
+        client,
+        &validator_set_key,
+    )
+    .await
+    .expect("Validator set should always be set");
     let validator_set = validator_sets
         .get(epoch)
         .expect("Validator set should be always set in the current epoch");
@@ -1516,11 +1538,12 @@ pub async fn query_bonded_stake<C: Client + namada::ledger::queries::Client + Sy
             let validator = validator;
             // Find bonded stake for the given validator
             let validator_deltas_key = pos::validator_deltas_key(&validator);
-            let validator_deltas = query_storage_value::<C, pos::ValidatorDeltas>(
-                client,
-                &validator_deltas_key,
-            )
-            .await;
+            let validator_deltas =
+                query_storage_value::<C, pos::ValidatorDeltas>(
+                    client,
+                    &validator_deltas_key,
+                )
+                .await;
             match validator_deltas.and_then(|data| data.get(epoch)) {
                 Some(val_stake) => {
                     let bonded_stake: u64 = val_stake.try_into().expect(
@@ -1594,7 +1617,9 @@ pub async fn query_bonded_stake<C: Client + namada::ledger::queries::Client + Sy
 }
 
 /// Query PoS validator's commission rate
-pub async fn query_commission_rate<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_commission_rate<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     args: args::QueryCommissionRate,
 ) {
@@ -1603,8 +1628,7 @@ pub async fn query_commission_rate<C: Client + namada::ledger::queries::Client +
         None => query_epoch(client).await,
     };
     let validator = args.validator;
-    let is_validator =
-        is_validator(client, &validator).await;
+    let is_validator = is_validator(client, &validator).await;
 
     if is_validator {
         let validator_commission_key =
@@ -1649,7 +1673,12 @@ pub async fn query_commission_rate<C: Client + namada::ledger::queries::Client +
 }
 
 /// Query PoS slashes
-pub async fn query_slashes<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QuerySlashes) {
+pub async fn query_slashes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QuerySlashes,
+) {
     match args.validator {
         Some(validator) => {
             let validator = validator;
@@ -1679,9 +1708,11 @@ pub async fn query_slashes<C: Client + namada::ledger::queries::Client + Sync>(c
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes =
-                query_storage_prefix::<C, pos::Slashes>(&client, &slashes_prefix)
-                    .await;
+            let slashes = query_storage_prefix::<C, pos::Slashes>(
+                &client,
+                &slashes_prefix,
+            )
+            .await;
 
             match slashes {
                 Some(slashes) => {
@@ -1718,12 +1749,20 @@ pub async fn query_slashes<C: Client + namada::ledger::queries::Client + Sync>(c
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: Client + namada::ledger::queries::Client + Sync>(client: &C, tx_bytes: Vec<u8>) {
-    println!("Dry-run result: {}", namada::ledger::rpc::dry_run_tx(client, tx_bytes).await);
+pub async fn dry_run_tx<C: Client + namada::ledger::queries::Client + Sync>(
+    client: &C,
+    tx_bytes: Vec<u8>,
+) {
+    println!(
+        "Dry-run result: {}",
+        namada::ledger::rpc::dry_run_tx(client, tx_bytes).await
+    );
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_public_key<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> Option<common::PublicKey> {
@@ -1731,7 +1770,9 @@ pub async fn get_public_key<C: Client + namada::ledger::queries::Client + Sync>(
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn is_validator<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1739,14 +1780,18 @@ pub async fn is_validator<C: Client + namada::ledger::queries::Client + Sync>(
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn is_delegator<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> bool {
     namada::ledger::rpc::is_delegator(client, address).await
 }
 
-pub async fn is_delegator_at<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn is_delegator_at<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -1757,7 +1802,9 @@ pub async fn is_delegator_at<C: Client + namada::ledger::queries::Client + Sync>
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn known_address<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1899,7 +1946,12 @@ fn process_unbonds_query(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions<C: Client + namada::ledger::queries::Client + Sync>(client: &C, args: args::QueryConversions) {
+pub async fn query_conversions<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args: args::QueryConversions,
+) {
     // The chosen token type of the conversions
     let target_token = args.token;
     // To facilitate human readable token addresses
@@ -1961,7 +2013,9 @@ pub async fn query_conversions<C: Client + namada::ledger::queries::Client + Syn
 }
 
 /// Query a conversion.
-pub async fn query_conversion<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_conversion<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     asset_type: AssetType,
 ) -> Option<(
@@ -1974,7 +2028,10 @@ pub async fn query_conversion<C: Client + namada::ledger::queries::Client + Sync
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<C: Client + namada::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_value<
+    C: Client + namada::ledger::queries::Client + Sync,
+    T,
+>(
     client: &C,
     key: &storage::Key,
 ) -> Option<T>
@@ -1985,19 +2042,25 @@ where
 }
 
 /// Query a storage value and the proof without decoding.
-pub async fn query_storage_value_bytes<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_storage_value_bytes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     key: &storage::Key,
     height: Option<BlockHeight>,
     prove: bool,
 ) -> (Option<Vec<u8>>, Option<Proof>) {
-    namada::ledger::rpc::query_storage_value_bytes(client, key, height, prove).await
+    namada::ledger::rpc::query_storage_value_bytes(client, key, height, prove)
+        .await
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<C: Client + namada::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_prefix<
+    C: Client + namada::ledger::queries::Client + Sync,
+    T,
+>(
     client: &C,
     key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
@@ -2008,7 +2071,9 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_has_storage_key<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     key: &storage::Key,
 ) -> bool {
@@ -2017,10 +2082,15 @@ pub async fn query_has_storage_key<C: Client + namada::ledger::queries::Client +
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transation.
-pub async fn query_tx_events<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn query_tx_events<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     tx_event_query: namada::ledger::rpc::TxEventQuery<'_>,
-) -> std::result::Result<Option<Event>, <C as namada::ledger::queries::Client>::Error> {
+) -> std::result::Result<
+    Option<Event>,
+    <C as namada::ledger::queries::Client>::Error,
+> {
     namada::ledger::rpc::query_tx_events(client, tx_event_query).await
 }
 
@@ -2074,7 +2144,9 @@ pub async fn query_result<C: Client + Sync>(
     }
 }
 
-pub async fn get_proposal_votes<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_proposal_votes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     proposal_id: u64,
@@ -2082,7 +2154,9 @@ pub async fn get_proposal_votes<C: Client + namada::ledger::queries::Client + Sy
     namada::ledger::rpc::get_proposal_votes(client, epoch, proposal_id).await
 }
 
-pub async fn get_proposal_offline_votes<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_proposal_offline_votes<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     proposal: OfflineProposal,
     files: HashSet<PathBuf>,
@@ -2212,7 +2286,9 @@ pub async fn get_proposal_offline_votes<C: Client + namada::ledger::queries::Cli
 }
 
 // Compute the result of a proposal
-pub async fn compute_tally<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn compute_tally<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     votes: Votes,
@@ -2220,30 +2296,39 @@ pub async fn compute_tally<C: Client + namada::ledger::queries::Client + Sync>(
     namada::ledger::rpc::compute_tally(client, epoch, votes).await
 }
 
-pub async fn get_bond_amount_at<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_bond_amount_at<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     delegator: &Address,
     validator: &Address,
     epoch: Epoch,
 ) -> Option<token::Amount> {
-    namada::ledger::rpc::get_bond_amount_at(client, delegator, validator, epoch).await
+    namada::ledger::rpc::get_bond_amount_at(client, delegator, validator, epoch)
+        .await
 }
 
-pub async fn get_all_validators<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_all_validators<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
     namada::ledger::rpc::get_all_validators(client, epoch).await
 }
 
-pub async fn get_total_staked_tokens<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_total_staked_tokens<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
 ) -> token::Amount {
     namada::ledger::rpc::get_total_staked_tokens(client, epoch).await
 }
 
-async fn get_validator_stake<C: Client + namada::ledger::queries::Client + Sync>(
+async fn get_validator_stake<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
@@ -2251,14 +2336,20 @@ async fn get_validator_stake<C: Client + namada::ledger::queries::Client + Sync>
     namada::ledger::rpc::get_validator_stake(client, epoch, validator).await
 }
 
-pub async fn get_delegators_delegation<C: Client + namada::ledger::queries::Client + Sync>(
+pub async fn get_delegators_delegation<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> HashSet<Address> {
     namada::ledger::rpc::get_delegators_delegation(client, address).await
 }
 
-pub async fn get_governance_parameters<C: Client + namada::ledger::queries::Client + Sync>(client: &C) -> GovParams {
+pub async fn get_governance_parameters<
+    C: Client + namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> GovParams {
     namada::ledger::rpc::get_governance_parameters(client).await
 }
 
@@ -2272,7 +2363,9 @@ fn lookup_alias(wallet: &Wallet<CliWalletUtils>, addr: &Address) -> String {
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<C: namada::ledger::queries::Client, T>(response: Result<T, C::Error>) -> T {
+fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> T {
     response.unwrap_or_else(|err| {
         eprintln!("Error in the query");
         cli::safe_exit(1)

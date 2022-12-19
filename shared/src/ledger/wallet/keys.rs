@@ -9,6 +9,7 @@ use data_encoding::HEXLOWER;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
 use crate::ledger::wallet::WalletUtils;
 
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";

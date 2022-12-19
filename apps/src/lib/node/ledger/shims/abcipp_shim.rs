@@ -23,10 +23,12 @@ use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
 #[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::abci::{RequestBeginBlock, ResponseDeliverTx};
-use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::facade::tendermint_proto::abci::{
+    RequestBeginBlock, ResponseDeliverTx,
+};
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tower_abci::response::DeliverTx;
+use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used

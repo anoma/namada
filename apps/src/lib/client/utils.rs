@@ -10,6 +10,7 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use namada::ledger::wallet::Wallet;
 use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -20,7 +21,6 @@ use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::wallet::CliWalletUtils;
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
 use crate::config::genesis::genesis_config::{
@@ -31,8 +31,7 @@ use crate::config::{self, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::pre_genesis;
-use namada::ledger::wallet::Wallet;
+use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -108,13 +107,12 @@ pub async fn join_network(
         validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
             (
                 validator_alias,
-                pre_genesis::load(&pre_genesis_dir)
-                    .unwrap_or_else(|err| {
-                        eprintln!(
-                            "Error loading validator pre-genesis wallet {err}",
-                        );
-                        cli::safe_exit(1)
-                    }),
+                pre_genesis::load(&pre_genesis_dir).unwrap_or_else(|err| {
+                    eprintln!(
+                        "Error loading validator pre-genesis wallet {err}",
+                    );
+                    cli::safe_exit(1)
+                }),
             )
         });
 
@@ -550,10 +548,10 @@ pub fn init_network(
 
                 let validator_keys = crate::wallet::gen_validator_keys(
                     &mut wallet,
-                        Some(protocol_pk.clone()),
-                        SchemeType::Ed25519,
-                    )
-                    .expect("Generating new validator keys should not fail");
+                    Some(protocol_pk.clone()),
+                    SchemeType::Ed25519,
+                )
+                .expect("Generating new validator keys should not fail");
                 let pk = validator_keys.dkg_keypair.as_ref().unwrap().public();
                 wallet.add_validator_data(address.clone(), validator_keys);
                 pk

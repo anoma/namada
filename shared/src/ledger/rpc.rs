@@ -1,48 +1,42 @@
-use crate::tendermint_rpc::Client;
-use crate::types::storage::Epoch;
-use crate::ledger::queries::RPC;
-use crate::types::storage::BlockResults;
-use std::collections::HashMap;
-use crate::types::token;
-use namada_core::types::address::Address;
+use std::collections::{HashMap, HashSet};
+
 use borsh::BorshDeserialize;
+use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use crate::types::storage::{
-    BlockHeight, PrefixValue,
-};
-use crate::tendermint::merkle::proof::Proof;
-use crate::ledger::pos::{
-    self, BondId, Bonds, Slash,
-};
-use crate::types::storage;
 use masp_primitives::sapling::Node;
-use crate::types::token::balance_key;
-use crate::types::key::*;
-use crate::ledger::events::Event;
-use crate::types::hash::Hash;
-use crate::tendermint_rpc::query::Query;
-use crate::proto::Tx;
+use namada_core::types::address::Address;
 use serde::Serialize;
-use crate::tendermint_rpc::error::Error as TError;
-use crate::tendermint_rpc::Order;
-use crate::types::governance::VotePower;
-use crate::types::governance::ProposalVote;
-use crate::ledger::native_vp::governance::utils::Votes;
-use crate::ledger::governance::storage as gov_storage;
-use std::collections::HashSet;
-use crate::ledger::governance::parameters::GovParams;
-use crate::types::governance::ProposalResult;
-use crate::types::governance::TallyResult;
-use itertools::Itertools;
-use crate::ledger::pos::types::decimal_mult_u64;
 use tokio::time::{Duration, Instant};
+
+use crate::ledger::events::Event;
+use crate::ledger::governance::parameters::GovParams;
+use crate::ledger::governance::storage as gov_storage;
+use crate::ledger::native_vp::governance::utils::Votes;
+use crate::ledger::pos::types::decimal_mult_u64;
+use crate::ledger::pos::{self, BondId, Bonds, Slash};
+use crate::ledger::queries::RPC;
+use crate::proto::Tx;
+use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint_rpc::error::Error as TError;
+use crate::tendermint_rpc::query::Query;
+use crate::tendermint_rpc::{Client, Order};
+use crate::types::governance::{
+    ProposalResult, ProposalVote, TallyResult, VotePower,
+};
+use crate::types::hash::Hash;
+use crate::types::key::*;
+use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
+use crate::types::token::balance_key;
+use crate::types::{storage, token};
 
 /// Query the status of a given transaction.
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_tx_status<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     status: TxEventQuery<'_>,
     deadline: Instant,
@@ -69,7 +63,7 @@ pub async fn query_tx_status<C: Client + crate::ledger::queries::Client + Sync>(
             let maybe_event = match query_tx_events(client, status).await {
                 Ok(response) => response,
                 Err(err) => {
-                    //tracing::debug!(%err, "ABCI query failed");
+                    // tracing::debug!(%err, "ABCI query failed");
                     sleep_update(status, &mut backoff).await;
                     continue;
                 }
@@ -89,7 +83,9 @@ pub async fn query_tx_status<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch<C: Client + crate::ledger::queries::Client + Sync>(client: &C) -> Epoch {
+pub async fn query_epoch<C: Client + crate::ledger::queries::Client + Sync>(
+    client: &C,
+) -> Epoch {
     let epoch = unwrap_client_response::<C, _>(RPC.shell().epoch(client).await);
     println!("Last committed epoch: {}", epoch);
     epoch
@@ -110,19 +106,27 @@ pub async fn query_block<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<C: crate::ledger::queries::Client, T>(response: Result<T, C::Error>) -> T {
+fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> T {
     response.unwrap_or_else(|err| {
         panic!("Error in the query");
     })
 }
 
 /// Query the results of the last committed block
-pub async fn query_results<C: Client + crate::ledger::queries::Client + Sync>(client: &C) -> Vec<BlockResults> {
+pub async fn query_results<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> Vec<BlockResults> {
     unwrap_client_response::<C, _>(RPC.shell().read_results(client).await)
 }
 
 /// Query token amount of owner.
-pub async fn get_token_balance<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_token_balance<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     token: &Address,
     owner: &Address,
@@ -132,7 +136,9 @@ pub async fn get_token_balance<C: Client + crate::ledger::queries::Client + Sync
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_public_key<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> Option<common::PublicKey> {
@@ -145,7 +151,9 @@ pub async fn is_validator<C: Client + crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    unwrap_client_response::<C, _>(RPC.vp().pos().is_validator(client, address).await)
+    unwrap_client_response::<C, _>(
+        RPC.vp().pos().is_validator(client, address).await,
+    )
 }
 
 /// Check if a given address is a known delegator
@@ -159,7 +167,9 @@ pub async fn is_delegator<C: Client + crate::ledger::queries::Client + Sync>(
     bonds.is_some() && bonds.unwrap().count() > 0
 }
 
-pub async fn is_delegator_at<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn is_delegator_at<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -176,7 +186,9 @@ pub async fn is_delegator_at<C: Client + crate::ledger::queries::Client + Sync>(
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn known_address<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -191,7 +203,9 @@ pub async fn known_address<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Query a conversion.
-pub async fn query_conversion<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_conversion<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     asset_type: AssetType,
 ) -> Option<(
@@ -206,7 +220,10 @@ pub async fn query_conversion<C: Client + crate::ledger::queries::Client + Sync>
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<C: Client + crate::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_value<
+    C: Client + crate::ledger::queries::Client + Sync,
+    T,
+>(
     client: &C,
     key: &storage::Key,
 ) -> Option<T>
@@ -243,7 +260,9 @@ where
 }
 
 /// Query a storage value and the proof without decoding.
-pub async fn query_storage_value_bytes<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_storage_value_bytes<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     key: &storage::Key,
     height: Option<BlockHeight>,
@@ -265,7 +284,10 @@ pub async fn query_storage_value_bytes<C: Client + crate::ledger::queries::Clien
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<C: Client + crate::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_prefix<
+    C: Client + crate::ledger::queries::Client + Sync,
+    T,
+>(
     client: &C,
     key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
@@ -298,11 +320,15 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_has_storage_key<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     key: &storage::Key,
 ) -> bool {
-    unwrap_client_response::<C, _>(RPC.shell().storage_has_key(client, key).await)
+    unwrap_client_response::<C, _>(
+        RPC.shell().storage_has_key(client, key).await,
+    )
 }
 
 /// Represents a query for an event pertaining to the specified transaction
@@ -346,10 +372,15 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transation.
-pub async fn query_tx_events<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_tx_events<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     tx_event_query: TxEventQuery<'_>,
-) -> std::result::Result<Option<Event>, <C as crate::ledger::queries::Client>::Error> {
+) -> std::result::Result<
+    Option<Event>,
+    <C as crate::ledger::queries::Client>::Error,
+> {
     let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
     match tx_event_query {
         TxEventQuery::Accepted(_) => RPC
@@ -370,7 +401,10 @@ pub async fn query_tx_events<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: Client + crate::ledger::queries::Client + Sync>(client: &C, tx_bytes: Vec<u8>) -> namada_core::types::transaction::TxResult {
+pub async fn dry_run_tx<C: Client + crate::ledger::queries::Client + Sync>(
+    client: &C,
+    tx_bytes: Vec<u8>,
+) -> namada_core::types::transaction::TxResult {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     unwrap_client_response::<C, _>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
@@ -540,7 +574,9 @@ pub async fn query_tx_response<C: Client + Sync>(
     Ok(result)
 }
 
-pub async fn get_proposal_votes<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_proposal_votes<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     proposal_id: u64,
@@ -607,7 +643,9 @@ pub async fn get_proposal_votes<C: Client + crate::ledger::queries::Client + Syn
     }
 }
 
-pub async fn get_all_validators<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_all_validators<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
@@ -619,7 +657,9 @@ pub async fn get_all_validators<C: Client + crate::ledger::queries::Client + Syn
     )
 }
 
-pub async fn get_total_staked_tokens<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_total_staked_tokens<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
 ) -> token::Amount {
@@ -628,7 +668,9 @@ pub async fn get_total_staked_tokens<C: Client + crate::ledger::queries::Client 
     )
 }
 
-pub async fn get_validator_stake<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_validator_stake<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
@@ -641,14 +683,22 @@ pub async fn get_validator_stake<C: Client + crate::ledger::queries::Client + Sy
     )
 }
 
-pub async fn get_delegators_delegation<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_delegators_delegation<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
 ) -> HashSet<Address> {
-    unwrap_client_response::<C, _>(RPC.vp().pos().delegations(client, address).await)
+    unwrap_client_response::<C, _>(
+        RPC.vp().pos().delegations(client, address).await,
+    )
 }
 
-pub async fn get_governance_parameters<C: Client + crate::ledger::queries::Client + Sync>(client: &C) -> GovParams {
+pub async fn get_governance_parameters<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> GovParams {
     use crate::types::token::Amount;
     let key = gov_storage::get_max_proposal_code_size_key();
     let max_proposal_code_size = query_storage_value::<C, u64>(client, &key)
@@ -691,7 +741,9 @@ pub async fn get_governance_parameters<C: Client + crate::ledger::queries::Clien
 }
 
 // Compute the result of a proposal
-pub async fn compute_tally<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn compute_tally<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     epoch: Epoch,
     votes: Votes,
@@ -745,7 +797,9 @@ pub async fn compute_tally<C: Client + crate::ledger::queries::Client + Sync>(
     }
 }
 
-pub async fn get_bond_amount_at<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn get_bond_amount_at<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     delegator: &Address,
     validator: &Address,
@@ -759,7 +813,8 @@ pub async fn get_bond_amount_at<C: Client + crate::ledger::queries::Client + Syn
         source: delegator.clone(),
         validator: validator.clone(),
     });
-    let epoched_bonds = query_storage_value::<C, Bonds>(client, &bond_key).await;
+    let epoched_bonds =
+        query_storage_value::<C, Bonds>(client, &bond_key).await;
     match epoched_bonds {
         Some(epoched_bonds) => {
             let mut delegated_amount: token::Amount = 0.into();
@@ -779,12 +834,7 @@ pub async fn get_bond_amount_at<C: Client + crate::ledger::queries::Client + Syn
                         to_deduct = token::Amount::default();
                     }
 
-                    delta = apply_slashes(
-                        &slashes,
-                        delta,
-                        *epoch_start,
-                        None,
-                    );
+                    delta = apply_slashes(&slashes, delta, *epoch_start, None);
                     if epoch >= *epoch_start {
                         delegated_amount += delta;
                     }

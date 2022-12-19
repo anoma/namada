@@ -6,4 +6,3 @@ use namada::types::address::Address;
 use serde::Serialize;
 
 use crate::cli::safe_exit;
-

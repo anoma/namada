@@ -6,20 +6,20 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::ledger::masp::ShieldedContext;
+use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
-use namada::ledger::masp::ShieldedContext;
 
 use super::args;
 use crate::client::tx::CLIShieldedUtils;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use namada::ledger::wallet::Wallet;
-use crate::wasm_loader;
 use crate::wallet::CliWalletUtils;
+use crate::wasm_loader;
 
 /// Env. var to set chain ID
 const ENV_VAR_CHAIN_ID: &str = "ANOMA_CHAIN_ID";
@@ -100,8 +100,10 @@ impl Context {
         let native_token = genesis.native_token;
         let default_genesis =
             genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet =
-            crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
+        let wallet = crate::wallet::load_or_new_from_genesis(
+            &chain_dir,
+            default_genesis,
+        );
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {

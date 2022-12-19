@@ -1,56 +1,50 @@
-use itertools::Either::*;
-use crate::ledger::args;
-use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::tendermint_rpc::Client;
-use crate::proto::Tx;
-use namada_core::types::address::Address;
-use crate::ledger::signing::sign_tx;
-use crate::ledger::signing::TxSigningKey;
-use crate::ledger::rpc::{self, TxBroadcastData};
-use crate::ledger::signing::find_keypair;
-use crate::types::key::*;
-use borsh::BorshSerialize;
-use thiserror::Error;
-use crate::tendermint_rpc::error::Error as RpcError;
-use crate::ledger::rpc::TxResponse;
-use tokio::time::{Duration, Instant};
-use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use std::borrow::Cow;
+
+use borsh::BorshSerialize;
+use itertools::Either::*;
+use masp_primitives::transaction::builder;
+use namada_core::types::address::{masp, masp_tx_key, Address};
 use rust_decimal::Decimal;
-use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
-use crate::ledger;
-use crate::types::transaction::{pos, InitAccount, UpdateVp};
-use crate::types::{storage, token};
-use crate::types::storage::Epoch;
-use crate::ledger::governance::storage as gov_storage;
+use thiserror::Error;
+use tokio::time::{Duration, Instant};
+
+use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
-use crate::types::time::DateTimeUtc;
-use crate::ibc_proto::cosmos::base::v1beta1::Coin;
-use crate::types::storage::RESERVED_ADDRESS_PREFIX;
-use crate::ibc::Height as IbcHeight;
 use crate::ibc::tx_msg::Msg;
-use crate::ledger::masp::ShieldedUtils;
-use crate::ledger::masp::ShieldedContext;
-use namada_core::types::address::masp;
-use namada_core::types::address::masp_tx_key;
-use crate::ledger::signing::tx_signer;
-use masp_primitives::transaction::builder;
+use crate::ibc::Height as IbcHeight;
+use crate::ibc_proto::cosmos::base::v1beta1::Coin;
+use crate::ledger::args;
+use crate::ledger::governance::storage as gov_storage;
+use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
+use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
+use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
+use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::proto::Tx;
+use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
+use crate::tendermint_rpc::error::Error as RpcError;
+use crate::tendermint_rpc::Client;
+use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::vm;
+use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
+use crate::types::time::DateTimeUtc;
+use crate::types::transaction::{pos, InitAccount, UpdateVp};
+use crate::types::{storage, token};
+use crate::{ledger, vm};
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
-
 /// Errors to do with transaction events.
 #[derive(Error, Debug)]
 pub enum Error {
     /// Expect a dry running transaction
-    #[error("Expected a dry-run transaction, received a wrapper \
-             transaction instead: {0:?}")]
+    #[error(
+        "Expected a dry-run transaction, received a wrapper transaction \
+         instead: {0:?}"
+    )]
     ExpectDryRun(Tx),
     /// Expect a wrapped encrypted running transaction
     #[error("Cannot broadcast a dry-run transaction")]
@@ -65,16 +59,19 @@ pub enum Error {
     #[error("The address {0} doesn't belong to any known validator account.")]
     InvalidValidatorAddress(Address),
     /// Rate of epoch change too large for current epoch
-    #[error("New rate, {0}, is too large of a change with respect to \
-             the predecessor epoch in which the rate will take \
-             effect.")]
+    #[error(
+        "New rate, {0}, is too large of a change with respect to the \
+         predecessor epoch in which the rate will take effect."
+    )]
     TooLargeOfChange(Decimal),
     /// Error retrieving from storage
     #[error("Error retrieving from storage")]
     Retrival,
     /// No unbonded bonds ready to withdraw in the current epoch
-    #[error("There are no unbonded bonds ready to withdraw in the \
-             current epoch {0}.")]
+    #[error(
+        "There are no unbonded bonds ready to withdraw in the current epoch \
+         {0}."
+    )]
     NoUnbondReady(Epoch),
     /// No unbonded bonds found
     #[error("No unbonded bonds found")]
@@ -83,14 +80,16 @@ pub enum Error {
     #[error("No bonds found")]
     NoBondFound,
     /// Lower bond amount than the unbond
-    #[error("The total bonds of the source {0} is lower than the \
-             amount to be unbonded. Amount to unbond is {1} and the \
-             total bonds is {2}.")]
+    #[error(
+        "The total bonds of the source {0} is lower than the amount to be \
+         unbonded. Amount to unbond is {1} and the total bonds is {2}."
+    )]
     LowerBondThanUnbond(Address, token::Amount, token::Amount),
     /// Balance is too low
-    #[error("The balance of the source {0} of token {1} is lower than \
-             the amount to be transferred. Amount to transfer is {2} \
-             and the balance is {3}.")]
+    #[error(
+        "The balance of the source {0} of token {1} is lower than the amount \
+         to be transferred. Amount to transfer is {2} and the balance is {3}."
+    )]
     BalanceTooLow(Address, Address, token::Amount, token::Amount),
     /// Source address does not exist on chain
     #[error("The source address {0} doesn't exist on chain.")]
@@ -108,25 +107,37 @@ pub enum Error {
     #[error("No balance found for the source {0} of token {1}")]
     NoBalanceForToken(Address, Address),
     /// Negative balance after transfer
-    #[error("The balance of the source {0} is lower than the \
-             amount to be transferred and fees. Amount to \
-             transfer is {1} {2} and fees are {3} {4}.")]
-    NegativeBalanceAfterTransfer(Address, token::Amount, Address, token::Amount, Address),
+    #[error(
+        "The balance of the source {0} is lower than the amount to be \
+         transferred and fees. Amount to transfer is {1} {2} and fees are {3} \
+         {4}."
+    )]
+    NegativeBalanceAfterTransfer(
+        Address,
+        token::Amount,
+        Address,
+        token::Amount,
+        Address,
+    ),
     /// No Balance found for token
     #[error("{0}")]
-    MaspError(builder::Error)
+    MaspError(builder::Error),
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn process_tx<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
-) -> Result<Vec<Address>,Error> {
-    let to_broadcast = sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
+) -> Result<Vec<Address>, Error> {
+    let to_broadcast =
+        sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -153,12 +164,15 @@ pub async fn process_tx<C: Client + crate::ledger::queries::Client + Sync, U: Wa
             Right(Ok(result)) => Ok(result.initialized_accounts),
             Left(Ok(_)) => Ok(Vec::default()),
             Right(Err(err)) => Err(err),
-            Left(Err(err)) => Err(err)
+            Left(Err(err)) => Err(err),
         }
     }
 }
 
-pub async fn submit_reveal_pk<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_reveal_pk<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
@@ -174,7 +188,10 @@ pub async fn submit_reveal_pk<C: Client + crate::ledger::queries::Client + Sync,
     }
 }
 
-pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn reveal_pk_if_needed<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
@@ -182,8 +199,7 @@ pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sy
 ) -> bool {
     let addr: Address = public_key.into();
     // Check if PK revealed
-    if args.force || !has_revealed_pk(client, &addr).await
-    {
+    if args.force || !has_revealed_pk(client, &addr).await {
         // If not, submit it
         submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await;
         true
@@ -192,19 +208,24 @@ pub async fn reveal_pk_if_needed<C: Client + crate::ledger::queries::Client + Sy
     }
 }
 
-pub async fn has_revealed_pk<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn has_revealed_pk<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     addr: &Address,
 ) -> bool {
     rpc::get_public_key(client, addr).await.is_some()
 }
 
-pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_reveal_pk_aux<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<(),Error> {
+) -> Result<(), Error> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key
@@ -218,13 +239,11 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
         signing_key.clone()
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair::<C, U>(client, wallet, &signer)
-            .await
+        find_keypair::<C, U>(client, wallet, &signer).await
     } else {
         find_keypair::<C, U>(client, wallet, &addr).await
     };
-    let epoch = rpc::query_epoch(client)
-    .await;
+    let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
@@ -247,7 +266,7 @@ pub async fn submit_reveal_pk_aux<C: Client + crate::ledger::queries::Client + S
         match result {
             Right(Err(err)) => Err(err),
             Left(Err(err)) => Err(err),
-            _ => Ok({})
+            _ => Ok({}),
         }
     }
 }
@@ -277,7 +296,8 @@ pub async fn broadcast_tx<C: Client + Sync>(
     // TODO: configure an explicit timeout value? we need to hack away at
     // `tendermint-rs` for this, which is currently using a hard-coded 30s
     // timeout.
-    let response = lift_rpc_error(rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await)?;
+    let response =
+        lift_rpc_error(rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await)?;
 
     if response.code == 0.into() {
         println!("Transaction added to mempool: {:?}", response);
@@ -289,7 +309,9 @@ pub async fn broadcast_tx<C: Client + Sync>(
         }
         Ok(response)
     } else {
-        Err(Error::TxBroadcast(RpcError::server(serde_json::to_string(&response).unwrap())))
+        Err(Error::TxBroadcast(RpcError::server(
+            serde_json::to_string(&response).unwrap(),
+        )))
     }
 }
 
@@ -317,9 +339,8 @@ pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
     // Broadcast the supplied transaction
     broadcast_tx(client, &to_broadcast).await?;
 
-    let max_wait_time = Duration::from_secs(
-        DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS,
-    );
+    let max_wait_time =
+        Duration::from_secs(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS);
     let deadline = Instant::now() + max_wait_time;
 
     tracing::debug!(
@@ -329,10 +350,9 @@ pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
     );
 
     let parsed = {
-        let wrapper_query = crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event =
-            rpc::query_tx_status(client, wrapper_query, deadline)
-                .await;
+        let wrapper_query =
+            crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let event = rpc::query_tx_status(client, wrapper_query, deadline).await;
         let parsed = TxResponse::from_event(event);
 
         println!(
@@ -397,9 +417,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
                         format!("{}{}", initialized_account_alias, ix).into()
                     }
                 }
-                None => {
-                    U::read_alias(&encoded).into()
-                }
+                None => U::read_alias(&encoded).into(),
             };
             let alias = alias.into_owned();
             let added = wallet.add_address(alias.clone(), address.clone());
@@ -416,7 +434,10 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
     }
 }
 
-pub async fn submit_validator_commission_change<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_validator_commission_change<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
@@ -429,7 +450,10 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
     if rpc::is_validator(client, &validator).await {
         if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
             if args.tx.force {
-                eprintln!("Invalid new commission rate, received {}", args.rate);
+                eprintln!(
+                    "Invalid new commission rate, received {}",
+                    args.rate
+                );
                 Ok(())
             } else {
                 Err(Error::InvalidCommisionRate(args.rate))
@@ -446,12 +470,12 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
             &client,
             &commission_rate_key,
         )
-            .await;
+        .await;
         let max_change = rpc::query_storage_value::<C, Decimal>(
             &client,
             &max_commission_rate_change_key,
         )
-            .await;
+        .await;
 
         match (commission_rates, max_change) {
             (Some(rates), Some(max_change)) => {
@@ -461,9 +485,9 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
                 if epoch_change > max_change {
                     if args.tx.force {
                         eprintln!(
-                            "New rate, {epoch_change}, is too large of a change \
-                             with respect to the predecessor epoch in which the rate \
-                             will take effect."
+                            "New rate, {epoch_change}, is too large of a \
+                             change with respect to the predecessor epoch in \
+                             which the rate will take effect."
                         );
                         Ok(())
                     } else {
@@ -511,15 +535,19 @@ pub async fn submit_validator_commission_change<C: Client + crate::ledger::queri
     Ok(())
 }
 
-pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_withdraw<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
-) -> Result<(),Error> {
+) -> Result<(), Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
-        .await?;
+    let validator =
+        known_validator_or_err(args.validator.clone(), args.tx.force, client)
+            .await?;
 
     let source = args.source.clone();
     let tx_code = args.tx_code_path;
@@ -531,7 +559,8 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
-    let unbonds = rpc::query_storage_value::<C, Unbonds>(&client, &bond_key).await;
+    let unbonds =
+        rpc::query_storage_value::<C, Unbonds>(&client, &bond_key).await;
     match unbonds {
         Some(unbonds) => {
             let mut unbonded_amount: token::Amount = 0.into();
@@ -551,8 +580,7 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
                 } else {
                     Err(Error::NoUnbondReady(epoch))
                 }
-            }
-            else {
+            } else {
                 Ok(())
             }
         }
@@ -578,17 +606,21 @@ pub async fn submit_withdraw<C: Client + crate::ledger::queries::Client + Sync, 
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-        .await;
+    .await;
     Ok(())
 }
 
-pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_unbond<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) -> Result<(),Error> {
-    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
-        .await?;
+) -> Result<(), Error> {
+    let validator =
+        known_validator_or_err(args.validator.clone(), args.tx.force, client)
+            .await?;
     let source = args.source.clone();
     let tx_code = args.tx_code_path;
 
@@ -612,13 +644,17 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
                 if args.tx.force {
                     eprintln!(
                         "The total bonds of the source {} is lower than the \
-                         amount to be unbonded. Amount to unbond is {} and the \
-                         total bonds is {}.",
+                         amount to be unbonded. Amount to unbond is {} and \
+                         the total bonds is {}.",
                         bond_source, args.amount, bond_amount
                     );
                     Ok(())
                 } else {
-                    Err(Error::LowerBondThanUnbond(bond_source, args.amount, bond_amount))
+                    Err(Error::LowerBondThanUnbond(
+                        bond_source,
+                        args.amount,
+                        bond_amount,
+                    ))
                 }
             } else {
                 Ok(())
@@ -654,13 +690,17 @@ pub async fn submit_unbond<C: Client + crate::ledger::queries::Client + Sync, U:
     Ok(())
 }
 
-pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_bond<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
 ) -> Result<(), Error> {
-    let validator = known_validator_or_err(args.validator.clone(), args.tx.force, client)
-        .await?;
+    let validator =
+        known_validator_or_err(args.validator.clone(), args.tx.force, client)
+            .await?;
 
     // Check that the source address exists on chain
     let source = args.source.clone();
@@ -668,28 +708,29 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
         Some(source) => source_exists_or_err(source, args.tx.force, client)
             .await
             .map(Some),
-        None => Ok(source)
+        None => Ok(source),
     }?;
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&args.native_token, bond_source);
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        .await
     {
         Some(balance) => {
             if balance < args.amount {
                 if args.tx.force {
                     eprintln!(
-                        "The balance of the source {} is lower than the amount to \
-                         be transferred. Amount to transfer is {} and the balance \
-                         is {}.",
+                        "The balance of the source {} is lower than the \
+                         amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
                         bond_source, args.amount, balance
                     );
                 } else {
                     panic!(
-                        "The balance of the source {} is lower than the amount to \
-                         be transferred. Amount to transfer is {} and the balance \
-                         is {}.",
+                        "The balance of the source {} is lower than the \
+                         amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
                         bond_source, args.amount, balance
                     );
                 }
@@ -727,7 +768,9 @@ pub async fn submit_bond<C: Client + crate::ledger::queries::Client + Sync, U: W
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-pub async fn is_safe_voting_window<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn is_safe_voting_window<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
@@ -754,15 +797,19 @@ pub async fn is_safe_voting_window<C: Client + crate::ledger::queries::Client + 
     }
 }
 
-pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_ibc_transfer<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
 ) -> Result<(), Error> {
     // Check that the source address exists on chain
-    let source = source_exists_or_err(args.source.clone(), args.tx.force, client).await?;
+    let source =
+        source_exists_or_err(args.source.clone(), args.tx.force, client)
+            .await?;
     // We cannot check the receiver
-
 
     let token = token_exists_or_err(args.token, args.tx.force, client).await?;
 
@@ -778,22 +825,23 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        .await
     {
         Some(balance) => {
             if balance < args.amount {
                 if args.tx.force {
                     eprintln!(
-                        "The balance of the source {} of token {} is lower than \
-                         the amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
                         source, token, args.amount, balance
                     );
                 } else {
                     panic!(
-                        "The balance of the source {} of token {} is lower than \
-                         the amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
                         source, token, args.amount, balance
                     );
                 }
@@ -858,12 +906,22 @@ pub async fn submit_ibc_transfer<C: Client + crate::ledger::queries::Client + Sy
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-        .await?;
+    process_tx::<C, U>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.source),
+    )
+    .await?;
     Ok(())
 }
 
-pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, V: WalletUtils, U: ShieldedUtils<C = C>>(
+pub async fn submit_transfer<
+    C: Client + crate::ledger::queries::Client + Sync,
+    V: WalletUtils,
+    U: ShieldedUtils<C = C>,
+>(
     client: &C,
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
@@ -872,22 +930,30 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
     // Check that the source address exists on chain
     let force = args.tx.force;
     let transfer_source = args.source;
-    let source = source_exists_or_err(transfer_source.effective_address(), force, client).await?;
+    let source = source_exists_or_err(
+        transfer_source.effective_address(),
+        force,
+        client,
+    )
+    .await?;
     // Check that the target address exists on chain
     let transfer_target = args.target.clone();
-    let target = target_exists_or_err(transfer_target.effective_address(), force, client).await?;
+    let target = target_exists_or_err(
+        transfer_target.effective_address(),
+        force,
+        client,
+    )
+    .await?;
 
     // Check that the token address exists on chain
-    let token = &(token_exists_or_err(args.token.clone(), force, client).await?);
+    let token =
+        &(token_exists_or_err(args.token.clone(), force, client).await?);
 
     // Check source balance
     let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(
-                &token,
-                &sub_prefix,
-            );
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             (
                 Some(sub_prefix),
                 token::multitoken_balance_key(&prefix, &source),
@@ -895,20 +961,26 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key).await
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        .await
     {
         Some(balance) => {
             if balance < args.amount {
                 if args.tx.force {
                     eprintln!(
-                        "The balance of the source {} of token {} is lower than \
-                         the amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
                         source, token, args.amount, balance
                     );
                     Ok(())
                 } else {
-                    Err(Error::BalanceTooLow(source.clone(), token.clone(), args.amount, balance))
+                    Err(Error::BalanceTooLow(
+                        source.clone(),
+                        token.clone(),
+                        args.amount,
+                        balance,
+                    ))
                 }
             } else {
                 Ok(())
@@ -956,9 +1028,10 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
         };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
-    let chosen_signer = tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-        .await
-        .ref_to();
+    let chosen_signer =
+        tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
+            .await
+            .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
@@ -966,8 +1039,8 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
         _ => None,
     };
 
-    let stx_result =
-        shielded.gen_shielded_transfer(
+    let stx_result = shielded
+        .gen_shielded_transfer(
             client,
             transfer_source,
             transfer_target,
@@ -981,7 +1054,13 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
     let shielded = match stx_result {
         Ok(stx) => Ok(stx.map(|x| x.0)),
         Err(builder::Error::ChangeIsNegative(_)) => {
-            Err(Error::NegativeBalanceAfterTransfer(source.clone(), args.amount, token.clone(), args.tx.fee_amount, args.tx.fee_token.clone()))
+            Err(Error::NegativeBalanceAfterTransfer(
+                source.clone(),
+                args.amount,
+                token.clone(),
+                args.tx.fee_amount,
+                args.tx.fee_token.clone(),
+            ))
         }
         Err(err) => Err(Error::MaspError(err)),
     }?;
@@ -1006,7 +1085,10 @@ pub async fn submit_transfer<C: Client + crate::ledger::queries::Client + Sync, 
     Ok(())
 }
 
-pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_init_account<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
@@ -1031,13 +1113,23 @@ pub async fn submit_init_account<C: Client + crate::ledger::queries::Client + Sy
 
     let tx = Tx::new(tx_code, Some(data));
     // TODO Move unwrap to an either
-    let initialized_accounts =
-        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-            .await.unwrap();
-    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
+    let initialized_accounts = process_tx::<C, U>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.source),
+    )
+    .await
+    .unwrap();
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
+        .await;
 }
 
-pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_update_vp<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
@@ -1047,8 +1139,7 @@ pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync,
     // Check that the address is established and exists on chain
     match &addr {
         Address::Established(_) => {
-            let exists =
-                rpc::known_address::<C>(client, &addr).await;
+            let exists = rpc::known_address::<C>(client, &addr).await;
             if !exists {
                 if args.tx.force {
                     eprintln!("The address {} doesn't exist on chain.", addr);
@@ -1103,10 +1194,20 @@ pub async fn submit_update_vp<C: Client + crate::ledger::queries::Client + Sync,
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    process_tx::<C, U>(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.addr),
+    )
+    .await;
 }
 
-pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U: WalletUtils>(
+pub async fn submit_custom<
+    C: Client + crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
@@ -1115,41 +1216,50 @@ pub async fn submit_custom<C: Client + crate::ledger::queries::Client + Sync, U:
     let data = args.data_path;
     let tx = Tx::new(tx_code, data);
     let initialized_accounts =
-        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None).await?;
-    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts).await;
+        process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None)
+            .await?;
+    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
+        .await;
     Ok(())
 }
 
-async fn expect_dry_broadcast<T, C: Client + crate::ledger::queries::Client + Sync>(
+async fn expect_dry_broadcast<
+    T,
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     to_broadcast: TxBroadcastData,
     client: &C,
-    ret:T
-) -> Result<T,Error> {
+    ret: T,
+) -> Result<T, Error> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
             rpc::dry_run_tx(client, tx.to_bytes()).await;
             Ok(ret)
         }
-        TxBroadcastData::Wrapper { tx, wrapper_hash: _, decrypted_hash: _ } =>
-            Err(Error::ExpectDryRun(tx))
+        TxBroadcastData::Wrapper {
+            tx,
+            wrapper_hash: _,
+            decrypted_hash: _,
+        } => Err(Error::ExpectDryRun(tx)),
     }
 }
 
-fn lift_rpc_error<T>(res: Result<T,RpcError>) -> Result<T,Error> {
+fn lift_rpc_error<T>(res: Result<T, RpcError>) -> Result<T, Error> {
     res.map_err(Error::TxBroadcast)
 }
 
 /// Returns the given validator if the given address is a validator,
 /// otherwise returns an error, force forces the address through even
 /// if it isn't a validator
-async fn known_validator_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+async fn known_validator_or_err<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     validator: Address,
     force: bool,
-    client: &C
+    client: &C,
 ) -> Result<Address, Error> {
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(client, &validator).await;
+    let is_validator = rpc::is_validator(client, &validator).await;
     if !is_validator {
         if force {
             eprintln!(
@@ -1168,19 +1278,18 @@ async fn known_validator_or_err<C: Client + crate::ledger::queries::Client + Syn
 /// general pattern for checking if an address exists on the chain, or
 /// throwing an error if it's not forced. Takes a generic error
 /// message and the error type.
-async fn address_exists_or_err<C,F>(
+async fn address_exists_or_err<C, F>(
     addr: Address,
     force: bool,
     client: &C,
     message: String,
-    err: F
+    err: F,
 ) -> Result<Address, Error>
 where
     C: Client + crate::ledger::queries::Client + Sync,
-    F: FnOnce(Address) -> Error
+    F: FnOnce(Address) -> Error,
 {
-    let addr_exists =
-        rpc::known_address::<C>(client, &addr).await;
+    let addr_exists = rpc::known_address::<C>(client, &addr).await;
     if !addr_exists {
         if force {
             eprintln!("{}", message);
@@ -1196,35 +1305,65 @@ where
 /// Returns the given token if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn token_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+async fn token_exists_or_err<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     token: Address,
     force: bool,
-    client: &C
+    client: &C,
 ) -> Result<Address, Error> {
-    let message = format!("The token address {} doesn't exist on chain.", token);
-    address_exists_or_err(token, force, client, message, Error::TokenDoesNotExist).await
+    let message =
+        format!("The token address {} doesn't exist on chain.", token);
+    address_exists_or_err(
+        token,
+        force,
+        client,
+        message,
+        Error::TokenDoesNotExist,
+    )
+    .await
 }
 
 /// Returns the given source address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn source_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+async fn source_exists_or_err<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     token: Address,
     force: bool,
-    client: &C
+    client: &C,
 ) -> Result<Address, Error> {
-    let message = format!("The source address {} doesn't exist on chain.", token);
-    address_exists_or_err(token, force, client, message, Error::SourceDoesNotExist).await
+    let message =
+        format!("The source address {} doesn't exist on chain.", token);
+    address_exists_or_err(
+        token,
+        force,
+        client,
+        message,
+        Error::SourceDoesNotExist,
+    )
+    .await
 }
 
 /// Returns the given target address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn target_exists_or_err<C: Client + crate::ledger::queries::Client + Sync>(
+async fn target_exists_or_err<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
     token: Address,
     force: bool,
-    client: &C
+    client: &C,
 ) -> Result<Address, Error> {
-    let message = format!("The target address {} doesn't exist on chain.", token);
-    address_exists_or_err(token, force, client, message, Error::TargetLocationDoesNotExist).await
+    let message =
+        format!("The target address {} doesn't exist on chain.", token);
+    address_exists_or_err(
+        token,
+        force,
+        client,
+        message,
+        Error::TargetLocationDoesNotExist,
+    )
+    .await
 }

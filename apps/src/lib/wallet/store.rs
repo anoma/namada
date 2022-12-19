@@ -6,13 +6,12 @@ use std::path::{Path, PathBuf};
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use file_lock::{FileLock, FileOptions};
+use namada::ledger::wallet::{gen_sk, Store, StoredKeypair, ValidatorKeys};
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use thiserror::Error;
-use namada::ledger::wallet::Store;
 
-use namada::ledger::wallet::{StoredKeypair, ValidatorKeys, gen_sk};
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
 
@@ -42,8 +41,7 @@ pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
     let wallet_dir = wallet_path.parent().unwrap();
     fs::create_dir_all(wallet_dir)?;
     // Write the file
-    let options =
-        FileOptions::new().create(true).write(true).truncate(true);
+    let options = FileOptions::new().create(true).write(true).truncate(true);
     let mut filelock =
         FileLock::lock(wallet_path.to_str().unwrap(), true, options)?;
     filelock.file.write_all(&data)
@@ -53,9 +51,8 @@ pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
 pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
     load(store_dir).or_else(|_| {
         let store = Store::default();
-        save(&store, store_dir).map_err(|err| {
-            LoadStoreError::StoreNewWallet(err.to_string())
-        })?;
+        save(&store, store_dir)
+            .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
         Ok(store)
     })
 }
@@ -75,9 +72,8 @@ pub fn load_or_new_from_genesis(
             let _ = genesis_cfg;
             new()
         };
-        save(&store, store_dir).map_err(|err| {
-            LoadStoreError::StoreNewWallet(err.to_string())
-        })?;
+        save(&store, store_dir)
+            .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
         Ok(store)
     })
 }
@@ -148,8 +144,7 @@ pub fn gen_validator_keys(
     protocol_keypair: Option<common::SecretKey>,
     scheme: SchemeType,
 ) -> ValidatorKeys {
-    let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk(scheme));
+    let protocol_keypair = protocol_keypair.unwrap_or_else(|| gen_sk(scheme));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );
@@ -166,8 +161,7 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_ed25519() {
         let mut store = new();
-        let validator_keys =
-            gen_validator_keys(None, SchemeType::Ed25519);
+        let validator_keys = gen_validator_keys(None, SchemeType::Ed25519);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys
@@ -179,8 +173,7 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_secp256k1() {
         let mut store = new();
-        let validator_keys =
-            gen_validator_keys(None, SchemeType::Secp256k1);
+        let validator_keys = gen_validator_keys(None, SchemeType::Secp256k1);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys

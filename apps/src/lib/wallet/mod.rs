@@ -4,28 +4,28 @@ mod keys;
 pub mod pre_genesis;
 mod store;
 
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+use namada::ledger::wallet::{
+    Alias, ConfirmationResponse, FindKeyError, Wallet, WalletUtils,
+};
+pub use namada::ledger::wallet::{
+    DecryptionError, StoredKeypair, ValidatorData, ValidatorKeys,
+};
 use namada::types::key::*;
 pub use store::wallet_file;
-use namada::ledger::wallet::ConfirmationResponse;
 
-pub use namada::ledger::wallet::{DecryptionError, StoredKeypair};
-use namada::ledger::wallet::Wallet;
-pub use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
-use namada::ledger::wallet::{WalletUtils, Alias};
-use std::io::{self, Write};
-use namada::ledger::wallet::FindKeyError;
 
 #[derive(Debug)]
 pub struct CliWalletUtils;
 
 impl WalletUtils for CliWalletUtils {
     type Storage = PathBuf;
-    
+
     /// Prompt for pssword and confirm it if parameter is false
     fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String> {
         let password = if unsafe_dont_encrypt {
@@ -50,7 +50,8 @@ impl WalletUtils for CliWalletUtils {
         password
     }
 
-    /// Read the password for encryption from the file/env/stdin with confirmation.
+    /// Read the password for encryption from the file/env/stdin with
+    /// confirmation.
     fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
         let password = if unsafe_dont_encrypt {
             println!("Warning: The keypair will NOT be encrypted.");
@@ -63,7 +64,8 @@ impl WalletUtils for CliWalletUtils {
             None
         } else {
             Some(Self::read_password(
-                "To confirm, please enter the same encryption password once more: ",
+                "To confirm, please enter the same encryption password once \
+                 more: ",
             ))
         };
         if to_confirm != password {
@@ -73,8 +75,8 @@ impl WalletUtils for CliWalletUtils {
         password
     }
 
-    /// Read the password for encryption/decryption from the file/env/stdin. Panics
-    /// if all options are empty/invalid.
+    /// Read the password for encryption/decryption from the file/env/stdin.
+    /// Panics if all options are empty/invalid.
     fn read_password(prompt_msg: &str) -> String {
         let pwd = match env::var("ANOMA_WALLET_PASSWORD_FILE") {
             Ok(path) => fs::read_to_string(path)
@@ -109,8 +111,8 @@ impl WalletUtils for CliWalletUtils {
         alias_for: &str,
     ) -> ConfirmationResponse {
         print!(
-            "You're trying to create an alias \"{}\" that already exists for {} \
-             in your store.\nWould you like to replace it? \
+            "You're trying to create an alias \"{}\" that already exists for \
+             {} in your store.\nWould you like to replace it? \
              s(k)ip/re(p)lace/re(s)elect: ",
             alias, alias_for
         );
@@ -158,10 +160,12 @@ pub fn gen_validator_keys(
     scheme: SchemeType,
 ) -> Result<ValidatorKeys, FindKeyError> {
     let protocol_keypair = protocol_pk.map(|pk| {
-        wallet.find_key_by_pkh(&PublicKeyHash::from(&pk))
+        wallet
+            .find_key_by_pkh(&PublicKeyHash::from(&pk))
             .ok()
             .or_else(|| {
-                wallet.store_mut()
+                wallet
+                    .store_mut()
                     .validator_data()
                     .take()
                     .map(|data| data.keys.protocol_keypair.clone())
@@ -178,7 +182,10 @@ pub fn gen_validator_keys(
 }
 
 /// Add addresses from a genesis configuration.
-pub fn add_genesis_addresses(wallet: &mut Wallet<CliWalletUtils>, genesis: GenesisConfig) {
+pub fn add_genesis_addresses(
+    wallet: &mut Wallet<CliWalletUtils>,
+    genesis: GenesisConfig,
+) {
     for (alias, addr) in defaults::addresses_from_genesis(genesis) {
         wallet.add_address(alias.normalize(), addr);
     }
@@ -195,7 +202,10 @@ pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
         eprintln!("Unable to load the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Some(Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store))
+    Some(Wallet::<CliWalletUtils>::new(
+        store_dir.to_path_buf(),
+        store,
+    ))
 }
 
 /// Load a wallet from the store file or create a new wallet without any
@@ -221,4 +231,3 @@ pub fn load_or_new_from_genesis(
         });
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
-
