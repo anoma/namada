@@ -6,15 +6,19 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::ledger::eth_bridge::{
-    Contracts, EthereumBridgeConfig, UpgradeableContract,
-};
+use namada::ledger::eth_bridge::EthereumBridgeConfig;
+#[cfg(feature = "dev")]
+use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
-use namada::types::address::{wnam, Address};
+#[cfg(feature = "dev")]
+use namada::types::address::wnam;
+use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
+use namada::types::chain::ProposalBytes;
+#[cfg(feature = "dev")]
 use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
@@ -36,6 +40,7 @@ pub mod genesis_config {
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
+    use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
@@ -232,17 +237,30 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
-        // Minimum number of blocks per epoch.
+        /// Max payload size, in bytes, for a tx batch proposal.
+        ///
+        /// Block proposers may never return a `PrepareProposal`
+        /// response containing `txs` with a byte length greater
+        /// than whatever is configured through this parameter.
+        ///
+        /// Note that this parameter's value will always be strictly
+        /// smaller than a Tendermint block's `MaxBytes` consensus
+        /// parameter. Currently, we hard cap `max_proposal_bytes`
+        /// at 90 MiB in Namada, which leaves at least 10 MiB of
+        /// room for header data, evidence and protobuf
+        /// serialization overhead in Tendermint blocks.
+        pub max_proposal_bytes: ProposalBytes,
+        /// Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Maximum duration per block (in seconds).
+        /// Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
-        // Hashes of whitelisted vps array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted vps array. `None` value or an empty array
+        /// disables whitelisting.
         pub vp_whitelist: Option<Vec<String>>,
-        // Hashes of whitelisted txs array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted txs array. `None` value or an empty array
+        /// disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
         /// Filename of implicit accounts validity predicate WASM code
         pub implicit_vp: String,
@@ -597,6 +615,7 @@ pub mod genesis_config {
                     parameters.max_expected_time_per_block,
                 )
                 .into(),
+            max_proposal_bytes: parameters.max_proposal_bytes,
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
@@ -822,6 +841,8 @@ pub struct ImplicitAccount {
     BorshDeserialize,
 )]
 pub struct Parameters {
+    // Max payload size, in bytes, for a tx batch proposal.
+    pub max_proposal_bytes: ProposalBytes,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
@@ -904,6 +925,7 @@ pub fn genesis() -> Genesis {
             min_duration: namada::types::time::Duration::seconds(600).into(),
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
+        max_proposal_bytes: Default::default(),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
