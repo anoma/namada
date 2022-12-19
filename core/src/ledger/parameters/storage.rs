@@ -1,9 +1,12 @@
 //! Parameters storage
 
+use namada_macros::StorageKeys;
+
 use super::ADDRESS;
 use crate::types::storage::{DbKeySeg, Key};
 
 /// Storage keys for ledger parameters.
+#[derive(StorageKeys)]
 struct Keys {
     epoch_duration: &'static str,
     epochs_per_year: &'static str,
@@ -15,58 +18,6 @@ struct Keys {
     staked_ratio: &'static str,
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
-}
-
-impl Keys {
-    /// All ledger parameter key types.
-    const ALL: &[&'static str] = {
-        // keep this pattern here to remind us to
-        // include all fields of `Keys` in the slice
-        // below (e.g. if we get a compiler error, we
-        // probably need to add a missing field to the
-        // slice)
-        let Keys {
-            epoch_duration,
-            epochs_per_year,
-            implicit_vp,
-            max_expected_time_per_block,
-            pos_gain_d,
-            pos_gain_p,
-            pos_inflation_amount,
-            staked_ratio,
-            tx_whitelist,
-            vp_whitelist,
-        } = Keys::VALUES;
-
-        // additionally, the slice itself must be sorted
-        // in ascending order
-        &[
-            epoch_duration,
-            epochs_per_year,
-            implicit_vp,
-            max_expected_time_per_block,
-            pos_gain_d,
-            pos_gain_p,
-            pos_inflation_amount,
-            staked_ratio,
-            tx_whitelist,
-            vp_whitelist,
-        ]
-    };
-    /// This constant is contains the stringified version of all
-    /// the key types for ledger parameters.
-    const VALUES: Keys = Keys {
-        epoch_duration: "epoch_duration",
-        epochs_per_year: "epochs_per_year",
-        implicit_vp: "implicit_vp",
-        max_expected_time_per_block: "max_expected_time_per_block",
-        pos_gain_d: "pos_gain_d",
-        pos_gain_p: "pos_gain_p",
-        pos_inflation_amount: "pos_inflation_amount",
-        staked_ratio: "staked_ratio",
-        tx_whitelist: "tx_whitelist",
-        vp_whitelist: "vp_whitelist",
-    };
 }
 
 /// Returns if the key is a parameter key.
@@ -266,19 +217,5 @@ pub fn get_pos_inflation_amount_key() -> Key {
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.pos_inflation_amount.to_string()),
         ],
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Check if [`Keys::ALL`] is sorted.
-    ///
-    /// This is required for binary searching over this slice of data
-    /// to work as intended.
-    #[test]
-    fn test_keys_slice_is_sorted() {
-        itertools::assert_equal(itertools::sorted(Keys::ALL), Keys::ALL)
     }
 }
