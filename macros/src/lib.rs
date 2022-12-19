@@ -207,17 +207,19 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
         }
     });
 
+    let struct_def_ident = &struct_def.ident;
+
     quote! {
-        impl #struct_def.ident {
+        impl #struct_def_ident {
             const ALL: &[&'static str] = {
-                let #struct_def.ident {
+                let #struct_def_ident {
                     #ident_list
                 } = Self::VALUES;
 
                 &[ #ident_list ]
             };
 
-            const VALUES: #struct_def.ident = Self {
+            const VALUES: #struct_def_ident = Self {
                 #values_list
             };
         }
