@@ -2218,6 +2218,7 @@ dependencies = [
 [[package]]
 name = "ferveo"
 version = "0.1.1"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -2234,7 +2235,7 @@ dependencies = [
  "digest 0.10.5",
  "ed25519-dalek",
  "either",
- "ferveo-common 0.1.0",
+ "ferveo-common",
  "group-threshold-cryptography",
  "hex",
  "itertools",
@@ -2254,19 +2255,7 @@ dependencies = [
 [[package]]
 name = "ferveo-common"
 version = "0.1.0"
-dependencies = [
- "anyhow",
- "ark-ec",
- "ark-serialize",
- "ark-std",
- "serde 1.0.147",
- "serde_bytes",
-]
-
-[[package]]
-name = "ferveo-common"
-version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",
@@ -2661,6 +2650,7 @@ dependencies = [
 [[package]]
 name = "group-threshold-cryptography"
 version = "0.1.0"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4053,7 +4043,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "eyre",
- "ferveo-common 0.1.0 (git+https://github.com/anoma/ferveo)",
+ "ferveo-common",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
@@ -4129,7 +4119,7 @@ dependencies = [
  "ethabi",
  "eyre",
  "ferveo",
- "ferveo-common 0.1.0",
+ "ferveo-common",
  "file-lock",
  "flate2",
  "futures 0.3.25",
@@ -4216,7 +4206,7 @@ dependencies = [
  "ethabi",
  "eyre",
  "ferveo",
- "ferveo-common 0.1.0",
+ "ferveo-common",
  "group-threshold-cryptography",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
@@ -4300,7 +4290,7 @@ version = "0.11.0"
 dependencies = [
  "borsh",
  "derivative",
- "ferveo-common 0.1.0",
+ "ferveo-common",
  "namada_core",
  "proptest",
  "rust_decimal",
@@ -6679,6 +6669,7 @@ dependencies = [
 [[package]]
 name = "subproductdomain"
 version = "0.1.0"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",
