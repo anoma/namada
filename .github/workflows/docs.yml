@@ -128,10 +128,10 @@ jobs:
           name: ${{ matrix.make.bucket }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ matrix.make.bucket }}.tar
       - name: Publish docs
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/main' }}
         run: aws s3 sync ${{ matrix.make.folder }}/book/html/ s3://${{ matrix.make.bucket }} --region eu-west-1 --delete
       - name: Invalidate distribution cache
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/main' }}
         run: aws cloudfront create-invalidation --distribution-id ${{ matrix.make.distribution_id }} --paths "/*"
       - name: Print sccache stats
         if: always()
