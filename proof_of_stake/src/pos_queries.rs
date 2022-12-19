@@ -21,7 +21,7 @@ use crate::tendermint_proto::types::EvidenceParams;
 use crate::types::WeightedValidator;
 use crate::{PosBase, PosParams};
 
-/// Errors returned by [`QueriesExt`] operations.
+/// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
 pub enum Error {
     /// The given address is not among the set of active validators for
@@ -50,11 +50,11 @@ pub enum Error {
     InvalidTMAddress,
 }
 
-/// Result type returned by [`QueriesExt`] operations.
+/// Result type returned by [`PosQueries`] operations.
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 /// This enum is used as a parameter to
-/// [`QueriesExt::can_send_validator_set_update`].
+/// [`PosQueries::can_send_validator_set_update`].
 pub enum SendValsetUpd {
     /// Check if it is possible to send a validator set update
     /// vote extension at the current block height.
