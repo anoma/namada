@@ -8,6 +8,7 @@ use rust_decimal::Decimal;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
 
+use super::args::KeyList;
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -714,36 +715,18 @@ pub async fn submit_bond<
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&args.native_token, bond_source);
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
-        .await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                if args.tx.force {
-                    eprintln!(
-                        "The balance of the source {} is lower than the \
-                         amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
-                        bond_source, args.amount, balance
-                    );
-                } else {
-                    panic!(
-                        "The balance of the source {} is lower than the \
-                         amount to be transferred. Amount to transfer is {} \
-                         and the balance is {}.",
-                        bond_source, args.amount, balance
-                    );
-                }
-            }
-        }
-        None => {
-            if args.tx.force {
-                eprintln!("No balance found for the source {}", bond_source);
-            } else {
-                panic!("No balance found for the source {}", bond_source);
-            }
-        }
-    }
+
+    // TODO Should we state the same error message for the native token?
+    check_balance_too_low_err(
+        &args.native_token,
+        bond_source,
+        args.amount,
+        balance_key,
+        args.tx.force,
+        client,
+    )
+    .await?;
+
     let tx_code = args.tx_code_path;
     let bond = pos::Bond {
         validator,
@@ -825,42 +808,17 @@ pub async fn submit_ibc_transfer<
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
-        .await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                if args.tx.force {
-                    eprintln!(
-                        "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
-                        source, token, args.amount, balance
-                    );
-                } else {
-                    panic!(
-                        "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
-                        source, token, args.amount, balance
-                    );
-                }
-            }
-        }
-        None => {
-            if args.tx.force {
-                eprintln!(
-                    "No balance found for the source {} of token {}",
-                    source, token
-                );
-            } else {
-                panic!(
-                    "No balance found for the source {} of token {}",
-                    source, token
-                );
-            }
-        }
-    }
+
+    check_balance_too_low_err(
+        &token,
+        &source,
+        args.amount,
+        balance_key,
+        args.tx.force,
+        client,
+    )
+    .await?;
+
     let tx_code = args.tx_code_path;
 
     let denom = match sub_prefix {
@@ -961,43 +919,16 @@ pub async fn submit_transfer<
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
-        .await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                if args.tx.force {
-                    eprintln!(
-                        "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
-                        source, token, args.amount, balance
-                    );
-                    Ok(())
-                } else {
-                    Err(Error::BalanceTooLow(
-                        source.clone(),
-                        token.clone(),
-                        args.amount,
-                        balance,
-                    ))
-                }
-            } else {
-                Ok(())
-            }
-        }
-        None => {
-            if args.tx.force {
-                eprintln!(
-                    "No balance found for the source {} of token {}",
-                    source, token
-                );
-                Ok(())
-            } else {
-                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
-            }
-        }
-    };
+
+    check_balance_too_low_err(
+        &token,
+        &source,
+        args.amount,
+        balance_key,
+        args.tx.force,
+        client,
+    )
+    .await?;
 
     let tx_code = args.tx_code_path;
     let masp_addr = masp();
@@ -1366,4 +1297,56 @@ async fn target_exists_or_err<
         Error::TargetLocationDoesNotExist,
     )
     .await
+}
+
+/// checks the balance at the given address is enough to transfer the
+/// given amount, along with the balance even existing. force
+/// overrides this
+async fn check_balance_too_low_err<
+    C: Client + crate::ledger::queries::Client + Sync,
+>(
+    token: &Address,
+    source: &Address,
+    amount: token::Amount,
+    balance_key: storage::Key,
+    force: bool,
+    client: &C,
+) -> Result<(), Error> {
+    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+        .await
+    {
+        Some(balance) => {
+            if balance < amount {
+                if force {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                        source, token, amount, balance
+                    );
+                    Ok(())
+                } else {
+                    Err(Error::BalanceTooLow(
+                        source.clone(),
+                        token.clone(),
+                        amount,
+                        balance,
+                    ))
+                }
+            } else {
+                Ok(())
+            }
+        }
+        None => {
+            if force {
+                eprintln!(
+                    "No balance found for the source {} of token {}",
+                    source, token
+                );
+                Ok(())
+            } else {
+                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
+            }
+        }
+    }
 }
