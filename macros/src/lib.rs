@@ -7,8 +7,10 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
+use quote::{quote, ToTokens};
+use syn::punctuated::Punctuated;
+use syn::{parse_macro_input, ItemFn, ItemStruct};
 
 /// Generate WASM binding for a transaction main entrypoint function.
 ///
@@ -148,4 +150,90 @@ pub fn validity_predicate(
         }
     };
     TokenStream::from(gen)
+}
+
+#[proc_macro_derive(StorageKeys)]
+// TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
+pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
+    let struct_def = parse_macro_input!(item as ItemStruct);
+
+    // type check the struct - all fields must be of type `&'static str`
+    let fields = match &struct_def.fields {
+        syn::Fields::Named(fields) => &fields.named,
+        _ => panic!(
+            "Only named struct fields are accepted in StorageKeys derives"
+        ),
+    };
+
+    let mut idents = vec![];
+
+    for field in fields {
+        let field_type = {
+            let mut toks = TokenStream2::new();
+            field.ty.to_tokens(&mut toks);
+            toks.to_string()
+        };
+        if field_type != "&'static str" {
+            panic!(
+                "Expected `&'static str` field type in StorageKeys derive, \
+                 but got {field_type} instead"
+            );
+        }
+        idents.push(field.ident.clone().expect("Expected a named field"));
+    }
+
+    idents.sort();
+
+    let ident_list = create_ponctuated(&idents, |ident| ident.clone());
+    let values_list = create_ponctuated(&idents, |ident| {
+        let storage_key = {
+            let mut toks = TokenStream2::new();
+            ident.to_tokens(&mut toks);
+            toks.to_string()
+        };
+        syn::FieldValue {
+            attrs: vec![],
+            member: syn::Member::Named(ident.clone()),
+            colon_token: Some(syn::token::Colon {
+                spans: [Span2::call_site()],
+            }),
+            expr: syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Str(syn::LitStr::new(
+                    storage_key.as_str(),
+                    Span2::call_site(),
+                )),
+            }),
+        }
+    });
+
+    quote! {
+        impl #struct_def.ident {
+            const ALL: &[&'static str] = {
+                let #struct_def.ident {
+                    #ident_list
+                } = Self::VALUES;
+
+                &[ #ident_list ]
+            };
+
+            const VALUES: #struct_def.ident = Self {
+                #values_list
+            };
+        }
+    }
+    .into()
+}
+
+fn create_ponctuated<F, M>(
+    idents: &[syn::Ident],
+    mut map: F,
+) -> Punctuated<M, syn::token::Comma>
+where
+    F: FnMut(&syn::Ident) -> M,
+{
+    idents.iter().fold(Punctuated::new(), |mut accum, ident| {
+        accum.push(map(ident));
+        accum
+    })
 }
