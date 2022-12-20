@@ -139,7 +139,7 @@ appearing in this order, as [examplified above](#example)). Let us fix $H$ as
 the height of the block $B$ currently being decided through Tendermint's 
 consensus mechanism, $P$ as the batch of transactions proposed at $H$ as $B$'s 
 payload and $V$ as the current set of active validators. To vote on $P$, each 
-validator $v : v \in V$ checks:
+validator $v \in V$ checks:
 
 * If the length of $P$ in bytes, defined as $P_{Len} : P_{Len} = \sum_{tx \in 
 P} \text{size\_of}(tx)$, is not greater than $MaxProposalBytes$.
