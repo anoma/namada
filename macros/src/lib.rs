@@ -156,7 +156,10 @@ pub fn validity_predicate(
 // TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
 pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
     let struct_def = parse_macro_input!(item as ItemStruct);
+    create_storage_keys(struct_def).parse().unwrap()
+}
 
+fn create_storage_keys(struct_def: ItemStruct) -> String {
     // type check the struct - all fields must be of type `&'static str`
     let fields = match &struct_def.fields {
         syn::Fields::Named(fields) => &fields.named,
@@ -168,11 +171,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
     let mut idents = vec![];
 
     for field in fields {
-        let field_type = {
-            let mut toks = TokenStream2::new();
-            field.ty.to_tokens(&mut toks);
-            toks.to_string()
-        };
+        let field_type = field.ty.to_token_stream().to_string();
         if field_type != "& 'static str" {
             panic!(
                 "Expected `&'static str` field type in StorageKeys derive, \
@@ -223,8 +222,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
                 #values_list
             };
         }
-    }
-    .into()
+    }.to_string()
 }
 
 fn create_punctuated<F, M>(
@@ -238,4 +236,42 @@ where
         accum.push(map(ident));
         accum
     })
+}
+
+
+#[cfg(test)]
+mod test_proc_macros {
+    use syn::ItemImpl;
+    use super::*;
+
+
+    /// Test that the create storage keys produces
+    /// the expected code.
+    #[test]
+    fn test_create_storage_keys() {
+        const TEST: &str = r#"
+            struct Keys {
+                param1: &'static str,
+                param2: &'static str,
+            }
+        "#;
+
+        const EXPECT: &str = r#"
+            impl Keys {
+                const ALL: &[&'static str] = {
+                    let Keys { param1 , param2 } = Self::VALUES;
+                    &[param1, param2]
+                };
+                const VALUES: Keys = Self {
+                    param1: "param1",
+                    param2: "param2"
+                };
+            }
+        "#;
+        let struct_def = syn::parse_str(TEST).unwrap();
+        let result = create_storage_keys(struct_def);
+        let result: ItemImpl = syn::parse_str(&result).unwrap();
+        let expected = syn::parse_str(EXPECT).unwrap();
+        assert_eq!(result, expected);
+    }
 }
