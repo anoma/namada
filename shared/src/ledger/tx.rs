@@ -9,7 +9,6 @@ use rust_decimal::Decimal;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
 
-use super::args::KeyList;
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -22,7 +21,6 @@ use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
 use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
-use crate::ledger::tx::Error::EncodeTxFailure;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -568,7 +566,7 @@ pub async fn submit_validator_commission_change<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -643,7 +641,7 @@ pub async fn submit_withdraw<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -723,7 +721,7 @@ pub async fn submit_unbond<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -780,7 +778,7 @@ pub async fn submit_bond<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -1161,7 +1159,7 @@ pub async fn submit_update_vp<
         tx,
         TxSigningKey::WalletAddress(args.addr),
     )
-    .await;
+    .await?;
     Ok(())
 }
 

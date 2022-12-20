@@ -35,7 +35,6 @@ use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, CliWalletUtils};
@@ -47,8 +46,8 @@ pub async fn submit_custom<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCustom,
-) {
-    tx::submit_custom::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_custom::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_update_vp<
@@ -58,8 +57,8 @@ pub async fn submit_update_vp<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
-) {
-    tx::submit_update_vp::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_update_vp::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_init_account<
@@ -69,8 +68,8 @@ pub async fn submit_init_account<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
-) {
-    tx::submit_init_account::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_init_account::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_init_validator<
@@ -394,8 +393,8 @@ pub async fn submit_transfer<
     wallet: &mut Wallet<V>,
     shielded: &mut ShieldedContext<U>,
     args: args::TxTransfer,
-) {
-    tx::submit_transfer::<C, V, U>(client, wallet, shielded, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_transfer::<C, V, U>(client, wallet, shielded, args).await
 }
 
 pub async fn submit_ibc_transfer<
@@ -405,8 +404,8 @@ pub async fn submit_ibc_transfer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxIbcTransfer,
-) {
-    tx::submit_ibc_transfer::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_ibc_transfer::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_init_proposal<
@@ -415,7 +414,7 @@ pub async fn submit_init_proposal<
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
-) {
+) -> Result<(), tx::Error> {
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -503,6 +502,7 @@ pub async fn submit_init_proposal<
                 safe_exit(1)
             }
         }
+        Ok(())
     } else {
         let signer = ctx.get(&signer);
         let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
@@ -550,7 +550,8 @@ pub async fn submit_init_proposal<
             tx,
             TxSigningKey::WalletAddress(signer),
         )
-        .await;
+        .await?;
+        Ok(())
     }
 }
 
@@ -680,7 +681,7 @@ pub async fn submit_vote_proposal<
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),
                 )
-                .await;
+                .await?;
                 Ok(())
             }
             None => {
@@ -701,8 +702,8 @@ pub async fn submit_reveal_pk<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
-) {
-    tx::submit_reveal_pk::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_reveal_pk::<C, U>(client, wallet, args).await
 }
 
 pub async fn reveal_pk_if_needed<
@@ -734,8 +735,8 @@ pub async fn submit_reveal_pk_aux<
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) {
-    tx::submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args);
+) -> Result<(), tx::Error> {
+    tx::submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await
 }
 
 /// Check if current epoch is in the last third of the voting period of the
@@ -799,8 +800,8 @@ pub async fn submit_bond<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Bond,
-) {
-    tx::submit_bond::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_bond::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_unbond<
@@ -810,8 +811,8 @@ pub async fn submit_unbond<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Unbond,
-) {
-    tx::submit_unbond::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_unbond::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_withdraw<
@@ -821,8 +822,8 @@ pub async fn submit_withdraw<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::Withdraw,
-) {
-    tx::submit_withdraw::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_withdraw::<C, U>(client, wallet, args).await
 }
 
 pub async fn submit_validator_commission_change<
@@ -832,8 +833,8 @@ pub async fn submit_validator_commission_change<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxCommissionRateChange,
-) {
-    tx::submit_validator_commission_change::<C, U>(client, wallet, args).await;
+) -> Result<(), tx::Error> {
+    tx::submit_validator_commission_change::<C, U>(client, wallet, args).await
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
