@@ -481,7 +481,7 @@ pub async fn submit_init_proposal<
         let signer = ctx.get(&signer);
         let signing_key =
             find_keypair::<C, CliWalletUtils>(client, &mut ctx.wallet, &signer)
-                .await;
+                .await?;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
         let proposal_filename = args
@@ -587,7 +587,7 @@ pub async fn submit_vote_proposal<
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<C, U>(client, wallet, &signer).await;
+        let signing_key = find_keypair::<C, U>(client, wallet, &signer).await?;
         let offline_vote = OfflineVote::new(
             &proposal,
             args.vote,

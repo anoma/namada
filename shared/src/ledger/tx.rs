@@ -171,7 +171,7 @@ pub async fn process_tx<
     default_signer: TxSigningKey,
 ) -> Result<Vec<Address>, Error> {
     let to_broadcast =
-        sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
+        sign_tx::<C, U>(client, wallet, tx, args, default_signer).await?;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -271,13 +271,13 @@ pub async fn submit_reveal_pk_aux<
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
-        signing_key.clone()
+        Ok(signing_key.clone())
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
         find_keypair::<C, U>(client, wallet, &signer).await
     } else {
         find_keypair::<C, U>(client, wallet, &addr).await
-    };
+    }?;
     let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
@@ -995,7 +995,7 @@ pub async fn submit_transfer<
     // will need to cover the gas fees.
     let chosen_signer =
         tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-            .await
+            .await?
             .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
