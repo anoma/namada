@@ -13,7 +13,7 @@ of Namada.
 parameter) have a minimum value of 1 byte, and a hard cap of $100\ 
 MiB$, reflecting the header, evidence of misbehavior (used to slash 
 Byzantine validators) and transaction data, as well as any potential protobuf 
-serialization overhead. Some of these datum are dynamic in nature (e.g. 
+serialization overhead. Some of these data are dynamic in nature (e.g. 
 evidence of misbehavior), so the total size reserved to transactions in a block 
 at some height $H_0$ might not be the same as another block's, say, at some 
 height $H_1 : H_1 \ne H_0$. During Tendermint's `PrepareProposal` ABCI phase, 
