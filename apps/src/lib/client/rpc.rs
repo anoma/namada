@@ -39,15 +39,11 @@ use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::Wallet;
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalResult,
-    VotePower,
+    OfflineProposal, OfflineVote, ProposalResult, VotePower,
 };
-
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg,
-};
+use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
 use tokio::time::Instant;

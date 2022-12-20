@@ -3,12 +3,12 @@
 
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
+use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
-use namada::ledger::tx;
 
 use crate::cli::args;
 use crate::facade::tendermint_rpc::Client;
@@ -38,7 +38,7 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<common::SecretKey,tx::Error> {
+) -> Result<common::SecretKey, tx::Error> {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
 }
@@ -60,7 +60,7 @@ pub async fn sign_tx<
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<TxBroadcastData,tx::Error> {
+) -> Result<TxBroadcastData, tx::Error> {
     namada::ledger::signing::sign_tx::<C, U>(client, wallet, tx, args, default)
         .await
 }

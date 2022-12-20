@@ -118,9 +118,11 @@ pub async fn tx_signer<
                 .await?;
             Ok(signing_key)
         }
-        TxSigningKey::None =>
-            other_err("All transactions must be signed; please either specify the \
-                       key or the address from which to look up the signing key.".to_string())
+        TxSigningKey::None => other_err(
+            "All transactions must be signed; please either specify the key \
+             or the address from which to look up the signing key."
+                .to_string(),
+        ),
     }
 }
 
