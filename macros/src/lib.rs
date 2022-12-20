@@ -241,6 +241,7 @@ where
 
 #[cfg(test)]
 mod test_proc_macros {
+    use itertools::Itertools;
     use syn::ItemImpl;
 
     use super::*;

@@ -3845,6 +3845,7 @@ dependencies = [
 name = "namada_macros"
 version = "0.12.1"
 dependencies = [
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",
