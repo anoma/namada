@@ -214,6 +214,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
 
     quote! {
         impl #struct_def_ident {
+            #[allow(dead_code)]
             const ALL: &[&'static str] = {
                 let #struct_def_ident {
                     #ident_list
@@ -222,6 +223,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 &[ #ident_list ]
             };
 
+            #[allow(dead_code)]
             const VALUES: #struct_def_ident = Self {
                 #values_list
             };
@@ -245,10 +247,41 @@ where
 
 #[cfg(test)]
 mod test_proc_macros {
-    use itertools::Itertools;
     use syn::ItemImpl;
 
     use super::*;
+
+    /// Test if we reject enums in `StorageKeys` derives.
+    #[test]
+    #[should_panic(expected = "Expected a struct in the StorageKeys derive")]
+    fn test_storage_keys_panics_on_enum() {
+        derive_storage_keys_inner(quote! {
+            enum What {
+                The,
+                Funk,
+            }
+        });
+    }
+
+    /// Test if we reject unit structs in `StorageKeys` derives.
+    #[test]
+    #[should_panic(expected = "Only named struct fields are accepted in \
+                               StorageKeys derives")]
+    fn test_storage_keys_panics_on_unit_structs() {
+        derive_storage_keys_inner(quote! {
+            struct WhatTheFunk;
+        });
+    }
+
+    /// Test if we reject tuple structs in `StorageKeys` derives.
+    #[test]
+    #[should_panic(expected = "Only named struct fields are accepted in \
+                               StorageKeys derives")]
+    fn test_storage_keys_panics_on_tuple_structs() {
+        derive_storage_keys_inner(quote! {
+            struct WhatTheFunk(&'static str);
+        });
+    }
 
     /// Test if the `ALL` slice generated in `StorageKeys` macro
     /// derives is sorted in ascending order.
@@ -262,51 +295,30 @@ mod test_proc_macros {
                 the: &'static str,
             }
         };
-        let all = {
-            let test_impl: ItemImpl =
-                syn::parse2(derive_storage_keys_inner(test_struct))
-                    .expect("Test failed");
-            test_impl
-                .items
-                .iter()
-                .find_map(|i| match i {
-                    syn::ImplItem::Const(e)
-                        if e.ident.to_token_stream().to_string() == "ALL" =>
-                    {
-                        match &e.expr {
-                            syn::Expr::Block(e) => {
-                                match e
-                                    .block
-                                    .stmts
-                                    .last()
-                                    .expect("Must have slice")
-                                {
-                                    syn::Stmt::Expr(syn::Expr::Reference(
-                                        e,
-                                    )) => match &*e.expr {
-                                        syn::Expr::Array(e) => Some(e.clone()),
-                                        t => panic!(
-                                            "Expected array, but got {t:?}"
-                                        ),
-                                    },
-                                    t => panic!(
-                                        "Expected reference, but got {t:?}"
-                                    ),
-                                }
-                            }
-                            t => panic!("Expected block, but got {t:?}"),
-                        }
-                    }
-                    t => panic!("Expected const, but got {t:?}"),
-                })
-                .unwrap()
+        let test_impl: ItemImpl =
+            syn::parse2(derive_storage_keys_inner(test_struct))
+                .expect("Test failed");
+
+        let expected_impl = quote! {
+            impl Keys {
+                #[allow(dead_code)]
+                const ALL: &[&'static str] = {
+                    let Keys { bird, is, the, word } = Self::VALUES;
+                    &[bird, is, the, word]
+                };
+                #[allow(dead_code)]
+                const VALUES: Keys = Self {
+                    bird: "bird",
+                    is: "is",
+                    the: "the",
+                    word: "word"
+                };
+            }
         };
-        let string = all
-            .elems
-            .into_iter()
-            .map(|e| e.to_token_stream().to_string())
-            .join(" ");
-        assert_eq!(string, "bird is the word");
+        let expected_impl: ItemImpl =
+            syn::parse2(expected_impl).expect("Test failed");
+
+        assert_eq!(test_impl, expected_impl);
     }
 
     /// Test if we reject structs with non static string fields in
@@ -321,6 +333,20 @@ mod test_proc_macros {
                 x: &'static str,
                 y: i32,
                 z: u64,
+            }
+        });
+    }
+
+    /// Test if we reject structs with non static lifetimes.
+    #[test]
+    #[should_panic(
+        expected = "Expected `&'static str` field type in StorageKeys derive"
+    )]
+    fn test_storage_keys_derive_with_non_static_str() {
+        derive_storage_keys_inner(quote! {
+            struct Keys<'a> {
+                x: &'static str,
+                y: &'a str,
             }
         });
     }
@@ -341,10 +367,12 @@ mod test_proc_macros {
 
         let expected_impl = quote! {
             impl Keys {
+                #[allow(dead_code)]
                 const ALL: &[&'static str] = {
                     let Keys { param1, param2 } = Self::VALUES;
                     &[param1, param2]
                 };
+                #[allow(dead_code)]
                 const VALUES: Keys = Self {
                     param1: "param1",
                     param2: "param2"
