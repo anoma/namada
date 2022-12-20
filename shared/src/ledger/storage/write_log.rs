@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
@@ -69,6 +70,20 @@ pub struct WriteLog {
     tx_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC event for the current transaction
     ibc_event: Option<IbcEvent>,
+}
+
+/// Write log prefix iterator
+pub struct PrefixIter {
+    /// The concrete iterator for modifications sorted by storage keys
+    pub iter: std::vec::IntoIter<(storage::Key, StorageModification)>,
+}
+
+impl Iterator for PrefixIter {
+    type Item = (storage::Key, StorageModification);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 impl Default for WriteLog {
@@ -285,7 +300,7 @@ impl WriteLog {
     pub fn get_partitioned_keys(
         &self,
     ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
-        use itertools::{Either, Itertools};
+        use itertools::Either;
         self.tx_write_log.iter().partition_map(|(key, value)| {
             match (key.is_validity_predicate(), value) {
                 (Some(address), StorageModification::InitAccount { .. }) => {
@@ -423,6 +438,26 @@ impl WriteLog {
             }
         }
         (verifiers, changed_keys)
+    }
+
+    /// Iterate modifications whose storage key matches the given prefix, sorted
+    /// by their storage key.
+    pub fn iter_prefix(&self, prefix: &storage::Key) -> PrefixIter {
+        let mut matches = HashMap::new();
+        for (key, modification) in &self.block_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        for (key, modification) in &self.tx_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        let iter = matches
+            .into_iter()
+            .sorted_unstable_by_key(|(key, _val)| key.clone());
+        PrefixIter { iter }
     }
 }
 
