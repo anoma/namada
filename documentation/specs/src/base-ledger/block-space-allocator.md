@@ -10,7 +10,7 @@ of Namada.
 
 [Block sizes in Tendermint]
 (configured through the $MaxBytes$ consensus 
-parameter) have a minimum value of $1\ B$, and a hard cap of $100\ 
+parameter) have a minimum value of 1 byte, and a hard cap of $100\ 
 MiB$, reflecting header, evidence of misbehavior (used to slash 
 Byzantine validators) and transaction data, as well as any potential protobuf 
 serialization overhead. Some of these datum are dynamic in nature (e.g. 
