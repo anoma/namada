@@ -350,6 +350,7 @@ where
     ///   5. More decrypted txs than expected
     ///   6. A transaction could not be decrypted
     ///   7. An error in the vote extensions included in the proposal
+    ///   8. Not enough block space was available for some tx
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
