@@ -227,7 +227,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
     .into()
 }
 
-fn create_ponctuated<F, M>(
+fn create_punctuated<F, M>(
     idents: &[syn::Ident],
     mut map: F,
 ) -> Punctuated<M, syn::token::Comma>
