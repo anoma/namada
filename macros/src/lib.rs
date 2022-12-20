@@ -184,8 +184,8 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
 
     idents.sort();
 
-    let ident_list = create_ponctuated(&idents, |ident| ident.clone());
-    let values_list = create_ponctuated(&idents, |ident| {
+    let ident_list = create_punctuated(&idents, |ident| ident.clone());
+    let values_list = create_punctuated(&idents, |ident| {
         let storage_key = {
             let mut toks = TokenStream2::new();
             ident.to_tokens(&mut toks);
