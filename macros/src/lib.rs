@@ -189,11 +189,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
 
     let ident_list = create_punctuated(&idents, |ident| ident.clone());
     let values_list = create_punctuated(&idents, |ident| {
-        let storage_key = {
-            let mut toks = TokenStream2::new();
-            ident.to_tokens(&mut toks);
-            toks.to_string()
-        };
+        let storage_key = ident.to_token_stream().to_string();
         syn::FieldValue {
             attrs: vec![],
             member: syn::Member::Named(ident.clone()),
