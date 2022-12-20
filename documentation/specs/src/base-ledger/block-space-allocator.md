@@ -10,7 +10,7 @@ of Namada.
 
 [Block sizes in Tendermint]
 (configured through the $MaxBytes$ consensus 
-parameter) have a minimum value of 1 byte, and a hard cap of $100\ 
+parameter) have a minimum value of $1\ \text{byte}$, and a hard cap of $100\ 
 MiB$, reflecting the header, evidence of misbehavior (used to slash 
 Byzantine validators) and transaction data, as well as any potential protobuf 
 serialization overhead. Some of these data are dynamic in nature (e.g. 
@@ -20,9 +20,11 @@ height $H_1 : H_1 \ne H_0$. During Tendermint's `PrepareProposal` ABCI phase,
 applications receive a $MaxTxBytes$ parameter whose value already accounts for 
 the total space available for transactions at some height $H$. Namada does not 
 rely on the $MaxTxBytes$ parameter of `RequestPrepareProposal`; instead, 
-app-side validators configure a $MaxProposalSize$ parameter at genesis (whose 
-value is static throughout the course of the chain) and set Tendermint blocks' 
-$MaxBytes$ parameter to its upper bound.
+app-side validators configure a $MaxProposalSize$ parameter at genesis (or
+through governance) and set Tendermint blocks' $MaxBytes$ parameter to its upper bound.
+Governance parameter update proposals for $MaxProposalBytes_H$, where $H$ is some
+arbitrary block height, should be such that $MaxProposalBytes_H \ge \frac{1}{3} MaxProposalBytes_{H-1}$,
+to leave enough room for decrypted transactions from $H-1$ at $H$.
 
 [Block sizes in Tendermint]: <https://github.com/tendermint/tendermint/blob/v0.34.x/spec/abci/apps.md#blockparamsmaxbytes>
 
