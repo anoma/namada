@@ -62,7 +62,6 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
-use crate::wallet::CliWalletUtils;
 #[allow(unused_imports)]
 use crate::wallet::ValidatorData;
 

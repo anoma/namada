@@ -107,7 +107,7 @@ pub async fn tx_signer<
                 super::tx::reveal_pk_if_needed::<C, U>(
                     client, wallet, &pk, args,
                 )
-                .await;
+                .await?;
             }
             Ok(signing_key)
         }
@@ -115,7 +115,7 @@ pub async fn tx_signer<
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
             super::tx::reveal_pk_if_needed::<C, U>(client, wallet, &pk, args)
-                .await;
+                .await?;
             Ok(signing_key)
         }
         TxSigningKey::None =>

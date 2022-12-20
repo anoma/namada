@@ -1,7 +1,5 @@
 //! Anoma client CLI.
 
-use std::path::PathBuf;
-
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
@@ -28,7 +26,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
                             .unwrap_or_else(|err| eprintln!("{}", err));
@@ -50,7 +48,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.shielded,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
                     let client =
@@ -62,7 +60,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
                     let client =
@@ -74,7 +72,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     let client =
@@ -87,7 +85,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
                             .unwrap_or_else(|err| eprintln!("{}", err));
@@ -112,7 +110,7 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
-                        .await;
+                        .await?;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     let client =
@@ -124,7 +122,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
                     let client =
@@ -136,7 +134,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::Bond(Bond(args)) => {
                     let client =
@@ -148,7 +146,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::Unbond(Unbond(args)) => {
                     let client =
@@ -160,7 +158,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
                     let client =
@@ -172,7 +170,7 @@ pub async fn main() -> Result<()> {
                         &mut ctx.wallet,
                         args,
                     )
-                    .await;
+                    .await?;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
