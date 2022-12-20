@@ -1,44 +1,21 @@
 //! Validity predicate for the Ethereum bridge
-
-mod authorize;
-
 use std::collections::{BTreeSet, HashSet};
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
 use itertools::Itertools;
+use namada_core::ledger::eth_bridge::storage::{
+    self, escrow_key, wrapped_erc20s,
+};
+use namada_core::ledger::storage::traits::StorageHasher;
+use namada_core::ledger::{eth_bridge, storage as ledger_storage};
+use namada_core::types::address::{nam, Address, InternalAddress};
+use namada_core::types::storage::Key;
+use namada_core::types::token::{balance_key, Amount};
 
-use crate::ledger::eth_bridge::storage::{self, escrow_key, wrapped_erc20s};
+use crate::ledger::native_vp::ethereum_bridge::authorize;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
-use crate::ledger::storage as ledger_storage;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::types::address::{nam, Address, InternalAddress};
-use crate::types::storage::Key;
-use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
-
-/// Initialize the storage owned by the Ethereum Bridge VP.
-///
-/// This means that the amount of escrowed Nam is
-/// initialized to 0.
-pub fn init_storage<D, H>(storage: &mut ledger_storage::Storage<D, H>)
-where
-    D: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
-{
-    let escrow_key = balance_key(&nam(), &super::ADDRESS);
-    storage
-        .write(
-            &escrow_key,
-            Amount::default()
-                .try_to_vec()
-                .expect("Serializing an amount shouldn't fail."),
-        )
-        .expect(
-            "Initializing the escrow balance of the Ethereum Bridge VP \
-             shouldn't fail.",
-        );
-}
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
@@ -65,7 +42,7 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
-        let escrow_key = balance_key(&nam(), &super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         let escrow_pre: Amount = if let Ok(Some(bytes)) =
             self.ctx.read_bytes_pre(&escrow_key)
         {
@@ -131,7 +108,7 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = super::INTERNAL_ADDRESS;
+    const ADDR: InternalAddress = eth_bridge::INTERNAL_ADDRESS;
 
     /// Validate that a wasm transaction is permitted to change keys under this
     /// account.
@@ -410,14 +387,16 @@ mod tests {
     use std::default::Default;
     use std::env::temp_dir;
 
+    use borsh::BorshSerialize;
+    use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::types::address;
+    use namada_ethereum_bridge::parameters::{
+        Contracts, EthereumBridgeConfig, UpgradeableContract,
+    };
     use rand::Rng;
 
     use super::*;
-    use crate::ledger::eth_bridge::parameters::{
-        Contracts, EthereumBridgeConfig, UpgradeableContract,
-    };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
@@ -500,7 +479,7 @@ mod tests {
         verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
-            &super::super::ADDRESS,
+            &eth_bridge::ADDRESS,
             storage,
             write_log,
             tx,
@@ -650,7 +629,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         writelog
             .write(
                 &escrow_key,
@@ -699,7 +678,7 @@ mod tests {
             .expect("Test failed");
 
         // do not credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         writelog
             .write(
                 &escrow_key,
@@ -747,7 +726,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &super::super::ADDRESS);
+        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         writelog
             .write(
                 &escrow_key,

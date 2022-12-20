@@ -95,8 +95,8 @@ data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
 ethabi = "17.0.0"
-ferveo = {git = "https://github.com/anoma/ferveo"}
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
+ferveo = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 eyre = "0.6.5"
 flate2 = "1.0.22"
 file-lock = "2.0.2"

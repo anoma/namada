@@ -12,18 +12,18 @@
 //! and that tokens to be transferred are escrowed.
 use std::collections::BTreeSet;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use eyre::eyre;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use namada_ethereum_bridge::storage;
+use namada_ethereum_bridge::storage::wrapped_erc20s;
 
-use crate::ledger::eth_bridge::storage;
-use crate::ledger::eth_bridge::storage::wrapped_erc20s;
-use crate::ledger::eth_bridge::vp::check_balance_changes;
+use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
+use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
@@ -41,29 +41,6 @@ pub struct Error(#[from] eyre::Error);
 enum SignedAmount {
     Positive(Amount),
     Negative(Amount),
-}
-
-/// Initialize the storage owned by the Bridge Pool VP.
-///
-/// This means that the amount of escrowed gas fees is
-/// initialized to 0.
-pub fn init_storage<D, H>(storage: &mut Storage<D, H>)
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-    storage
-        .write(
-            &escrow_key,
-            Amount::default()
-                .try_to_vec()
-                .expect("Serializing an amount shouldn't fail."),
-        )
-        .expect(
-            "Initializing the escrow balance of the Bridge pool VP shouldn't \
-             fail.",
-        );
 }
 
 /// Validity predicate for the Ethereum bridge
@@ -395,11 +372,11 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::types::address;
-
-    use super::*;
-    use crate::ledger::eth_bridge::parameters::{
+    use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
+
+    use super::*;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;

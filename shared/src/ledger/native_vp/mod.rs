@@ -1,6 +1,7 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 
+pub mod ethereum_bridge;
 pub mod governance;
 pub mod parameters;
 pub mod slash_fund;

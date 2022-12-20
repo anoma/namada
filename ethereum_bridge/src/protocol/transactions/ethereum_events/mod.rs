@@ -7,19 +7,19 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
+use namada_core::ledger::storage::traits::StorageHasher;
+use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::types::address::Address;
+use namada_core::types::storage::BlockHeight;
+use namada_core::types::transaction::TxResult;
+use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::ChangedKeys;
-use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils::{self};
-use crate::ledger::protocol::transactions::votes::update::NewVotes;
-use crate::ledger::protocol::transactions::votes::{self, calculate_new};
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::types::address::Address;
-use crate::types::storage::BlockHeight;
-use crate::types::transaction::TxResult;
-use crate::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use crate::types::voting_power::FractionalVotingPower;
+use crate::protocol::transactions::utils;
+use crate::protocol::transactions::votes::update::NewVotes;
+use crate::protocol::transactions::votes::{self, calculate_new};
+use crate::storage::vote_tallies;
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
@@ -38,7 +38,7 @@ impl utils::GetVoters for HashSet<EthMsgUpdate> {
 ///
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
-pub(crate) fn apply_derived_tx<D, H>(
+pub fn apply_derived_tx<D, H>(
     storage: &mut Storage<D, H>,
     events: Vec<MultiSignedEthEvent>,
 ) -> Result<TxResult>
@@ -172,24 +172,27 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-
-    use super::*;
-    use crate::ledger::eth_bridge::storage::wrapped_erc20s;
-    use crate::ledger::pos::namada_proof_of_stake::epoched::Epoched;
-    use crate::ledger::pos::namada_proof_of_stake::PosBase;
-    use crate::ledger::pos::types::{ValidatorSet, WeightedValidator};
-    use crate::ledger::protocol::transactions::utils::GetVoters;
-    use crate::ledger::protocol::transactions::votes::Votes;
-    use crate::ledger::storage::mockdb::MockDB;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::types::address;
-    use crate::types::ethereum_events::testing::{
+    use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada_core::ledger::storage::mockdb::MockDB;
+    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::ledger::storage::traits::Sha256Hasher;
+    use namada_core::types::address;
+    use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
         arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
     };
-    use crate::types::ethereum_events::{EthereumEvent, TransferToNamada};
-    use crate::types::token::Amount;
+    use namada_core::types::ethereum_events::{
+        EthereumEvent, TransferToNamada,
+    };
+    use namada_core::types::token::Amount;
+    use namada_proof_of_stake::epoched::Epoched;
+    use namada_proof_of_stake::storage::ValidatorSet;
+    use namada_proof_of_stake::types::WeightedValidator;
+    use namada_proof_of_stake::PosBase;
+
+    use super::*;
+    use crate::protocol::transactions::utils::GetVoters;
+    use crate::protocol::transactions::votes::Votes;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer

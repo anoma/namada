@@ -68,9 +68,9 @@ derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
 ethabi = "17.0.0"
 eyre = "0.6.8"
-ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
-tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
+ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
+tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {version = "0.14.0", default-features = false, optional = true}
 ibc-proto = {version = "0.17.1", default-features = false, optional = true}

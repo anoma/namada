@@ -1,9 +1,9 @@
 //! Functionality for accessing keys to do with tallying votes
 
-use crate::types::ethereum_events::EthereumEvent;
-use crate::types::hash::Hash;
-use crate::types::storage::{Epoch, Key};
-use crate::types::vote_extensions::validator_set_update::VotingPowersMap;
+use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::{Epoch, Key};
+use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.
@@ -127,9 +127,11 @@ impl From<&Epoch> for Keys<VotingPowersMap> {
 
 #[cfg(test)]
 mod test {
+    use assert_matches::assert_matches;
+    use namada_core::ledger::eth_bridge::ADDRESS;
+    use namada_core::types::storage::DbKeySeg;
+
     use super::*;
-    use crate::ledger::eth_bridge::ADDRESS;
-    use crate::types::storage::DbKeySeg;
 
     mod helpers {
         use super::*;

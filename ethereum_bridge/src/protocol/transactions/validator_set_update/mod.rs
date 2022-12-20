@@ -3,22 +3,21 @@
 use std::collections::{HashMap, HashSet};
 
 use eyre::Result;
+use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::types::address::Address;
+use namada_core::types::storage::BlockHeight;
+#[allow(unused_imports)]
+use namada_core::types::transaction::protocol::ProtocolTxType;
+use namada_core::types::transaction::TxResult;
+use namada_core::types::vote_extensions::validator_set_update;
+use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
-use crate::ledger::eth_bridge::storage::vote_tallies;
-use crate::ledger::protocol::transactions::utils;
-use crate::ledger::protocol::transactions::votes::update::NewVotes;
-use crate::ledger::protocol::transactions::votes::{self, Votes};
-use crate::ledger::queries_ext::QueriesExt;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::types::address::Address;
-use crate::types::storage::BlockHeight;
-#[allow(unused_imports)]
-use crate::types::transaction::protocol::ProtocolTxType;
-use crate::types::transaction::TxResult;
-use crate::types::vote_extensions::validator_set_update;
-use crate::types::voting_power::FractionalVotingPower;
+use crate::protocol::transactions::utils;
+use crate::protocol::transactions::votes::update::NewVotes;
+use crate::protocol::transactions::votes::{self, Votes};
+use crate::storage::vote_tallies;
 
 impl utils::GetVoters for validator_set_update::VextDigest {
     #[inline]
@@ -27,7 +26,7 @@ impl utils::GetVoters for validator_set_update::VextDigest {
     }
 }
 
-pub(crate) fn aggregate_votes<D, H>(
+pub fn aggregate_votes<D, H>(
     storage: &mut Storage<D, H>,
     ext: validator_set_update::VextDigest,
 ) -> Result<TxResult>

@@ -5,7 +5,7 @@ pub mod val_set_update;
 
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
-use namada::ledger::queries_ext::{QueriesExt, SendValsetUpd};
+use namada::ledger::pos::{PosQueries, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]

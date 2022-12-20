@@ -1,11 +1,10 @@
 //! Helpers for reading from storage
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::types::storage;
-use crate::types::token::Amount;
+use namada_core::ledger::storage::traits::StorageHasher;
+use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::types::storage;
+use namada_core::types::token::Amount;
 
 /// Returns the stored Amount, or 0 if not stored
 pub(super) fn amount_or_default<D, H>(
@@ -55,11 +54,11 @@ where
 mod tests {
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
+    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::types::storage;
+    use namada_core::types::token::Amount;
 
-    use crate::ledger::protocol::transactions::read;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::types::storage;
-    use crate::types::token::Amount;
+    use crate::protocol::transactions::read;
 
     #[test]
     fn test_amount_returns_zero_for_uninitialized_storage() {

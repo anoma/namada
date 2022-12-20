@@ -2,13 +2,13 @@
 use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::storage;
+use namada_core::ledger::storage::types::encode;
+use namada_core::ledger::storage::Storage;
+use namada_core::types::ethereum_events::EthAddress;
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::eth_bridge;
-use crate::ledger::eth_bridge::{bridge_pool_vp, storage as bridge_storage};
-use crate::ledger::storage::types::encode;
-use crate::ledger::storage::{self, Storage};
-use crate::types::ethereum_events::EthAddress;
+use crate::{bridge_pool_vp, storage as bridge_storage, vp};
 
 /// Represents a configuration value for the minimum number of
 /// confirmations an Ethereum event must reach before it can be acted on.
@@ -153,7 +153,7 @@ impl EthereumBridgeConfig {
             .write(&governance_contract_key, encode(governance))
             .unwrap();
         // Initialize the storage for the Ethereum Bridge VP.
-        eth_bridge::vp::init_storage(storage);
+        vp::init_storage(storage);
         // Initialize the storage for the Bridge Pool VP.
         bridge_pool_vp::init_storage(storage);
     }
@@ -162,12 +162,12 @@ impl EthereumBridgeConfig {
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada_core::types::ethereum_events::EthAddress;
 
-    use crate::ledger::eth_bridge::parameters::{
+    use crate::parameters::{
         ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
         UpgradeableContract,
     };
-    use crate::types::ethereum_events::EthAddress;
 
     /// Ensure we can serialize and deserialize a [`Config`] struct to and from
     /// TOML. This can fail if complex fields are ordered before simple fields

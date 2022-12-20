@@ -2,15 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
+use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::types::address::Address;
+use namada_core::types::storage::BlockHeight;
 use namada_core::types::token;
-
-use crate::ledger::pos::types::WeightedValidator;
-use crate::ledger::queries_ext::QueriesExt;
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, Storage, DB};
-use crate::types::address::Address;
-use crate::types::storage::BlockHeight;
-use crate::types::voting_power::FractionalVotingPower;
+use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::types::WeightedValidator;
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
@@ -147,10 +145,10 @@ mod tests {
     use std::collections::HashSet;
 
     use assert_matches::assert_matches;
+    use namada_core::types::address;
+    use namada_core::types::ethereum_events::testing::arbitrary_bonded_stake;
 
     use super::*;
-    use crate::types::address;
-    use crate::types::ethereum_events::testing::arbitrary_bonded_stake;
 
     #[test]
     /// Test getting the voting power for the sole active validator from the set
