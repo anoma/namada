@@ -21,10 +21,8 @@ applications receive a $MaxTxBytes$ parameter whose value already accounts for
 the total space available for transactions at some height $H$. Namada does not 
 rely on the $MaxTxBytes$ parameter of `RequestPrepareProposal`; instead, 
 app-side validators configure a $MaxProposalSize$ parameter at genesis (or
-through governance) and set Tendermint blocks' $MaxBytes$ parameter to its upper bound.
-Governance parameter update proposals for $MaxProposalBytes_H$, where $H$ is some
-arbitrary block height, should be such that $MaxProposalBytes_H \ge \frac{1}{3} MaxProposalBytes_{H-1}$,
-to leave enough room for decrypted transactions from $H-1$ at $H$.
+through governance) and set Tendermint blocks' $MaxBytes$ parameter to its 
+upper bound.
 
 [Block sizes in Tendermint]: <https://github.com/tendermint/tendermint/blob/v0.34.x/spec/abci/apps.md#blockparamsmaxbytes>
 
@@ -88,7 +86,8 @@ block space remaining after allocating space for decrypted and protocol
 transactions.
 4. `FillingRemainingSpace` - The final state of the `BlockSpaceAllocator`. Due 
 to the short-circuit behavior of a `TxBin`, on allocation errors, some space 
-may be left unutilized at the end of the third state. At this state, the only kinds of
+may be left unutilized at the end of the third state. At this state, the only 
+kinds of
 transactions that are left to fill the available block space are
 of type encrypted and protocol, but encrypted transactions are forbidden
 to be included, to avoid breaking their invariant regarding
@@ -191,3 +190,12 @@ constructed.
 We cover validator set updates in detail in [the Ethereum bridge section].
 
 [the Ethereum bridge section]: ../interoperability/ethereum-bridge.md
+
+## Governance
+
+Governance parameter update proposals for $MaxProposalBytes_H$ that take effect 
+at $H$, where $H$ is some arbitrary block height, should be such that
+$MaxProposalBytes_H \ge \frac{1}{3} MaxProposalBytes_{H-1}$, to leave enough
+room for all decrypted transactions from $H-1$ at $H$. Subsequent block heights
+$H' : H' > H$ should eventually lead to allotted block space converging to about
+$\frac{1}{3} MaxProposalBytes_H$ for each kind of transaction type.
