@@ -141,7 +141,7 @@ consensus mechanism, $P$ as the batch of transactions proposed at $H$ as $B$'s
 payload and $V$ as the current set of active validators. To vote on $P$, each 
 validator $v \in V$ checks:
 
-* If the length of $P$ in bytes, defined as $P_{Len} : P_{Len} = \sum_{tx \in 
+* If the length of $P$ in bytes, defined as $P_{Len} := \sum_{tx \in 
 P} \text{size\_of}(tx)$, is not greater than $MaxProposalBytes$.
 * If $P$ does not contain more than $\frac{1}{3} MaxProposalBytes$ worth of 
 encrypted transactions.
