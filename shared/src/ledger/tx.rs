@@ -95,16 +95,16 @@ pub enum Error {
          to be transferred. Amount to transfer is {2} and the balance is {3}."
     )]
     BalanceTooLow(Address, Address, token::Amount, token::Amount),
-    /// Source address does not exist on chain
-    #[error("The source address {0} doesn't exist on chain.")]
-    SourceDoesNotExist(Address),
     /// Token Address does not exist on chain
     #[error("The token address {0} doesn't exist on chain.")]
     TokenDoesNotExist(Address),
-    /// Source Address does not exist on chain
-    #[error("The source address {0} doesn't exist on chain.")]
-    SourceLocationDoesNotExist(Address),
+    /// Source address does not exist on chain
+    #[error("The address {0} doesn't exist on chain.")]
+    LocationDoesNotExist(Address),
     /// Target Address does not exist on chain
+    #[error("The source address {0} doesn't exist on chain.")]
+    SourceDoesNotExist(Address),
+    /// Source Address does not exist on chain
     #[error("The target address {0} doesn't exist on chain.")]
     TargetLocationDoesNotExist(Address),
     /// No Balance found for token
@@ -132,11 +132,26 @@ pub enum Error {
     /// Encoding transaction failure
     #[error("Encoding tx data, {0}, shouldn't fail")]
     EncodeTxFailure(std::io::Error),
+    /// Like EncodeTxFailure but for the encode error type
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeFailure(EncodeError),
     /// Encoding public key failure
     #[error("Encoding a public key, {0}, shouldn't fail")]
     EncodeKeyFailure(std::io::Error),
-    #[error("Encoding tx data, {0}, shouldn't fail")]
-    EncodeFailure(EncodeError),
+    /// Updating an VP of an implicit account
+    #[error(
+        "A validity predicate of an implicit address cannot be directly \
+         updated. You can use an established address for this purpose."
+    )]
+    ImplicitUpdate,
+    // This should be removed? or rather refactored as it communicates
+    // the same information as the ImplicitUpdate
+    /// Updating a VP of an internal implicit address
+    #[error(
+        "A validity predicate of an internal address cannot be directly \
+         updated."
+    )]
+    ImplicitInternalError,
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -1037,16 +1052,7 @@ pub async fn submit_init_account<
     let public_key = args.public_key;
     let vp_code = args.vp_code_path;
     // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        if args.tx.force {
-            eprintln!("Validity predicate code validation failed with {}", err);
-            Ok(())
-        } else {
-            Err(Error::WasmValidationFailure(err))
-        }
-    } else {
-        Ok(())
-    }?;
+    validate_untrusted_code_err(&vp_code,args.tx.force)?;
 
     let tx_code = args.tx_code_path;
     let data = InitAccount {
@@ -1087,9 +1093,12 @@ pub async fn submit_update_vp<
             if !exists {
                 if args.tx.force {
                     eprintln!("The address {} doesn't exist on chain.", addr);
+                    Ok(())
                 } else {
-                    panic!("The address {} doesn't exist on chain.", addr);
+                    Err(Error::LocationDoesNotExist(addr.clone()))
                 }
+            } else {
+                Ok(())
             }
         }
         Address::Implicit(_) => {
@@ -1099,12 +1108,9 @@ pub async fn submit_update_vp<
                      directly updated. You can use an established address for \
                      this purpose."
                 );
+                Ok(())
             } else {
-                panic!(
-                    "A validity predicate of an implicit address cannot be \
-                     directly updated. You can use an established address for \
-                     this purpose."
-                );
+                Err(Error::ImplicitUpdate)
             }
         }
         Address::Internal(_) => {
@@ -1113,24 +1119,25 @@ pub async fn submit_update_vp<
                     "A validity predicate of an internal address cannot be \
                      directly updated."
                 );
+                Ok(())
             } else {
-                panic!(
-                    "A validity predicate of an internal address cannot be \
-                     directly updated."
-                );
+                Err(Error::ImplicitInternalError)
             }
         }
-    }
+    }?;
 
     let vp_code = args.vp_code_path;
     // Validate the VP code
     if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
         if args.tx.force {
             eprintln!("Validity predicate code validation failed with {}", err);
+            Ok(())
         } else {
-            panic!("Validity predicate code validation failed with {}", err);
+            Err(Error::WasmValidationFailure(err))
         }
-    }
+    } else {
+        Ok(())
+    }?;
 
     let tx_code = args.tx_code_path;
 
@@ -1362,5 +1369,21 @@ async fn check_balance_too_low_err<
                 Err(Error::NoBalanceForToken(source.clone(), token.clone()))
             }
         }
+    }
+}
+
+fn validate_untrusted_code_err(
+    vp_code: &Vec<u8>,
+    force: bool,
+) -> Result<(), Error> {
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        if force {
+            eprintln!("Validity predicate code validation failed with {}", err);
+            Ok(())
+        } else {
+            Err(Error::WasmValidationFailure(err))
+        }
+    } else {
+        Ok(())
     }
 }
