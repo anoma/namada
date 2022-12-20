@@ -17,7 +17,7 @@ serialization overhead. Some of these data are dynamic in nature (e.g.
 evidence of misbehavior), so the total size reserved to transactions in a block 
 at some height $H_0$ might not be the same as another block's, say, at some 
 height $H_1 : H_1 \ne H_0$. During Tendermint's `PrepareProposal` ABCI phase, 
-applications receive a $MaxTxBytes$ parameter, whose value already accounts for 
+applications receive a $MaxTxBytes$ parameter whose value already accounts for 
 the total space available for transactions at some height $H$. Namada does not 
 rely on the $MaxTxBytes$ parameter of `RequestPrepareProposal`; instead, 
 app-side validators configure a $MaxProposalSize$ parameter at genesis (whose 
