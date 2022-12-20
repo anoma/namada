@@ -4,6 +4,7 @@ use borsh::BorshSerialize;
 use itertools::Either::*;
 use masp_primitives::transaction::builder;
 use namada_core::types::address::{masp, masp_tx_key, Address};
+use prost::EncodeError;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
@@ -21,6 +22,7 @@ use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use crate::ledger::rpc::{self, TxBroadcastData, TxResponse};
 use crate::ledger::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::ledger::tx::Error::EncodeTxFailure;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -32,6 +34,7 @@ use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, UpdateVp};
 use crate::types::{storage, token};
+use crate::vm::WasmValidationError;
 use crate::{ledger, vm};
 
 /// Default timeout in seconds for requests to the `/accepted`
@@ -123,6 +126,17 @@ pub enum Error {
     /// No Balance found for token
     #[error("{0}")]
     MaspError(builder::Error),
+    /// Wasm validation failed
+    #[error("Validity predicate code validation failed with {0}")]
+    WasmValidationFailure(WasmValidationError),
+    /// Encoding transaction failure
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeTxFailure(std::io::Error),
+    /// Encoding public key failure
+    #[error("Encoding a public key, {0}, shouldn't fail")]
+    EncodeKeyFailure(std::io::Error),
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeFailure(EncodeError),
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -229,9 +243,7 @@ pub async fn submit_reveal_pk_aux<
 ) -> Result<(), Error> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
-    let tx_data = public_key
-        .try_to_vec()
-        .expect("Encoding a public key shouldn't fail");
+    let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
     let tx_code = args.tx_code_path.clone();
     let tx = Tx::new(tx_code, Some(tx_data));
 
@@ -521,7 +533,7 @@ pub async fn submit_validator_commission_change<
         validator: args.validator.clone(),
         new_rate: args.rate,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator.clone();
@@ -596,7 +608,7 @@ pub async fn submit_withdraw<
     }?;
 
     let data = pos::Withdraw { validator, source };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -676,7 +688,7 @@ pub async fn submit_unbond<
         amount: args.amount,
         source,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -733,7 +745,7 @@ pub async fn submit_bond<
         amount: args.amount,
         source,
     };
-    let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = bond.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -861,7 +873,7 @@ pub async fn submit_ibc_transfer<
     let any_msg = msg.to_any();
     let mut data = vec![];
     prost::Message::encode(&any_msg, &mut data)
-        .expect("Encoding tx data shouldn't fail");
+        .map_err(Error::EncodeFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx::<C, U>(
@@ -1006,9 +1018,7 @@ pub async fn submit_transfer<
         shielded,
     };
     tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
+    let data = transfer.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
@@ -1023,25 +1033,27 @@ pub async fn submit_init_account<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
-) {
+) -> Result<(), Error> {
     let public_key = args.public_key;
     let vp_code = args.vp_code_path;
     // Validate the VP code
     if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
         if args.tx.force {
             eprintln!("Validity predicate code validation failed with {}", err);
+            Ok(())
         } else {
-            panic!("Validity predicate code validation failed with {}", err);
+            Err(Error::WasmValidationFailure(err))
         }
-    }
+    } else {
+        Ok(())
+    }?;
 
     let tx_code = args.tx_code_path;
     let data = InitAccount {
         public_key,
         vp_code,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     let tx = Tx::new(tx_code, Some(data));
     // TODO Move unwrap to an either
     let initialized_accounts = process_tx::<C, U>(
@@ -1055,6 +1067,7 @@ pub async fn submit_init_account<
     .unwrap();
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
         .await;
+    Ok(())
 }
 
 pub async fn submit_update_vp<
@@ -1064,7 +1077,7 @@ pub async fn submit_update_vp<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
-) {
+) -> Result<(), Error> {
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -1122,7 +1135,7 @@ pub async fn submit_update_vp<
     let tx_code = args.tx_code_path;
 
     let data = UpdateVp { addr, vp_code };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx::<C, U>(
@@ -1133,6 +1146,7 @@ pub async fn submit_update_vp<
         TxSigningKey::WalletAddress(args.addr),
     )
     .await;
+    Ok(())
 }
 
 pub async fn submit_custom<
