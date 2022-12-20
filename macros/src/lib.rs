@@ -245,17 +245,91 @@ where
 
 #[cfg(test)]
 mod test_proc_macros {
+    use itertools::Itertools;
     use syn::ItemImpl;
 
-    // TODO: check if type checking fails for non-static str field
-    // types, check if the generated `ALL` is sorted, ???
     use super::*;
+
+    /// Test if the `ALL` slice generated in `StorageKeys` macro
+    /// derives is sorted in ascending order.
+    #[test]
+    fn test_storage_keys_derive_sorted_slice() {
+        let test_struct = quote! {
+            struct Keys {
+                word: &'static str,
+                is: &'static str,
+                bird: &'static str,
+                the: &'static str,
+            }
+        };
+        let all = {
+            let test_impl: ItemImpl =
+                syn::parse2(derive_storage_keys_inner(test_struct))
+                    .expect("Test failed");
+            test_impl
+                .items
+                .iter()
+                .find_map(|i| match i {
+                    syn::ImplItem::Const(e)
+                        if e.ident.to_token_stream().to_string() == "ALL" =>
+                    {
+                        match &e.expr {
+                            syn::Expr::Block(e) => {
+                                match e
+                                    .block
+                                    .stmts
+                                    .last()
+                                    .expect("Must have slice")
+                                {
+                                    syn::Stmt::Expr(syn::Expr::Reference(
+                                        e,
+                                    )) => match &*e.expr {
+                                        syn::Expr::Array(e) => Some(e.clone()),
+                                        t => panic!(
+                                            "Expected array, but got {t:?}"
+                                        ),
+                                    },
+                                    t => panic!(
+                                        "Expected reference, but got {t:?}"
+                                    ),
+                                }
+                            }
+                            t => panic!("Expected block, but got {t:?}"),
+                        }
+                    }
+                    t => panic!("Expected const, but got {t:?}"),
+                })
+                .unwrap()
+        };
+        let string = all
+            .elems
+            .into_iter()
+            .map(|e| e.to_token_stream().to_string())
+            .join(" ");
+        assert_eq!(string, "bird is the word");
+    }
+
+    /// Test if we reject structs with non static string fields in
+    /// `StorageKeys` macro derives.
+    #[test]
+    #[should_panic(
+        expected = "Expected `&'static str` field type in StorageKeys derive"
+    )]
+    fn test_typecheck_storage_keys_derive() {
+        derive_storage_keys_inner(quote! {
+            struct Keys {
+                x: &'static str,
+                y: i32,
+                z: u64,
+            }
+        });
+    }
 
     /// Test that the create storage keys produces
     /// the expected code.
     #[test]
     fn test_derive_storage_keys() {
-        let test_struct: TokenStream2 = quote! {
+        let test_struct = quote! {
             struct Keys {
                 param1: &'static str,
                 param2: &'static str,
@@ -265,7 +339,7 @@ mod test_proc_macros {
             syn::parse2(derive_storage_keys_inner(test_struct))
                 .expect("Test failed");
 
-        let expected_impl: TokenStream2 = quote! {
+        let expected_impl = quote! {
             impl Keys {
                 const ALL: &[&'static str] = {
                     let Keys { param1, param2 } = Self::VALUES;
