@@ -5,6 +5,7 @@
 //! and [`Shell::process_proposal`] must be also reverted
 //! (unless we can simply overwrite them in the next block).
 //! More info in <https://github.com/anoma/namada/issues/362>.
+mod block_space_alloc;
 mod finalize_block;
 mod governance;
 mod init_chain;
@@ -124,8 +125,8 @@ pub enum ErrorCodes {
     ExtraTxs = 5,
     Undecryptable = 6,
     InvalidVoteExtension = 7,
-    // NOTE: keep these values in sync with
-    // [`ErrorCodes::is_recoverable`]
+    AllocationError = 8, /* NOTE: keep these values in sync with
+                          * [`ErrorCodes::is_recoverable`] */
 }
 
 impl ErrorCodes {
@@ -1019,6 +1020,7 @@ mod test_utils {
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
+        #[allow(dead_code)]
         pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
         {
             Self::new_at_height(BlockHeight(1))

@@ -101,7 +101,7 @@ eyre = "0.6.5"
 flate2 = "1.0.22"
 file-lock = "2.0.2"
 futures = "0.3"
-index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.5.0"}
+index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1"}
 itertools = "0.10.1"
 libc = "0.2.97"
 libloading = "0.7.2"

@@ -1,7 +1,5 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-mod block_space_alloc;
-
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
@@ -18,13 +16,13 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 
-use self::block_space_alloc::states::{
+use super::super::*;
+use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, FillingRemainingSpace, NextState,
     NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
 };
-use self::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
-use super::super::*;
+use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -110,6 +108,67 @@ where
         );
 
         response::PrepareProposal { txs }
+    }
+
+    /// Builds a batch of DKG decrypted transactions.
+    // NOTE: we won't have frontrunning protection until V2 of the
+    // Anoma protocol; Namada runs V1, therefore this method is
+    // essentially a NOOP
+    //
+    // sources:
+    // - https://specs.namada.net/main/releases/v2.html
+    // - https://github.com/anoma/ferveo
+    fn build_decrypted_txs(
+        &mut self,
+        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
+        // TODO: This should not be hardcoded
+        let privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+
+        let txs = self
+            .storage
+            .tx_queue
+            .iter()
+            .map(|tx| {
+                Tx::from(match tx.decrypt(privkey) {
+                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    _ => DecryptedTx::Undecryptable(tx.clone()),
+                })
+                .to_bytes()
+            })
+            // TODO: make sure all decrypted txs are accepted
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&tx_bytes[..]).map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping decrypted tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large decrypted tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
+            })
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
@@ -315,67 +374,6 @@ where
                         },
                         |()| true,
                     )
-            })
-            .collect();
-        let alloc = alloc.next_state();
-
-        (txs, alloc)
-    }
-
-    /// Builds a batch of DKG decrypted transactions.
-    // NOTE: we won't have frontrunning protection until V2 of the
-    // Anoma protocol; Namada runs V1, therefore this method is
-    // essentially a NOOP
-    //
-    // sources:
-    // - https://specs.namada.net/main/releases/v2.html
-    // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(
-        &mut self,
-        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
-        // TODO: This should not be hardcoded
-        let privkey =
-            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-
-        let txs = self
-            .storage
-            .tx_queue
-            .iter()
-            .map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
-                })
-                .to_bytes()
-            })
-            // TODO: make sure all decrypted txs are accepted
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&tx_bytes[..]).map_or_else(
-                    |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_space_left,
-                                proposal_height =
-                                    ?self.storage.get_current_decision_height(),
-                                "Dropping decrypted tx from the current proposal",
-                            );
-                            false
-                        }
-                        AllocFailure::OverflowsBin { bin_size } => {
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_size,
-                                proposal_height =
-                                    ?self.storage.get_current_decision_height(),
-                                "Dropping large decrypted tx from the current proposal",
-                            );
-                            true
-                        }
-                    },
-                    |()| true,
-                )
             })
             .collect();
         let alloc = alloc.next_state();
