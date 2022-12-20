@@ -159,7 +159,6 @@ pub fn derive_storage_keys(struct_def: TokenStream) -> TokenStream {
 
 #[inline]
 // TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
-// TODO: emit allow_deadcode in ALL and VALUES
 fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
     let struct_def: ItemStruct = syn::parse2(struct_def)
         .expect("Expected a struct in the StorageKeys derive");
