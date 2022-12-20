@@ -160,6 +160,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
 }
 
 #[inline]
+// TODO: emit allow_deadcode in ALL and VALUES
 fn create_storage_keys(struct_def: ItemStruct) -> String {
     // type check the struct - all fields must be of type `&'static str`
     let fields = match &struct_def.fields {
@@ -245,11 +246,15 @@ where
 mod test_proc_macros {
     use syn::ItemImpl;
 
+    // TODO: check if type checking fails for non-static str field
+    // types, check if the generated `ALL` is sorted, ???
+
     use super::*;
 
     /// Test that the create storage keys produces
     /// the expected code.
     #[test]
+    // TODO: use quote! to get formatted expected code
     fn test_create_storage_keys() {
         const TEST: &str = r#"
             struct Keys {
