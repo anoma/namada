@@ -14,7 +14,6 @@ use async_std::path::PathBuf;
 use async_std::prelude::*;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
-use eyre::{eyre, Context as EyreContext};
 use itertools::{Either, Itertools};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
@@ -32,35 +31,27 @@ use namada::ledger::native_vp::governance::utils::Votes;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{decimal_mult_u64, WeightedValidator};
 use namada::ledger::pos::{
-    self, is_validator_slashes_key, BondId, Bonds, PosParams, Slash, Unbonds,
+    self, is_validator_slashes_key, Bonds, PosParams, Slash, Unbonds,
 };
-use namada::ledger::queries::{self, RPC};
+use namada::ledger::queries::RPC;
 use namada::ledger::rpc::TxResponse;
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::Wallet;
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
-    VotePower,
+    OfflineProposal, OfflineVote, ProposalResult, VotePower,
 };
-use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue,
-};
-use namada::types::token::balance_key;
+use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
-use tokio::time::{Duration, Instant};
+use tokio::time::Instant;
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
-use crate::facade::tendermint_rpc::query::Query;
-use crate::facade::tendermint_rpc::{
-    Client, HttpClient, Order, WebSocketClient,
-};
+use crate::facade::tendermint_rpc::Client;
 use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
@@ -2366,7 +2357,7 @@ fn lookup_alias(wallet: &Wallet<CliWalletUtils>, addr: &Address) -> String {
 fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|err| {
+    response.unwrap_or_else(|_err| {
         eprintln!("Error in the query");
         cli::safe_exit(1)
     })

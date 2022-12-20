@@ -3,6 +3,7 @@
 
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
+use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::proto::Tx;
 use namada::types::address::Address;
@@ -21,7 +22,7 @@ pub async fn find_keypair<
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
-) -> common::SecretKey {
+) -> Result<common::SecretKey, tx::Error> {
     namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr).await
 }
 
@@ -36,8 +37,8 @@ pub async fn tx_signer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    mut default: TxSigningKey,
-) -> common::SecretKey {
+    default: TxSigningKey,
+) -> Result<common::SecretKey, tx::Error> {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
 }
@@ -59,7 +60,7 @@ pub async fn sign_tx<
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-) -> TxBroadcastData {
+) -> Result<TxBroadcastData, tx::Error> {
     namada::ledger::signing::sign_tx::<C, U>(client, wallet, tx, args, default)
         .await
 }

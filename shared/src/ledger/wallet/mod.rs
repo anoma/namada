@@ -128,9 +128,9 @@ impl<U: WalletUtils> Wallet<U> {
         self.store.get_validator_data()
     }
 
-    /// Returns the validator data, if it exists.
-    /// [`Wallet::save`] cannot be called after using this
-    /// method as it involves a partial move
+    /// Returns the validator data, if it exists.  the save function
+    /// cannot be called after using this method as it involves a
+    /// partial move
     pub fn take_validator_data(&mut self) -> Option<&mut ValidatorData> {
         self.store.validator_data()
     }

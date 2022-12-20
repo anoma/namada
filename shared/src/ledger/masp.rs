@@ -6,7 +6,6 @@ use std::env;
 use std::fmt::Debug;
 use std::fs::File;
 #[cfg(feature = "masp-tx-gen")]
-use std::io::Read;
 use std::ops::Deref;
 use std::path::PathBuf;
 
@@ -61,16 +60,14 @@ use crate::types::address::{masp, Address};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 #[cfg(feature = "masp-tx-gen")]
 use crate::types::masp::{TransferSource, TransferTarget};
-use crate::types::storage::{
-    BlockHeight, BlockResults, Epoch, Key, KeySeg, TxIndex,
-};
+use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use crate::types::token;
 use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::types::transaction::{
     process_tx, DecryptedTx, EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use crate::types::{storage, token};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.

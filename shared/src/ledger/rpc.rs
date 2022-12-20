@@ -62,7 +62,7 @@ pub async fn query_tx_status<
             tracing::debug!(query = ?status, "Querying tx status");
             let maybe_event = match query_tx_events(client, status).await {
                 Ok(response) => response,
-                Err(err) => {
+                Err(_err) => {
                     // tracing::debug!(%err, "ABCI query failed");
                     sleep_update(status, &mut backoff).await;
                     continue;
@@ -109,7 +109,7 @@ pub async fn query_block<C: Client + crate::ledger::queries::Client + Sync>(
 fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|err| {
+    response.unwrap_or_else(|_err| {
         panic!("Error in the query");
     })
 }

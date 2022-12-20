@@ -4,11 +4,11 @@ use borsh::BorshSerialize;
 use itertools::Either::*;
 use masp_primitives::transaction::builder;
 use namada_core::types::address::{masp, masp_tx_key, Address};
+use prost::EncodeError;
 use rust_decimal::Decimal;
 use thiserror::Error;
 use tokio::time::{Duration, Instant};
 
-use super::args::KeyList;
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
 use crate::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -32,6 +32,7 @@ use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, UpdateVp};
 use crate::types::{storage, token};
+use crate::vm::WasmValidationError;
 use crate::{ledger, vm};
 
 /// Default timeout in seconds for requests to the `/accepted`
@@ -92,16 +93,16 @@ pub enum Error {
          to be transferred. Amount to transfer is {2} and the balance is {3}."
     )]
     BalanceTooLow(Address, Address, token::Amount, token::Amount),
-    /// Source address does not exist on chain
-    #[error("The source address {0} doesn't exist on chain.")]
-    SourceDoesNotExist(Address),
     /// Token Address does not exist on chain
     #[error("The token address {0} doesn't exist on chain.")]
     TokenDoesNotExist(Address),
-    /// Source Address does not exist on chain
-    #[error("The source address {0} doesn't exist on chain.")]
-    SourceLocationDoesNotExist(Address),
+    /// Source address does not exist on chain
+    #[error("The address {0} doesn't exist on chain.")]
+    LocationDoesNotExist(Address),
     /// Target Address does not exist on chain
+    #[error("The source address {0} doesn't exist on chain.")]
+    SourceDoesNotExist(Address),
+    /// Source Address does not exist on chain
     #[error("The target address {0} doesn't exist on chain.")]
     TargetLocationDoesNotExist(Address),
     /// No Balance found for token
@@ -123,6 +124,38 @@ pub enum Error {
     /// No Balance found for token
     #[error("{0}")]
     MaspError(builder::Error),
+    /// Wasm validation failed
+    #[error("Validity predicate code validation failed with {0}")]
+    WasmValidationFailure(WasmValidationError),
+    /// Encoding transaction failure
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeTxFailure(std::io::Error),
+    /// Like EncodeTxFailure but for the encode error type
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeFailure(EncodeError),
+    /// Encoding public key failure
+    #[error("Encoding a public key, {0}, shouldn't fail")]
+    EncodeKeyFailure(std::io::Error),
+    /// Updating an VP of an implicit account
+    #[error(
+        "A validity predicate of an implicit address cannot be directly \
+         updated. You can use an established address for this purpose."
+    )]
+    ImplicitUpdate,
+    // This should be removed? or rather refactored as it communicates
+    // the same information as the ImplicitUpdate
+    /// Updating a VP of an internal implicit address
+    #[error(
+        "A validity predicate of an internal address cannot be directly \
+         updated."
+    )]
+    ImplicitInternalError,
+    /// Epoch not in storage
+    #[error("Proposal end epoch is not in the storage.")]
+    EpochNotInStorage,
+    /// Other Errors that may show up when using the interface
+    #[error("{0}")]
+    Other(String),
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -138,7 +171,7 @@ pub async fn process_tx<
     default_signer: TxSigningKey,
 ) -> Result<Vec<Address>, Error> {
     let to_broadcast =
-        sign_tx::<C, U>(client, wallet, tx, args, default_signer).await;
+        sign_tx::<C, U>(client, wallet, tx, args, default_signer).await?;
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -177,15 +210,18 @@ pub async fn submit_reveal_pk<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
-) {
+) -> Result<(), Error> {
     let args::RevealPk {
         tx: args,
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await {
+    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await? {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
+        Ok(())
+    } else {
+        Ok(())
     }
 }
 
@@ -197,15 +233,15 @@ pub async fn reveal_pk_if_needed<
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> bool {
+) -> Result<bool, Error> {
     let addr: Address = public_key.into();
     // Check if PK revealed
     if args.force || !has_revealed_pk(client, &addr).await {
         // If not, submit it
-        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await;
-        true
+        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await?;
+        Ok(true)
     } else {
-        false
+        Ok(false)
     }
 }
 
@@ -229,21 +265,19 @@ pub async fn submit_reveal_pk_aux<
 ) -> Result<(), Error> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
-    let tx_data = public_key
-        .try_to_vec()
-        .expect("Encoding a public key shouldn't fail");
+    let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
     let tx_code = args.tx_code_path.clone();
     let tx = Tx::new(tx_code, Some(tx_data));
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
-        signing_key.clone()
+        Ok(signing_key.clone())
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
         find_keypair::<C, U>(client, wallet, &signer).await
     } else {
         find_keypair::<C, U>(client, wallet, &addr).await
-    };
+    }?;
     let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
@@ -521,7 +555,7 @@ pub async fn submit_validator_commission_change<
         validator: args.validator.clone(),
         new_rate: args.rate,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator.clone();
@@ -532,7 +566,7 @@ pub async fn submit_validator_commission_change<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -596,7 +630,7 @@ pub async fn submit_withdraw<
     }?;
 
     let data = pos::Withdraw { validator, source };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -607,7 +641,7 @@ pub async fn submit_withdraw<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -676,7 +710,7 @@ pub async fn submit_unbond<
         amount: args.amount,
         source,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -687,7 +721,7 @@ pub async fn submit_unbond<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -733,7 +767,7 @@ pub async fn submit_bond<
         amount: args.amount,
         source,
     };
-    let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = bond.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
@@ -744,7 +778,7 @@ pub async fn submit_bond<
         tx,
         TxSigningKey::WalletAddress(default_signer),
     )
-    .await;
+    .await?;
     Ok(())
 }
 
@@ -757,7 +791,7 @@ pub async fn is_safe_voting_window<
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
-) -> bool {
+) -> Result<bool, Error> {
     let current_epoch = rpc::query_epoch(client).await;
 
     let proposal_end_epoch_key =
@@ -768,14 +802,14 @@ pub async fn is_safe_voting_window<
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
+            Ok(!crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,
-            )
+            ))
         }
         None => {
-            panic!("Proposal end epoch is not in the storage.");
+            Err(Error::EpochNotInStorage)
         }
     }
 }
@@ -861,7 +895,7 @@ pub async fn submit_ibc_transfer<
     let any_msg = msg.to_any();
     let mut data = vec![];
     prost::Message::encode(&any_msg, &mut data)
-        .expect("Encoding tx data shouldn't fail");
+        .map_err(Error::EncodeFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx::<C, U>(
@@ -961,7 +995,7 @@ pub async fn submit_transfer<
     // will need to cover the gas fees.
     let chosen_signer =
         tx_signer::<C, V>(client, wallet, &args.tx, default_signer.clone())
-            .await
+            .await?
             .ref_to();
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
@@ -1006,9 +1040,7 @@ pub async fn submit_transfer<
         shielded,
     };
     tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
+    let data = transfer.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(source);
@@ -1023,25 +1055,18 @@ pub async fn submit_init_account<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxInitAccount,
-) {
+) -> Result<(), Error> {
     let public_key = args.public_key;
     let vp_code = args.vp_code_path;
     // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        if args.tx.force {
-            eprintln!("Validity predicate code validation failed with {}", err);
-        } else {
-            panic!("Validity predicate code validation failed with {}", err);
-        }
-    }
+    validate_untrusted_code_err(&vp_code, args.tx.force)?;
 
     let tx_code = args.tx_code_path;
     let data = InitAccount {
         public_key,
         vp_code,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
     let tx = Tx::new(tx_code, Some(data));
     // TODO Move unwrap to an either
     let initialized_accounts = process_tx::<C, U>(
@@ -1055,6 +1080,7 @@ pub async fn submit_init_account<
     .unwrap();
     save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
         .await;
+    Ok(())
 }
 
 pub async fn submit_update_vp<
@@ -1064,7 +1090,7 @@ pub async fn submit_update_vp<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::TxUpdateVp,
-) {
+) -> Result<(), Error> {
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -1074,9 +1100,12 @@ pub async fn submit_update_vp<
             if !exists {
                 if args.tx.force {
                     eprintln!("The address {} doesn't exist on chain.", addr);
+                    Ok(())
                 } else {
-                    panic!("The address {} doesn't exist on chain.", addr);
+                    Err(Error::LocationDoesNotExist(addr.clone()))
                 }
+            } else {
+                Ok(())
             }
         }
         Address::Implicit(_) => {
@@ -1086,12 +1115,9 @@ pub async fn submit_update_vp<
                      directly updated. You can use an established address for \
                      this purpose."
                 );
+                Ok(())
             } else {
-                panic!(
-                    "A validity predicate of an implicit address cannot be \
-                     directly updated. You can use an established address for \
-                     this purpose."
-                );
+                Err(Error::ImplicitUpdate)
             }
         }
         Address::Internal(_) => {
@@ -1100,29 +1126,30 @@ pub async fn submit_update_vp<
                     "A validity predicate of an internal address cannot be \
                      directly updated."
                 );
+                Ok(())
             } else {
-                panic!(
-                    "A validity predicate of an internal address cannot be \
-                     directly updated."
-                );
+                Err(Error::ImplicitInternalError)
             }
         }
-    }
+    }?;
 
     let vp_code = args.vp_code_path;
     // Validate the VP code
     if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
         if args.tx.force {
             eprintln!("Validity predicate code validation failed with {}", err);
+            Ok(())
         } else {
-            panic!("Validity predicate code validation failed with {}", err);
+            Err(Error::WasmValidationFailure(err))
         }
-    }
+    } else {
+        Ok(())
+    }?;
 
     let tx_code = args.tx_code_path;
 
     let data = UpdateVp { addr, vp_code };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    let data = data.try_to_vec().map_err(Error::EncodeTxFailure)?;
 
     let tx = Tx::new(tx_code, Some(data));
     process_tx::<C, U>(
@@ -1132,7 +1159,8 @@ pub async fn submit_update_vp<
         tx,
         TxSigningKey::WalletAddress(args.addr),
     )
-    .await;
+    .await?;
+    Ok(())
 }
 
 pub async fn submit_custom<
@@ -1348,5 +1376,21 @@ async fn check_balance_too_low_err<
                 Err(Error::NoBalanceForToken(source.clone(), token.clone()))
             }
         }
+    }
+}
+
+fn validate_untrusted_code_err(
+    vp_code: &Vec<u8>,
+    force: bool,
+) -> Result<(), Error> {
+    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+        if force {
+            eprintln!("Validity predicate code validation failed with {}", err);
+            Ok(())
+        } else {
+            Err(Error::WasmValidationFailure(err))
+        }
+    } else {
+        Ok(())
     }
 }

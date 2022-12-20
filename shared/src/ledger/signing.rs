@@ -2,6 +2,7 @@ use borsh::BorshSerialize;
 use namada_core::types::address::{Address, ImplicitAddress};
 
 use crate::ledger::rpc::TxBroadcastData;
+use crate::ledger::tx::Error;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::Tx;
@@ -11,7 +12,7 @@ use crate::types::storage::Epoch;
 use crate::types::transaction::{hash_tx, Fee, WrapperTx};
 
 /// Find the public key for the given address and try to load the keypair
-/// for it from the wallet. Panics if the key cannot be found or loaded.
+/// for it from the wallet. Errors if the key cannot be found or loaded.
 pub async fn find_keypair<
     C: Client + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -19,41 +20,41 @@ pub async fn find_keypair<
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
-) -> common::SecretKey {
+) -> Result<common::SecretKey, Error> {
     match addr {
         Address::Established(_) => {
             println!(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key =
-                rpc::get_public_key(client, addr).await.unwrap_or_else(|| {
-                    panic!(
-                        "No public key found for the address {}",
-                        addr.encode()
-                    );
-                });
-            wallet.find_key_by_pk(&public_key).unwrap_or_else(|err| {
-                panic!(
+            let public_key = rpc::get_public_key(client, addr).await.ok_or(
+                Error::Other(format!(
+                    "No public key found for the address {}",
+                    addr.encode()
+                )),
+            )?;
+            wallet.find_key_by_pk(&public_key).map_err(|err| {
+                Error::Other(format!(
                     "Unable to load the keypair from the wallet for public \
                      key {}. Failed with: {}",
                     public_key, err
-                );
+                ))
             })
         }
         Address::Implicit(ImplicitAddress(pkh)) => {
-            wallet.find_key_by_pkh(pkh).unwrap_or_else(|err| {
-                panic!(
+            wallet.find_key_by_pkh(pkh).map_err(|err| {
+                Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
                      implicit address {}. Failed with: {}",
                     addr.encode(),
                     err
-                );
+                ))
             })
         }
-        Address::Internal(_) => {
-            panic!("Internal address {} doesn't have any signing keys.", addr);
-        }
+        Address::Internal(_) => other_err(format!(
+            "Internal address {} doesn't have any signing keys.",
+            addr
+        )),
     }
 }
 
@@ -74,7 +75,7 @@ pub enum TxSigningKey {
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
-/// is given, panics.
+/// is given, an `Error` is returned.
 pub async fn tx_signer<
     C: Client + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -82,21 +83,23 @@ pub async fn tx_signer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    mut default: TxSigningKey,
-) -> common::SecretKey {
+    default: TxSigningKey,
+) -> Result<common::SecretKey, Error> {
     // Override the default signing key source if possible
-    if let Some(signing_key) = &args.signing_key {
-        default = TxSigningKey::WalletKeypair(signing_key.clone());
+    let default = if let Some(signing_key) = &args.signing_key {
+        TxSigningKey::WalletKeypair(signing_key.clone())
     } else if let Some(signer) = &args.signer {
-        default = TxSigningKey::WalletAddress(signer.clone());
-    }
+        TxSigningKey::WalletAddress(signer.clone())
+    } else {
+        default
+    };
     // Now actually fetch the signing key and apply it
     match default {
-        TxSigningKey::WalletKeypair(signing_key) => signing_key,
+        TxSigningKey::WalletKeypair(signing_key) => Ok(signing_key),
         TxSigningKey::WalletAddress(signer) => {
             let signer = signer;
             let signing_key =
-                find_keypair::<C, U>(client, wallet, &signer).await;
+                find_keypair::<C, U>(client, wallet, &signer).await?;
             // Check if the signer is implicit account that needs to reveal its
             // PK first
             if matches!(signer, Address::Implicit(_)) {
@@ -104,29 +107,28 @@ pub async fn tx_signer<
                 super::tx::reveal_pk_if_needed::<C, U>(
                     client, wallet, &pk, args,
                 )
-                .await;
+                .await?;
             }
-            signing_key
+            Ok(signing_key)
         }
         TxSigningKey::SecretKey(signing_key) => {
             // Check if the signing key needs to reveal its PK first
             let pk: common::PublicKey = signing_key.ref_to();
             super::tx::reveal_pk_if_needed::<C, U>(client, wallet, &pk, args)
-                .await;
-            signing_key
+                .await?;
+            Ok(signing_key)
         }
-        TxSigningKey::None => {
-            panic!(
-                "All transactions must be signed; please either specify the \
-                 key or the address from which to look up the signing key."
-            );
-        }
+        TxSigningKey::None => other_err(
+            "All transactions must be signed; please either specify the key \
+             or the address from which to look up the signing key."
+                .to_string(),
+        ),
     }
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
 /// If no explicit signer given, use the `default`. If no `default` is given,
-/// panics.
+/// Error.
 ///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
@@ -141,17 +143,16 @@ pub async fn sign_tx<
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
-) -> TxBroadcastData {
-    let keypair = tx_signer::<C, U>(client, wallet, args, default).await;
+) -> Result<TxBroadcastData, Error> {
+    let keypair = tx_signer::<C, U>(client, wallet, args, default).await?;
     let tx = tx.sign(&keypair);
 
     let epoch = rpc::query_epoch(client).await;
-    let broadcast_data = if args.dry_run {
+    Ok(if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(args, epoch, tx, &keypair).await
-    };
-    broadcast_data
+    })
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -190,4 +191,8 @@ pub async fn sign_wrapper(
         wrapper_hash,
         decrypted_hash,
     }
+}
+
+fn other_err<T>(string: String) -> Result<T, Error> {
+    Err(Error::Other(string))
 }
