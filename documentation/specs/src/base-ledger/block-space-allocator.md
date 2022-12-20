@@ -88,8 +88,14 @@ block space remaining after allocating space for decrypted and protocol
 transactions.
 4. `FillingRemainingSpace` - The final state of the `BlockSpaceAllocator`. Due 
 to the short-circuit behavior of a `TxBin`, on allocation errors, some space 
-may be left unutilized at the end of the third state. This state allows 
-protocol transactions to be included in the block's remaining space.
+may be left unutilized at the end of the third state. At this state, the only kinds of
+transactions that are left to fill the available block space are
+of type encrypted and protocol, but encrypted transactions are forbidden
+to be included, to avoid breaking their invariant regarding
+allotted block space (i.e. encrypted transactions can only occupy up to
+$\frac{1}{3}$ of the total block space for a given height $H$). As such,
+only protocol transactions are allowed at the fourth and final state of
+the `BlockSpaceAllocator`.
 
 For a fixed block height $H_0$, if at $H_0 - 1$ and $H_0$ no encrypted 
 transactions are included in the respective proposals, the block decided for 
@@ -157,7 +163,7 @@ $P$, for height $H$.
 Should any of these conditions not be met at some arbitrary round $R$ of $H$, 
 all honest validators $V_h : V_h \subseteq V$ will reject the proposal $P$. 
 Byzantine validators are permitted to re-order the layout of $P$ typically 
-derived from the [block space allocator](#transaction-batch-construction) $A$, 
+derived from the [`BlockSpaceAllocator`](#transaction-batch-construction) $A$, 
 under normal operation, however this should not be a compromising factor of the 
 safety and liveness properties of Namada. The rigid layout of $B$ is simply a 
 consequence of $A$ allocating in different phases.
