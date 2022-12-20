@@ -218,6 +218,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 &[ #ident_list ]
             };
 
+            #[allow(dead_code)]
             const VALUES: #struct_def_ident = Self {
                 #values_list
             };
@@ -241,7 +242,6 @@ where
 
 #[cfg(test)]
 mod test_proc_macros {
-    use itertools::Itertools;
     use syn::ItemImpl;
 
     use super::*;
@@ -366,6 +366,7 @@ mod test_proc_macros {
                     let Keys { param1, param2 } = Self::VALUES;
                     &[param1, param2]
                 };
+                #[allow(dead_code)]
                 const VALUES: Keys = Self {
                     param1: "param1",
                     param2: "param2"
