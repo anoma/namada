@@ -326,7 +326,15 @@ pub struct EstablishedAddress {
 }
 
 /// A generator of established addresses
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct EstablishedAddressGen {
     last_hash: String,
 }
