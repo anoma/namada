@@ -153,15 +153,17 @@ pub fn validity_predicate(
 }
 
 #[proc_macro_derive(StorageKeys)]
-// TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
-pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
-    let struct_def = parse_macro_input!(item as ItemStruct);
-    create_storage_keys(struct_def).parse().unwrap()
+pub fn derive_storage_keys(struct_def: TokenStream) -> TokenStream {
+    derive_storage_keys_inner(struct_def.into()).into()
 }
 
 #[inline]
+// TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
 // TODO: emit allow_deadcode in ALL and VALUES
-fn create_storage_keys(struct_def: ItemStruct) -> String {
+fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
+    let struct_def: ItemStruct = syn::parse2(struct_def)
+        .expect("Expected a struct in the StorageKeys derive");
+
     // type check the struct - all fields must be of type `&'static str`
     let fields = match &struct_def.fields {
         syn::Fields::Named(fields) => &fields.named,
@@ -225,7 +227,6 @@ fn create_storage_keys(struct_def: ItemStruct) -> String {
             };
         }
     }
-    .to_string()
 }
 
 #[inline]
@@ -248,25 +249,26 @@ mod test_proc_macros {
 
     // TODO: check if type checking fails for non-static str field
     // types, check if the generated `ALL` is sorted, ???
-
     use super::*;
 
     /// Test that the create storage keys produces
     /// the expected code.
     #[test]
-    // TODO: use quote! to get formatted expected code
-    fn test_create_storage_keys() {
-        const TEST: &str = r#"
+    fn test_derive_storage_keys() {
+        let test_struct: TokenStream2 = quote! {
             struct Keys {
                 param1: &'static str,
                 param2: &'static str,
             }
-        "#;
+        };
+        let test_impl: ItemImpl =
+            syn::parse2(derive_storage_keys_inner(test_struct))
+                .expect("Test failed");
 
-        const EXPECT: &str = r#"
+        let expected_impl: TokenStream2 = quote! {
             impl Keys {
                 const ALL: &[&'static str] = {
-                    let Keys { param1 , param2 } = Self::VALUES;
+                    let Keys { param1, param2 } = Self::VALUES;
                     &[param1, param2]
                 };
                 const VALUES: Keys = Self {
@@ -274,11 +276,10 @@ mod test_proc_macros {
                     param2: "param2"
                 };
             }
-        "#;
-        let struct_def = syn::parse_str(TEST).unwrap();
-        let result = create_storage_keys(struct_def);
-        let result: ItemImpl = syn::parse_str(&result).unwrap();
-        let expected = syn::parse_str(EXPECT).unwrap();
-        assert_eq!(result, expected);
+        };
+        let expected_impl: ItemImpl =
+            syn::parse2(expected_impl).expect("Test failed");
+
+        assert_eq!(test_impl, expected_impl);
     }
 }
