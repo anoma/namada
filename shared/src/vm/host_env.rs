@@ -1833,11 +1833,13 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
     let full_tx: Transfer =
         BorshDeserialize::try_from_slice(tx_bytes.as_slice()).unwrap();
-    let shielded_tx: Transaction = full_tx.shielded.unwrap();
-    Ok(HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(
-        &shielded_tx,
-    ))
-    .to_i64())
+
+    let shielded_tx: Option<Transaction> = full_tx.shielded;
+    if shielded_tx.is_none() {
+        Ok(HostEnvResult::Fail.to_i64())
+    } else {
+        Ok(HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded_tx.unwrap())).to_i64())
+    }
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
