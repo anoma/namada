@@ -1,6 +1,6 @@
 //! Genesis transactions
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -399,6 +399,8 @@ fn sign_tx<T: BorshSerialize>(
     Serialize,
     BorshDeserialize,
     BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Transactions {
     pub established_account: Option<Vec<SignedEstablishedAccountTx>>,
@@ -425,7 +427,8 @@ impl Transactions {
         self.bond
             .as_ref()
             .map(|txs| {
-                let mut stakes: HashMap<&Alias, token::Amount> = HashMap::new();
+                let mut stakes: BTreeMap<&Alias, token::Amount> =
+                    BTreeMap::new();
                 for tx in txs {
                     let entry = stakes.entry(&tx.data.validator).or_default();
                     *entry += tx.data.amount;
@@ -447,7 +450,7 @@ impl Transactions {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct UnsignedTransactions {
     pub established_account: Option<Vec<UnsignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<UnsignedValidatorAccountTx>>,
@@ -461,7 +464,14 @@ pub type UnsignedValidatorAccountTx =
 pub type SignedValidatorAccountTx = ValidatorAccountTx<SignedPk>;
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct ValidatorAccountTx<PK> {
     pub alias: Alias,
@@ -487,7 +497,14 @@ pub type UnsignedEstablishedAccountTx =
 pub type SignedEstablishedAccountTx = EstablishedAccountTx<SignedPk>;
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct EstablishedAccountTx<PK> {
     pub alias: Alias,
@@ -499,7 +516,14 @@ pub struct EstablishedAccountTx<PK> {
 pub type SignedTransferTx = Signed<TransferTx>;
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct TransferTx {
     pub token: Alias,
@@ -511,7 +535,14 @@ pub struct TransferTx {
 pub type SignedBondTx = Signed<BondTx>;
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct BondTx {
     pub source: AliasOrPk,
@@ -519,7 +550,7 @@ pub struct BondTx {
     pub amount: token::Amount,
 }
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
 pub enum AliasOrPk {
     /// `alias = "value"` in toml (encoded via `AliasSerHelper`)
     Alias(Alias),
@@ -588,7 +619,14 @@ impl Display for AliasOrPk {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Signed<T> {
     #[serde(flatten)]
@@ -597,7 +635,14 @@ pub struct Signed<T> {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshSerialize, BorshDeserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
 )]
 pub struct SignedPk {
     pub pk: StringEncoded<common::PublicKey>,
@@ -612,11 +657,11 @@ pub fn validate(
 ) -> bool {
     let mut is_valid = true;
 
-    let mut all_used_aliases: HashSet<Alias> = HashSet::default();
-    let mut established_accounts: HashMap<Alias, Option<common::PublicKey>> =
-        HashMap::default();
-    let mut validator_accounts: HashMap<Alias, common::PublicKey> =
-        HashMap::default();
+    let mut all_used_aliases: BTreeSet<Alias> = BTreeSet::default();
+    let mut established_accounts: BTreeMap<Alias, Option<common::PublicKey>> =
+        BTreeMap::default();
+    let mut validator_accounts: BTreeMap<Alias, common::PublicKey> =
+        BTreeMap::default();
 
     let Transactions {
         established_account,
@@ -652,7 +697,7 @@ pub fn validate(
     }
 
     // Make a mutable copy of the balances for tracking changes applied from txs
-    let mut token_balances: HashMap<Alias, TokenBalancesForValidation> =
+    let mut token_balances: BTreeMap<Alias, TokenBalancesForValidation> =
         balances
             .map(|balances| {
                 balances
@@ -664,7 +709,7 @@ pub fn validate(
                             TokenBalancesForValidation {
                                 // Add an accumulator for tokens transferred to
                                 // aliases
-                                aliases: HashMap::new(),
+                                aliases: BTreeMap::new(),
                                 pks: token_balances.clone(),
                             },
                         )
@@ -713,9 +758,9 @@ pub fn validate(
 
 fn validate_bond(
     tx: &SignedBondTx,
-    balances: &mut HashMap<Alias, TokenBalancesForValidation>,
-    established_accounts: &HashMap<Alias, Option<common::PublicKey>>,
-    validator_accounts: &HashMap<Alias, common::PublicKey>,
+    balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
+    established_accounts: &BTreeMap<Alias, Option<common::PublicKey>>,
+    validator_accounts: &BTreeMap<Alias, common::PublicKey>,
     parameters: &Parameters,
 ) -> bool {
     let mut is_valid = true;
@@ -823,7 +868,7 @@ fn validate_bond(
 #[derive(Clone, Debug)]
 pub struct TokenBalancesForValidation {
     /// Accumulator for tokens transferred to aliases
-    pub aliases: HashMap<Alias, token::Amount>,
+    pub aliases: BTreeMap<Alias, token::Amount>,
     /// Token balances from the balances file, associated with PKs
     pub pks: TokenBalances,
 }
@@ -831,8 +876,8 @@ pub struct TokenBalancesForValidation {
 pub fn validate_established_account(
     tx: &SignedEstablishedAccountTx,
     vps: Option<&ValidityPredicates>,
-    all_used_aliases: &mut HashSet<Alias>,
-    established_accounts: &mut HashMap<Alias, Option<common::PublicKey>>,
+    all_used_aliases: &mut BTreeSet<Alias>,
+    established_accounts: &mut BTreeMap<Alias, Option<common::PublicKey>>,
 ) -> bool {
     let mut is_valid = true;
 
@@ -886,8 +931,8 @@ fn validate_established_account_sig(
 pub fn validate_validator_account(
     tx: &ValidatorAccountTx<SignedPk>,
     vps: Option<&ValidityPredicates>,
-    all_used_aliases: &mut HashSet<Alias>,
-    validator_accounts: &mut HashMap<Alias, common::PublicKey>,
+    all_used_aliases: &mut BTreeSet<Alias>,
+    validator_accounts: &mut BTreeMap<Alias, common::PublicKey>,
 ) -> bool {
     let mut is_valid = true;
 
@@ -974,8 +1019,8 @@ pub fn validate_validator_account(
 /// Updates the token balances with all the valid transfers applied
 pub fn validate_transfer(
     tx: &SignedTransferTx,
-    balances: &mut HashMap<Alias, TokenBalancesForValidation>,
-    all_used_aliases: &HashSet<Alias>,
+    balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
+    all_used_aliases: &BTreeSet<Alias>,
 ) -> bool {
     let mut is_valid = true;
 

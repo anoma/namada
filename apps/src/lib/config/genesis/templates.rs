@@ -1,6 +1,6 @@
 //! The templates for balances, parameters and VPs used for a chain's genesis.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -46,52 +46,101 @@ pub fn read_transactions(path: &Path) -> eyre::Result<Transactions> {
 
 /// Genesis balances of all tokens
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Balances {
-    pub token: HashMap<Alias, TokenBalances>,
+    pub token: BTreeMap<Alias, TokenBalances>,
 }
 
 /// Genesis balances for a given token
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct TokenBalances(
-    pub HashMap<StringEncoded<common::PublicKey>, token::Amount>,
+    pub BTreeMap<StringEncoded<common::PublicKey>, token::Amount>,
 );
 
 /// Genesis validity predicates
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct ValidityPredicates {
     // Wasm definitions
-    pub wasm: HashMap<String, WasmVpConfig>,
+    pub wasm: BTreeMap<String, WasmVpConfig>,
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct WasmVpConfig {
     pub filename: String,
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Tokens {
-    pub token: HashMap<Alias, TokenConfig>,
+    pub token: BTreeMap<Alias, TokenConfig>,
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct TokenConfig {
     pub vp: String,
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct Parameters {
     pub parameters: ChainParams,
@@ -100,7 +149,14 @@ pub struct Parameters {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct ChainParams {
     /// Name of the native token - this must one of the tokens from
@@ -129,7 +185,14 @@ pub struct ChainParams {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct PosParams {
     /// Maximum number of active validators.
@@ -157,7 +220,14 @@ pub struct PosParams {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct GovernanceParams {
     /// Min funds to stake to submit a proposal
@@ -182,7 +252,14 @@ impl TokenBalances {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
 )]
 pub struct All {
     pub vps: ValidityPredicates,
