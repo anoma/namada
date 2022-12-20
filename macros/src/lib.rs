@@ -159,6 +159,7 @@ pub fn derive_storage_keys(item: TokenStream) -> TokenStream {
     create_storage_keys(struct_def).parse().unwrap()
 }
 
+#[inline]
 fn create_storage_keys(struct_def: ItemStruct) -> String {
     // type check the struct - all fields must be of type `&'static str`
     let fields = match &struct_def.fields {
@@ -175,7 +176,7 @@ fn create_storage_keys(struct_def: ItemStruct) -> String {
         if field_type != "& 'static str" {
             panic!(
                 "Expected `&'static str` field type in StorageKeys derive, \
-                 but got {field_type} instead"
+                 but got `{field_type}` instead"
             );
         }
         idents.push(field.ident.clone().expect("Expected a named field"));
@@ -222,9 +223,11 @@ fn create_storage_keys(struct_def: ItemStruct) -> String {
                 #values_list
             };
         }
-    }.to_string()
+    }
+    .to_string()
 }
 
+#[inline]
 fn create_punctuated<F, M>(
     idents: &[syn::Ident],
     mut map: F,
@@ -238,12 +241,11 @@ where
     })
 }
 
-
 #[cfg(test)]
 mod test_proc_macros {
     use syn::ItemImpl;
-    use super::*;
 
+    use super::*;
 
     /// Test that the create storage keys produces
     /// the expected code.
