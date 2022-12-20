@@ -330,6 +330,7 @@ pub struct EstablishedAddress {
     Debug,
     Clone,
     PartialEq,
+    Eq,
     BorshSerialize,
     BorshDeserialize,
     Serialize,

@@ -98,7 +98,17 @@ impl From<std::time::Duration> for DurationNanos {
 
 /// An RFC 3339 timestamp (e.g., "1970-01-01T00:00:00Z").
 #[derive(
-    Clone, Debug, Deserialize, Serialize, BorshDeserialize, BorshSerialize,
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 pub struct Rfc3339String(pub String);
 
