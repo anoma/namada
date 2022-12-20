@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
-use crate::ledger::protocol::transactions::votes::{dedupe, Tally, Votes};
+use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(

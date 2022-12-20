@@ -4,7 +4,7 @@ use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{Tally, Votes};
-use crate::ledger::storage::vote_tallies;
+use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
     storage: &mut Storage<D, H>,

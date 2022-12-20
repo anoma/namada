@@ -16,10 +16,10 @@ use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::ChangedKeys;
-use crate::ledger::protocol::transactions::utils::{self};
-use crate::ledger::protocol::transactions::votes::update::NewVotes;
-use crate::ledger::protocol::transactions::votes::{self, calculate_new};
-use crate::ledger::storage::vote_tallies;
+use crate::protocol::transactions::utils;
+use crate::protocol::transactions::votes::update::NewVotes;
+use crate::protocol::transactions::votes::{self, calculate_new};
+use crate::storage::vote_tallies;
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
@@ -191,8 +191,8 @@ mod tests {
     use namada_proof_of_stake::PosBase;
 
     use super::*;
-    use crate::ledger::protocol::transactions::utils::GetVoters;
-    use crate::ledger::protocol::transactions::votes::Votes;
+    use crate::protocol::transactions::utils::GetVoters;
+    use crate::protocol::transactions::votes::Votes;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer

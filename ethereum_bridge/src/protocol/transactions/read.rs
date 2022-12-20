@@ -58,7 +58,7 @@ mod tests {
     use namada_core::types::storage;
     use namada_core::types::token::Amount;
 
-    use crate::ledger::protocol::transactions::read;
+    use crate::protocol::transactions::read;
 
     #[test]
     fn test_amount_returns_zero_for_uninitialized_storage() {

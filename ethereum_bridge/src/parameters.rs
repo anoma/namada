@@ -8,7 +8,7 @@ use namada_core::ledger::storage::Storage;
 use namada_core::types::ethereum_events::EthAddress;
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::{bridge_pool_vp, storage as bridge_storage, vp};
+use crate::{bridge_pool_vp, storage as bridge_storage, vp};
 
 /// Represents a configuration value for the minimum number of
 /// confirmations an Ethereum event must reach before it can be acted on.
@@ -164,7 +164,7 @@ mod tests {
     use eyre::Result;
     use namada_core::types::ethereum_events::EthAddress;
 
-    use crate::ledger::parameters::{
+    use crate::parameters::{
         ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
         UpgradeableContract,
     };

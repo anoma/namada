@@ -8,7 +8,7 @@ use namada_core::types::storage::BlockHeight;
 use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{ChangedKeys, Tally, Votes};
-use crate::ledger::storage::vote_tallies;
+use crate::storage::vote_tallies;
 
 /// Wraps all the information about new votes to be applied to some existing
 /// tally in storage.
@@ -197,8 +197,10 @@ mod tests {
     use namada_core::types::ethereum_events::EthereumEvent;
 
     use super::*;
-    use crate::ledger::protocol::transactions::votes;
-    use crate::ledger::protocol::transactions::votes::update::tests::helpers::{arbitrary_event, setup_tally};
+    use crate::protocol::transactions::votes;
+    use crate::protocol::transactions::votes::update::tests::helpers::{
+        arbitrary_event, setup_tally,
+    };
 
     mod helpers {
         use super::*;

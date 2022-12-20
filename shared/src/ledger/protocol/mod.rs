@@ -204,7 +204,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use namada_ethereum_bridge::ledger::protocol::transactions;
+    use namada_ethereum_bridge::protocol::transactions;
 
     use crate::types::vote_extensions::{
         ethereum_events, validator_set_update,

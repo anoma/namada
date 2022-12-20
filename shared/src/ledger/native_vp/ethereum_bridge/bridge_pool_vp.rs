@@ -17,8 +17,8 @@ use eyre::eyre;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
-use namada_ethereum_bridge::ledger::storage;
-use namada_ethereum_bridge::ledger::storage::wrapped_erc20s;
+use namada_ethereum_bridge::storage;
+use namada_ethereum_bridge::storage::wrapped_erc20s;
 
 use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
@@ -372,7 +372,7 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::types::address;
-    use namada_ethereum_bridge::ledger::parameters::{
+    use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
 

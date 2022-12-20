@@ -391,7 +391,7 @@ mod tests {
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::types::address;
-    use namada_ethereum_bridge::ledger::parameters::{
+    use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
     use rand::Rng;

@@ -14,10 +14,10 @@ use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
-use crate::ledger::protocol::transactions::utils;
-use crate::ledger::protocol::transactions::votes::update::NewVotes;
-use crate::ledger::protocol::transactions::votes::{self, Votes};
-use crate::ledger::storage::vote_tallies;
+use crate::protocol::transactions::utils;
+use crate::protocol::transactions::votes::update::NewVotes;
+use crate::protocol::transactions::votes::{self, Votes};
+use crate::storage::vote_tallies;
 
 impl utils::GetVoters for validator_set_update::VextDigest {
     #[inline]
