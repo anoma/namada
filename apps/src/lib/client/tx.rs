@@ -561,7 +561,7 @@ pub async fn submit_vote_proposal<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::VoteProposal,
-) {
+) -> Result<(), tx::Error> {
     let signer = if let Some(addr) = &args.tx.signer {
         addr
     } else {
@@ -571,8 +571,9 @@ pub async fn submit_vote_proposal<
 
     if args.offline {
         let signer = signer;
-        let proposal_file_path =
-            args.proposal_data.expect("Proposal file should exist.");
+        let proposal_file_path = args
+            .proposal_data
+            .ok_or(tx::Error::Other(format!("Proposal file should exist.")))?;
         let file = File::open(&proposal_file_path).expect("File must exist.");
 
         let proposal: OfflineProposal =
@@ -604,6 +605,7 @@ pub async fn submit_vote_proposal<
                     "Proposal vote created: {}.",
                     proposal_vote_filename.to_string_lossy()
                 );
+                Ok(())
             }
             Err(e) => {
                 eprintln!("Error while creating proposal vote file: {}.", e);
@@ -647,7 +649,7 @@ pub async fn submit_vote_proposal<
                 // validator changing his vote and, effectively, invalidating
                 // the delgator's vote
                 if !args.tx.force
-                    && is_safe_voting_window(client, proposal_id, epoch).await
+                    && is_safe_voting_window(client, proposal_id, epoch).await?
                 {
                     delegations = filter_delegations(
                         client,
@@ -679,15 +681,14 @@ pub async fn submit_vote_proposal<
                     TxSigningKey::WalletAddress(signer.clone()),
                 )
                 .await;
+                Ok(())
             }
             None => {
                 eprintln!(
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force {
-                    safe_exit(1)
-                }
+                if !args.tx.force { safe_exit(1) } else { Ok(()) }
             }
         }
     }
@@ -712,7 +713,7 @@ pub async fn reveal_pk_if_needed<
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> bool {
+) -> Result<bool, tx::Error> {
     tx::reveal_pk_if_needed::<C, U>(client, wallet, public_key, args).await
 }
 
@@ -746,7 +747,7 @@ async fn is_safe_voting_window<
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
-) -> bool {
+) -> Result<bool, tx::Error> {
     tx::is_safe_voting_window(client, proposal_id, proposal_start_epoch).await
 }
 

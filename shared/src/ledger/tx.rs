@@ -152,6 +152,12 @@ pub enum Error {
          updated."
     )]
     ImplicitInternalError,
+    /// Epoch not in storage
+    #[error("Proposal end epoch is not in the storage.")]
+    EpochNotInStorage,
+    /// Other Errors that may show up when using the interface
+    #[error("{0}")]
+    Other(String),
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -206,15 +212,18 @@ pub async fn submit_reveal_pk<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::RevealPk,
-) {
+) -> Result<(), Error> {
     let args::RevealPk {
         tx: args,
         public_key,
     } = args;
     let public_key = public_key;
-    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await {
+    if !reveal_pk_if_needed::<C, U>(client, wallet, &public_key, &args).await? {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");
+        Ok(())
+    } else {
+        Ok(())
     }
 }
 
@@ -226,15 +235,15 @@ pub async fn reveal_pk_if_needed<
     wallet: &mut Wallet<U>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> bool {
+) -> Result<bool, Error> {
     let addr: Address = public_key.into();
     // Check if PK revealed
     if args.force || !has_revealed_pk(client, &addr).await {
         // If not, submit it
-        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await;
-        true
+        submit_reveal_pk_aux::<C, U>(client, wallet, public_key, args).await?;
+        Ok(true)
     } else {
-        false
+        Ok(false)
     }
 }
 
@@ -784,7 +793,7 @@ pub async fn is_safe_voting_window<
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
-) -> bool {
+) -> Result<bool, Error> {
     let current_epoch = rpc::query_epoch(client).await;
 
     let proposal_end_epoch_key =
@@ -795,14 +804,14 @@ pub async fn is_safe_voting_window<
 
     match proposal_end_epoch {
         Some(proposal_end_epoch) => {
-            !crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
+            Ok(!crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
                 current_epoch,
                 proposal_start_epoch,
                 proposal_end_epoch,
-            )
+            ))
         }
         None => {
-            panic!("Proposal end epoch is not in the storage.");
+            Err(Error::EpochNotInStorage)
         }
     }
 }
@@ -1052,7 +1061,7 @@ pub async fn submit_init_account<
     let public_key = args.public_key;
     let vp_code = args.vp_code_path;
     // Validate the VP code
-    validate_untrusted_code_err(&vp_code,args.tx.force)?;
+    validate_untrusted_code_err(&vp_code, args.tx.force)?;
 
     let tx_code = args.tx_code_path;
     let data = InitAccount {
