@@ -33,7 +33,7 @@ fed a set of transactions $M = \{\ tx\ |\ tx\text{ in Tendermint's mempool}\
 \}$, whose total combined size (i.e. the sum of the bytes occupied by each $tx 
 : tx \in M$) may be greater than $MaxProposalBytes$. Therefore, consensus round 
 leaders are responsible for selecting a batch of transactions $P$ whose total 
-combined bytes $P_{Len} : P_{Len} \le MaxProposalBytes$.
+combined bytes $P_{Len} \le MaxProposalBytes$.
 
 To stay within these bounds, block space is **allotted** to different kinds of 
 transactions: decrypted, protocol and encrypted transactions. Each kind of 
