@@ -14,18 +14,18 @@ At the end of each epoch, in order to process any slashes scheduled for processi
 $$ \sum_{i \in \text{validators}} \max \{ 0.01, \big(\frac{i_{voting-power}}{\sum_{i \in \text{validators}}i_{voting-power}}\big)^2\} $$
 
 Or, in pseudocode:
-<!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
+<!— I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work—>
 ```haskell =
 calculateSlashRate :: [Slash] -> Float
 
 calculateSlashRate slashes = 
     let votingPowerFraction = sum [ votingPowerFraction (validator slash) | slash <- slashes]
 	in max 0.01 (min 1 (votingPowerFraction**2)*9)
-  -- minimum slash rate is 1%
-  -- then exponential between 0 & 1/3 voting power
-  -- we can make this a more complex function later
+  — minimum slash rate is 1%
+  — then exponential between 0 & 1/3 voting power
+  — we can make this a more complex function later
 ```
-<!-- ```python
+<!— ```python
 class PoS:
     def __init__(self, genesis_validators : list):
         self.update_validators(genesis_validators)
@@ -48,7 +48,7 @@ class PoS:
     def calc_slash_rate(voting_power_fraction):
         slash_rate = max(0.01, (voting_power_fraction ** 2) * 9)
         return slash_rate
-``` -->
+``` —>
 
 As a function, it can be drawn as:
 
@@ -72,6 +72,6 @@ This can be implemented as a negative inflation rate for a particular block.
 
 Instant redelegation is not supported. Redelegations must wait the unbonding period.
 
-<!--## State management
+<!—## State management
 
-Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.-->
+Each $entry_{v,i}$ can be reference-counted by the number of delegations created during that epoch which might need to reference it. As soon as the number of delegations drops to zero, the entry can be deleted.—>
