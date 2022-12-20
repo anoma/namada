@@ -11,10 +11,7 @@ use serde::{Deserialize, Serialize};
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
 /// `PartialEq` instance is case-insensitive.
-#[derive(
-    Clone, Debug, Default, Deserialize, PartialOrd, Ord, Eq, BorshDeserialize,
-)]
-#[serde(transparent)]
+#[derive(Clone, Debug, Default, Eq)]
 pub struct Alias(String);
 
 impl Alias {
@@ -43,6 +40,13 @@ impl BorshSerialize for Alias {
     }
 }
 
+impl BorshDeserialize for Alias {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        let raw: String = BorshDeserialize::deserialize(buf)?;
+        Ok(Self::from(raw))
+    }
+}
+
 impl Serialize for Alias {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -52,9 +56,31 @@ impl Serialize for Alias {
     }
 }
 
+impl<'de> Deserialize<'de> for Alias {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw: String = Deserialize::deserialize(deserializer)?;
+        Ok(Self::from(raw))
+    }
+}
+
 impl PartialEq for Alias {
     fn eq(&self, other: &Self) -> bool {
         self.normalize() == other.normalize()
+    }
+}
+
+impl PartialOrd for Alias {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.normalize().partial_cmp(&other.normalize())
+    }
+}
+
+impl Ord for Alias {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.normalize().cmp(&other.normalize())
     }
 }
 
@@ -69,7 +95,7 @@ where
     T: AsRef<str>,
 {
     fn from(raw: T) -> Self {
-        Self(raw.as_ref().to_owned())
+        Self(raw.as_ref().to_lowercase())
     }
 }
 
@@ -95,7 +121,7 @@ impl FromStr for Alias {
     type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.into()))
+        Ok(Self::from(s))
     }
 }
 
