@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## v0.12.1
+
+Namada 0.12.1 is a hotfix release, fixing a node crash on malformed
+transactions to the MASP.
+
+### BUG FIXES
+
+- Avoid panicking unwrap()s in vp_verify_masp, to prevent crashing the node on
+  malformed transactions. ([#942](https://github.com/anoma/namada/pull/942))
+
+## v0.12.0
+
+Namada 0.12.0 is a scheduled minor release.
+
+### CI
+
+- Run `make check-abcipp` in CI ([#824](https://github.com/anoma/namada/pull/824))
+- Run Ethereum bridge CI against more branches
+  ([#834](https://github.com/anoma/namada/pull/834))
+
+### DOCS
+
+- Adds specs for replay protection
+  ([#440](https://github.com/anoma/namada/pull/440))
+- Adds specs for multisig accounts
+  ([#680](https://github.com/anoma/namada/pull/680))
+
+### IMPROVEMENTS
+
+- Allow sign extension opcodes in WASM
+  ([#833](https://github.com/anoma/namada/pull/833))
+- Remove the MerkleValue type and just use byte slices for Merkle tree values.
+  ([#846](https://github.com/anoma/namada/pull/846))
+- Use index-set to reduce serialized size of block results.
+  ([#859](https://github.com/anoma/namada/pull/859))
+
+### TESTING
+
+- Allow size zero bonds in PoS for testing.
+  ([#813](https://github.com/anoma/namada/pull/813))
+
 ## v0.11.0
 
 Namada 0.11.0 is a scheduled minor release.

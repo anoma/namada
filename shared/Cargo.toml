@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada"
 resolver = "2"
-version = "0.11.0"
+version = "0.12.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -51,10 +51,12 @@ abcipp = [
   "tendermint-proto-abcipp",
   # it's OK to include the tendermint-rpc feature here, as we aren't currently building wasms with `abcipp`
   "tendermint-rpc-abcipp",
+  "namada_ethereum_bridge/abcipp",
 ]
 abciplus = [
   "namada_core/abciplus",
   "namada_proof_of_stake/abciplus",
+  "namada_ethereum_bridge/abciplus",
   "ibc",
   "ibc-proto",
   "tendermint",
@@ -82,6 +84,7 @@ testing = [
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
 bellman = "0.11.2"
 bls12_381 = "0.6.1"
@@ -92,7 +95,7 @@ clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 eyre = "0.6.8"
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
 ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d", default-features = false, optional = true}
@@ -145,5 +148,4 @@ pretty_assertions = "0.7.2"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio = {version = "1.8.2", default-features = false, features = ["rt", "macros"]}
-toml = "0.5.8"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}

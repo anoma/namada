@@ -1,0 +1,1 @@
+- Run `make check-abcipp` in CI ([#824](https://github.com/anoma/namada/pull/824))

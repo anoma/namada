@@ -56,7 +56,7 @@ pub mod states;
 use std::marker::PhantomData;
 
 use namada::core::ledger::storage::{self, Storage};
-use namada::ledger::queries_ext::QueriesExt;
+use namada::ledger::pos::PosQueries;
 
 #[allow(unused_imports)]
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;

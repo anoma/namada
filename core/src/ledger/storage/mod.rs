@@ -15,6 +15,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
+use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
@@ -627,7 +628,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: Vec<u8>,
+        value: StorageBytes,
         height: BlockHeight,
     ) -> Result<Proof> {
         use std::array;
@@ -638,10 +639,7 @@ where
             if let MembershipProof::ICS23(proof) = self
                 .block
                 .tree
-                .get_sub_tree_existence_proof(
-                    array::from_ref(key),
-                    vec![&value],
-                )
+                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
                 .map_err(Error::MerkleTreeError)?
             {
                 self.block
@@ -659,7 +657,7 @@ where
                     if let MembershipProof::ICS23(proof) = tree
                         .get_sub_tree_existence_proof(
                             array::from_ref(key),
-                            vec![&value],
+                            vec![value],
                         )
                         .map_err(Error::MerkleTreeError)?
                     {

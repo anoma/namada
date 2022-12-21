@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
 pub use namada_proof_of_stake::types;
 use namada_proof_of_stake::PosBase;

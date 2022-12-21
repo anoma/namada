@@ -8,6 +8,7 @@
     - [Default account](./base-ledger/default-account.md)
     - [Multisignature account](./base-ledger/multisignature.md)
     - [Fungible token](./base-ledger/fungible-token.md)
+    - [Replay protection](./base-ledger/replay-protection.md)
     - [Block space allocator](./base-ledger/block-space-allocator.md)
 - [Multi-asset shielded pool](./masp.md)
     - [Ledger integration](./masp/ledger-integration.md)

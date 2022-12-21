@@ -3,9 +3,9 @@
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
-use namada::ledger::queries_ext::QueriesExt;
+use namada::ledger::pos::PosQueries;
 #[cfg(feature = "abcipp")]
-use namada::ledger::queries_ext::SendValsetUpd;
+use namada::ledger::pos::SendValsetUpd;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
@@ -480,7 +480,7 @@ mod test_prepare_proposal {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::queries_ext::QueriesExt;
+    use namada::ledger::pos::PosQueries;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
