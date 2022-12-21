@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-20.04, macos-latest]
         namada_cache_version: [v1]
         make:
           - name: Build package
@@ -41,8 +41,8 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
           aws-region: eu-west-1
-      - name: Install sccache (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install sccache (ubuntu-20.04)
+        if: matrix.os == 'ubuntu-20.04'
         env:
           LINK: https://github.com/mozilla/sccache/releases/download
           SCCACHE_VERSION: v0.3.0
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-20.04]
 
     steps:
       - id: get_version

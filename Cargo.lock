@@ -3264,6 +3264,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
+name = "index-set"
+version = "0.7.1"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.7.1#dc24cdbbe3664514d59f1a4c4031863fc565f1c2"
+dependencies = [
+ "borsh",
+ "serde 1.0.147",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4030,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "namada"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4093,7 +4102,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4189,7 +4198,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4197,7 +4206,6 @@ dependencies = [
  "assert_matches",
  "bech32",
  "bellman",
- "bit-vec",
  "borsh",
  "chrono",
  "data-encoding",
@@ -4213,6 +4221,7 @@ dependencies = [
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ics23",
+ "index-set",
  "itertools",
  "libsecp256k1",
  "masp_primitives",
@@ -4245,7 +4254,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "itertools",
@@ -4278,7 +4287,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "quote",
  "syn",
@@ -4286,7 +4295,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "derivative",
@@ -4303,7 +4312,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -4347,7 +4356,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4362,7 +4371,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "hex",
@@ -4373,7 +4382,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "namada_core",

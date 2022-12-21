@@ -2275,6 +2275,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
+name = "index-set"
+version = "0.7.1"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.7.1#dc24cdbbe3664514d59f1a4c4031863fc565f1c2"
+dependencies = [
+ "borsh",
+ "serde",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2705,7 +2714,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "async-trait",
  "bellman",
@@ -2755,14 +2764,13 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
  "ark-serialize",
  "bech32",
  "bellman",
- "bit-vec",
  "borsh",
  "chrono",
  "data-encoding",
@@ -2776,6 +2784,7 @@ dependencies = [
  "ibc",
  "ibc-proto",
  "ics23",
+ "index-set",
  "itertools",
  "libsecp256k1",
  "masp_primitives",
@@ -2820,7 +2829,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "quote",
  "syn",
@@ -2828,7 +2837,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "derivative",
@@ -2844,7 +2853,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -2873,7 +2882,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -2888,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "hex",
@@ -2899,7 +2908,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2912,7 +2921,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -5011,7 +5020,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -5148,7 +5157,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
