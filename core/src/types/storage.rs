@@ -7,11 +7,11 @@ use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
-use bit_vec::BitVec;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ics23::CommitmentProof;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use index_set::vec::VecIndexSet;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
@@ -96,24 +96,8 @@ impl From<TxIndex> for u32 {
     }
 }
 
-fn serialize_bitvec<S>(x: &BitVec, s: S) -> std::result::Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    Serialize::serialize(&x.to_bytes(), s)
-}
-
-fn deserialize_bitvec<'de, D>(
-    deserializer: D,
-) -> std::result::Result<BitVec, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: Vec<u8> = Deserialize::deserialize(deserializer)?;
-    Ok(BitVec::from_bytes(&s))
-}
-
-/// Represents the accepted transactions in a block
+/// Represents the indices of the accepted transactions
+/// in a block.
 #[derive(
     Clone,
     PartialEq,
@@ -124,46 +108,36 @@ where
     Debug,
     Serialize,
     Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
     Default,
 )]
-pub struct BlockResults(
-    #[serde(serialize_with = "serialize_bitvec")]
-    #[serde(deserialize_with = "deserialize_bitvec")]
-    BitVec,
-);
+pub struct BlockResults(VecIndexSet<u128>);
 
 impl BlockResults {
-    /// Create `len` rejection results
-    pub fn with_len(len: usize) -> Self {
-        BlockResults(BitVec::from_elem(len, true))
+    /// Accept the tx at the given position.
+    #[inline]
+    pub fn accept(&mut self, index: usize) {
+        self.0.remove(index)
     }
 
-    /// Accept the tx at the given position
-    pub fn accept(&mut self, idx: usize) {
-        self.0.set(idx, false)
+    /// Reject the tx at the given position.
+    #[inline]
+    pub fn reject(&mut self, index: usize) {
+        self.0.insert(index)
     }
 
-    /// Reject the tx at the given position
-    pub fn reject(&mut self, idx: usize) {
-        self.0.set(idx, true)
+    /// Check if the tx at the given position is accepted.
+    #[inline]
+    pub fn is_accepted(&self, index: usize) -> bool {
+        !self.0.contains(index)
     }
 
-    /// Check if the tx at the given position is accepted
-    pub fn is_accepted(&self, idx: usize) -> bool {
-        !self.0[idx]
-    }
-}
-
-impl BorshSerialize for BlockResults {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.0.to_bytes(), writer)
-    }
-}
-
-impl BorshDeserialize for BlockResults {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let vec: Vec<_> = BorshDeserialize::deserialize(buf)?;
-        Ok(Self(BitVec::from_bytes(&vec)))
+    /// Return an iterator over the removed txs
+    /// in this [`BlockResults`] instance.
+    #[inline]
+    pub fn iter_removed(&self) -> impl Iterator<Item = usize> + '_ {
+        self.0.iter()
     }
 }
 
