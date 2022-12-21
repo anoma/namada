@@ -5,6 +5,8 @@ pub mod val_set_update;
 
 #[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
+#[cfg(not(feature = "abcipp"))]
+use index_set::vec::VecIndexSet;
 use namada::ledger::pos::{PosQueries, SendValsetUpd};
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
@@ -298,12 +300,13 @@ pub fn deserialize_vote_extensions(
 /// ones we could deserialize to vote extension [`ProtocolTx`]
 /// instances.
 #[cfg(not(feature = "abcipp"))]
-pub fn deserialize_vote_extensions(
-    txs: &[TxBytes],
-) -> impl Iterator<Item = TxBytes> + '_ {
+pub fn deserialize_vote_extensions<'shell>(
+    txs: &'shell [TxBytes],
+    protocol_tx_indices: &'shell mut VecIndexSet<u128>,
+) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().filter_map(|tx_bytes| {
+    txs.iter().enumerate().filter_map(|(index, tx_bytes)| {
         let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
@@ -320,7 +323,11 @@ pub fn deserialize_vote_extensions(
                     ProtocolTxType::EthEventsVext(_)
                     | ProtocolTxType::ValSetUpdateVext(_),
                 ..
-            }) => Some(tx_bytes.clone()),
+            }) => {
+                // mark tx for inclusion
+                protocol_tx_indices.insert(index);
+                Some(tx_bytes.clone())
+            }
             _ => None,
         }
     })

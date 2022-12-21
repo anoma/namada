@@ -25,6 +25,9 @@ build-test:
 build-release:
 	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
 
+build-debug:
+	ANOMA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
+
 install-release:
 	NAMADA_DEV=false $(cargo) install --path ./apps --locked
 

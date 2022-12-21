@@ -2,6 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::storage::Storage;
 use namada::ledger::pos::{PosQueries, SendValsetUpd};
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -10,8 +11,50 @@ use namada::types::voting_power::FractionalVotingPower;
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shell::block_space_alloc::{
+    threshold, AllocFailure, TxBin,
+};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+
+/// Validation metadata, to keep track of used resources or
+/// transaction numbers, in a block proposal.
+#[derive(Default)]
+pub struct ValidationMeta {
+    /// Vote extension digest counters.
+    #[cfg(feature = "abcipp")]
+    pub digests: DigestCounters,
+    /// Space utilized by encrypted txs.
+    pub encrypted_txs_bin: TxBin,
+    /// Space utilized by all txs.
+    pub txs_bin: TxBin,
+    /// Check if the decrypted tx queue has any elements
+    /// left.
+    ///
+    /// This field will only evaluate to true if a block
+    /// proposer didn't include all decrypted txs in a block.
+    pub decrypted_queue_has_remaining_txs: bool,
+}
+
+impl<D, H> From<&Storage<D, H>> for ValidationMeta
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn from(storage: &Storage<D, H>) -> Self {
+        let max_proposal_bytes = storage.get_max_proposal_bytes().get();
+        let encrypted_txs_bin =
+            TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
+        let txs_bin = TxBin::init(max_proposal_bytes);
+        Self {
+            #[cfg(feature = "abcipp")]
+            digests: DigestCounters::default(),
+            decrypted_queue_has_remaining_txs: false,
+            encrypted_txs_bin,
+            txs_bin,
+        }
+    }
+}
 
 /// Contains stateful data about the number of vote extension
 /// digests found as protocol transactions in a proposed block.
@@ -19,9 +62,9 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 #[cfg(feature = "abcipp")]
 pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
-    eth_ev_digest_num: usize,
+    pub eth_ev_digest_num: usize,
     /// The number of validator set update vote extensions found thus far.
-    valset_upd_digest_num: usize,
+    pub valset_upd_digest_num: usize,
 }
 
 impl<D, H> Shell<D, H>
@@ -53,31 +96,31 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, counters) = self.check_proposal(&req.txs);
+        let (tx_results, metadata) = self.check_proposal(&req.txs);
 
         // We should not have more than one `ethereum_events::VextDigest` in
         // a proposal from some round's leader.
         let invalid_num_of_eth_ev_digests =
-            !self.has_proper_eth_events_num(&counters);
+            !self.has_proper_eth_events_num(&metadata);
         if invalid_num_of_eth_ev_digests {
             tracing::warn!(
                 proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
                 hash = ?HEXUPPER.encode(&req.hash),
-                eth_ev_digest_num = counters.eth_ev_digest_num,
+                eth_ev_digest_num = metadata.digests.eth_ev_digest_num,
                 "Found invalid number of Ethereum events vote extension digests, proposed block \
                  will be rejected"
             );
         }
 
         let invalid_num_of_valset_upd_digests =
-            !self.has_proper_valset_upd_num(&counters);
+            !self.has_proper_valset_upd_num(&metadata);
         if invalid_num_of_valset_upd_digests {
             tracing::warn!(
                 proposer = ?HEXUPPER.encode(&req.proposer_address),
                 height = req.height,
                 hash = ?HEXUPPER.encode(&req.hash),
-                valset_upd_digest_num = counters.valset_upd_digest_num,
+                valset_upd_digest_num = metadata.digests.valset_upd_digest_num,
                 "Found invalid number of validator set update vote extension digests, proposed block \
                  will be rejected"
             );
@@ -102,9 +145,22 @@ where
             );
         }
 
+        let has_remaining_decrypted_txs =
+            metadata.decrypted_queue_has_remaining_txs;
+        if has_remaining_decrypted_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Not all decrypted txs from the previous height were included in
+                 the proposal, the block will be rejected"
+            );
+        }
+
         let will_reject_proposal = invalid_num_of_eth_ev_digests
             || invalid_num_of_valset_upd_digests
-            || invalid_txs;
+            || invalid_txs
+            || has_remaining_decrypted_txs;
 
         let status = if will_reject_proposal {
             ProposalStatus::Reject
@@ -134,7 +190,7 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let tx_results = self.check_proposal(&req.txs);
+        let (tx_results, meta) = self.check_proposal(&req.txs);
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -155,7 +211,21 @@ where
             );
         }
 
-        let will_reject_proposal = invalid_txs;
+        let has_remaining_decrypted_txs =
+            meta.decrypted_queue_has_remaining_txs;
+        if has_remaining_decrypted_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Not all decrypted txs from the previous height were included in
+                 the proposal, the block will be rejected"
+            );
+        }
+
+        let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
+
+        // TODO: check if tx queue still has txs left in it
 
         let status = if will_reject_proposal {
             ProposalStatus::Reject
@@ -169,49 +239,32 @@ where
         }
     }
 
-    /// Evaluates the corresponding [`TxResult`] for each tx in a
-    /// proposed block, and counts the number of digest transactions.
+    /// Evaluates the corresponding [`TxResult`] for each tx in the
+    /// proposal. Additionally, counts the number of digest
+    /// txs and the bytes used by encrypted txs in the proposal.
     ///
     /// `ProcessProposal` should be able to make a decision on whether a
     /// proposed block is acceptable or not based solely on what this
     /// function returns.
-    #[cfg(feature = "abcipp")]
     pub fn check_proposal(
         &self,
         txs: &[TxBytes],
-    ) -> (Vec<TxResult>, DigestCounters) {
+    ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.storage.tx_queue.iter();
-        // the number of vote extension digests included in the block proposal
-        let mut counters = DigestCounters::default();
+        let mut metadata = ValidationMeta::from(&self.storage);
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
                 self.check_proposal_tx(
                     tx_bytes,
                     &mut tx_queue_iter,
-                    &mut counters,
+                    &mut metadata,
                 )
             })
             .collect();
-        (tx_results, counters)
-    }
-
-    /// Evaluates the corresponding [`TxResult`] for each tx in a
-    /// proposed block.
-    ///
-    /// `ProcessProposal` should be able to make a decision on whether a
-    /// proposed block is acceptable or not based solely on what this
-    /// function returns.
-    #[cfg(not(feature = "abcipp"))]
-    pub fn check_proposal(&self, txs: &[TxBytes]) -> Vec<TxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
-        let tx_results: Vec<_> = txs
-            .iter()
-            .map(|tx_bytes| {
-                self.check_proposal_tx(tx_bytes, &mut tx_queue_iter)
-            })
-            .collect();
-        tx_results
+        metadata.decrypted_queue_has_remaining_txs =
+            !self.storage.tx_queue.is_empty() && tx_queue_iter.next().is_some();
+        (tx_results, metadata)
     }
 
     /// Validates a list of vote extensions, included in PrepareProposal.
@@ -297,6 +350,7 @@ where
     ///   5. More decrypted txs than expected
     ///   6. A transaction could not be decrypted
     ///   7. An error in the vote extensions included in the proposal
+    ///   8. Not enough block space was available for some tx
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -305,8 +359,25 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
-        #[cfg(feature = "abcipp")] counters: &mut DigestCounters,
+        metadata: &mut ValidationMeta,
     ) -> TxResult {
+        // try to allocate space for this tx
+        if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
+            return TxResult {
+                code: ErrorCodes::AllocationError.into(),
+                info: match e {
+                    AllocFailure::Rejected { .. } => {
+                        "No more space left in the block"
+                    }
+                    AllocFailure::OverflowsBin { .. } => {
+                        "The given tx is larger than the max configured \
+                         proposal size"
+                    }
+                }
+                .into(),
+            };
+        }
+
         let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
             |err| {
                 tracing::debug!(
@@ -353,41 +424,41 @@ where
                         ext,
                         self.storage.last_height,
                     )
-                    .ok()
                     .map(|_| TxResult {
                         code: ErrorCodes::Ok.into(),
                         info: "Process Proposal accepted this transaction"
                             .into(),
                     })
-                    .unwrap_or_else(|| TxResult {
+                    .unwrap_or_else(|err| TxResult {
                         code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: "Process proposal rejected this proposal \
-                               because one of the included Ethereum events \
-                               vote extensions was invalid."
-                            .into(),
+                        info: format!(
+                            "Process proposal rejected this proposal because \
+                             one of the included Ethereum events vote \
+                             extensions was invalid: {err}"
+                        ),
                     }),
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
                         self.storage.last_height,
                     )
-                    .ok()
                     .map(|_| TxResult {
                         code: ErrorCodes::Ok.into(),
                         info: "Process Proposal accepted this transaction"
                             .into(),
                     })
-                    .unwrap_or_else(|| TxResult {
+                    .unwrap_or_else(|err| TxResult {
                         code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: "Process proposal rejected this proposal \
-                               because one of the included validator set \
-                               update vote extensions was invalid."
-                            .into(),
+                        info: format!(
+                            "Process proposal rejected this proposal because \
+                             one of the included validator set update vote \
+                             extensions was invalid: {err}"
+                        ),
                     }),
                 ProtocolTxType::EthereumEvents(digest) => {
                     #[cfg(feature = "abcipp")]
                     {
-                        counters.eth_ev_digest_num += 1;
+                        metadata.digests.eth_ev_digest_num += 1;
                     }
                     let extensions =
                         digest.decompress(self.storage.last_height);
@@ -412,7 +483,7 @@ where
                     }
                     #[cfg(feature = "abcipp")]
                     {
-                        counters.valset_upd_digest_num += 1;
+                        metadata.digests.valset_upd_digest_num += 1;
                     }
 
                     let extensions =
@@ -460,6 +531,24 @@ where
                 },
             },
             TxType::Wrapper(tx) => {
+                // try to allocate space for this encrypted tx
+                if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
+                    return TxResult {
+                        code: ErrorCodes::AllocationError.into(),
+                        info: match e {
+                            AllocFailure::Rejected { .. } => {
+                                "No more space left in the block for wrapper \
+                                 txs"
+                            }
+                            AllocFailure::OverflowsBin { .. } => {
+                                "The given wrapper tx is larger than 1/3 of \
+                                 the available block space"
+                            }
+                        }
+                        .into(),
+                    };
+                }
+
                 // validate the ciphertext via Ferveo
                 if !tx.validate_ciphertext() {
                     TxResult {
@@ -512,19 +601,20 @@ where
     /// Checks if we have found the correct number of Ethereum events
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
-    fn has_proper_eth_events_num(&self, c: &DigestCounters) -> bool {
-        self.storage.last_height.0 == 0 || c.eth_ev_digest_num == 1
+    fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
+        self.storage.last_height.0 == 0 || meta.digests.eth_ev_digest_num == 1
     }
 
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
-    fn has_proper_valset_upd_num(&self, c: &DigestCounters) -> bool {
+    fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
         if self
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
-            self.storage.last_height.0 == 0 || c.valset_upd_digest_num == 1
+            self.storage.last_height.0 == 0
+                || meta.digests.valset_upd_digest_num == 1
         } else {
             true
         }
@@ -1175,68 +1265,45 @@ mod test_process_proposal {
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
         }
         #[cfg(feature = "abcipp")]
-        let response_1 = {
+        let response = {
             let request = ProcessProposal {
-                txs: vec![txs[0].to_bytes(), get_empty_eth_ev_digest(&shell)],
-            };
-            if let [resp, _] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed");
-            }
-        };
-        #[cfg(not(feature = "abcipp"))]
-        let response_1 = {
-            let request = ProcessProposal {
-                txs: vec![txs[0].to_bytes()],
-            };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        };
-        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
-
-        #[cfg(feature = "abcipp")]
-        let response_2 = {
-            let request = ProcessProposal {
-                txs: vec![txs[2].to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    txs[0].to_bytes(),
+                    txs[2].to_bytes(),
+                    txs[1].to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                ],
             };
             if let Err(TestError::RejectProposal(mut resp)) =
                 shell.process_proposal(request)
             {
-                assert_eq!(resp.len(), 2);
-                resp.remove(0)
+                assert_eq!(resp.len(), 4);
+                resp.remove(1)
             } else {
                 panic!("Test failed")
             }
         };
         #[cfg(not(feature = "abcipp"))]
-        let response_2 = {
+        let response = {
             let request = ProcessProposal {
-                txs: vec![txs[2].to_bytes()],
+                txs: vec![
+                    txs[0].to_bytes(),
+                    txs[2].to_bytes(),
+                    txs[1].to_bytes(),
+                ],
             };
             if let Err(TestError::RejectProposal(mut resp)) =
                 shell.process_proposal(request)
             {
-                assert_eq!(resp.len(), 1);
-                resp.remove(0)
+                assert_eq!(resp.len(), 3);
+                resp.remove(1)
             } else {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
-            response_2.result.info,
+            response.result.info,
             String::from(
                 "Process proposal rejected a decrypted transaction that \
                  violated the tx order determined in the previous block"
@@ -1440,7 +1507,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _recv, _) = TestShell::new();
+        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),

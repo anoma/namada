@@ -1,7 +1,11 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+#[cfg(not(feature = "abcipp"))]
+use index_set::vec::VecIndexSet;
+use namada::core::hints;
+use namada::ledger::pos::PosQueries;
 #[cfg(feature = "abcipp")]
-use namada::ledger::pos::{PosQueries, SendValsetUpd};
+use namada::ledger::pos::SendValsetUpd;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
@@ -11,9 +15,14 @@ use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
-use shims::abcipp_shim_types::shim::response;
 
 use super::super::*;
+use super::block_space_alloc::states::{
+    BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
+    EncryptedTxBatchAllocator, FillingRemainingSpace, NextState,
+    NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
+};
+use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -24,7 +33,7 @@ use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 impl<D, H> Shell<D, H>
 where
@@ -33,9 +42,8 @@ where
 {
     /// Begin a new block.
     ///
-    /// We include half of the new wrapper txs given to us from the mempool
-    /// by tendermint. The rest of the block is filled with decryptions
-    /// of the wrapper txs from the previously committed block.
+    /// Block construction is documented in [`block_space_alloc`]
+    /// and [`block_space_alloc::states`].
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
@@ -49,21 +57,44 @@ where
         // proposal is accepted
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
-            // TODO: add some info logging?
-
-            // add ethereum events and validator set updates as protocol txs
-            #[cfg(feature = "abcipp")]
-            let mut txs = self.build_vote_extension_txs(req.local_last_commit);
+            // start counting allotted space for txs
+            let alloc = BlockSpaceAllocator::from(&self.storage);
             #[cfg(not(feature = "abcipp"))]
-            let mut txs = self.build_vote_extension_txs(&req.txs);
-
-            // add mempool txs
-            let mut mempool_txs = self.build_mempool_txs(req.txs);
-            txs.append(&mut mempool_txs);
+            let mut protocol_tx_indices = VecIndexSet::default();
 
             // decrypt the wrapper txs included in the previous block
-            let mut decrypted_txs = self.build_decrypted_txs();
-            txs.append(&mut decrypted_txs);
+            let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
+            let mut txs = decrypted_txs;
+
+            // add vote extension protocol txs
+            let (mut protocol_txs, alloc) = self.build_protocol_txs(
+                alloc,
+                #[cfg(not(feature = "abcipp"))]
+                &mut protocol_tx_indices,
+                #[cfg(feature = "abcipp")]
+                req.local_last_commit,
+                #[cfg(not(feature = "abcipp"))]
+                &req.txs,
+            );
+            txs.append(&mut protocol_txs);
+
+            // add encrypted txs
+            let (mut encrypted_txs, alloc) =
+                self.build_encrypted_txs(alloc, &req.txs);
+            txs.append(&mut encrypted_txs);
+
+            // fill up the remaining block space with
+            // protocol transactions that haven't been
+            // selected for inclusion yet, and whose
+            // size allows them to fit in the free
+            // space left
+            let mut remaining_txs = self.build_remaining_batch(
+                alloc,
+                #[cfg(not(feature = "abcipp"))]
+                &protocol_tx_indices,
+                req.txs,
+            );
+            txs.append(&mut remaining_txs);
 
             txs
         } else {
@@ -72,23 +103,85 @@ where
 
         tracing::info!(
             height = req.height,
-            tx_records = txs.len(),
+            num_of_txs = txs.len(),
             "Proposing block"
         );
 
         response::PrepareProposal { txs }
     }
 
-    /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update
-    #[cfg(feature = "abcipp")]
-    fn build_vote_extension_txs(
+    /// Builds a batch of DKG decrypted transactions.
+    // NOTE: we won't have frontrunning protection until V2 of the
+    // Anoma protocol; Namada runs V1, therefore this method is
+    // essentially a NOOP
+    //
+    // sources:
+    // - https://specs.namada.net/main/releases/v2.html
+    // - https://github.com/anoma/ferveo
+    fn build_decrypted_txs(
         &mut self,
+        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
+        // TODO: This should not be hardcoded
+        let privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+
+        let txs = self
+            .storage
+            .tx_queue
+            .iter()
+            .map(|tx| {
+                Tx::from(match tx.decrypt(privkey) {
+                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    _ => DecryptedTx::Undecryptable(tx.clone()),
+                })
+                .to_bytes()
+            })
+            // TODO: make sure all decrypted txs are accepted
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&tx_bytes[..]).map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping decrypted tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large decrypted tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
+            })
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
+    }
+
+    /// Builds a batch of vote extension transactions, comprised of Ethereum
+    /// events and, optionally, a validator set update.
+    #[cfg(feature = "abcipp")]
+    fn build_protocol_txs(
+        &mut self,
+        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
-    ) -> Vec<TxBytes> {
+    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         // genesis should not contain vote extensions
         if self.storage.last_height == BlockHeight(0) {
-            return vec![];
+            return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
         let (eth_events, valset_upds) = split_vote_extensions(
@@ -126,69 +219,246 @@ where
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
-        iter_protocol_txs(VoteExtensionDigest {
+        let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
-        .collect()
+        .collect();
+
+        // TODO(feature = "abcipp"):
+        // - alloc space for each protocol tx
+        // - handle space allocation errors
+        // - transition to new allocator state
+
+        (txs, self.get_encrypted_txs_allocator(alloc))
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
     /// events and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
-    fn build_vote_extension_txs(&mut self, txs: &[TxBytes]) -> Vec<TxBytes> {
-        if self.storage.last_height != BlockHeight(0) {
-            deserialize_vote_extensions(txs).collect()
-        } else {
+    fn build_protocol_txs(
+        &mut self,
+        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        protocol_tx_indices: &mut VecIndexSet<u128>,
+        txs: &[TxBytes],
+    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
+        if self.storage.last_height == BlockHeight(0) {
             // genesis should not contain vote extensions
-            vec![]
+            return (vec![], self.get_encrypted_txs_allocator(alloc));
+        }
+
+        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
+            alloc.try_alloc(&tx_bytes[..])
+                .map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            // TODO: maybe we should find a way to include
+                            // validator set updates all the time. for instance,
+                            // we could have recursive bins -> bin space within
+                            // a bin is partitioned into yet more bins. so, we
+                            // could have, say, 2/3 of the bin space available
+                            // for eth events, and 1/3 available for valset
+                            // upds. to be determined, as we implement CheckTx
+                            // changes (issue #367)
+                            tracing::debug!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping protocol tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            // TODO: handle tx whose size is greater
+                            // than bin size
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large protocol tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
+        )
+        .collect();
+
+        (txs, self.get_encrypted_txs_allocator(alloc))
+    }
+
+    /// Depending on the current block height offset within the epoch,
+    /// transition state accordingly, from a protocol tx batch allocator
+    /// to an encrypted tx batch allocator.
+    ///
+    /// # How to determine which path to take in the states DAG
+    ///
+    /// If we are at the second or third block height offset within an
+    /// epoch, we do not allow encrypted transactions to be included in
+    /// a block, therefore we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithoutEncryptedTxs`] value.
+    /// Otherwise, we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
+    #[inline]
+    fn get_encrypted_txs_allocator(
+        &self,
+        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+    ) -> EncryptedTxBatchAllocator {
+        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+
+        if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
+            tracing::warn!(
+                proposal_height =
+                    ?self.storage.get_current_decision_height(),
+                "No mempool txs are being included in the current proposal"
+            );
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(
+                alloc.next_state_without_encrypted_txs(),
+            )
+        } else {
+            EncryptedTxBatchAllocator::WithEncryptedTxs(
+                alloc.next_state_with_encrypted_txs(),
+            )
         }
     }
 
-    /// Builds a batch of mempool transactions
-    fn build_mempool_txs(&mut self, txs: Vec<Vec<u8>>) -> Vec<TxBytes> {
-        // filter in half of the new txs from Tendermint, only keeping
-        // wrappers
-        let number_of_new_txs = 1 + txs.len() / 2;
-        txs.into_iter()
-            .take(number_of_new_txs)
+    /// Builds a batch of encrypted transactions, retrieved from
+    /// Tendermint's mempool.
+    fn build_encrypted_txs(
+        &mut self,
+        mut alloc: EncryptedTxBatchAllocator,
+        txs: &[TxBytes],
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
+        let txs = txs
+            .iter()
             .filter_map(|tx_bytes| {
                 if let Ok(Ok(TxType::Wrapper(_))) =
                     Tx::try_from(tx_bytes.as_slice()).map(process_tx)
                 {
-                    Some(tx_bytes)
+                    Some(tx_bytes.clone())
                 } else {
                     None
                 }
             })
-            .collect()
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&tx_bytes[..])
+                    .map_or_else(
+                        |status| match status {
+                            AllocFailure::Rejected { bin_space_left } => {
+                                tracing::debug!(
+                                    ?tx_bytes,
+                                    bin_space_left,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping encrypted tx from the current proposal",
+                                );
+                                false
+                            }
+                            AllocFailure::OverflowsBin { bin_size } => {
+                                // TODO: handle tx whose size is greater
+                                // than bin size
+                                tracing::warn!(
+                                    ?tx_bytes,
+                                    bin_size,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping large encrypted tx from the current proposal",
+                                );
+                                true
+                            }
+                        },
+                        |()| true,
+                    )
+            })
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
     }
 
-    /// Builds a batch of DKG decrypted transactions
-    // TODO: we won't have frontrunning protection until V2 of the Namada
-    // protocol; Namada runs V1, therefore this method is
-    // essentially a NOOP, and ought to be removed
-    //
-    // sources:
-    // - https://specs.namada.net/main/releases/v2.html
-    // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(&mut self) -> Vec<TxBytes> {
-        // TODO: This should not be hardcoded
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+    /// Builds a batch of transactions that can fit in the
+    /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(feature = "abcipp")]
+    fn build_remaining_batch(
+        &mut self,
+        _alloc: BlockSpaceAllocator<FillingRemainingSpace>,
+        _txs: Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        vec![]
+    }
 
-        self.storage
-            .tx_queue
-            .iter()
-            .map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
-                })
-                .to_bytes()
+    /// Builds a batch of transactions that can fit in the
+    /// remaining space of the [`BlockSpaceAllocator`].
+    #[cfg(not(feature = "abcipp"))]
+    fn build_remaining_batch(
+        &mut self,
+        mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
+        protocol_tx_indices: &VecIndexSet<u128>,
+        txs: Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        get_remaining_protocol_txs(protocol_tx_indices, txs)
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&tx_bytes[..]).map_or_else(
+                    |status| match status {
+                        AllocFailure::Rejected { bin_space_left } => {
+                            tracing::debug!(
+                                ?tx_bytes,
+                                bin_space_left,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping tx from the current proposal",
+                            );
+                            false
+                        }
+                        AllocFailure::OverflowsBin { bin_size } => {
+                            // TODO: handle tx whose size is greater
+                            // than bin size
+                            tracing::warn!(
+                                ?tx_bytes,
+                                bin_size,
+                                proposal_height =
+                                    ?self.storage.get_current_decision_height(),
+                                "Dropping large tx from the current proposal",
+                            );
+                            true
+                        }
+                    },
+                    |()| true,
+                )
             })
             .collect()
     }
+}
+
+/// Return a list of the protocol transactions that haven't
+/// been marked for inclusion in the block, yet.
+#[cfg(not(feature = "abcipp"))]
+fn get_remaining_protocol_txs(
+    protocol_tx_indices: &VecIndexSet<u128>,
+    txs: Vec<TxBytes>,
+) -> impl Iterator<Item = TxBytes> + '_ {
+    let mut skip_list = protocol_tx_indices.iter();
+    let mut skip = skip_list.next();
+
+    txs.into_iter().enumerate().filter_map(move |(index, tx)| {
+        // this works bc/ tx indices are ordered
+        // in ascending order
+        if hints::likely(Some(index) == skip) {
+            skip = skip_list.next();
+            return None;
+        }
+        if let Ok(Ok(TxType::Protocol(_))) =
+            Tx::try_from(&tx[..]).map(process_tx)
+        {
+            return Some(tx);
+        }
+        None
+    })
 }
 
 /// Returns a suitable message to be displayed when Tendermint
@@ -234,6 +504,64 @@ mod test_prepare_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
+    /// Extract an [`ethereum_events::SignedVext`], from a set of
+    /// serialized [`TxBytes`].
+    #[cfg(not(feature = "abcipp"))]
+    fn extract_eth_events_vext(
+        tx_bytes: TxBytes,
+    ) -> ethereum_events::SignedVext {
+        let got = Tx::try_from(&tx_bytes[..]).unwrap();
+        let got_signed_tx =
+            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
+        let protocol_tx =
+            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
+        let protocol_tx = match protocol_tx {
+            TxType::Protocol(protocol_tx) => protocol_tx.tx,
+            _ => panic!("Test failed"),
+        };
+        match protocol_tx {
+            ProtocolTxType::EthEventsVext(ext) => ext,
+            _ => panic!("Test failed"),
+        }
+    }
+
+    /// Test if [`get_remaining_protocol_txs`] is working as expected.
+    #[test]
+    #[cfg(not(feature = "abcipp"))]
+    fn test_get_remaining_protocol_txs() {
+        // TODO(feature = "abcipp"): use a different tx type here
+        fn bertha_ext(at_height: u64) -> TxBytes {
+            let key = wallet::defaults::bertha_keypair();
+            let ext = ethereum_events::Vext::empty(
+                at_height.into(),
+                wallet::defaults::bertha_address(),
+            )
+            .sign(&key);
+            ProtocolTxType::EthEventsVext(ext).sign(&key).to_bytes()
+        }
+
+        let excluded_indices = [0, 1, 3, 5, 7];
+        let all_txs: Vec<_> = (0..10).map(bertha_ext).collect();
+        let expected_txs: Vec<_> = [2, 4, 6, 8, 9]
+            .into_iter()
+            .map(bertha_ext)
+            .map(extract_eth_events_vext)
+            .collect();
+
+        let set = {
+            let mut s = VecIndexSet::default();
+            for idx in excluded_indices.iter().copied() {
+                s.insert(idx as usize);
+            }
+            s
+        };
+
+        let got_txs: Vec<_> = get_remaining_protocol_txs(&set, all_txs)
+            .map(extract_eth_events_vext)
+            .collect();
+        assert_eq!(expected_txs, got_txs);
+    }
+
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let evts = {
@@ -278,6 +606,15 @@ mod test_prepare_proposal {
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
+    // TODO: remove this test after CheckTx implements
+    // filtering of invalid txs; otherwise, we would have
+    // needed to return invalid txs from PrepareProposal,
+    // for these to get removed from a node's mempool.
+    // not returning invalid txs from PrepareProposal is
+    // a DoS vector, because the mempool will slowly fill
+    // up with garbage. luckily, Tendermint implements a
+    // mempool eviction policy, but honest client's txs
+    // may get lost in the process
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
@@ -289,7 +626,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![non_wrapper_tx.to_bytes()],
-            max_tx_bytes: 0,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -621,21 +957,7 @@ mod test_prepare_proposal {
             assert_eq!(rsp.txs.len(), 1);
 
             let tx_bytes = rsp.txs.remove(0);
-            let got = Tx::try_from(&tx_bytes[..]).unwrap();
-            let got_signed_tx =
-                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-            let protocol_tx =
-                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
-                    .unwrap();
-            let protocol_tx = match protocol_tx {
-                TxType::Protocol(protocol_tx) => protocol_tx.tx,
-                _ => panic!("Test failed"),
-            };
-
-            match protocol_tx {
-                ProtocolTxType::EthEventsVext(ext) => ext,
-                _ => panic!("Test failed"),
-            }
+            extract_eth_events_vext(tx_bytes)
         };
 
         assert_eq!(rsp_ext, ext);
@@ -767,6 +1089,7 @@ mod test_prepare_proposal {
     /// Test that if an error is encountered while
     /// trying to process a tx from the mempool,
     /// we simply exclude it from the proposal
+    // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
     #[test]
     fn test_error_in_processing_tx() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
@@ -800,7 +1123,6 @@ mod test_prepare_proposal {
             #[cfg(feature = "abcipp")]
             local_last_commit: get_local_last_commit(&shell),
             txs: vec![wrapper.clone()],
-            max_tx_bytes: 0,
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
@@ -821,7 +1143,6 @@ mod test_prepare_proposal {
 
         let mut req = RequestPrepareProposal {
             txs: vec![],
-            max_tx_bytes: 0,
             ..Default::default()
         };
         // create a request with two new wrappers from mempool and
@@ -849,16 +1170,15 @@ mod test_prepare_proposal {
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }
-        // we extract the inner data from the txs for testing
-        // equality since otherwise changes in timestamps would
-        // fail the test
-        expected_wrapper.append(&mut expected_decrypted);
-        let expected_txs: Vec<Vec<u8>> = expected_wrapper
-            .iter()
-            .map(|tx| tx.data.clone().expect("Test failed"))
+        let expected_txs: Vec<TxBytes> = expected_decrypted
+            .into_iter()
+            .chain(expected_wrapper.into_iter())
+            // we extract the inner data from the txs for testing
+            // equality since otherwise changes in timestamps would
+            // fail the test
+            .map(|tx| tx.data.expect("Test failed"))
             .collect();
-
-        let received: Vec<Vec<u8>> = shell
+        let received: Vec<TxBytes> = shell
             .prepare_proposal(req)
             .txs
             .into_iter()

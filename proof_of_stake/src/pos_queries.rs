@@ -4,10 +4,13 @@ use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ferveo_common::TendermintValidator;
+use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
+use namada_core::ledger::storage::types::decode;
 use namada_core::ledger::storage::Storage;
 use namada_core::ledger::{storage, storage_api};
 use namada_core::types::address::Address;
+use namada_core::types::chain::ProposalBytes;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::dkg_session_keys::DkgPublicKey;
 use namada_core::types::storage::{BlockHeight, Epoch};
@@ -116,9 +119,11 @@ pub trait PosQueries {
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    ///
-    /// This is done by checking if we are at the second block of a new epoch.
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current [`Epoch`].
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool;
 
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
@@ -148,6 +153,9 @@ pub trait PosQueries {
         &'db self,
         epoch: Option<Epoch>,
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
+
+    /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+    fn get_max_proposal_bytes(&self) -> ProposalBytes;
 }
 
 impl<D, H> PosQueries for Storage<D, H>
@@ -297,6 +305,7 @@ where
     }
 
     #[cfg(feature = "abcipp")]
+    #[inline]
     fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
         // TODO: implement this method for ABCI++; should only be able to send
         // a validator set update at the second block of an epoch
@@ -304,13 +313,20 @@ where
     }
 
     #[cfg(not(feature = "abcipp"))]
+    #[inline]
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
-        // when checking vote extensions in Prepare
-        // and ProcessProposal, we simply return true
         if matches!(can_send, SendValsetUpd::AtPrevHeight) {
-            return true;
+            // when checking vote extensions in Prepare
+            // and ProcessProposal, we simply return true
+            true
+        } else {
+            // offset of 1 => are we at the 2nd
+            // block within the epoch?
+            self.is_deciding_offset_within_epoch(1)
         }
+    }
 
+    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
@@ -318,10 +334,9 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        match current_decision_height {
-            BlockHeight(1) => return false,
-            BlockHeight(2) => return true,
-            _ => (),
+        if self.get_current_epoch().0 == Epoch(0) {
+            let height_offset_within_epoch = BlockHeight(1 + height_offset);
+            return current_decision_height == height_offset_within_epoch;
         }
 
         let fst_heights_of_each_epoch =
@@ -330,8 +345,8 @@ where
         fst_heights_of_each_epoch
             .last()
             .map(|&h| {
-                let second_height_of_epoch = h + 1;
-                current_decision_height == second_height_of_epoch
+                let height_offset_within_epoch = h + height_offset;
+                current_decision_height == height_offset_within_epoch
             })
             .unwrap_or(false)
     }
@@ -408,5 +423,15 @@ where
                 )
             },
         ))
+    }
+
+    fn get_max_proposal_bytes(&self) -> ProposalBytes {
+        let key = get_max_proposal_bytes_key();
+        let (maybe_value, _gas) = self
+            .read(&key)
+            .expect("Must be able to read ProposalBytes from storage");
+        let value =
+            maybe_value.expect("ProposalBytes must be present in storage");
+        decode(value).expect("Must be able to decode ProposalBytes in storage")
     }
 }
