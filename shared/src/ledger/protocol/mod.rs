@@ -1,5 +1,4 @@
 //! The ledger's protocol
-mod transactions;
 
 use std::collections::BTreeSet;
 use std::panic;
@@ -7,10 +6,10 @@ use std::panic;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::ledger::eth_bridge::bridge_pool_vp::BridgePoolVp;
-use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
+use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
@@ -61,9 +60,9 @@ pub enum Error {
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
-    BridgePoolNativeVpError(crate::ledger::eth_bridge::bridge_pool_vp::Error),
+    BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -205,6 +204,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    use namada_ethereum_bridge::protocol::transactions;
+
     use crate::types::vote_extensions::{
         ethereum_events, validator_set_update,
     };
@@ -213,10 +214,8 @@ where
         ProtocolTxType::EthEventsVext(ext) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
-            self::transactions::ethereum_events::apply_derived_tx(
-                storage, events,
-            )
-            .map_err(Error::ProtocolTxError)
+            transactions::ethereum_events::apply_derived_tx(storage, events)
+                .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any
@@ -231,7 +230,7 @@ where
             // relayer process of a newly available validator set update;
             // for this, we need to receive a mutable reference to the
             // event log, in `apply_protocol_tx()`
-            self::transactions::validator_set_update::aggregate_votes(
+            transactions::validator_set_update::aggregate_votes(
                 storage,
                 validator_set_update::VextDigest::singleton(ext),
             )

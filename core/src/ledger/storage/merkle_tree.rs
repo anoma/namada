@@ -58,7 +58,7 @@ type Result<T> = std::result::Result<T, Error>;
 /// Type alias for bytes to be put into the Merkle storage
 pub(super) type StorageBytes<'a> = &'a [u8];
 
-/// Type aliases for the different merkle trees and backing stores
+// Type aliases for the different merkle trees and backing stores
 /// Sparse-merkle-tree store
 pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
 /// Arse-merkle-tree store

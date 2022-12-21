@@ -99,6 +99,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ark-ed-on-bls12-381"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43b7ada17db3854f5994e74e60b18e10e818594935ee7e1d329800c117b32970"
+dependencies = [
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ff",
+ "ark-std",
+]
+
+[[package]]
 name = "ark-ff"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -136,6 +148,19 @@ dependencies = [
  "num-traits",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ark-poly"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b0f78f47537c2f15706db7e98fe64cc1711dbf9def81218194e17239e53e5aa"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "derivative",
+ "hashbrown 0.11.2",
 ]
 
 [[package]]
@@ -313,6 +338,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bip0039"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -390,6 +424,15 @@ dependencies = [
  "radium 0.7.0",
  "tap",
  "wyz 0.5.1",
+]
+
+[[package]]
+name = "blake2"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b12e5fd123190ce1c2e559308a94c9bacad77907d4c6005d9e58fe1a0689e55e"
+dependencies = [
+ "digest 0.10.5",
 ]
 
 [[package]]
@@ -1239,6 +1282,7 @@ version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
 dependencies = [
+ "serde",
  "signature",
 ]
 
@@ -1265,6 +1309,10 @@ checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "merlin",
+ "rand 0.7.3",
+ "serde",
+ "serde_bytes",
  "sha2 0.9.9",
  "zeroize",
 ]
@@ -1422,9 +1470,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferveo"
+version = "0.1.1"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
+dependencies = [
+ "anyhow",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ed-on-bls12-381",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "bincode",
+ "blake2",
+ "blake2b_simd 1.0.0",
+ "borsh",
+ "digest 0.10.5",
+ "ed25519-dalek",
+ "either",
+ "ferveo-common",
+ "group-threshold-cryptography",
+ "hex",
+ "itertools",
+ "measure_time",
+ "miracl_core",
+ "num",
+ "rand 0.7.3",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "subproductdomain",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "ferveo-common"
 version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",
@@ -1670,6 +1755,30 @@ dependencies = [
  "ff",
  "rand_core 0.6.4",
  "subtle",
+]
+
+[[package]]
+name = "group-threshold-cryptography"
+version = "0.1.0"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
+dependencies = [
+ "anyhow",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "blake2b_simd 1.0.0",
+ "chacha20",
+ "hex",
+ "itertools",
+ "miracl_core",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rayon",
+ "subproductdomain",
+ "thiserror",
 ]
 
 [[package]]
@@ -2166,6 +2275,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
+name = "index-set"
+version = "0.7.1"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.7.1#dc24cdbbe3664514d59f1a4c4031863fc565f1c2"
+dependencies = [
+ "borsh",
+ "serde",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2192,6 +2310,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -2455,6 +2576,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
+name = "measure_time"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56220900f1a0923789ecd6bf25fbae8af3b2f1ff3e9e297fc9b6b8674dd4d852"
+dependencies = [
+ "instant",
+ "log",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2503,6 +2634,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "merlin"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e261cf0f8b3c42ded9f7d2bb59dea03aa52bc8a1cbc7482f9fc3fd1229d3b42"
+dependencies = [
+ "byteorder",
+ "keccak",
+ "rand_core 0.5.1",
+ "zeroize",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2528,6 +2671,12 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.42.0",
 ]
+
+[[package]]
+name = "miracl_core"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94c7128ba23c81f6471141b90f17654f89ef44a56e14b8a4dd0fddfccd655277"
 
 [[package]]
 name = "moka"
@@ -2565,7 +2714,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "async-trait",
  "bellman",
@@ -2584,6 +2733,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada_core",
+ "namada_ethereum_bridge",
  "namada_proof_of_stake",
  "parity-wasm",
  "paste",
@@ -2614,13 +2764,13 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "ark-bls12-381",
+ "ark-ec",
  "ark-serialize",
  "bech32",
  "bellman",
- "bit-vec",
  "borsh",
  "chrono",
  "data-encoding",
@@ -2628,10 +2778,13 @@ dependencies = [
  "ed25519-consensus",
  "ethabi",
  "eyre",
+ "ferveo",
  "ferveo-common",
+ "group-threshold-cryptography",
  "ibc",
  "ibc-proto",
  "ics23",
+ "index-set",
  "itertools",
  "libsecp256k1",
  "masp_primitives",
@@ -2658,8 +2811,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "namada_macros"
+name = "namada_ethereum_bridge"
 version = "0.11.0"
+dependencies = [
+ "borsh",
+ "eyre",
+ "itertools",
+ "namada_core",
+ "namada_proof_of_stake",
+ "serde",
+ "serde_json",
+ "tendermint",
+ "tendermint-proto",
+ "tendermint-rpc",
+ "tracing",
+]
+
+[[package]]
+name = "namada_macros"
+version = "0.12.1"
 dependencies = [
  "quote",
  "syn",
@@ -2667,21 +2837,23 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "derivative",
+ "ferveo-common",
  "namada_core",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
+ "tendermint-proto",
  "thiserror",
  "tracing",
 ]
 
 [[package]]
 name = "namada_tests"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -2710,7 +2882,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -2725,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "hex",
@@ -2736,7 +2908,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2749,7 +2921,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -2783,6 +2955,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9e591e719385e6ebaeb5ce5d3887f7d5676fceca6411d1925ccc95745f3d6f7"
 
 [[package]]
+name = "num"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43db66d1170d347f9a065114077f7dccb00c1b9478c89384490a3425279a4606"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2792,6 +2978,15 @@ dependencies = [
  "num-integer",
  "num-traits",
  "serde",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ae39348c8bc5fbd7f40c727a9925f03517afd2ab27d46702108b6a7e5414c19"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2812,6 +3007,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-iter"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d03e6c028c5dc5cac6e2dec0efda81fc887605bb3d884578bb6d6bf7514e252"
+dependencies = [
+ "autocfg",
+ "num-integer",
  "num-traits",
 ]
 
@@ -4199,6 +4405,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "subproductdomain"
+version = "0.1.0"
+source = "git+https://github.com/anoma/ferveo?rev=9e5e91c954158e7cff45c483fd06cd649a81553f#9e5e91c954158e7cff45c483fd06cd649a81553f"
+dependencies = [
+ "anyhow",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+]
+
+[[package]]
 name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4801,7 +5020,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -4938,7 +5157,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.11.0"
+version = "0.12.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",

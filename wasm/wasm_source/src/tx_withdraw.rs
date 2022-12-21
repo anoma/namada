@@ -205,16 +205,17 @@ mod tests {
     fn arb_initial_stake_and_unbonded_amount()
     -> impl Strategy<Value = (token::Amount, token::Amount)> {
         // Generate initial stake
-        token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
-            |initial_stake| {
+        token::testing::arb_amount_non_zero_ceiled((i64::MAX / 8) as u64)
+            .prop_flat_map(|initial_stake| {
                 // Use the initial stake to limit the unbonded amount from the
                 // stake
                 let unbonded_amount =
-                    token::testing::arb_amount_ceiled(initial_stake.into());
+                    token::testing::arb_amount_non_zero_ceiled(
+                        initial_stake.into(),
+                    );
                 // Use the generated initial stake too too
                 (Just(initial_stake), unbonded_amount)
-            },
-        )
+            })
     }
 
     fn arb_withdraw() -> impl Strategy<Value = transaction::pos::Withdraw> {

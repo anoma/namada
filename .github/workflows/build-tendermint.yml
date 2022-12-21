@@ -19,11 +19,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-20.04]
         make:
           - name: tendermint-unreleased
             repository: heliaxdev/tendermint
-            tendermint_version: ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_version: v0.1.4-abciplus
 
     steps:
       - name: Build ${{ matrix.make.name }}

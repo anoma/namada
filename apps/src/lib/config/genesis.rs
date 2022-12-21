@@ -6,9 +6,9 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::ledger::eth_bridge::parameters::EthereumBridgeConfig;
+use namada::ledger::eth_bridge::EthereumBridgeConfig;
 #[cfg(feature = "dev")]
-use namada::ledger::eth_bridge::parameters::{Contracts, UpgradeableContract};
+use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};

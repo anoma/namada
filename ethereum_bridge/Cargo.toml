@@ -1,0 +1,47 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+name = "namada_ethereum_bridge"
+resolver = "2"
+version = "0.11.0"
+
+[features]
+default = ["abciplus"]
+
+abcipp = [
+    "tendermint-abcipp",
+    "tendermint-rpc-abcipp",
+    "tendermint-proto-abcipp",
+    "namada_core/abcipp",
+    "namada_proof_of_stake/abcipp"
+]
+
+abciplus = [
+    "tendermint",
+    "tendermint-rpc",
+    "tendermint-proto",
+    "namada_core/abciplus",
+    "namada_core/tendermint",
+    "namada_proof_of_stake/abciplus",
+]
+
+[dependencies]
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ferveo-tpke"]}
+namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+borsh = "0.9.0"
+eyre = "0.6.8"
+itertools = "0.10.0"
+serde = {version = "1.0.125", features = ["derive"]}
+serde_json = "1.0.62"
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client"], optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint = {version = "0.23.6", optional = true}
+tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
+tendermint-proto = {version = "0.23.6", optional = true}
+tracing = "0.1.30"
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+toml = "0.5.8"

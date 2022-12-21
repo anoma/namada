@@ -15,6 +15,7 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod pos_queries;
 pub mod storage;
 pub mod types;
 pub mod validation;
@@ -34,6 +35,10 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 pub use parameters::PosParams;
 use rust_decimal::Decimal;
+#[cfg(not(feature = "abcipp"))]
+pub use tendermint_proto;
+#[cfg(feature = "abcipp")]
+pub use tendermint_proto_abcipp as tendermint_proto;
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, CommissionRates, GenesisValidator, Slash,
