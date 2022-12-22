@@ -59,9 +59,11 @@ where
                         record::remove(tx_bytes)
                     }
                 })
-                .take_while(|tx_bytes| {
-                    let new_size = total_proposal_size + tx_bytes.len();
-                    if new_size > HALF_MAX_PROPOSAL_SIZE {
+                .take_while(|tx_record| {
+                    let new_size = total_proposal_size + tx_record.tx.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE
+                        || tx_record.action != TxAction::Unmodified as i32
+                    {
                         false
                     } else {
                         total_proposal_size = new_size;
