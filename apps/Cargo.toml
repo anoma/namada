@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_apps"
 readme = "../README.md"
 resolver = "2"
-version = "0.12.1"
+version = "0.12.2"
 default-run = "namada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

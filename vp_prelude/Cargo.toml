@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_vp_prelude"
 resolver = "2"
-version = "0.12.1"
+version = "0.12.2"
 
 [features]
 default = ["abciplus"]
