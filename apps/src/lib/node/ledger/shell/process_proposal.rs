@@ -1604,8 +1604,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that if we reject wrapper txs
-    /// when they shouldn't be included in blocks.
+    /// Test if we reject wrapper txs when they shouldn't be included in blocks.
     ///
     /// Currently, the conditions to reject wrapper
     /// txs are simply to check if we are at the 2nd
