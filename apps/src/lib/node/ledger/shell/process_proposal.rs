@@ -549,7 +549,7 @@ where
                         .into(),
                     };
                 }
-                if hints::unlikely(!self.can_include_encrypted_txs()) {
+                if hints::unlikely(self.encrypted_txs_not_allowed()) {
                     return TxResult {
                         code: ErrorCodes::AllocationError.into(),
                         info: "Wrapper txs not allowed at the current block \
@@ -629,9 +629,9 @@ where
         }
     }
 
-    /// Checks if it is possible to include encrypted txs at the current block
-    /// height.
-    fn can_include_encrypted_txs(&self) -> bool {
+    /// Checks if it is not possible to include encrypted txs at the current
+    /// block height.
+    fn encrypted_txs_not_allowed(&self) -> bool {
         let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
         let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
