@@ -9,6 +9,7 @@ use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::chain::ProposalBytes;
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
 
@@ -32,6 +33,8 @@ pub struct Parameters {
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block (read only)
     pub max_expected_time_per_block: DurationSecs,
+    /// Max payload size, in bytes, for a tx batch proposal.
+    pub max_proposal_bytes: ProposalBytes,
     /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes (read only)
@@ -101,6 +104,7 @@ impl Parameters {
         let Self {
             epoch_duration,
             max_expected_time_per_block,
+            max_proposal_bytes,
             vp_whitelist,
             tx_whitelist,
             implicit_vp,
@@ -110,6 +114,16 @@ impl Parameters {
             staked_ratio,
             pos_inflation_amount,
         } = self;
+
+        // write max proposal bytes parameter
+        let max_proposal_bytes_key = storage::get_max_proposal_bytes_key();
+        let max_proposal_bytes_value = encode(&max_proposal_bytes);
+        storage
+            .write(&max_proposal_bytes_key, max_proposal_bytes_value)
+            .expect(
+                "Max proposal bytes parameter must be initialized in the \
+                 genesis block",
+            );
 
         // write epoch parameters
         let epoch_key = storage::get_epoch_duration_storage_key();
@@ -382,6 +396,17 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
+    // read max proposal bytes
+    let (max_proposal_bytes, gas_proposal_bytes) = {
+        let key = storage::get_max_proposal_bytes_key();
+        let (value, gas) =
+            storage.read(&key).map_err(ReadError::StorageError)?;
+        let value: ProposalBytes =
+            decode(value.ok_or(ReadError::ParametersMissing)?)
+                .map_err(ReadError::StorageTypeError)?;
+        (value, gas)
+    };
+
     // read epoch duration
     let (epoch_duration, gas_epoch) = read_epoch_duration_parameter(storage)
         .expect("Couldn't read epoch duration parameters");
@@ -464,10 +489,31 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    let total_gas_cost = [
+        gas_epoch,
+        gas_tx,
+        gas_vp,
+        gas_time,
+        gas_implicit_vp,
+        gas_epy,
+        gas_gain_p,
+        gas_gain_d,
+        gas_staked,
+        gas_reward,
+        gas_proposal_bytes,
+    ]
+    .into_iter()
+    .fold(0u64, |accum, gas| {
+        accum
+            .checked_add(gas)
+            .expect("u64 overflow occurred while doing gas arithmetic")
+    });
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
+            max_proposal_bytes,
             vp_whitelist,
             tx_whitelist,
             implicit_vp,
@@ -477,15 +523,6 @@ where
             staked_ratio,
             pos_inflation_amount,
         },
-        gas_epoch
-            + gas_tx
-            + gas_vp
-            + gas_time
-            + gas_implicit_vp
-            + gas_epy
-            + gas_gain_p
-            + gas_gain_d
-            + gas_staked
-            + gas_reward,
+        total_gas_cost,
     ))
 }
