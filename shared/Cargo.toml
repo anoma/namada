@@ -9,7 +9,7 @@ version = "0.10.1"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["abciplus"]
+default = ["abciplus", "namada-sdk"]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
 dev = []
 ferveo-tpke = [
@@ -78,6 +78,13 @@ testing = [
   "async-client",
   "proptest",
   "tempfile",
+]
+
+namada-sdk = [
+  "tendermint-rpc",
+  "masp-tx-gen",
+  "ferveo-tpke",
+  "masp_primitives/transparent-inputs",
 ]
 
 [dependencies]
