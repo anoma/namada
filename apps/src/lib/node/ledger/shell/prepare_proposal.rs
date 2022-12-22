@@ -13,6 +13,13 @@ use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
+// TODO: remove this hard-coded value; Tendermint, and thus
+// Namada uses 20 MiB max block sizes by default; 16 MiB leaves
+// plenty of room for header data, evidence and protobuf serialization
+// overhead
+const MAX_PROPOSAL_SIZE: usize = 16 << 20;
+const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -38,12 +45,20 @@ where
             // TODO: Craft the Ethereum state update tx
             // filter in half of the new txs from Tendermint, only keeping
             // wrappers
-            let number_of_new_txs = 1 + req.txs.len() / 2;
+            let mut total_proposal_size = 0;
             #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> = req
                 .txs
                 .into_iter()
-                .take(number_of_new_txs)
+                .take_while(|tx_bytes| {
+                    let new_size = total_proposal_size + tx_bytes.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE {
+                        false
+                    } else {
+                        total_proposal_size = new_size;
+                        true
+                    }
+                })
                 .map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -58,7 +73,15 @@ where
             let mut txs: Vec<TxBytes> = req
                 .txs
                 .into_iter()
-                .take(number_of_new_txs)
+                .take_while(|tx_bytes| {
+                    let new_size = total_proposal_size + tx_bytes.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE {
+                        false
+                    } else {
+                        total_proposal_size = new_size;
+                        true
+                    }
+                })
                 .filter_map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
