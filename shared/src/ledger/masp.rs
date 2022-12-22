@@ -50,7 +50,7 @@ use namada_core::types::transaction::AffineCurve;
 use rand_core::{CryptoRng, OsRng, RngCore};
 #[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
-use tendermint_rpc::Client;
+use crate::tendermint_rpc::Client;
 
 use crate::ledger::rpc;
 use crate::proto::{SignedTxData, Tx};
@@ -260,7 +260,7 @@ pub trait ShieldedUtils:
 {
     /// The type of the Tendermint client to make queries with
     type C: crate::ledger::queries::Client
-        + tendermint_rpc::Client
+        + crate::tendermint_rpc::Client
         + std::marker::Sync;
 
     /// Get a MASP transaction prover
