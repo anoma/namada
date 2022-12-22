@@ -1603,4 +1603,75 @@ mod test_process_proposal {
             ),
         );
     }
+
+    /// Test that if we reject wrapper txs
+    /// when they shouldn't be included in blocks.
+    ///
+    /// Currently, the conditions to reject wrapper
+    /// txs are simply to check if we are at the 2nd
+    /// or 3rd height offset within an epoch.
+    #[test]
+    fn test_include_only_protocol_txs() {
+        let (mut shell, _recv, _) = test_utils::setup_at_height(1u64);
+        let keypair = gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some(b"transaction data".to_vec()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 1234.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+        )
+        .sign(&keypair)
+        .expect("Test failed")
+        .to_bytes();
+        for height in [1u64, 2] {
+            shell.storage.last_height = height.into();
+            #[cfg(feature = "abcipp")]
+            let response = {
+                let request = ProcessProposal {
+                    txs: vec![wrapper.clone(), get_empty_eth_ev_digest(&shell)],
+                };
+                if let Err(TestError::RejectProposal(mut resp)) =
+                    shell.process_proposal(request)
+                {
+                    assert_eq!(resp.len(), 2);
+                    resp.remove(0)
+                } else {
+                    panic!("Test failed")
+                }
+            };
+            #[cfg(not(feature = "abcipp"))]
+            let response = {
+                let request = ProcessProposal {
+                    txs: vec![wrapper.clone()],
+                };
+                if let Err(TestError::RejectProposal(mut resp)) =
+                    shell.process_proposal(request)
+                {
+                    assert_eq!(resp.len(), 1);
+                    resp.remove(0)
+                } else {
+                    panic!("Test failed")
+                }
+            };
+            assert_eq!(
+                response.result.code,
+                u32::from(ErrorCodes::AllocationError)
+            );
+            assert_eq!(
+                response.result.info,
+                String::from(
+                    "Wrapper txs not allowed at the current block height"
+                ),
+            );
+        }
+    }
 }
