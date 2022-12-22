@@ -27,9 +27,10 @@ where
 {
     /// Begin a new block.
     ///
-    /// We include half of the new wrapper txs given to us from the mempool
-    /// by tendermint. The rest of the block is filled with decryptions
-    /// of the wrapper txs from the previously committed block.
+    /// We fill half the block space with new wrapper txs given to us
+    /// from the mempool by tendermint. The rest of the block is filled
+    /// with decryptions of the wrapper txs from the previously
+    /// committed block.
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
