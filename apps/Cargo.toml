@@ -49,6 +49,7 @@ testing = ["dev"]
 abcipp = [
     "namada/abcipp",
     "namada/tendermint-rpc-abcipp",
+    "namada/http-client-abcipp",
     "tendermint-abcipp",
     "tendermint-config-abcipp",
     "tendermint-proto-abcipp",
@@ -59,6 +60,7 @@ abcipp = [
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
+    "namada/http-client",
     "tendermint",
     "tendermint-config",
     "tendermint-rpc",

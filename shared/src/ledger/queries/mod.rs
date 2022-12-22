@@ -108,6 +108,7 @@ pub mod tm {
         InvalidHeight(BlockHeight),
     }
 
+    #[cfg(any(feature = "http-client", feature = "http-client-abcipp"))]
     #[async_trait::async_trait]
     impl Client for crate::tendermint_rpc::HttpClient {
         type Error = Error;
