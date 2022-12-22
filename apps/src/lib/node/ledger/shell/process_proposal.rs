@@ -25,6 +25,7 @@ where
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
+    // TODO: add block space alloc validation logic to ProcessProposal
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,

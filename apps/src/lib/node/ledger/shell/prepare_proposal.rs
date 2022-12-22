@@ -36,6 +36,8 @@ where
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
+    // TODO: update second paragraph of docstring with block space alloc
+    // info, and plug block space alloc to PrepareProposal
     pub fn prepare_proposal(
         &self,
         req: RequestPrepareProposal,
