@@ -3685,6 +3685,7 @@ version = "0.14.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
+ "assert_matches",
  "async-std",
  "async-trait",
  "base64 0.13.0",
@@ -3708,6 +3709,7 @@ dependencies = [
  "flate2",
  "futures 0.3.25",
  "git2",
+ "index-set",
  "itertools",
  "libc",
  "libloading",
@@ -3715,6 +3717,7 @@ dependencies = [
  "masp_proofs",
  "namada",
  "num-derive",
+ "num-rational",
  "num-traits 0.2.15",
  "num_cpus",
  "once_cell",
