@@ -169,7 +169,7 @@ mod tests {
                 let value = i.try_to_vec().unwrap();
                 env.storage.write(&key, value).unwrap();
             }
-            env.storage.commit().unwrap();
+            env.storage.commit_block().unwrap();
         });
 
         // Then try to iterate over their prefix
@@ -377,7 +377,7 @@ mod tests {
             let value = i.try_to_vec().unwrap();
             tx_env.storage.write(&key, value).unwrap();
         }
-        tx_env.storage.commit().unwrap();
+        tx_env.storage.commit_block().unwrap();
 
         // In a transaction, write override the existing key's value and add
         // another key-value

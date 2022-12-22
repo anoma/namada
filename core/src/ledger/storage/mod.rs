@@ -433,7 +433,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self) -> Result<()> {
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),

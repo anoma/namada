@@ -132,7 +132,7 @@ mod tests {
         storage
             .write(&key, value_bytes.clone())
             .expect("write failed");
-        storage.commit().expect("commit failed");
+        storage.commit_block().expect("commit failed");
 
         // save the last state and drop the storage
         let root = storage.merkle_root().0;
@@ -187,7 +187,7 @@ mod tests {
                 .expect("write failed");
             expected.push((key.to_string(), value_bytes));
         }
-        storage.commit().expect("commit failed");
+        storage.commit_block().expect("commit failed");
 
         let (iter, gas) = storage.iter_prefix(&prefix);
         assert_eq!(gas, prefix.len() as u64);
@@ -302,7 +302,7 @@ mod tests {
             } else {
                 storage.delete(&key)?;
             }
-            storage.commit()?;
+            storage.commit_block()?;
         }
 
         // 2. We try to read from these heights to check that we get back
