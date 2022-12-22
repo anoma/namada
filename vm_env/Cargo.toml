@@ -16,6 +16,6 @@ abciplus = [
 namada_core = {path = "../core", default-features = false}
 borsh = "0.9.0"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
 hex = "0.4.3"

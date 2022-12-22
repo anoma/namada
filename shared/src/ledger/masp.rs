@@ -33,7 +33,7 @@ use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::redjubjub::PublicKey;
 use masp_primitives::sapling::Node;
 #[cfg(feature = "masp-tx-gen")]
-use masp_primitives::transaction::builder::{self, libsecp256k1, *};
+use masp_primitives::transaction::builder::{self, secp256k1, *};
 use masp_primitives::transaction::components::{
     Amount, ConvertDescription, OutputDescription, SpendDescription,
 };
@@ -1175,10 +1175,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
-            let secp_sk = libsecp256k1::SecretKey::parse_slice(&[0xcd; 32])
+            let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
                 .expect("secret key");
+            let secp_ctx =
+                secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
             let secp_pk =
-                libsecp256k1::PublicKey::from_secret_key(&secp_sk).serialize();
+                secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                    .serialize();
             let hash =
                 ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
             let script = TransparentAddress::PublicKey(hash.into()).script();
@@ -1247,10 +1250,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     memo,
                 )?;
 
-                let secp_sk = libsecp256k1::SecretKey::parse_slice(&[0xcd; 32])
+                let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
                     .expect("secret key");
+                let secp_ctx =
+                    secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
                 let secp_pk =
-                    libsecp256k1::PublicKey::from_secret_key(&secp_sk)
+                    secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                         .serialize();
                 let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
                     &secp_pk,

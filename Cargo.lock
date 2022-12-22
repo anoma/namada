@@ -613,7 +613,7 @@ checksum = "42b2a9a8e3c7544f5ce2b475f2f56580a3102b37e0ee001558ad4faedcf56cf4"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
- "secp256k1",
+ "secp256k1 0.22.1",
  "serde 1.0.147",
 ]
 
@@ -3186,43 +3186,13 @@ dependencies = [
  "base64 0.13.1",
  "digest 0.9.0",
  "hmac-drbg",
- "libsecp256k1-core 0.3.0 (git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9)",
- "libsecp256k1-gen-ecmult 0.3.0 (git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9)",
- "libsecp256k1-gen-genmult 0.3.0 (git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9)",
+ "libsecp256k1-core",
+ "libsecp256k1-gen-ecmult",
+ "libsecp256k1-gen-genmult",
  "rand 0.8.5",
  "serde 1.0.147",
  "sha2 0.9.9",
  "typenum",
-]
-
-[[package]]
-name = "libsecp256k1"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95b09eff1b35ed3b33b877ced3a691fc7a481919c7e29c53c906226fcf55e2a1"
-dependencies = [
- "arrayref",
- "base64 0.13.1",
- "digest 0.9.0",
- "hmac-drbg",
- "libsecp256k1-core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libsecp256k1-gen-ecmult 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libsecp256k1-gen-genmult 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.8.5",
- "serde 1.0.147",
- "sha2 0.9.9",
- "typenum",
-]
-
-[[package]]
-name = "libsecp256k1-core"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5be9b9bb642d8522a44d533eab56c16c738301965504753b03ad1de3425d5451"
-dependencies = [
- "crunchy 0.2.2",
- "digest 0.9.0",
- "subtle",
 ]
 
 [[package]]
@@ -3238,27 +3208,9 @@ dependencies = [
 [[package]]
 name = "libsecp256k1-gen-ecmult"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3038c808c55c87e8a172643a7d87187fc6c4174468159cb3090659d55bcb4809"
-dependencies = [
- "libsecp256k1-core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "libsecp256k1-gen-ecmult"
-version = "0.3.0"
 source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
- "libsecp256k1-core 0.3.0 (git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9)",
-]
-
-[[package]]
-name = "libsecp256k1-gen-genmult"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
-dependencies = [
- "libsecp256k1-core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libsecp256k1-core",
 ]
 
 [[package]]
@@ -3266,7 +3218,7 @@ name = "libsecp256k1-gen-genmult"
 version = "0.3.0"
 source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
 dependencies = [
- "libsecp256k1-core 0.3.0 (git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9)",
+ "libsecp256k1-core",
 ]
 
 [[package]]
@@ -3398,7 +3350,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=117bff3b0d3e15aff993c25ff6222d411136559d#117bff3b0d3e15aff993c25ff6222d411136559d"
+source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
 dependencies = [
  "aes",
  "bip0039",
@@ -3417,10 +3369,10 @@ dependencies = [
  "incrementalmerkletree",
  "jubjub",
  "lazy_static",
- "libsecp256k1 0.7.1",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "ripemd160",
+ "secp256k1 0.20.3",
  "serde 1.0.147",
  "sha2 0.9.9",
  "subtle",
@@ -3431,7 +3383,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.5.0"
-source = "git+https://github.com/anoma/masp?rev=117bff3b0d3e15aff993c25ff6222d411136559d#117bff3b0d3e15aff993c25ff6222d411136559d"
+source = "git+https://github.com/anoma/masp?rev=bee40fc465f6afbd10558d12fe96eb1742eee45c#bee40fc465f6afbd10558d12fe96eb1742eee45c"
 dependencies = [
  "bellman",
  "blake2b_simd 1.0.0",
@@ -3696,13 +3648,12 @@ dependencies = [
  "clru",
  "data-encoding",
  "derivative",
- "getrandom 0.2.8",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc-proto 0.17.1 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",
  "itertools",
- "libsecp256k1 0.7.0",
+ "libsecp256k1",
  "loupe",
  "masp_primitives",
  "masp_proofs",
@@ -3853,7 +3804,7 @@ dependencies = [
  "ics23",
  "index-set",
  "itertools",
- "libsecp256k1 0.7.0",
+ "libsecp256k1",
  "masp_primitives",
  "pretty_assertions",
  "proptest",
@@ -5612,12 +5563,30 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
+dependencies = [
+ "secp256k1-sys 0.4.2",
+]
+
+[[package]]
+name = "secp256k1"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
 dependencies = [
- "secp256k1-sys",
+ "secp256k1-sys 0.5.2",
  "serde 1.0.147",
+]
+
+[[package]]
+name = "secp256k1-sys"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "957da2573cde917463ece3570eab4a0b3f19de6f1646cde62e6fd3868f566036"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
