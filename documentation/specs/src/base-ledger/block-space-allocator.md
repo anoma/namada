@@ -158,6 +158,11 @@ MaxProposalBytes$ bytes of the available block space at $H$ (or any block
 height, in fact).
 * If all decrypted transactions from $H-1$ have been included in the proposal 
 $P$, for height $H$.
+* That no encrypted transactions were included in the proposal $P$, if no
+encrypted transactions should be included at $H$.
+    - N.b. the conditions to reject encrypted transactions are still not clearly
+    specced out, therefore they will be left out of this section, for the
+    time being.
 
 Should any of these conditions not be met at some arbitrary round $R$ of $H$, 
 all honest validators $V_h : V_h \subseteq V$ will reject the proposal $P$. 
