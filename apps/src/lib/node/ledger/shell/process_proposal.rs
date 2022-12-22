@@ -2,6 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+use namada::core::hints;
 use namada::core::ledger::storage::Storage;
 use namada::ledger::pos::{PosQueries, SendValsetUpd};
 use namada::types::transaction::protocol::ProtocolTxType;
@@ -548,6 +549,14 @@ where
                         .into(),
                     };
                 }
+                if hints::unlikely(!self.can_include_encrypted_txs()) {
+                    return TxResult {
+                        code: ErrorCodes::AllocationError.into(),
+                        info: "Wrapper txs not allowed at the current block \
+                               height"
+                            .into(),
+                    };
+                }
 
                 // validate the ciphertext via Ferveo
                 if !tx.validate_ciphertext() {
@@ -618,6 +627,14 @@ where
         } else {
             true
         }
+    }
+
+    /// Checks if it is possible to include encrypted txs at the current block
+    /// height.
+    fn can_include_encrypted_txs(&self) -> bool {
+        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        is_2nd_height_off || is_3rd_height_off
     }
 }
 
