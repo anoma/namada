@@ -77,7 +77,7 @@ ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/i
 ics23 = "0.7.0"
 itertools = "0.10.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d" }
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 prost = "0.9.0"
 prost-types = "0.9.0"

@@ -143,8 +143,8 @@ tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
 websocket = "0.26.2"
 winapi = "0.3.9"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["transparent-inputs"] }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", features = ["bundled-prover", "download-params"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d", features = ["transparent-inputs"] }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d", features = ["bundled-prover", "download-params"] }
 bimap = {version = "0.6.2", features = ["serde"]}
 rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
