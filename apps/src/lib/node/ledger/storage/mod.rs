@@ -50,7 +50,6 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use borsh::BorshSerialize;
     use itertools::Itertools;
     use namada::ledger::storage::testing::TestWlStorage;
     use namada::ledger::storage::types;
@@ -368,18 +367,15 @@ mod tests {
         let prefix = storage::Key::parse("prefix").unwrap();
         let mismatched_prefix = storage::Key::parse("different").unwrap();
         // We'll write sub-key in some random order to check prefix iter's order
-        let sub_keys = [2_i32, 1, i32::MAX, -1, 260, -2, i32::MIN, 5, 0];
+        let sub_keys = [2_i32, -1, 260, -2, 5, 0];
 
         for i in sub_keys.iter() {
             let key = prefix.push(i).unwrap();
-            let value = i.try_to_vec().unwrap();
-            storage.write(&key, value).unwrap();
+            storage.write(&key, i).unwrap();
 
             let key = mismatched_prefix.push(i).unwrap();
-            let value = (i / 2).try_to_vec().unwrap();
-            storage.write(&key, value).unwrap();
+            storage.write(&key, i / 2).unwrap();
         }
-        storage.commit().unwrap();
 
         // Then try to iterate over their prefix
         let iter = storage_api::iter_prefix(&storage, &prefix)
@@ -391,6 +387,66 @@ mod tests {
             .iter()
             .sorted()
             .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected.clone());
+
+        // Commit genesis state
+        storage.commit_genesis().unwrap();
+
+        // Again, try to iterate over their prefix
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+        itertools::assert_equal(iter, expected);
+
+        let more_sub_keys = [1_i32, i32::MIN, -10, 123, i32::MAX, 10];
+        debug_assert!(
+            !more_sub_keys.iter().any(|x| sub_keys.contains(x)),
+            "assuming no repetition"
+        );
+        for i in more_sub_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            storage.write(&key, i).unwrap();
+
+            let key = mismatched_prefix.push(i).unwrap();
+            storage.write(&key, i / 2).unwrap();
+        }
+
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be sorted by sub-key value
+        let merged = itertools::merge(sub_keys.iter(), more_sub_keys.iter());
+        let expected = merged
+            .clone()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
+
+        // Delete some keys
+        let delete_keys = [2, 0, -10, 123];
+        for i in delete_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            storage.delete(&key).unwrap()
+        }
+
+        // Check that iter_prefix doesn't return deleted keys anymore
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+        let expected = merged
+            .filter(|x| !delete_keys.contains(x))
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected.clone());
+
+        // Commit genesis state
+        storage.commit_genesis().unwrap();
+
+        // And check again
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
         itertools::assert_equal(iter, expected);
     }
 }
