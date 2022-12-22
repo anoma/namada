@@ -50,15 +50,6 @@ where
             let mut txs: Vec<TxRecord> = req
                 .txs
                 .into_iter()
-                .take_while(|tx_bytes| {
-                    let new_size = total_proposal_size + tx_bytes.len();
-                    if new_size > HALF_MAX_PROPOSAL_SIZE {
-                        false
-                    } else {
-                        total_proposal_size = new_size;
-                        true
-                    }
-                })
                 .map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -68,11 +59,6 @@ where
                         record::remove(tx_bytes)
                     }
                 })
-                .collect();
-            #[cfg(not(feature = "abcipp"))]
-            let mut txs: Vec<TxBytes> = req
-                .txs
-                .into_iter()
                 .take_while(|tx_bytes| {
                     let new_size = total_proposal_size + tx_bytes.len();
                     if new_size > HALF_MAX_PROPOSAL_SIZE {
@@ -82,6 +68,11 @@ where
                         true
                     }
                 })
+                .collect();
+            #[cfg(not(feature = "abcipp"))]
+            let mut txs: Vec<TxBytes> = req
+                .txs
+                .into_iter()
                 .filter_map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -89,6 +80,15 @@ where
                         Some(tx_bytes)
                     } else {
                         None
+                    }
+                })
+                .take_while(|tx_bytes| {
+                    let new_size = total_proposal_size + tx_bytes.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE {
+                        false
+                    } else {
+                        total_proposal_size = new_size;
+                        true
                     }
                 })
                 .collect();
