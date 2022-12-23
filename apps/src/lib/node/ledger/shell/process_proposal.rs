@@ -162,7 +162,7 @@ where
                         let balance =
                             self.get_balance(&tx.fee.token, &fee_payer);
 
-                        if tx.fee.amount <= balance {
+                        if Amount::from(100) <= balance {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \

@@ -2,7 +2,10 @@
 
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
+use namada::ledger::storage::write_log::StorageModification;
+use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
+use namada::types::token::Amount;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -128,9 +131,80 @@ where
             }
 
             let mut tx_event = match &tx_type {
-                TxType::Wrapper(_wrapper) => {
-                    self.storage.tx_queue.push(_wrapper.clone());
-                    Event::new_tx_event(&tx_type, height.0)
+                TxType::Wrapper(wrapper) => {
+                    let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+
+                    // Charge fee
+                    let fee_payer =
+                        if wrapper.pk != address::masp_tx_key().ref_to() {
+                            wrapper.fee_payer()
+                        } else {
+                            address::masp()
+                        };
+
+                    let balance_key = token::balance_key(
+                        &self.storage.native_token,
+                        &fee_payer,
+                    );
+                    let balance: Amount =
+                        match self.write_log.read(&balance_key).0 {
+                            Some(wal_mod) => {
+                                // Read from WAL
+                                if let StorageModification::Write { value } =
+                                    wal_mod
+                                {
+                                    Amount::try_from_slice(value).unwrap()
+                                } else {
+                                    Amount::default()
+                                }
+                            }
+                            None => {
+                                // Read from storage
+                                let balance = StorageRead::read(
+                                    &self.storage,
+                                    &balance_key,
+                                );
+                                // Storage read must not fail, but there might
+                                // be no value, in which
+                                // case default (0) is returned
+                                balance
+                                    .expect(
+                                        "Storage read in the protocol must \
+                                         not fail",
+                                    )
+                                    .unwrap_or_default()
+                            }
+                        };
+
+                    let balance: u64 = balance.into();
+                    match balance.checked_sub(100) {
+                        Some(v) => {
+                            self.write_log
+                                .write(
+                                    &balance_key,
+                                    Amount::from(v).try_to_vec().unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        None => {
+                            // Burn remaining funds
+                            self.write_log
+                                .write(
+                                    &balance_key,
+                                    Amount::from(0).try_to_vec().unwrap(),
+                                )
+                                .unwrap();
+                            tx_event["log"] =
+                                "Insufficient balance for fee".into();
+                            tx_event["code"] = ErrorCodes::InvalidTx.into();
+
+                            response.events.push(tx_event);
+                            continue;
+                        }
+                    }
+
+                    self.storage.tx_queue.push(wrapper.clone());
+                    tx_event
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
