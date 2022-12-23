@@ -11,6 +11,8 @@ pub const ENV_KEY: &str = "NAMADA_LOG";
 
 // Env var to enable/disable color log
 const COLOR_ENV_KEY: &str = "NAMADA_LOG_COLOR";
+// Env var to enable/disable json formatting
+const JSON_ENV_KEY: &str = "NAMADA_JSON_FMT";
 
 pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
     let filter = filter_from_env_or(default);
@@ -30,13 +32,27 @@ pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
     } else {
         true
     };
-
-    let my_collector = Subscriber::builder()
-        .with_ansi(with_color)
-        .with_env_filter(filter)
-        .finish();
-    tracing::subscriber::set_global_default(my_collector)
-        .wrap_err("Failed to set log subscriber")
+    let json_format = if let Ok(val) = env::var(JSON_ENV_KEY) {
+        val.to_ascii_lowercase() != "false"
+    } else {
+        true
+    };
+    if json_format {
+        let my_collector = Subscriber::builder()
+            .with_ansi(with_color)
+            .json()
+            .with_env_filter(filter)
+            .finish();
+        tracing::subscriber::set_global_default(my_collector)
+            .wrap_err("Failed to set log subscriber")
+    } else {
+        let my_collector = Subscriber::builder()
+            .with_ansi(with_color)
+            .with_env_filter(filter)
+            .finish();
+        tracing::subscriber::set_global_default(my_collector)
+            .wrap_err("Failed to set log subscriber")
+    }
 }
 
 pub fn init_log_tracer() -> Result<()> {
