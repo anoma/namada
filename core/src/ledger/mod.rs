@@ -1,5 +1,6 @@
 //! The ledger modules
 
+pub mod faucet_pow;
 pub mod gas;
 pub mod governance;
 #[cfg(any(feature = "abciplus", feature = "abcipp"))]

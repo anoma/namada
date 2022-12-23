@@ -18,12 +18,12 @@ use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::ledger::governance::storage as gov_storage;
-pub use namada_core::ledger::parameters;
 pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead,
 };
 pub use namada_core::ledger::vp_env::VpEnv;
+pub use namada_core::ledger::{faucet_pow, parameters};
 pub use namada_core::proto::{Signed, SignedTxData};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
