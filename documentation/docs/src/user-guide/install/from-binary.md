@@ -8,7 +8,7 @@ If you'd like to install Namada from binaries you will have to install some depe
 
 Let's install Tendermint.
 
-You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/master/scripts/install/get_tendermint.sh) and execute it (will ask you for `root` access):
+You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/master/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/main/scripts/get_tendermint.sh) and execute it (will ask you for `root` access):
 
 ```shell
 curl -LO https://raw.githubusercontent.com/namada/namada/main/scripts/install/get_tendermint.sh
