@@ -422,15 +422,26 @@ mod test_finalize_block {
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
+
+        // Add unshielded balance for fee paymenty
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .unwrap();
+
         // create some wrapper txs
-        for i in 1..5 {
+        for i in 1u64..5 {
             let raw_tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: i.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -603,6 +614,16 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
+        // Add unshielded balance for fee paymenty
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .unwrap();
+
         // create two decrypted txs
         let mut wasm_path = top_level_directory();
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
@@ -619,7 +640,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -650,7 +671,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,

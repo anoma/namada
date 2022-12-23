@@ -400,6 +400,15 @@ mod test_process_proposal {
             ..Default::default()
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
+        // reduce address balance to match the 100 token fee
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(99).try_to_vec().unwrap())
+            .unwrap();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
