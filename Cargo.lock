@@ -3803,6 +3803,7 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "namada_macros",
  "pretty_assertions",
  "proptest",
  "prost",
