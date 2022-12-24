@@ -381,36 +381,6 @@ where
             Ok((sub_key, val))
         }))
     }
-
-    /// An reverse iterator visiting all key-value elements, where the values
-    /// are from the inner-most collection. The iterator element type is
-    /// `Result<_>`, because iterator's call to `next` may fail with e.g.
-    /// out of gas or data decoding error.
-    ///
-    /// Note that this function shouldn't be used in transactions and VPs code
-    /// on unbounded maps to avoid gas usage increasing with the length of the
-    /// map.
-    pub fn rev_iter<'iter>(
-        &'iter self,
-        storage: &'iter impl StorageRead<'iter>,
-    ) -> Result<
-        impl Iterator<
-            Item = Result<(
-                <Self as LazyCollection>::SubKey,
-                <Self as LazyCollection>::Value,
-            )>,
-        > + 'iter,
-    > {
-        let iter =
-            storage_api::rev_iter_prefix(storage, &self.get_data_prefix())?;
-        Ok(iter.map(|key_val_res| {
-            let (key, val) = key_val_res?;
-            let sub_key = LazyCollection::is_valid_sub_key(self, &key)?
-                .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
-                .into_storage_result()?;
-            Ok((sub_key, val))
-        }))
-    }
 }
 
 // `LazyMap` methods with borsh encoded values `V`
@@ -506,30 +476,6 @@ where
         storage: &'iter impl StorageRead<'iter>,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'iter> {
         let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
-        Ok(iter.map(|key_val_res| {
-            let (key, val) = key_val_res?;
-            let last_key_seg = key
-                .last()
-                .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
-                .into_storage_result()?;
-            let key = K::parse(last_key_seg.raw()).into_storage_result()?;
-            Ok((key, val))
-        }))
-    }
-
-    /// A reverse iterator visiting all key-value elements. The iterator element
-    /// type is `Result<(K, V)>`, because iterator's call to `next` may fail
-    /// with e.g. out of gas or data decoding error.
-    ///
-    /// Note that this function shouldn't be used in transactions and VPs code
-    /// on unbounded maps to avoid gas usage increasing with the length of the
-    /// map.
-    pub fn rev_iter<'iter>(
-        &self,
-        storage: &'iter impl StorageRead<'iter>,
-    ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'iter> {
-        let iter =
-            storage_api::rev_iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
             let last_key_seg = key
