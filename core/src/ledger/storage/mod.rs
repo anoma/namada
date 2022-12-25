@@ -6,6 +6,7 @@ pub mod merkle_tree;
 pub mod mockdb;
 pub mod traits;
 pub mod types;
+pub mod write_log;
 
 use core::fmt::Debug;
 use std::collections::BTreeMap;
