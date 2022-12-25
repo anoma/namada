@@ -51,13 +51,6 @@ pub mod tx {
         // keys.
         pub fn namada_tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
-        // Get an ID of a data iterator with key prefix, reverse ordered by
-        // storage keys.
-        pub fn namada_tx_rev_iter_prefix(
-            prefix_ptr: u64,
-            prefix_len: u64,
-        ) -> u64;
-
         // Returns the size of the value (can be 0), or -1 if there's no next
         // value. If a value is found, it will be placed in the read
         // cache, because we cannot allocate a buffer for it before we know
@@ -149,13 +142,6 @@ pub mod vp {
         // Get an ID of a data iterator with key prefix, ordered by storage
         // keys.
         pub fn namada_vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
-
-        // Get an ID of a data iterator with key prefix, reverse ordered by
-        // storage keys.
-        pub fn namada_vp_rev_iter_prefix(
-            prefix_ptr: u64,
-            prefix_len: u64,
-        ) -> u64;
 
         // Read variable-length prior state when we don't know the size
         // up-front, returns the size of the value (can be 0), or -1 if

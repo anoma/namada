@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
@@ -69,6 +70,20 @@ pub struct WriteLog {
     tx_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC event for the current transaction
     ibc_event: Option<IbcEvent>,
+}
+
+/// Write log prefix iterator
+pub struct PrefixIter {
+    /// The concrete iterator for modifications sorted by storage keys
+    pub iter: std::vec::IntoIter<(storage::Key, StorageModification)>,
+}
+
+impl Iterator for PrefixIter {
+    type Item = (storage::Key, StorageModification);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 impl Default for WriteLog {
@@ -285,7 +300,7 @@ impl WriteLog {
     pub fn get_partitioned_keys(
         &self,
     ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
-        use itertools::{Either, Itertools};
+        use itertools::Either;
         self.tx_write_log.iter().partition_map(|(key, value)| {
             match (key.is_validity_predicate(), value) {
                 (Some(address), StorageModification::InitAccount { .. }) => {
@@ -320,6 +335,53 @@ impl WriteLog {
     /// Get the IBC event of the current transaction
     pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
         self.ibc_event.as_ref()
+    }
+
+    /// Commit the current genesis tx's write log to the storage.
+    pub fn commit_genesis<DB, H>(
+        &mut self,
+        storage: &mut Storage<DB, H>,
+    ) -> Result<()>
+    where
+        DB: 'static
+            + ledger::storage::DB
+            + for<'iter> ledger::storage::DBIter<'iter>,
+        H: StorageHasher,
+    {
+        // This hole function is almost the same as `commit_block`, except that
+        // we commit the state directly from `tx_write_log`
+        let mut batch = Storage::<DB, H>::batch();
+        for (key, entry) in self.tx_write_log.iter() {
+            match entry {
+                StorageModification::Write { value } => {
+                    storage
+                        .batch_write_subspace_val(
+                            &mut batch,
+                            key,
+                            value.clone(),
+                        )
+                        .map_err(Error::StorageError)?;
+                }
+                StorageModification::Delete => {
+                    storage
+                        .batch_delete_subspace_val(&mut batch, key)
+                        .map_err(Error::StorageError)?;
+                }
+                StorageModification::InitAccount { vp } => {
+                    storage
+                        .batch_write_subspace_val(&mut batch, key, vp.clone())
+                        .map_err(Error::StorageError)?;
+                }
+                // temporary value isn't persisted
+                StorageModification::Temp { .. } => {}
+            }
+        }
+        storage.exec_batch(batch).map_err(Error::StorageError)?;
+        if let Some(address_gen) = self.address_gen.take() {
+            storage.address_gen = address_gen
+        }
+        self.tx_write_log.clear();
+        Ok(())
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -423,6 +485,26 @@ impl WriteLog {
             }
         }
         (verifiers, changed_keys)
+    }
+
+    /// Iterate modifications whose storage key matches the given prefix, sorted
+    /// by their storage key.
+    pub fn iter_prefix(&self, prefix: &storage::Key) -> PrefixIter {
+        let mut matches = HashMap::new();
+        for (key, modification) in &self.block_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        for (key, modification) in &self.tx_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        let iter = matches
+            .into_iter()
+            .sorted_unstable_by_key(|(key, _val)| key.clone());
+        PrefixIter { iter }
     }
 }
 

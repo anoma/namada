@@ -548,7 +548,7 @@ where
             .commit_block(&mut self.storage)
             .expect("Expected committing block write log success");
         // store the block's data in DB
-        self.storage.commit().unwrap_or_else(|e| {
+        self.storage.commit_block().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
                 e

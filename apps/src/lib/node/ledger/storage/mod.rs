@@ -50,10 +50,13 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use namada::ledger::storage::types;
-    use namada::types::address;
+    use itertools::Itertools;
+    use namada::ledger::storage::write_log::WriteLog;
+    use namada::ledger::storage::{types, WlStorage};
+    use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
+    use namada::types::{address, storage};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -129,7 +132,7 @@ mod tests {
         storage
             .write(&key, value_bytes.clone())
             .expect("write failed");
-        storage.commit().expect("commit failed");
+        storage.commit_block().expect("commit failed");
 
         // save the last state and drop the storage
         let root = storage.merkle_root().0;
@@ -184,7 +187,7 @@ mod tests {
                 .expect("write failed");
             expected.push((key.to_string(), value_bytes));
         }
-        storage.commit().expect("commit failed");
+        storage.commit_block().expect("commit failed");
 
         let (iter, gas) = storage.iter_prefix(&prefix);
         assert_eq!(gas, prefix.len() as u64);
@@ -299,7 +302,7 @@ mod tests {
             } else {
                 storage.delete(&key)?;
             }
-            storage.commit()?;
+            storage.commit_block()?;
         }
 
         // 2. We try to read from these heights to check that we get back
@@ -343,5 +346,106 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    /// Test the prefix iterator with RocksDB.
+    #[test]
+    fn test_persistent_storage_prefix_iter() {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
+        let mut write_log = WriteLog::default();
+
+        let mut storage = WlStorage::new(&mut write_log, &mut storage);
+
+        let prefix = storage::Key::parse("prefix").unwrap();
+        let mismatched_prefix = storage::Key::parse("different").unwrap();
+        // We'll write sub-key in some random order to check prefix iter's order
+        let sub_keys = [2_i32, -1, 260, -2, 5, 0];
+
+        for i in sub_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            storage.write(&key, i).unwrap();
+
+            let key = mismatched_prefix.push(i).unwrap();
+            storage.write(&key, i / 2).unwrap();
+        }
+
+        // Then try to iterate over their prefix
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be sorted by sub-key value
+        let expected = sub_keys
+            .iter()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected.clone());
+
+        // Commit genesis state
+        storage.commit_genesis().unwrap();
+
+        // Again, try to iterate over their prefix
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+        itertools::assert_equal(iter, expected);
+
+        let more_sub_keys = [1_i32, i32::MIN, -10, 123, i32::MAX, 10];
+        debug_assert!(
+            !more_sub_keys.iter().any(|x| sub_keys.contains(x)),
+            "assuming no repetition"
+        );
+        for i in more_sub_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            storage.write(&key, i).unwrap();
+
+            let key = mismatched_prefix.push(i).unwrap();
+            storage.write(&key, i / 2).unwrap();
+        }
+
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be sorted by sub-key value
+        let merged = itertools::merge(sub_keys.iter(), more_sub_keys.iter());
+        let expected = merged
+            .clone()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
+
+        // Delete some keys
+        let delete_keys = [2, 0, -10, 123];
+        for i in delete_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            storage.delete(&key).unwrap()
+        }
+
+        // Check that iter_prefix doesn't return deleted keys anymore
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+        let expected = merged
+            .filter(|x| !delete_keys.contains(x))
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected.clone());
+
+        // Commit genesis state
+        storage.commit_genesis().unwrap();
+
+        // And check again
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+        itertools::assert_equal(iter, expected);
     }
 }

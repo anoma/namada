@@ -302,13 +302,13 @@ pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
-
-    /// Read account subspace key value pairs with the given prefix from the DB,
-    /// reverse ordered by the storage keys.
-    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
@@ -434,7 +434,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self) -> Result<()> {
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
@@ -508,21 +508,16 @@ where
         }
     }
 
-    /// Returns a prefix iterator, ordered by storage keys, and the gas cost
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Returns a prefix iterator, ordered by storage keys, and the gas cost.
     pub fn iter_prefix(
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (self.db.iter_prefix(prefix), prefix.len() as _)
-    }
-
-    /// Returns a prefix iterator, reverse ordered by storage keys, and the gas
-    /// cost
-    pub fn rev_iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db.rev_iter_prefix(prefix), prefix.len() as _)
     }
 
     /// Returns a prefix iterator and the gas cost
@@ -1032,13 +1027,6 @@ where
         prefix: &crate::types::storage::Key,
     ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))
-    }
-
-    fn rev_iter_prefix(
-        &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
-        Ok(self.db.rev_iter_prefix(prefix))
     }
 
     fn iter_next(
