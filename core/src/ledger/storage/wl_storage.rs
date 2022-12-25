@@ -3,11 +3,10 @@
 use std::iter::Peekable;
 use std::marker::PhantomData;
 
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
-
 use super::write_log::{self, WriteLog};
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage_api;
+use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 
 /// Read-write storage with write-log
 pub type RwWlStorage<'a, D, H> =
@@ -182,8 +181,8 @@ macro_rules! impl_storage_read {
 
             fn read_bytes(
                 &self,
-                key: &namada_core::types::storage::Key,
-            ) -> namada_core::ledger::storage_api::Result<Option<Vec<u8>>> {
+                key: &crate::types::storage::Key,
+            ) -> crate::ledger::storage_api::Result<Option<Vec<u8>>> {
                 // try to read from the write log first
                 let (log_val, _gas) = self.write_log.read(key);
                 match log_val {
@@ -207,8 +206,8 @@ macro_rules! impl_storage_read {
 
             fn has_key(
                 &self,
-                key: &namada_core::types::storage::Key,
-            ) -> namada_core::ledger::storage_api::Result<bool> {
+                key: &crate::types::storage::Key,
+            ) -> crate::ledger::storage_api::Result<bool> {
                 // try to read from the write log first
                 let (log_val, _gas) = self.write_log.read(key);
                 match log_val {
@@ -232,8 +231,8 @@ macro_rules! impl_storage_read {
 
             fn iter_prefix(
                 &'iter self,
-                prefix: &namada_core::types::storage::Key,
-            ) -> namada_core::ledger::storage_api::Result<Self::PrefixIter> {
+                prefix: &crate::types::storage::Key,
+            ) -> crate::ledger::storage_api::Result<Self::PrefixIter> {
                 let storage_iter =
                     StorageRead::iter_prefix(self.storage, prefix)?.peekable();
                 let write_log_iter = self.write_log.iter_prefix(prefix).peekable();
@@ -246,53 +245,53 @@ macro_rules! impl_storage_read {
             fn iter_next(
                 &self,
                 iter: &mut Self::PrefixIter,
-            ) -> namada_core::ledger::storage_api::Result<Option<(String, Vec<u8>)>>
+            ) -> crate::ledger::storage_api::Result<Option<(String, Vec<u8>)>>
             {
                 Ok(iter.next())
             }
 
             fn get_chain_id(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<String> {
+            ) -> crate::ledger::storage_api::Result<String> {
                 StorageRead::get_chain_id(self.storage)
             }
 
             fn get_block_height(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<
-                namada_core::types::storage::BlockHeight,
+            ) -> crate::ledger::storage_api::Result<
+                crate::types::storage::BlockHeight,
             > {
                 StorageRead::get_block_height(self.storage)
             }
 
             fn get_block_hash(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<
-                namada_core::types::storage::BlockHash,
+            ) -> crate::ledger::storage_api::Result<
+                crate::types::storage::BlockHash,
             > {
                 StorageRead::get_block_hash(self.storage)
             }
 
             fn get_block_epoch(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<
-                namada_core::types::storage::Epoch,
+            ) -> crate::ledger::storage_api::Result<
+                crate::types::storage::Epoch,
             > {
                 StorageRead::get_block_epoch(self.storage)
             }
 
             fn get_tx_index(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<
-                namada_core::types::storage::TxIndex,
+            ) -> crate::ledger::storage_api::Result<
+                crate::types::storage::TxIndex,
             > {
                 StorageRead::get_tx_index(self.storage)
             }
 
             fn get_native_token(
                 &self,
-            ) -> namada_core::ledger::storage_api::Result<
-                namada_core::types::address::Address,
+            ) -> crate::ledger::storage_api::Result<
+                crate::types::address::Address,
             > {
                 StorageRead::get_native_token(self.storage)
             }
@@ -322,9 +321,9 @@ where
 {
     fn write_bytes(
         &mut self,
-        key: &namada_core::types::storage::Key,
+        key: &crate::types::storage::Key,
         val: impl AsRef<[u8]>,
-    ) -> namada_core::ledger::storage_api::Result<()> {
+    ) -> crate::ledger::storage_api::Result<()> {
         let _ = self
             .write_log
             .write(key, val.as_ref().to_vec())
@@ -334,8 +333,8 @@ where
 
     fn delete(
         &mut self,
-        key: &namada_core::types::storage::Key,
-    ) -> namada_core::ledger::storage_api::Result<()> {
+        key: &crate::types::storage::Key,
+    ) -> crate::ledger::storage_api::Result<()> {
         let _ = self.write_log.delete(key).into_storage_result();
         Ok(())
     }
