@@ -12,6 +12,7 @@ wasms += tx_init_validator
 wasms += tx_init_proposal
 wasms += tx_reveal_pk
 wasms += tx_vote_proposal
+wasms += tx_testnet_faucet_withdrawal
 wasms += tx_transfer
 wasms += tx_unbond
 wasms += tx_update_vp

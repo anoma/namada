@@ -12,6 +12,8 @@ pub mod tx_init_proposal;
 pub mod tx_init_validator;
 #[cfg(feature = "tx_reveal_pk")]
 pub mod tx_reveal_pk;
+#[cfg(feature = "tx_testnet_faucet_withdrawal")]
+pub mod tx_testnet_faucet_withdrawal;
 #[cfg(feature = "tx_transfer")]
 pub mod tx_transfer;
 #[cfg(feature = "tx_unbond")]
