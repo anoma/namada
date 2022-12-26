@@ -5,7 +5,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::{SignedTxData, *};
+use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 /// Allows anyone to withdraw up to 1_000 tokens in a single tx
@@ -46,9 +46,25 @@ fn validate_tx(
         _ => false,
     });
 
+    let solution = Lazy::new(|| match &*signed_tx_data {
+        Ok(signed) => {
+            if let Some(data) = &signed.data.as_ref() {
+                faucet_pow::Solution::try_from_slice(data).ok()
+            } else {
+                None
+            }
+        }
+        _ => None,
+    });
+
     if !is_valid_tx(ctx, &tx_data)? {
         return reject();
     }
+
+    // An address whose counter has been incremented
+    let mut incremented_counter: Option<Address> = None;
+    // An address other than faucet that received tokens
+    let mut withdrawal: Option<Address> = None;
 
     for key in keys_changed.iter() {
         let is_valid = if let Some(owner) = token::is_any_token_balance_key(key)
@@ -58,11 +74,69 @@ fn validate_tx(
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-                // Debit over `MAX_FREE_DEBIT` has to signed, credit doesn't
-                change >= -MAX_FREE_DEBIT || change >= 0 || *valid_sig
+
+                if change < 0 {
+                    // If there's a PoW solution
+                    match &*solution {
+                        Some(solution) => {
+                            // Validate it
+                            if solution.validate(ctx, &addr)? {
+                                change >= -MAX_FREE_DEBIT
+                            } else {
+                                debug_log!("Invalid PoW solution");
+                                false
+                            }
+                        }
+                        _ => {
+                            debug_log!(
+                                "No PoW solution, signature is required"
+                            );
+                            // Debit without a solution has to signed
+                            *valid_sig
+                        }
+                    }
+                } else {
+                    // credit is permissive
+                    true
+                }
             } else {
-                // If this is not the owner, allow any change
+                // An address other than self whose balance has changed
+                let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: token::Amount =
+                    ctx.read_post(key)?.unwrap_or_default();
+                let change = post.change() - pre.change();
+
+                if change < 0 {
+                    // Debit
+                    true
+                } else {
+                    // Credit
+                    if withdrawal.as_ref().is_none() {
+                        // Store the withdrawal target
+                        withdrawal = Some(owner.clone());
+                        // Allow to withdraw
+                        true
+                    } else {
+                        // Only one withdrawal at the time
+                        false
+                    }
+                }
+            }
+        } else if let Some(owner) = faucet_pow::is_counter_key(key, &addr) {
+            let counter_pre =
+                faucet_pow::get_counter(&ctx.pre(), &addr, owner)?;
+            let counter_post =
+                faucet_pow::get_counter(&ctx.post(), &addr, owner)?;
+            // Counters can only increment
+            if counter_pre + 1 == counter_post &&
+                    // Only one counter update too
+                 incremented_counter.as_ref().is_none()
+            {
+                // Store the owner of incremented counter
+                incremented_counter = Some(owner.clone());
                 true
+            } else {
+                false
             }
         } else if let Some(owner) = key.is_validity_predicate() {
             let has_post: bool = ctx.has_key_post(key)?;
@@ -81,12 +155,29 @@ fn validate_tx(
             // Allow any other key change if authorized by a signature
             *valid_sig
         };
+
         if !is_valid {
             debug_log!("key {} modification failed vp", key);
             return reject();
         }
     }
-    accept()
+
+    let is_valid = match (withdrawal, incremented_counter) {
+        (Some(withdrawal), Some(incremented_counter)) => {
+            // A withdrawal target must have incremented counter
+            withdrawal == incremented_counter
+        }
+        (None, None) => {
+            // No withdrawal without counter change is fine
+            true
+        }
+        _ => {
+            // Missing withdrawal with a counter update or other way
+            // round
+            false
+        }
+    };
+    if is_valid { accept() } else { reject() }
 }
 
 #[cfg(test)]
