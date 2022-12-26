@@ -22,6 +22,7 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::ledger::faucet_pow;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -2003,6 +2004,26 @@ pub async fn known_address(
         }
         Address::Implicit(_) | Address::Internal(_) => true,
     }
+}
+
+/// Check if the given address is a testnet faucet account address.
+pub async fn is_faucet_account(
+    address: &Address,
+    ledger_address: TendermintAddress,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    unwrap_client_response(RPC.vp().is_faucet(&client, address).await)
+}
+
+/// Obtain a PoW challenge for a withdrawal from a testnet faucet account.
+pub async fn get_faucet_pow_challenge(
+    transfer: Transfer,
+    ledger_address: TendermintAddress,
+) -> faucet_pow::Challenge {
+    let client = HttpClient::new(ledger_address).unwrap();
+    unwrap_client_response(
+        RPC.vp().faucet_pow_challenge(&client, transfer).await,
+    )
 }
 
 /// Accumulate slashes starting from `epoch_start` until (optionally)

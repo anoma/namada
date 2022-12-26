@@ -85,6 +85,8 @@ const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+const TX_TESTNET_FAUCET_WITHDRAWAL_WASM: &str =
+    "tx_testnet_faucet_withdrawal.wasm";
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -1488,6 +1490,8 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             safe_exit(1)
         }
     }
+    let is_source_faucet =
+        rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
     // Check that the target address exists on chain
     let target_exists =
         rpc::known_address(&target, args.tx.ledger_address.clone()).await;
@@ -1552,7 +1556,6 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
     };
 
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -1606,6 +1609,15 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             if spending_key.is_none() && payment_address.is_none() {
                 None
             } else {
+                if is_source_faucet {
+                    eprintln!(
+                        "Shielded withdrawals from faucet are not supported"
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+
                 // We want to fund our transaction solely from supplied spending
                 // key
                 let spending_key = spending_key.map(|x| x.into());
@@ -1643,11 +1655,29 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         },
     };
     tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let tx = if is_source_faucet {
+        // Obtain a PoW challenge for faucet withdrawal
+        let challenge = rpc::get_faucet_pow_challenge(
+            transfer,
+            args.tx.ledger_address.clone(),
+        )
+        .await;
+        // Solve the solution, this blocks until a solution is found
+        let solution = challenge.solve();
+        let data = solution
+            .try_to_vec()
+            .expect("Encoding tx data shouldn't fail");
+        let tx_code = ctx.read_wasm(TX_TESTNET_FAUCET_WITHDRAWAL_WASM);
+        Tx::new(tx_code, Some(data))
+    } else {
+        let data = transfer
+            .try_to_vec()
+            .expect("Encoding tx data shouldn't fail");
+        let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+        Tx::new(tx_code, Some(data))
+    };
+
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
     process_tx(ctx, &args.tx, tx, signing_address).await;
 }
