@@ -20,9 +20,9 @@ pub type RoWlStorage<'a, D, H> = WlStorage<'a, &'a WriteLog, &'a Storage<D, H>>;
 /// with changes not yet committed to the DB.
 pub struct WlStorage<'a, WL, S> {
     /// Write log
-    write_log: WL,
+    pub write_log: WL,
     /// Storage provides access to DB
-    storage: S,
+    pub storage: S,
     /// `'a` must be used
     lifetime_phantom: PhantomData<&'a ()>,
 }

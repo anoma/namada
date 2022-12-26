@@ -13,7 +13,9 @@ use namada_proof_of_stake::PosBase;
 use rust_decimal::Decimal;
 pub use vp::PosVP;
 
-use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
+use crate::ledger::storage::{
+    self as ledger_storage, RwWlStorage, Storage, StorageHasher,
+};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Epoch;
 
@@ -50,8 +52,8 @@ pub fn init_genesis_storage<'a, DB, H>(
 }
 
 /// Initialize storage in the genesis block.
-pub fn init_genesis_storage_new<DB, H>(
-    storage: &mut Storage<DB, H>,
+pub fn init_genesis_storage_new<'a, DB, H>(
+    storage: &mut RwWlStorage<'a, DB, H>,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: Epoch,

@@ -29,6 +29,7 @@ use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use namada_core::ledger::storage::types::{decode, encode};
+use namada_core::ledger::storage::wl_storage::WlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
@@ -1775,8 +1776,8 @@ pub fn validator_slashes_handle(validator: &Address) -> SlashesNew {
 }
 
 /// new init genesis
-pub fn init_genesis_new<S>(
-    storage: &mut S,
+pub fn init_genesis_new<'a, WL, S>(
+    wls: &mut WlStorage<'a, WL, S>,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
@@ -1785,9 +1786,9 @@ where
     S: for<'iter> StorageRead<'iter> + StorageWrite,
 {
     let mut total_bonded = token::Amount::default();
-    active_validator_set_handle().init(storage, current_epoch)?;
+    active_validator_set_handle().init(&mut wls.storage, current_epoch)?;
     // Do I necessarily want to do this one here since we may not fill it?
-    inactive_validator_set_handle().init(storage, current_epoch)?;
+    inactive_validator_set_handle().init(&mut wls.storage, current_epoch)?;
     let mut n_validators: u64 = 0;
 
     for GenesisValidator {
@@ -1806,12 +1807,12 @@ where
         if n_validators < params.max_validator_slots {
             insert_validator_into_set(
                 &active_val_handle,
-                storage,
+                &mut wls.storage,
                 &current_epoch,
                 &address,
             )?;
             validator_state_handle(&address).init_at_genesis(
-                storage,
+                &mut wls.storage,
                 ValidatorState::Candidate,
                 current_epoch,
             )?;
@@ -1820,7 +1821,7 @@ where
             // already in the active set
             let min_active_amount = get_min_active_validator_amount(
                 &active_validator_set_handle().at(&current_epoch),
-                storage,
+                &mut wls.storage,
             )?;
             if tokens > min_active_amount {
                 // Swap this genesis validator in and demote the last min active
@@ -1830,34 +1831,34 @@ where
                     .at(&min_active_amount);
                 // Remove last min active validator
                 let last_min_active_position =
-                    find_next_position(&min_active_handle, storage)?
+                    find_next_position(&min_active_handle, &mut wls.storage)?
                         - Position::ONE;
                 let removed = min_active_handle
-                    .remove(storage, &last_min_active_position)?;
+                    .remove(&mut wls.storage, &last_min_active_position)?;
                 // Insert last min active validator into the inactive set
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
                         .at(&min_active_amount.into()),
-                    storage,
+                    &mut wls.storage,
                     &current_epoch,
                     &removed.clone().unwrap(),
                 )?;
                 // Insert the current genesis validator into the active set
                 insert_validator_into_set(
                     &active_val_handle,
-                    storage,
+                    &mut wls.storage,
                     &current_epoch,
                     &address,
                 )?;
                 // Update and set the validator states
                 validator_state_handle(&address).init_at_genesis(
-                    storage,
+                    &mut wls.storage,
                     ValidatorState::Candidate,
                     current_epoch,
                 )?;
                 validator_state_handle(&removed.unwrap()).set(
-                    storage,
+                    &mut wls.storage,
                     ValidatorState::Inactive,
                     current_epoch,
                     0,
@@ -1868,47 +1869,51 @@ where
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
                         .at(&tokens.into()),
-                    storage,
+                    &mut wls.storage,
                     &current_epoch,
                     &address,
                 )?;
                 validator_state_handle(&address).init_at_genesis(
-                    storage,
+                    &mut wls.storage,
                     ValidatorState::Inactive,
                     current_epoch,
                 )?;
             }
         }
         // Write other validator data to storage
-        write_validator_address_raw_hash(storage, &address, &consensus_key)?;
+        write_validator_address_raw_hash(
+            &mut wls.storage,
+            &address,
+            &consensus_key,
+        )?;
         write_validator_max_commission_rate_change(
-            storage,
+            &mut wls.storage,
             &address,
             max_commission_rate_change,
         )?;
         validator_consensus_key_handle(&address).init_at_genesis(
-            storage,
+            &mut wls.storage,
             consensus_key,
             current_epoch,
         )?;
         let delta = token::Change::from(tokens);
         validator_deltas_handle(&address).init_at_genesis(
-            storage,
+            &mut wls.storage,
             delta,
             current_epoch,
         )?;
         bond_handle(&address, &address, false).init_at_genesis(
-            storage,
+            &mut wls.storage,
             delta,
             current_epoch,
         )?;
         bond_handle(&address, &address, true).init_at_genesis(
-            storage,
+            &mut wls.storage,
             delta,
             current_epoch,
         )?;
         validator_commission_rate_handle(&address).init_at_genesis(
-            storage,
+            &mut wls.storage,
             commission_rate,
             current_epoch,
         )?;
@@ -1920,16 +1925,16 @@ where
     } else {
         n_validators
     };
-    write_num_active_validators(storage, n_active_validators)?;
+    write_num_active_validators(&mut wls.storage, n_active_validators)?;
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
-        storage,
+        &mut wls.storage,
         token::Change::from(total_bonded),
         current_epoch,
     )?;
     // Credit bonded token amount to the PoS account
     credit_tokens_new(
-        storage,
+        &mut wls.storage,
         &staking_token_address(),
         &ADDRESS,
         total_bonded,

@@ -1,9 +1,11 @@
 //! Implementation of chain initialization for the Shell
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
+use namada::ledger::storage::WlStorage;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
@@ -301,8 +303,14 @@ where
 
         // PoS system depends on epoch being initialized
         let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let mut storage_with_wl = WlStorage {
+            storage: &mut self.storage,
+            write_log: &mut self.write_log,
+            lifetime_phantom: PhantomData,
+        };
+
         pos::init_genesis_storage_new(
-            &mut self.storage,
+            &mut storage_with_wl,
             &genesis.pos_params,
             genesis
                 .validators
