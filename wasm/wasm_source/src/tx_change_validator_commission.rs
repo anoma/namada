@@ -104,9 +104,6 @@ mod tests {
             .read_validator_commission_rate(&commission_change.validator)?
             .unwrap();
 
-        dbg!(&commission_rates_pre);
-        dbg!(&commission_rates_post);
-
         // Before pipeline, the commission rates should not change
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
