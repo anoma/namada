@@ -6,6 +6,7 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::ledger::faucet_pow;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -28,6 +29,7 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    use namada::core::ledger::faucet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -109,6 +111,8 @@ pub mod genesis_config {
         // Name of the native token - this must one of the tokens included in
         // the `token` field
         pub native_token: String,
+        /// Faucet PoW difficulty - defaults to `0` when not set
+        pub faucet_pow_difficulty: Option<faucet_pow::Difficulty>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -495,6 +499,7 @@ pub mod genesis_config {
         let GenesisConfig {
             genesis_time,
             native_token,
+            faucet_pow_difficulty,
             validator,
             token,
             established,
@@ -630,6 +635,7 @@ pub mod genesis_config {
         let mut genesis = Genesis {
             genesis_time: genesis_time.try_into().unwrap(),
             native_token,
+            faucet_pow_difficulty,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -678,6 +684,7 @@ pub mod genesis_config {
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
+    pub faucet_pow_difficulty: Option<faucet_pow::Difficulty>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -952,6 +959,7 @@ pub fn genesis() -> Genesis {
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
         native_token: address::nam(),
+        faucet_pow_difficulty: None,
     }
 }
 

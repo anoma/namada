@@ -175,11 +175,12 @@ where
 
             // When using a faucet WASM, initialize its PoW challenge storage
             if vp_code_path == "vp_testnet_faucet.wasm" {
+                let difficulty =
+                    genesis.faucet_pow_difficulty.unwrap_or_default();
                 faucet_pow::init_faucet_storage(
                     &mut self.storage,
                     &address,
-                    faucet_pow::Difficulty::try_new(5)
-                        .expect("Difficulty 5 is valid"),
+                    difficulty,
                 )
                 .expect("Couldn't init faucet storage")
             }
