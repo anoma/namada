@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::core::ledger::faucet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::types::key::*;
@@ -170,6 +171,17 @@ where
 
             for (key, value) in storage {
                 self.storage.write(&key, value).unwrap();
+            }
+
+            // When using a faucet WASM, initialize its PoW challenge storage
+            if vp_code_path == "vp_testnet_faucet.wasm" {
+                faucet_pow::init_faucet_storage(
+                    &mut self.storage,
+                    &address,
+                    faucet_pow::Difficulty::try_new(5)
+                        .expect("Difficulty 5 is valid"),
+                )
+                .expect("Couldn't init faucet storage")
             }
         }
 
