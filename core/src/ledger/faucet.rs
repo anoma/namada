@@ -43,7 +43,12 @@ pub struct Challenge {
     /// PoW difficulty
     pub difficulty: u8,
     /// The counter value of the `transfer.target`
+    /// TODO: What does this mean though?
     pub counter: Counter,
+
+    // TODO: 
+    // What about the public key? I.e the initial thing that is hashed? 
+    // I'm assuming we don't hash the transaction data
 }
 
 /// One must find a value for this type to solve a [`Challenge`] that is at
@@ -82,6 +87,7 @@ impl Challenge {
     }
 
     /// Try to find a solution to the [`Challenge`].
+    /// TODO: This loop can continue on forever, should probably put some limit
     pub fn solve(self) -> Solution {
         use std::io::Write;
 
@@ -103,6 +109,7 @@ impl Challenge {
         {
             *old = *new;
         }
+        // This is the nonce that is hashed with the PK
         let mut maybe_solution: SolutionValue = 0;
         'outer: loop {
             stdout.flush().unwrap();
