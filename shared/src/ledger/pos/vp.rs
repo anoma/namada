@@ -305,7 +305,7 @@ where
 }
 
 impl_pos_read_only! {
-    impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPreStorageRead<'f, 'a, DB, H, CA>
+    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPreStorageRead<'view, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
             H: StorageHasher +'static,
@@ -313,7 +313,7 @@ impl_pos_read_only! {
 }
 
 impl_pos_read_only! {
-    impl<'f, 'a, DB, H, CA> PosReadOnly for CtxPostStorageRead<'f, 'a, DB, H, CA>
+    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPostStorageRead<'view, 'a, DB, H, CA>
         where
             DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
             H: StorageHasher +'static,

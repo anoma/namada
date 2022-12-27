@@ -1002,12 +1002,15 @@ where
     }
 }
 
-impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
+impl<D, H> StorageRead for Storage<D, H>
 where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
+    type PrefixIter<'iter> = <D as DBIter<'iter>>::PrefixIter
+where
+        Self: 'iter
+    ;
 
     fn read_bytes(
         &self,
@@ -1023,16 +1026,16 @@ where
         self.block.tree.has_key(key).into_storage_result()
     }
 
-    fn iter_prefix(
+    fn iter_prefix<'iter>(
         &'iter self,
         prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
+    ) -> std::result::Result<Self::PrefixIter<'iter>, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))
     }
 
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
     {
         Ok(iter.next().map(|(key, val, _gas)| (key, val)))
@@ -1109,43 +1112,6 @@ where
     }
 }
 
-impl<D, H> StorageWrite for &mut Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    fn write<T: borsh::BorshSerialize>(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: T,
-    ) -> storage_api::Result<()> {
-        let val = val.try_to_vec().unwrap();
-        self.write_bytes(key, val)
-    }
-
-    fn write_bytes(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        let _ = self
-            .db
-            .write_subspace_val(self.block.height, key, val)
-            .into_storage_result()?;
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &crate::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        let _ = self
-            .db
-            .delete_subspace_val(self.block.height, key)
-            .into_storage_result()?;
-        Ok(())
-    }
-}
 
 impl From<MerkleTreeError> for Error {
     fn from(error: MerkleTreeError) -> Self {

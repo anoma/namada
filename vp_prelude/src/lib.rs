@@ -190,7 +190,7 @@ pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 impl<'view> VpEnv<'view> for Ctx {
     type Post = CtxPostStorageRead<'view>;
     type Pre = CtxPreStorageRead<'view>;
-    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
+    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { _ctx: self }
@@ -221,39 +221,39 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
-    fn get_chain_id(&'view self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_chain_id()
     }
 
-    fn get_block_height(&'view self) -> Result<BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_height()
     }
 
-    fn get_block_hash(&'view self) -> Result<BlockHash, Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
     }
 
-    fn get_block_epoch(&'view self) -> Result<Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_epoch()
     }
 
-    fn get_tx_index(&'view self) -> Result<TxIndex, Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
 
-    fn get_native_token(&'view self) -> Result<Address, Error> {
+    fn get_native_token(&self) -> Result<Address, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_native_token()
     }
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         iter_prefix_impl(prefix)
     }
@@ -309,8 +309,8 @@ impl<'view> VpEnv<'view> for Ctx {
     }
 }
 
-impl StorageRead<'_> for CtxPreStorageRead<'_> {
-    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
+impl StorageRead for CtxPreStorageRead<'_> {
+    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self: 'iter;
 
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
@@ -326,9 +326,9 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { namada_vp_iter_pre_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
@@ -339,10 +339,10 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
 
     // ---- Methods below share the same implementation in `pre/post` ----
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, Error> {
         iter_prefix_impl(prefix)
     }
 
@@ -371,8 +371,8 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
     }
 }
 
-impl StorageRead<'_> for CtxPostStorageRead<'_> {
-    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
+impl StorageRead for CtxPostStorageRead<'_> {
+    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self:'iter;
 
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
@@ -389,9 +389,9 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { namada_vp_iter_post_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
@@ -402,10 +402,10 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
 
     // ---- Methods below share the same implementation in `pre/post` ----
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, Error> {
         iter_prefix_impl(prefix)
     }
 
