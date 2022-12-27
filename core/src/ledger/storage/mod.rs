@@ -992,12 +992,15 @@ where
     }
 }
 
-impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
+impl<D, H> StorageRead for Storage<D, H>
 where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
+    type PrefixIter<'iter> = <D as DBIter<'iter>>::PrefixIter
+where
+        Self: 'iter
+    ;
 
     fn read_bytes(
         &self,
@@ -1013,16 +1016,16 @@ where
         self.block.tree.has_key(key).into_storage_result()
     }
 
-    fn iter_prefix(
+    fn iter_prefix<'iter>(
         &'iter self,
         prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
+    ) -> std::result::Result<Self::PrefixIter<'iter>, storage_api::Error> {
         Ok(self.db.iter_prefix(prefix))
     }
 
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
     {
         Ok(iter.next().map(|(key, val, _gas)| (key, val)))

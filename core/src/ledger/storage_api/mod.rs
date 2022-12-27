@@ -20,21 +20,17 @@ use crate::types::storage::{self, BlockHash, BlockHeight, Epoch, TxIndex};
 ///
 /// ```rust,ignore
 /// where
-///     S: for<'iter> StorageRead<'iter>
+///     S: StorageRead
 /// ```
 ///
 /// If you want to know why this is needed, see the to-do task below. The
 /// syntax for this relies on higher-rank lifetimes, see e.g.
 /// <https://doc.rust-lang.org/nomicon/hrtb.html>.
-///
-/// TODO: once GATs are stabilized, we should be able to remove the `'iter`
-/// lifetime param that is currently the only way to make the prefix iterator
-/// typecheck in the `<D as DBIter<'iter>>::PrefixIter` associated type used in
-/// `impl StorageRead for Storage` (shared/src/ledger/storage/mod.rs).
-/// See <https://github.com/rust-lang/rfcs/blob/master/text/1598-generic_associated_types.md>
-pub trait StorageRead<'iter> {
+pub trait StorageRead {
     /// Storage read prefix iterator
-    type PrefixIter;
+    type PrefixIter<'iter>
+    where
+        Self: 'iter;
 
     /// Storage read Borsh encoded value. It will try to read from the storage
     /// and decode it if found.
@@ -63,15 +59,15 @@ pub trait StorageRead<'iter> {
     ///
     /// For a more user-friendly iterator API, use [`fn@iter_prefix`] or
     /// [`fn@iter_prefix_bytes`] instead.
-    fn iter_prefix(
+    fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter>;
+    ) -> Result<Self::PrefixIter<'iter>>;
 
     /// Storage prefix iterator. It will try to read from the storage.
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>>;
 
     /// Getting the chain ID.
@@ -121,7 +117,7 @@ pub trait StorageWrite {
 
 /// Iterate items matching the given prefix, ordered by the storage keys.
 pub fn iter_prefix_bytes<'a>(
-    storage: &'a impl StorageRead<'a>,
+    storage: &'a impl StorageRead,
     prefix: &crate::types::storage::Key,
 ) -> Result<impl Iterator<Item = Result<(storage::Key, Vec<u8>)>> + 'a> {
     let iter = storage.iter_prefix(prefix)?;
@@ -150,7 +146,7 @@ pub fn iter_prefix_bytes<'a>(
 /// Iterate Borsh encoded items matching the given prefix, ordered by the
 /// storage keys.
 pub fn iter_prefix<'a, T>(
-    storage: &'a impl StorageRead<'a>,
+    storage: &'a impl StorageRead,
     prefix: &crate::types::storage::Key,
 ) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
 where
