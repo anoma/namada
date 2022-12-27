@@ -177,7 +177,7 @@ macro_rules! impl_storage_read {
     ($($any:tt)*) => {
         $( $any )*
         {
-            type PrefixIter = PrefixIter<'iter, D>;
+            type PrefixIter<'iter_> = PrefixIter<'iter_, D> where Self: 'iter_;
 
             fn read_bytes(
                 &self,
@@ -229,10 +229,10 @@ macro_rules! impl_storage_read {
                 }
             }
 
-            fn iter_prefix(
+            fn iter_prefix<'iter>(
                 &'iter self,
                 prefix: &crate::types::storage::Key,
-            ) -> crate::ledger::storage_api::Result<Self::PrefixIter> {
+            ) -> crate::ledger::storage_api::Result<Self::PrefixIter<'iter>> {
                 let storage_iter =
                     StorageRead::iter_prefix(self.storage, prefix)?.peekable();
                 let write_log_iter = self.write_log.iter_prefix(prefix).peekable();
@@ -242,9 +242,9 @@ macro_rules! impl_storage_read {
                 })
             }
 
-            fn iter_next(
-                &self,
-                iter: &mut Self::PrefixIter,
+            fn iter_next<'iter>(
+                &'iter self,
+                iter: &mut Self::PrefixIter<'iter>,
             ) -> crate::ledger::storage_api::Result<Option<(String, Vec<u8>)>>
             {
                 Ok(iter.next())
@@ -300,14 +300,14 @@ macro_rules! impl_storage_read {
 }
 
 impl_storage_read! {
-    impl<'iter, D, H> StorageRead<'iter> for WlStorage<'iter, &'iter WriteLog, &'iter Storage<D, H>>
+    impl<'it, D, H> StorageRead for WlStorage<'it, &'it WriteLog, &'it Storage<D, H>>
     where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 }
 
 impl_storage_read! {
-    impl<'iter, D, H> StorageRead<'iter> for WlStorage<'iter, &'iter mut WriteLog, &'iter mut Storage<D, H>>
+    impl<'it, D, H> StorageRead for WlStorage<'it, &'it mut WriteLog, &'it mut Storage<D, H>>
     where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,

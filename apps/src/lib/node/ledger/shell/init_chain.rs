@@ -1,7 +1,6 @@
 //! Implementation of chain initialization for the Shell
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
@@ -303,11 +302,8 @@ where
 
         // PoS system depends on epoch being initialized
         let (current_epoch, _gas) = self.storage.get_current_epoch();
-        let mut storage_with_wl = WlStorage {
-            storage: &mut self.storage,
-            write_log: &mut self.write_log,
-            lifetime_phantom: PhantomData,
-        };
+        let mut storage_with_wl =
+            WlStorage::new(&mut self.write_log, &mut self.storage);
 
         pos::init_genesis_storage_new(
             &mut storage_with_wl,
@@ -319,6 +315,11 @@ where
                 .map(|validator| validator.pos_data),
             current_epoch,
         );
+        storage_with_wl
+            .commit_genesis()
+            .expect("Couldn't commit write-log changes");
+        drop(storage_with_wl);
+
         ibc::init_genesis_storage(&mut self.storage);
 
         // Set the initial validator set

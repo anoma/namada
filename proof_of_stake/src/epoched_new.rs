@@ -74,7 +74,7 @@ where
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         self.init(storage, value, current_epoch, 0)
     }
@@ -88,7 +88,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
@@ -104,7 +104,7 @@ where
         params: &PosParams,
     ) -> storage_api::Result<Option<Data>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
@@ -145,7 +145,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         self.update_data(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
@@ -159,7 +159,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let data_handler = self.get_data_handler();
         let epoch = current_epoch + offset;
@@ -177,7 +177,7 @@ where
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
         if let Some(last_update) = last_update {
@@ -223,7 +223,7 @@ where
         storage: &S,
     ) -> storage_api::Result<Option<Epoch>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let key = self.get_last_update_storage_key();
         storage.read(&key)
@@ -269,7 +269,7 @@ where
         epoch: Epoch,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, epoch)
@@ -312,7 +312,7 @@ where
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         self.init(storage, value, current_epoch, 0)
     }
@@ -326,7 +326,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
@@ -342,7 +342,7 @@ where
         params: &PosParams,
     ) -> storage_api::Result<Option<Data>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
@@ -382,7 +382,7 @@ where
         params: &PosParams,
     ) -> storage_api::Result<Option<Data>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
         match last_update {
@@ -432,7 +432,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         self.update_data(storage, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
@@ -446,7 +446,7 @@ where
         offset: u64,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let data_handler = self.get_data_handler();
         let epoch = current_epoch + offset;
@@ -466,7 +466,7 @@ where
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let last_update = self.get_last_update(storage)?;
         if let Some(last_update) = last_update {
@@ -522,7 +522,7 @@ where
         storage: &S,
     ) -> storage_api::Result<Option<Epoch>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let key = self.get_last_update_storage_key();
         storage.read(&key)

@@ -3,6 +3,7 @@
 pub mod vp;
 
 pub use namada_core::ledger::storage_api;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 pub use namada_core::types::key::common;
 pub use namada_core::types::token;
 pub use namada_proof_of_stake;
@@ -52,14 +53,13 @@ pub fn init_genesis_storage<'a, DB, H>(
 }
 
 /// Initialize storage in the genesis block.
-pub fn init_genesis_storage_new<'a, DB, H>(
-    storage: &mut RwWlStorage<'a, DB, H>,
+pub fn init_genesis_storage_new<S>(
+    storage: &mut S,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: Epoch,
 ) where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    S: StorageRead + StorageWrite,
 {
     namada_proof_of_stake::init_genesis_new(
         storage,

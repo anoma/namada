@@ -1776,19 +1776,19 @@ pub fn validator_slashes_handle(validator: &Address) -> SlashesNew {
 }
 
 /// new init genesis
-pub fn init_genesis_new<'a, WL, S>(
-    wls: &mut WlStorage<'a, WL, S>,
+pub fn init_genesis_new<S>(
+    storage: &mut S,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let mut total_bonded = token::Amount::default();
-    active_validator_set_handle().init(&mut wls.storage, current_epoch)?;
+    active_validator_set_handle().init(storage, current_epoch)?;
     // Do I necessarily want to do this one here since we may not fill it?
-    inactive_validator_set_handle().init(&mut wls.storage, current_epoch)?;
+    inactive_validator_set_handle().init(storage, current_epoch)?;
     let mut n_validators: u64 = 0;
 
     for GenesisValidator {
@@ -1807,12 +1807,12 @@ where
         if n_validators < params.max_validator_slots {
             insert_validator_into_set(
                 &active_val_handle,
-                &mut wls.storage,
+                storage,
                 &current_epoch,
                 &address,
             )?;
             validator_state_handle(&address).init_at_genesis(
-                &mut wls.storage,
+                storage,
                 ValidatorState::Candidate,
                 current_epoch,
             )?;
@@ -1821,7 +1821,7 @@ where
             // already in the active set
             let min_active_amount = get_min_active_validator_amount(
                 &active_validator_set_handle().at(&current_epoch),
-                &mut wls.storage,
+                storage,
             )?;
             if tokens > min_active_amount {
                 // Swap this genesis validator in and demote the last min active
@@ -1831,34 +1831,34 @@ where
                     .at(&min_active_amount);
                 // Remove last min active validator
                 let last_min_active_position =
-                    find_next_position(&min_active_handle, &mut wls.storage)?
+                    find_next_position(&min_active_handle, storage)?
                         - Position::ONE;
                 let removed = min_active_handle
-                    .remove(&mut wls.storage, &last_min_active_position)?;
+                    .remove(storage, &last_min_active_position)?;
                 // Insert last min active validator into the inactive set
                 insert_validator_into_set(
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
                         .at(&min_active_amount.into()),
-                    &mut wls.storage,
+                    storage,
                     &current_epoch,
                     &removed.clone().unwrap(),
                 )?;
                 // Insert the current genesis validator into the active set
                 insert_validator_into_set(
                     &active_val_handle,
-                    &mut wls.storage,
+                    storage,
                     &current_epoch,
                     &address,
                 )?;
                 // Update and set the validator states
                 validator_state_handle(&address).init_at_genesis(
-                    &mut wls.storage,
+                    storage,
                     ValidatorState::Candidate,
                     current_epoch,
                 )?;
                 validator_state_handle(&removed.unwrap()).set(
-                    &mut wls.storage,
+                    storage,
                     ValidatorState::Inactive,
                     current_epoch,
                     0,
@@ -1869,51 +1869,47 @@ where
                     &inactive_validator_set_handle()
                         .at(&current_epoch)
                         .at(&tokens.into()),
-                    &mut wls.storage,
+                    storage,
                     &current_epoch,
                     &address,
                 )?;
                 validator_state_handle(&address).init_at_genesis(
-                    &mut wls.storage,
+                    storage,
                     ValidatorState::Inactive,
                     current_epoch,
                 )?;
             }
         }
         // Write other validator data to storage
-        write_validator_address_raw_hash(
-            &mut wls.storage,
-            &address,
-            &consensus_key,
-        )?;
+        write_validator_address_raw_hash(storage, &address, &consensus_key)?;
         write_validator_max_commission_rate_change(
-            &mut wls.storage,
+            storage,
             &address,
             max_commission_rate_change,
         )?;
         validator_consensus_key_handle(&address).init_at_genesis(
-            &mut wls.storage,
+            storage,
             consensus_key,
             current_epoch,
         )?;
         let delta = token::Change::from(tokens);
         validator_deltas_handle(&address).init_at_genesis(
-            &mut wls.storage,
+            storage,
             delta,
             current_epoch,
         )?;
         bond_handle(&address, &address, false).init_at_genesis(
-            &mut wls.storage,
+            storage,
             delta,
             current_epoch,
         )?;
         bond_handle(&address, &address, true).init_at_genesis(
-            &mut wls.storage,
+            storage,
             delta,
             current_epoch,
         )?;
         validator_commission_rate_handle(&address).init_at_genesis(
-            &mut wls.storage,
+            storage,
             commission_rate,
             current_epoch,
         )?;
@@ -1925,20 +1921,21 @@ where
     } else {
         n_validators
     };
-    write_num_active_validators(&mut wls.storage, n_active_validators)?;
+    write_num_active_validators(storage, n_active_validators)?;
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
-        &mut wls.storage,
+        storage,
         token::Change::from(total_bonded),
         current_epoch,
     )?;
     // Credit bonded token amount to the PoS account
     credit_tokens_new(
-        &mut wls.storage,
+        storage,
         &staking_token_address(),
         &ADDRESS,
         total_bonded,
     );
+    println!("FINISHED GENESIS\n");
 
     Ok(())
 }
@@ -1946,7 +1943,7 @@ where
 /// Read PoS parameters
 pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let value = storage.read_bytes(&params_key())?.unwrap();
     Ok(decode(value).unwrap())
@@ -1958,7 +1955,7 @@ pub fn read_validator_address_raw_hash<S>(
     validator: &Address,
 ) -> storage_api::Result<Option<Address>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let key = validator_address_raw_hash_key(validator.raw_hash().unwrap());
     let value = storage.read_bytes(&key)?;
@@ -1972,7 +1969,7 @@ pub fn write_validator_address_raw_hash<S>(
     consensus_key: &common::PublicKey,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let raw_hash = tm_consensus_key_raw_hash(consensus_key);
     storage.write(&validator_address_raw_hash_key(raw_hash), encode(validator))
@@ -1984,7 +1981,7 @@ pub fn read_validator_max_commission_rate_change<S>(
     validator: &Address,
 ) -> storage_api::Result<Decimal>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let key = validator_max_commission_rate_change_key(validator);
     let value = storage.read_bytes(&key)?.unwrap();
@@ -1998,7 +1995,7 @@ pub fn write_validator_max_commission_rate_change<S>(
     change: Decimal,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let key = validator_max_commission_rate_change_key(validator);
     storage.write(&key, change)
@@ -2007,7 +2004,7 @@ where
 /// Read number of active PoS validators.
 pub fn read_num_active_validators<S>(storage: &S) -> storage_api::Result<u64>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let value = storage.read_bytes(&num_active_validators_key())?.unwrap();
     Ok(decode(value).unwrap())
@@ -2019,7 +2016,7 @@ pub fn write_num_active_validators<S>(
     new_num: u64,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let key = num_active_validators_key();
     storage.write(&key, new_num)
@@ -2033,7 +2030,7 @@ pub fn read_validator_delta_value<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<Option<token::Change>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let handle = validator_deltas_handle(validator);
     handle.get_delta_val(storage, epoch, params)
@@ -2047,7 +2044,7 @@ pub fn read_validator_stake<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<token::Amount>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let handle = validator_deltas_handle(validator);
     let amount = handle.get_sum(storage, epoch, params)?.unwrap_or_default();
@@ -2067,7 +2064,7 @@ pub fn update_validator_deltas<S>(
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let handle = validator_deltas_handle(validator);
     let offset = OffsetPipelineLen::value(params);
@@ -2084,7 +2081,7 @@ pub fn read_total_stake<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<Option<token::Change>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let handle = total_deltas_handle();
     handle.get_sum(storage, epoch, params)
@@ -2097,7 +2094,7 @@ pub fn read_active_validator_set_addresses<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<HashSet<Address>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let mut addresses: HashSet<Address> = HashSet::new();
 
@@ -2126,7 +2123,7 @@ pub fn read_inactive_validator_set_addresses<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<HashSet<Address>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let mut addresses: HashSet<Address> = HashSet::new();
 
@@ -2154,7 +2151,7 @@ pub fn read_all_validator_addresses<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<HashSet<Address>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let mut addresses = read_active_validator_set_addresses(
         storage,
@@ -2179,7 +2176,7 @@ pub fn update_total_deltas<S>(
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let handle = total_deltas_handle();
     let offset = OffsetPipelineLen::value(params);
@@ -2197,7 +2194,7 @@ pub fn is_validator<S>(
     epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<bool>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let state = validator_state_handle(address).get(storage, epoch, params)?;
     Ok(state.is_some())
@@ -2214,7 +2211,7 @@ pub fn bond_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let params = read_pos_params(storage)?;
     if let Some(source) = source {
@@ -2320,7 +2317,7 @@ fn update_validator_set_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let epoch = current_epoch + params.pipeline_len;
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
@@ -2475,7 +2472,7 @@ fn read_validator_set_position<S>(
     epoch: Epoch,
 ) -> storage_api::Result<Option<Position>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let handle = validator_set_positions_handle();
     handle.at(&epoch).get(storage, validator)
@@ -2487,7 +2484,7 @@ fn find_next_position<S>(
     storage: &S,
 ) -> storage_api::Result<Position>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     // Unless we store Positions in the ReverseOrdTokenFormat way, we should
     // probably just iterate like this:
@@ -2517,7 +2514,7 @@ fn find_lowest_position<S>(
     storage: &S,
 ) -> storage_api::Result<Option<Position>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let lowest_position = handle
         .iter(storage)?
@@ -2532,7 +2529,7 @@ fn get_min_active_validator_amount<S>(
     storage: &S,
 ) -> storage_api::Result<token::Amount>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     Ok(handle
         .iter(storage)?
@@ -2552,7 +2549,7 @@ fn get_max_inactive_validator_amount<S>(
     storage: &S,
 ) -> storage_api::Result<token::Amount>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     Ok(handle
         .iter(storage)?
@@ -2575,7 +2572,7 @@ fn insert_validator_into_set<S>(
     address: &Address,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
     handle.insert(storage, next_position, address.clone())?;
@@ -2596,7 +2593,7 @@ pub fn unbond_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let params = read_pos_params(storage)?;
     if let Some(source) = source {
@@ -2734,7 +2731,7 @@ fn update_unbond<S>(
     amount: token::Amount,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let current = handle
         .at(withdraw_epoch)
@@ -2761,7 +2758,7 @@ pub fn become_validator_new<S>(
     max_commission_rate_change: Decimal,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
@@ -2832,7 +2829,7 @@ pub fn withdraw_tokens_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<token::Amount>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
@@ -2914,7 +2911,7 @@ pub fn change_validator_commission_rate_new<S>(
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     if new_rate < Decimal::ZERO {
         return Err(CommissionRateChangeError::NegativeRate(
@@ -2964,7 +2961,7 @@ pub fn slash_new<S>(
     validator: &Address,
 ) -> storage_api::Result<()>
 where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let rate = slash_type.get_slash_rate(params);
     let slash = SlashNew {
@@ -3025,7 +3022,7 @@ pub fn transfer_tokens<S>(
     src: &Address,
     dest: &Address,
 ) where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let src_key = token::balance_key(token, src);
     let dest_key = token::balance_key(token, dest);
@@ -3069,7 +3066,7 @@ pub fn credit_tokens_new<S>(
     target: &Address,
     amount: token::Amount,
 ) where
-    S: for<'iter> StorageRead<'iter> + StorageWrite,
+    S: StorageRead + StorageWrite,
 {
     let key = token::balance_key(token, target);
     let new_balance = match storage
