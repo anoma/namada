@@ -189,7 +189,7 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
-    use namada_vp_prelude::key::RefTo;
+    use namada_vp_prelude::key::{RefTo, SigScheme};
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -358,7 +358,11 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
+        // Init the VP
         let vp_owner = address::testing::established_address_1();
+        let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
+        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
+
         let target = address::testing::established_address_2();
         let token = address::nam();
         let amount = token::Amount::from(amount);
@@ -385,14 +389,20 @@ mod tests {
         assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
     }
 
-    /// Test that a debit of less than or equal to [`MAX_FREE_DEBIT`] tokens without a valid signature is accepted.
+    /// Test that a debit of less than or equal to [`MAX_FREE_DEBIT`] tokens
+    /// without a valid signature but with a valid PoW solution is accepted.
     #[test]
     fn test_unsigned_debit_under_limit_accepted(amount in (..MAX_FREE_DEBIT as u64 + 1)) {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
+        // Init the VP
         let vp_owner = address::testing::established_address_1();
+        let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
+        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
+
         let target = address::testing::established_address_2();
+        let target_key = key::testing::keypair_1();
         let token = address::nam();
         let amount = token::Amount::from(amount);
 
@@ -403,14 +413,37 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
+        // Construct a PoW solution like a client would
+        let transfer = token::Transfer {
+            source: vp_owner.clone(),
+            target: target.clone(),
+            token: token.clone(),
+            sub_prefix: None,
+            amount,
+            key: None,
+            shielded: None,
+        };
+        let challenge = faucet_pow::Challenge::new(&mut tx_env.storage, &vp_owner, transfer).unwrap();
+        let solution = challenge.solve();
+        let solution_bytes = solution.try_to_vec().unwrap();
+        // The signature itself doesn't matter and is not being checked in this
+        // test, it's just used to construct `SignedTxData`
+        let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
+        let signed_solution = SignedTxData {
+            data: Some(solution_bytes),
+            sig,
+        };
+
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-        // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+            // Do same as `tx_testnet_faucet_withdrawal`
+            solution.apply_from_tx(tx::ctx()).unwrap();
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
         });
 
         let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let tx_data: Vec<u8> = signed_solution.try_to_vec().unwrap();
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -428,6 +461,10 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+
+            // Init the VP
+            let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
+            faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();
