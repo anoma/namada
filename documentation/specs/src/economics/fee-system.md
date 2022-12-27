@@ -108,38 +108,8 @@ transaction for the state of the application (importance on the lifetime
 parameter of the tx here).
 
 If enough funds are available, these are deducted from the unshielded storage
-balances of the fee payers and directed to the balance of the block proposer. To
-prevent a possible locked-out problem in which a user doesn't have enough funds
-to pay fees (preventing any sort of operation on the chain), Namada allows the
-signer of the wrapper transaction to unshield some funds on the go to cover the
-cost of the fee. To support this mechanism the `WrapperTx` struct must be
-extended as follows:
-
-```rust
-pub struct WrapperTx {
-   /// The fee to be paid for including the tx
-   pub fee: Fee,
-   /// Used to determine an implicit account of the fee payer
-   pub pk: common::PublicKey,
-   /// Max amount of gas that can be used when executing the inner tx
-   pub gas_limit: GasLimit,
-   /// The optional unshielding data for fee payment
-   pub unshield: Option<SignedTxData>,
-   /// the encrypted payload
-   pub inner_tx: EncryptedTx,
-   /// sha-2 hash of the inner transaction acting as a commitment
-   /// the contents of the encrypted payload
-   pub tx_hash: Hash,
-}
-```
-
-The new `unshield` field carries an optional `SignedTxData` struct encoding for
-an unshielding `Transfer`. The tx itself is crafted in protocol by the
-validators to reduce the burden of the messages on the network and to prevent
-users from including arbitrary transactions. This unshielding operation is
-exempted from paying fees and doesn't charge gas.
-
-If the balance is not enough to cover fees, then the proposed block is
+balances of the fee payers and directed to the balance of the block proposer. If
+instead the balance is not enough to cover fees, then the proposed block is
 considered invalid and rejected, initiating a new Tendermint round: this logic
 implies that the strategy of placing wrapper transactions before any decrypted
 tx in the block will be reinforced.
@@ -200,6 +170,38 @@ checks could reject transactions that may become valid in the future or
 vice-versa: since we can assume a slow rate of change for these parameters and
 mempool and block space optimizations are a priority, it is up to the clients to
 track any changes of these parameters and act accordingly.
+
+### Unshielding
+
+To prevent a possible locked-out problem in which a user doesn't have enough
+funds to pay fees (preventing any sort of operation on the chain), Namada allows
+the signer of the wrapper transaction to unshield some funds on the go to cover
+the cost of the fee. To support this mechanism the `WrapperTx` struct must be
+extended as follows:
+
+```rust
+pub struct WrapperTx {
+   /// The fee to be paid for including the tx
+   pub fee: Fee,
+   /// Used to determine an implicit account of the fee payer
+   pub pk: common::PublicKey,
+   /// Max amount of gas that can be used when executing the inner tx
+   pub gas_limit: GasLimit,
+   /// The optional unshielding data for fee payment
+   pub unshield: Option<SignedTxData>,
+   /// the encrypted payload
+   pub inner_tx: EncryptedTx,
+   /// sha-2 hash of the inner transaction acting as a commitment
+   /// the contents of the encrypted payload
+   pub tx_hash: Hash,
+}
+```
+
+The new `unshield` field carries an optional `SignedTxData` struct encoding for
+an unshielding `Transfer`. The tx itself is crafted in protocol by the
+validators to reduce the burden of the messages on the network and to prevent
+users from including arbitrary transactions. This unshielding operation is
+exempted from paying fees and doesn't charge gas.
 
 The proposer and the validators must also check the validity of the optional
 unshielding transfer attached to the wrapper. More specifically the correctness
