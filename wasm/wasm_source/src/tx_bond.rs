@@ -5,20 +5,27 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let signed = SignedTxData::try_from_slice(&tx_data[..])
-        .wrap_err("failed to decode SignedTxData")?;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+        .wrap_err("failed to decode SignedTxData")
+        .unwrap();
+    let data = signed.data.ok_or_err_msg("Missing data").unwrap();
     let bond = transaction::pos::Bond::try_from_slice(&data[..])
-        .wrap_err("failed to decode Bond")?;
+        .wrap_err("failed to decode Bond")
+        .unwrap();
 
     ctx.bond_tokens_new(bond.source.as_ref(), &bond.validator, bond.amount)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::types::Bond;
+    use namada::proof_of_stake::{
+        active_validator_set_handle,
+        read_active_validator_set_addresses_with_stake, read_total_stake,
+        read_validator_stake,
+    };
     use namada::proto::Tx;
     use namada::types::storage::Epoch;
     use namada_tests::log::test;
@@ -33,6 +40,7 @@ mod tests {
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::token;
+    use namada_vp_prelude::proof_of_stake::WeightedValidator;
     use proptest::prelude::*;
     use rust_decimal;
 
@@ -103,23 +111,86 @@ mod tests {
             &Address::Internal(InternalAddress::PoS),
         );
         let pos_balance_pre: token::Amount = ctx()
-            .read(&pos_balance_key)?
+            .read(&pos_balance_key)
+            .unwrap()
             .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
 
+        println!("DBG0\n");
+
         // Read some data before the tx is executed
-        let total_deltas_pre = ctx().read_total_deltas()?;
-        let validator_deltas_pre =
-            ctx().read_validator_deltas(&bond.validator)?.unwrap();
-        let validator_sets_pre = ctx().read_validator_set()?;
+        let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
+        let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
+        let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
+            Vec::new();
+
+        for epoch in 0..=pos_params.unbonding_len {
+            epoched_total_stake_pre.push(
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?.unwrap(),
+            );
+            epoched_validator_stake_pre.push(
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &bond.validator,
+                    Epoch(epoch),
+                )?
+                .unwrap(),
+            );
+            epoched_validator_set_pre.push(
+                read_active_validator_set_addresses_with_stake(
+                    ctx(),
+                    &active_validator_set_handle(),
+                    Epoch(epoch),
+                )?,
+            );
+        }
+
+        // let total_deltas_pre = ctx().read_total_deltas().unwrap();
+        // let validator_deltas_pre = ctx()
+        //     .read_validator_deltas(&bond.validator)
+        //     .unwrap()
+        //     .unwrap();
+        // let validator_sets_pre = ctx().read_validator_set().unwrap();
+
+        println!("DBG1\n");
 
         apply_tx(ctx(), tx_data)?;
 
+        println!("DBG2\n");
+
         // Read the data after the tx is executed.
-        let validator_deltas_post =
-            ctx().read_validator_deltas(&bond.validator)?.unwrap();
-        let total_deltas_post = ctx().read_total_deltas()?;
-        let validator_sets_post = ctx().read_validator_set()?;
+        // let validator_deltas_post =
+        //     ctx().read_validator_deltas(&bond.validator)?.unwrap();
+        // let total_deltas_post = ctx().read_total_deltas()?;
+        // let validator_sets_post = ctx().read_validator_set()?;
+
+        let mut epoched_total_stake_post: Vec<token::Amount> = Vec::new();
+        let mut epoched_validator_stake_post: Vec<token::Amount> = Vec::new();
+        let mut epoched_validator_set_post: Vec<HashSet<WeightedValidator>> =
+            Vec::new();
+
+        for epoch in 0..=pos_params.unbonding_len {
+            epoched_total_stake_post.push(
+                read_total_stake(ctx(), &pos_params, Epoch(epoch))?.unwrap(),
+            );
+            epoched_validator_stake_post.push(
+                read_validator_stake(
+                    ctx(),
+                    &pos_params,
+                    &bond.validator,
+                    Epoch(epoch),
+                )?
+                .unwrap(),
+            );
+            epoched_validator_set_post.push(
+                read_active_validator_set_addresses_with_stake(
+                    ctx(),
+                    &active_validator_set_handle(),
+                    Epoch(epoch),
+                )?,
+            );
+        }
 
         // The following storage keys should be updated:
 
@@ -132,50 +203,53 @@ mod tests {
         // unbonding lengths
         if bond.amount == token::Amount::from(0) {
             // None of the optional storage fields should have been updated
-            assert_eq!(validator_sets_pre, validator_sets_post);
-            assert_eq!(validator_deltas_pre, validator_deltas_post);
-            assert_eq!(total_deltas_pre, total_deltas_post);
+            assert_eq!(epoched_validator_set_pre, epoched_validator_set_post);
+            assert_eq!(
+                epoched_validator_stake_pre,
+                epoched_validator_stake_post
+            );
+            assert_eq!(epoched_total_stake_pre, epoched_total_stake_post);
         } else {
-            for epoch in 0..pos_params.pipeline_len {
+            for epoch in 0..pos_params.pipeline_len as usize {
                 assert_eq!(
-                    validator_deltas_post.get(epoch),
-                    Some(initial_stake.into()),
+                    epoched_validator_stake_post[epoch], initial_stake,
                     "The validator deltas before the pipeline offset must not \
                      change - checking in epoch: {epoch}"
                 );
                 assert_eq!(
-                    total_deltas_post.get(epoch),
-                    Some(initial_stake.into()),
+                    epoched_total_stake_post[epoch], initial_stake,
                     "The total deltas before the pipeline offset must not \
                      change - checking in epoch: {epoch}"
                 );
                 assert_eq!(
-                    validator_sets_pre.get(epoch),
-                    validator_sets_post.get(epoch),
+                    epoched_validator_set_pre[epoch],
+                    epoched_validator_set_post[epoch],
                     "Validator set before pipeline offset must not change - \
                      checking epoch {epoch}"
                 );
             }
-            for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
+            for epoch in (pos_params.pipeline_len as usize)
+                ..=pos_params.unbonding_len as usize
+            {
                 let expected_stake =
                     i128::from(initial_stake) + i128::from(bond.amount);
                 assert_eq!(
-                    validator_deltas_post.get(epoch),
-                    Some(expected_stake),
+                    epoched_validator_stake_post[epoch],
+                    token::Amount::from_change(expected_stake),
                     "The total deltas at and after the pipeline offset epoch \
                      must be incremented by the bonded amount - checking in \
                      epoch: {epoch}"
                 );
                 assert_eq!(
-                    total_deltas_post.get(epoch),
-                    Some(expected_stake),
+                    epoched_total_stake_post[epoch],
+                    token::Amount::from_change(expected_stake),
                     "The total deltas at and after the pipeline offset epoch \
                      must be incremented by the bonded amount - checking in \
                      epoch: {epoch}"
                 );
                 assert_ne!(
-                    validator_sets_pre.get(epoch),
-                    validator_sets_post.get(epoch),
+                    epoched_validator_set_pre[epoch],
+                    epoched_validator_set_post[epoch],
                     "Validator set at and after pipeline offset must have \
                      changed - checking epoch {epoch}"
                 );

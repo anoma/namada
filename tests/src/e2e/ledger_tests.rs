@@ -1790,6 +1790,7 @@ fn pos_bonds() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    println!("\nSUBMITTING SELF-BOND\n");
     // 2. Submit a self-bond for the gepnesis validator
     let tx_args = vec![
         "bond",
@@ -1810,6 +1811,8 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    println!("\nSUBMITTING DELEGATION\n");
 
     // 3. Submit a delegation to the genesis validator
     let tx_args = vec![
@@ -1833,6 +1836,8 @@ fn pos_bonds() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    println!("\nSUBMITTING UNBOND OF SELF-BOND\n");
+
     // 4. Submit an unbond of the self-bond
     let tx_args = vec![
         "unbond",
@@ -1853,6 +1858,8 @@ fn pos_bonds() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    println!("\nSUBMITTING UNBOND OF DELEGATION\n");
 
     // 5. Submit an unbond of the delegation
     let tx_args = vec![
@@ -1924,6 +1931,90 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--source",
         BERTHA,
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    Ok(())
+}
+
+/// Testing
+#[test]
+fn pos_bonds_test() -> Result<()> {
+    let unbonding_len = 2;
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 2,
+                max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
+                ..genesis.parameters
+            };
+            let pos_params = PosParamsConfig {
+                pipeline_len: 1,
+                unbonding_len,
+                ..genesis.pos_params
+            };
+            GenesisConfig {
+                parameters,
+                pos_params,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    println!("\nSUBMITTING SELF-BOND\n");
+    // 2. Submit a self-bond for the gepnesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--amount",
+        "10.1",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    println!("\nSUBMITTING DELEGATION\n");
+
+    // 3. Submit a delegation to the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "10.1",
         "--gas-amount",
         "0",
         "--gas-limit",

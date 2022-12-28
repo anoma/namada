@@ -28,18 +28,16 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use namada_core::ledger::storage::types::{decode, encode};
-use namada_core::ledger::storage::wl_storage::WlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
 use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::ledger::storage_api::{
-    self, OptionExt, ResultExt, StorageRead, StorageWrite,
+    self, OptionExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::key::{common, tm_consensus_key_raw_hash};
-use namada_core::types::storage::Epoch;
+pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use parameters::PosParams;
 use rust_decimal::Decimal;
@@ -1785,6 +1783,8 @@ pub fn init_genesis_new<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    write_pos_params(storage, params.clone())?;
+
     let mut total_bonded = token::Amount::default();
     active_validator_set_handle().init(storage, current_epoch)?;
     // Do I necessarily want to do this one here since we may not fill it?
@@ -1945,8 +1945,24 @@ pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
     S: StorageRead,
 {
-    let value = storage.read_bytes(&params_key())?.unwrap();
-    Ok(decode(value).unwrap())
+    // let value = storage.read_bytes(&params_key())?.unwrap();
+    // Ok(decode(value).unwrap())
+    storage
+        .read(&params_key())
+        .transpose()
+        .expect("PosParams should always exist in storage after genesis")
+}
+
+/// Write PoS parameters
+pub fn write_pos_params<S>(
+    storage: &mut S,
+    params: PosParams,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = params_key();
+    storage.write(&key, params)
 }
 
 /// Read PoS validator's address raw hash.
@@ -1958,8 +1974,9 @@ where
     S: StorageRead,
 {
     let key = validator_address_raw_hash_key(validator.raw_hash().unwrap());
-    let value = storage.read_bytes(&key)?;
-    Ok(value.map(|value| decode(value).unwrap()))
+    storage.read(&key)
+    // let value = storage.read_bytes(&key)?;
+    // Ok(value.map(|value| decode(value).unwrap()))
 }
 
 /// Write PoS validator's address raw hash.
@@ -1972,20 +1989,19 @@ where
     S: StorageRead + StorageWrite,
 {
     let raw_hash = tm_consensus_key_raw_hash(consensus_key);
-    storage.write(&validator_address_raw_hash_key(raw_hash), encode(validator))
+    storage.write(&validator_address_raw_hash_key(raw_hash), validator)
 }
 
 /// Read PoS validator's max commission rate change.
 pub fn read_validator_max_commission_rate_change<S>(
     storage: &S,
     validator: &Address,
-) -> storage_api::Result<Decimal>
+) -> storage_api::Result<Option<Decimal>>
 where
     S: StorageRead,
 {
     let key = validator_max_commission_rate_change_key(validator);
-    let value = storage.read_bytes(&key)?.unwrap();
-    Ok(decode(value).unwrap())
+    storage.read(&key)
 }
 
 /// Write PoS validator's max commission rate change.
@@ -2006,8 +2022,12 @@ pub fn read_num_active_validators<S>(storage: &S) -> storage_api::Result<u64>
 where
     S: StorageRead,
 {
-    let value = storage.read_bytes(&num_active_validators_key())?.unwrap();
-    Ok(decode(value).unwrap())
+    // let value = storage.read_bytes(&num_active_validators_key())?.unwrap();
+    // Ok(decode(value).unwrap())
+    storage
+        .read(&num_active_validators_key())
+        .transpose()
+        .expect("Num active validators key should always exist after genesis.")
 }
 
 /// Read number of active PoS validators.
@@ -2042,16 +2062,15 @@ pub fn read_validator_stake<S>(
     params: &PosParams,
     validator: &Address,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<token::Amount>
+) -> storage_api::Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
     let handle = validator_deltas_handle(validator);
-    let amount = handle.get_sum(storage, epoch, params)?.unwrap_or_default();
-    let amount: u64 = amount
-        .try_into()
-        .wrap_err("validator_deltas sum must not overflow u64")?;
-    Ok(amount.into())
+    let amount = handle
+        .get_sum(storage, epoch, params)?
+        .map(token::Amount::from_change);
+    Ok(amount)
 }
 
 /// Write PoS validator's consensus key (used for signing block votes).
@@ -2079,12 +2098,15 @@ pub fn read_total_stake<S>(
     storage: &S,
     params: &PosParams,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<token::Change>>
+) -> storage_api::Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
     let handle = total_deltas_handle();
-    handle.get_sum(storage, epoch, params)
+    let amnt = handle
+        .get_sum(storage, epoch, params)?
+        .map(token::Amount::from_change);
+    Ok(amnt)
 }
 
 /// Read all addresses from active validator set.
@@ -2111,6 +2133,38 @@ where
             )) = res
             {
                 addresses.insert(address);
+            }
+        });
+    Ok(addresses)
+}
+
+/// Read all addresses from active validator set with their stake.
+pub fn read_active_validator_set_addresses_with_stake<S>(
+    storage: &S,
+    validator_set_handle: &ActiveValidatorSetsNew,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<WeightedValidator>>
+where
+    S: StorageRead,
+{
+    let mut addresses: HashSet<WeightedValidator> = HashSet::new();
+
+    validator_set_handle
+        .at(&epoch)
+        .iter(storage)?
+        .for_each(|res| {
+            if let Ok((
+                NestedSubKey::Data {
+                    key,
+                    nested_sub_key: _,
+                },
+                address,
+            )) = res
+            {
+                addresses.insert(WeightedValidator {
+                    address,
+                    bonded_stake: u64::from(key),
+                });
             }
         });
     Ok(addresses)
@@ -2188,7 +2242,7 @@ where
 
 /// Check if the provided address is a validator address
 pub fn is_validator<S>(
-    storage: &mut S,
+    storage: &S,
     address: &Address,
     params: &PosParams,
     epoch: namada_core::types::storage::Epoch,
@@ -2213,6 +2267,7 @@ pub fn bond_tokens_new<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    println!("BONDING TOKENS\n");
     let params = read_pos_params(storage)?;
     if let Some(source) = source {
         if source != validator
@@ -2223,9 +2278,17 @@ where
             );
         }
     }
-    if !storage.has_key(&validator_state_key(validator))? {
+    // TODO: what happens if an address used to be a validator but no longer is?
+    // Think if the 'get' here needs to be amended.
+    let state = validator_state_handle(validator).get(
+        storage,
+        current_epoch,
+        &params,
+    )?;
+    if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
+    println!("IS VALIDATOR\n");
 
     let validator_state_handle = validator_state_handle(validator);
     let source = source.unwrap_or(validator);
@@ -2248,6 +2311,7 @@ where
         validator: validator.clone(),
     };
     let offset = params.pipeline_len;
+    // TODO: ensure that this method of checking if the bond exists works
     if storage.has_key(&storage::bond_amount_key(&bond_id))? {
         let cur_amount = bond_amount_handle
             .get_delta_val(storage, current_epoch, &params)?
@@ -2272,6 +2336,24 @@ where
         bond_remain_handle.init(storage, amount, current_epoch, offset)?;
     }
 
+    dbg!(
+        validator_set_positions_handle()
+            .at(&current_epoch)
+            .get(storage, validator)?
+    );
+    dbg!(
+        validator_set_positions_handle()
+            .at(&(current_epoch + 1_u64))
+            .get(storage, validator)?
+    );
+    dbg!(
+        validator_set_positions_handle()
+            .at(&(current_epoch + 2_u64))
+            .get(storage, validator)?
+    );
+
+    println!("UPDATING VALIDATOR SET NOW\n");
+
     // Update the validator set
     update_validator_set_new(
         storage,
@@ -2282,6 +2364,7 @@ where
         &inactive_validator_set_handle(),
         current_epoch,
     )?;
+    println!("UPDATING VALIDATOR DELTAS NOW\n");
 
     // Update the validator and total deltas
     update_validator_deltas(
@@ -2300,7 +2383,8 @@ where
         token::Amount::from_change(amount),
         source,
         &ADDRESS,
-    );
+    )?;
+    println!("END BOND_TOKENS_NEW\n");
 
     Ok(())
 }
@@ -2320,10 +2404,15 @@ where
     S: StorageRead + StorageWrite,
 {
     let epoch = current_epoch + params.pipeline_len;
-    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
+    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
+        .unwrap_or_default();
     let tokens_post = tokens_pre.change() + token_change;
     // TODO: handle overflow or negative vals perhaps with TryFrom
     let tokens_post = token::Amount::from_change(tokens_post);
+
+    // let position =
+    // validator_set_positions_handle().at(&current_epoch).get(storage,
+    // validator)
 
     let position: Position = read_validator_set_position(
         storage, validator, epoch,
@@ -2898,7 +2987,7 @@ where
         withdrawable_amount,
         &ADDRESS,
         source,
-    );
+    )?;
 
     Ok(withdrawable_amount)
 }
@@ -2923,6 +3012,13 @@ where
 
     let max_change =
         read_validator_max_commission_rate_change(storage, validator)?;
+    if max_change.is_none() {
+        return Err(CommissionRateChangeError::NoMaxSetInStorage(
+            validator.clone(),
+        )
+        .into());
+    }
+
     let params = read_pos_params(storage)?;
     let commission_handle = validator_commission_rate_handle(validator);
     let pipeline_epoch = current_epoch + params.pipeline_len;
@@ -2939,7 +3035,7 @@ where
         .get(storage, pipeline_epoch - 1, &params)?
         .expect("Could not find a rate in given epoch");
     let change_from_prev = new_rate - rate_before_pipeline;
-    if change_from_prev.abs() > max_change {
+    if change_from_prev.abs() > max_change.unwrap() {
         return Err(CommissionRateChangeError::RateChangeTooLarge(
             change_from_prev,
             validator.clone(),
@@ -2971,7 +3067,8 @@ where
     };
 
     let current_stake =
-        read_validator_stake(storage, params, validator, current_epoch)?;
+        read_validator_stake(storage, params, validator, current_epoch)?
+            .unwrap_or_default();
     let slashed_amount = decimal_mult_u64(rate, u64::from(current_stake));
     let token_change = -token::Change::from(slashed_amount);
 
@@ -3004,7 +3101,7 @@ where
         token::Amount::from(slashed_amount),
         &ADDRESS,
         &SLASH_POOL_ADDRESS,
-    );
+    )?;
 
     Ok(())
 }
@@ -3021,17 +3118,15 @@ pub fn transfer_tokens<S>(
     amount: token::Amount,
     src: &Address,
     dest: &Address,
-) where
+) -> storage_api::Result<()>
+where
     S: StorageRead + StorageWrite,
 {
     let src_key = token::balance_key(token, src);
     let dest_key = token::balance_key(token, dest);
-    if let Some(src_balance) = storage
-        .read_bytes(&src_key)
-        .expect("Unable to read token balance for PoS system")
-    {
-        let mut src_balance: token::Amount =
-            decode(src_balance).unwrap_or_default();
+    if let Some(mut src_balance) = storage.read::<token::Amount>(&src_key)? {
+        // let mut src_balance: token::Amount =
+        //     decode(src_balance).unwrap_or_default();
         if src_balance < amount {
             tracing::error!(
                 "PoS system transfer error, the source doesn't have \
@@ -3039,23 +3134,27 @@ pub fn transfer_tokens<S>(
                 src_balance,
                 amount
             );
-            return;
         }
         src_balance.spend(&amount);
-        let dest_balance = storage.read_bytes(&dest_key).unwrap_or_default();
-        let mut dest_balance: token::Amount = dest_balance
-            .and_then(|b| decode(b).ok())
+        let mut dest_balance = storage
+            .read::<token::Amount>(&dest_key)?
             .unwrap_or_default();
+
+        // let dest_balance = storage.read_bytes(&dest_key).unwrap_or_default();
+        // let mut dest_balance: token::Amount = dest_balance
+        //     .and_then(|b| decode(b).ok())
+        //     .unwrap_or_default();
         dest_balance.receive(&amount);
         storage
-            .write(&src_key, encode(&src_balance))
+            .write(&src_key, src_balance)
             .expect("Unable to write token balance for PoS system");
         storage
-            .write(&dest_key, encode(&dest_balance))
+            .write(&dest_key, dest_balance)
             .expect("Unable to write token balance for PoS system");
     } else {
         tracing::error!("PoS system transfer error, the source has no balance");
     }
+    return Ok(());
 }
 
 /// Credit tokens to an account, to be used only during genesis
@@ -3070,16 +3169,178 @@ pub fn credit_tokens_new<S>(
 {
     let key = token::balance_key(token, target);
     let new_balance = match storage
-        .read_bytes(&key)
+        .read::<token::Amount>(&key)
         .expect("Unable to read token balance for PoS system")
     {
-        Some(balance) => {
-            let balance: token::Amount = decode(balance).unwrap_or_default();
-            balance + amount
-        }
+        Some(balance) => balance + amount,
         None => amount,
     };
     storage
-        .write(&key, encode(&new_balance))
+        .write(&key, new_balance)
         .expect("Unable to write token balance for PoS system");
+}
+
+/// NEW: adapting `PosBase::validator_set_update for lazy storage
+pub fn validator_set_update_tendermint<S>(
+    storage: &S,
+    params: &PosParams,
+    current_epoch: Epoch,
+    f: impl FnMut(ValidatorSetUpdate),
+) where
+    S: StorageRead,
+{
+    let current_epoch: Epoch = current_epoch;
+    let current_epoch_u64: u64 = current_epoch.into();
+
+    let previous_epoch: Option<Epoch> = if current_epoch_u64 == 0 {
+        None
+    } else {
+        Some(Epoch::from(current_epoch_u64 - 1))
+    };
+
+    let cur_active_validators =
+        active_validator_set_handle().at(&current_epoch);
+    let prev_active_validators = if previous_epoch.is_some() {
+        Some(active_validator_set_handle().at(&previous_epoch.clone().unwrap()))
+    } else {
+        None
+    };
+
+    let active_validators = cur_active_validators
+        .iter(storage)
+        .unwrap()
+        .filter_map(|validator| {
+            let (
+                NestedSubKey::Data {
+                    key: cur_stake,
+                    nested_sub_key: _,
+                },
+                address,
+            ) = validator.unwrap();
+
+            // Check if the validator was active in the previous epoch with the
+            // same stake
+            //
+            // TODO: check consistency btwn here and old method
+            //
+            // TODO: do I need to check Pending here? (will be deprecated soon
+            // anyway)
+            //
+            // TODO: perhaps write a specific function for
+            // (In)ActiveValidatorSetsNew that checks if a validator is
+            // contained
+            if previous_epoch.is_some() && prev_active_validators.is_some() {
+                let prev_epoch = previous_epoch.unwrap();
+                let prev_active_validators =
+                    prev_active_validators.as_ref().unwrap();
+
+                // Method 1
+                let prev_validator_state = validator_state_handle(&address)
+                    .get(storage, prev_epoch, params)
+                    .unwrap();
+                let prev_validator_stake = validator_deltas_handle(&address)
+                    .get_sum(storage, prev_epoch, params)
+                    .unwrap()
+                    .map(token::Amount::from_change);
+                if prev_validator_state == Some(ValidatorState::Candidate)
+                    && prev_validator_stake == Some(cur_stake)
+                {
+                    return None;
+                }
+
+                // Method 2
+                let prev_position = validator_set_positions_handle()
+                    .at(&prev_epoch)
+                    .get(storage, &address)
+                    .unwrap();
+                if prev_position.is_some() {
+                    let prev_address = prev_active_validators
+                        .at(&cur_stake)
+                        .get(storage, &prev_position.unwrap())
+                        .unwrap();
+                    if prev_address == Some(address.clone()) {
+                        return None;
+                    }
+                }
+                // TODO: remove one of the above methods
+
+                // TODO: this will be deprecated, but not sure if it is even
+                // needed rn
+                if cur_stake == token::Amount::default() {
+                    let state = validator_state_handle(&address)
+                        .get(storage, prev_epoch, params)
+                        .unwrap();
+                    if let Some(ValidatorState::Pending) = state {
+                        println!(
+                            "skipping validator update, it's new {}",
+                            address.clone()
+                        );
+                        return None;
+                    }
+                }
+            }
+            let consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap()
+                .unwrap();
+            Some(ValidatorSetUpdate::Active(ActiveValidator {
+                consensus_key,
+                bonded_stake: cur_stake.into(),
+            }))
+        });
+    let cur_inactive_validators =
+        inactive_validator_set_handle().at(&current_epoch);
+    let inactive_validators = cur_inactive_validators
+        .iter(storage)
+        .unwrap()
+        .filter_map(|validator| {
+            let (
+                NestedSubKey::Data {
+                    key: cur_stake,
+                    nested_sub_key: _,
+                },
+                address,
+            ) = validator.unwrap();
+            let cur_stake = token::Amount::from(cur_stake);
+            let prev_inactive_vals = inactive_validator_set_handle()
+                .at(&previous_epoch.clone().unwrap());
+            if previous_epoch.is_some()
+                && !prev_inactive_vals.is_empty(storage).unwrap()
+            {
+                let prev_epoch = previous_epoch.unwrap();
+                // Check if the current validator was in the inactive set
+
+                // Note: don't think we should care if a validator that was and
+                // still is inactive has changed stake, since we will still tell
+                // tendermint that it is 0 stake to make it inactive. I think we
+                // were doing too much previously.
+                let prev_state = validator_state_handle(&address)
+                    .get(storage, prev_epoch, params)
+                    .unwrap();
+                if prev_state == Some(ValidatorState::Inactive) {
+                    return None;
+                }
+
+                // TODO: this will be deprecated, but not sure if it is even
+                // needed rn
+                if cur_stake == token::Amount::default() {
+                    let state = validator_state_handle(&address)
+                        .get(storage, prev_epoch, params)
+                        .unwrap();
+                    if let Some(ValidatorState::Pending) = state {
+                        println!(
+                            "skipping validator update, it's new {}",
+                            address.clone()
+                        );
+                        return None;
+                    }
+                }
+            }
+            let consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap()
+                .unwrap();
+            Some(ValidatorSetUpdate::Deactivated(consensus_key))
+        });
+    active_validators.chain(inactive_validators).for_each(f)
 }

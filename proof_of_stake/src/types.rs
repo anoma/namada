@@ -190,6 +190,7 @@ pub struct BondId {
     Clone,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshDeserialize,

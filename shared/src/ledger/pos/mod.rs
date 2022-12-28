@@ -14,9 +14,7 @@ use namada_proof_of_stake::PosBase;
 use rust_decimal::Decimal;
 pub use vp::PosVP;
 
-use crate::ledger::storage::{
-    self as ledger_storage, RwWlStorage, Storage, StorageHasher,
-};
+use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Epoch;
 

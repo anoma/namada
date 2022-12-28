@@ -381,6 +381,16 @@ where
             Ok((sub_key, val))
         }))
     }
+
+    /// Returns whether the map contains no elements.
+    pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
+    where
+        S: StorageRead,
+    {
+        let mut iter =
+            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        Ok(iter.next().is_none())
+    }
 }
 
 // `LazyMap` methods with borsh encoded values `V`

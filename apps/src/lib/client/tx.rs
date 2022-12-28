@@ -2263,6 +2263,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
+            println!("Found source balance {}", balance);
             if balance < args.amount {
                 eprintln!(
                     "The balance of the source {} is lower than the amount to \
@@ -2283,6 +2284,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
         }
     }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
+    println!("Wasm tx bond code bytes length = {}\n", tx_code.len());
     let bond = pos::Bond {
         validator,
         amount: args.amount,

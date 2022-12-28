@@ -324,6 +324,8 @@ where
 
         // Set the initial validator set
         for validator in genesis.validators {
+            // dbg!(&validator.pos_data);
+
             let mut abci_validator = abci::ValidatorUpdate::default();
             let consensus_key: common::PublicKey =
                 validator.pos_data.consensus_key.clone();
