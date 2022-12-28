@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v0.12.2
+
+Namada 0.12.2 is a hotfix release, limiting transactions included in a
+block by size.
+
+### BUG FIXES
+
+- Limit block space to under Tendermint's limit, and limit transactions included
+  in a block by their size. ([#952](https://github.com/anoma/namada/pull/952))
+
+### MISCELLANEOUS
+
+- Don't attempt to include matchmaker DLLs, which no longer exist, in release
+  packages. ([#943](https://github.com/anoma/namada/pull/943))
+- Include license information in release binary tarballs.
+  ([#945](https://github.com/anoma/namada/pull/945))
+
+## v0.12.1
+
+Namada 0.12.1 is a hotfix release, fixing a node crash on malformed
+transactions to the MASP.
+
+### BUG FIXES
+
+- Avoid panicking unwrap()s in vp_verify_masp, to prevent crashing the node on
+  malformed transactions. ([#942](https://github.com/anoma/namada/pull/942))
+
 ## v0.12.0
 
 Namada 0.12.0 is a scheduled minor release.

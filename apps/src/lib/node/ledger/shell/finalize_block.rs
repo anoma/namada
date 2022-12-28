@@ -2,7 +2,10 @@
 
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
+use namada::ledger::storage::write_log::StorageModification;
+use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
+use namada::types::token::Amount;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -128,9 +131,80 @@ where
             }
 
             let mut tx_event = match &tx_type {
-                TxType::Wrapper(_wrapper) => {
-                    self.storage.tx_queue.push(_wrapper.clone());
-                    Event::new_tx_event(&tx_type, height.0)
+                TxType::Wrapper(wrapper) => {
+                    let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+
+                    // Charge fee
+                    let fee_payer =
+                        if wrapper.pk != address::masp_tx_key().ref_to() {
+                            wrapper.fee_payer()
+                        } else {
+                            address::masp()
+                        };
+
+                    let balance_key = token::balance_key(
+                        &self.storage.native_token,
+                        &fee_payer,
+                    );
+                    let balance: Amount =
+                        match self.write_log.read(&balance_key).0 {
+                            Some(wal_mod) => {
+                                // Read from WAL
+                                if let StorageModification::Write { value } =
+                                    wal_mod
+                                {
+                                    Amount::try_from_slice(value).unwrap()
+                                } else {
+                                    Amount::default()
+                                }
+                            }
+                            None => {
+                                // Read from storage
+                                let balance = StorageRead::read(
+                                    &self.storage,
+                                    &balance_key,
+                                );
+                                // Storage read must not fail, but there might
+                                // be no value, in which
+                                // case default (0) is returned
+                                balance
+                                    .expect(
+                                        "Storage read in the protocol must \
+                                         not fail",
+                                    )
+                                    .unwrap_or_default()
+                            }
+                        };
+
+                    let balance: u64 = balance.into();
+                    match balance.checked_sub(100) {
+                        Some(v) => {
+                            self.write_log
+                                .write(
+                                    &balance_key,
+                                    Amount::from(v).try_to_vec().unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        None => {
+                            // Burn remaining funds
+                            self.write_log
+                                .write(
+                                    &balance_key,
+                                    Amount::from(0).try_to_vec().unwrap(),
+                                )
+                                .unwrap();
+                            tx_event["log"] =
+                                "Insufficient balance for fee".into();
+                            tx_event["code"] = ErrorCodes::InvalidTx.into();
+
+                            response.events.push(tx_event);
+                            continue;
+                        }
+                    }
+
+                    self.storage.tx_queue.push(wrapper.clone());
+                    tx_event
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
@@ -348,15 +422,26 @@ mod test_finalize_block {
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
+
+        // Add unshielded balance for fee paymenty
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .unwrap();
+
         // create some wrapper txs
-        for i in 1..5 {
+        for i in 1u64..5 {
             let raw_tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: i.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -529,6 +614,16 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
+        // Add unshielded balance for fee paymenty
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .unwrap();
+
         // create two decrypted txs
         let mut wasm_path = top_level_directory();
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
@@ -545,7 +640,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -576,7 +671,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount: 100.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,

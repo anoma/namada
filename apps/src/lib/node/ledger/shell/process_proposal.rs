@@ -159,10 +159,12 @@ where
                             masp()
                         };
                         // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
+                        let balance = self.get_balance(
+                            &self.storage.native_token,
+                            &fee_payer,
+                        );
 
-                        if tx.fee.amount <= balance {
+                        if Amount::from(100) <= balance {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \
@@ -398,6 +400,15 @@ mod test_process_proposal {
             ..Default::default()
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
+        // reduce address balance to match the 100 token fee
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(99).try_to_vec().unwrap())
+            .unwrap();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),

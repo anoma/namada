@@ -25,7 +25,7 @@ All public testnets will be listed here:
   - Namada protocol version: `v0.12.0`
   - Tendermint version: `v0.1.4-abciplus`
   - Genesis time: 20th of December 2022 at 17:00 UTC
-  - CHAIN_ID: `TBD`
+  - CHAIN_ID: `public-testnet-1.0.05ab4adb9db`
 
 ## Block explorer
 The block explorer is currently in development. The latest version can be found at [namada.world](https://namada.world/)

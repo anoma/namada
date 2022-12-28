@@ -1156,6 +1156,7 @@ pub mod testing {
 mod tests {
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
+    use proptest::test_runner::Config;
     use rust_decimal_macros::dec;
 
     use super::testing::*;
@@ -1204,6 +1205,10 @@ mod tests {
     }
 
     proptest! {
+        #![proptest_config(Config {
+            cases: 10,
+            .. Config::default()
+        })]
         /// Test that:
         /// 1. When the minimum blocks have been created since the epoch
         ///    start height and minimum time passed since the epoch start time,

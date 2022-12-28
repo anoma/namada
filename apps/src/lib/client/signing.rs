@@ -6,6 +6,7 @@ use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
+use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx};
 
 use super::rpc;
@@ -174,7 +175,7 @@ pub async fn sign_wrapper(
     let tx = {
         WrapperTx::new(
             Fee {
-                amount: args.fee_amount,
+                amount: Amount::from(100),
                 token: ctx.get(&args.fee_token),
             },
             keypair,

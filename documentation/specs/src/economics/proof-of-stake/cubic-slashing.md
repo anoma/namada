@@ -1,21 +1,22 @@
 # Cubic slashing
 
-Namada implements cubic slashing, meaning that the amount of a slash is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus encourage network resilience.
+Namada implements a slashing scheme that is called cubic slashing: the amount of a slash is proportional to the cube of the voting power committing infractions within a particular interval. This is designed to make it riskier to operate larger or similarly configured validators, and thus the scheme encourages network resilience.
 
 When a slash is detected:
-1. Using the height of the infraction, calculate the epoch just after which stake bonded at the time of infraction could have been fully unbonded. Enqueue the slash for processing at the end of that epoch (so that it will be processed before unbonding could have completed, and hopefully long enough for any other misbehaviour from around the same height as this misbehaviour to also be detected).
-2. Jail the validator in question (this will apply at the end of the current epoch). While the validator is jailed, it should be removed from the validator set (also being effective from the end of the current epoch). Note that this is the only instance in our proof-of-stake model when the validator set is updated without waiting for the pipeline offset.
+1. Using the height of the infraction, calculate the epoch at the unbonding length relative to the current epoch. This is the final epoch before the stake that was used to commit the infraction can be fully unbonded and withdrawn. The slash is enqueued to be processed in this final epoch to allow for sufficient time to detect any other validator misbehaviors while still processing the slash before the infraction stake could be unbonded and withdrawn. 
+2. Jail the misbehaving validator, effective at the beginning of the next epoch. While the validator is jailed, it is removed from the validator set. Note that this is the only instance in our proof-of-stake model wherein the validator set is updated without waiting for the pipeline offset.
 3. Prevent the delegators to this validator from altering their delegations in any way until the enqueued slash is processed.
 
-At the end of each epoch, in order to process any slashes scheduled for processing at the end of that epoch:
-1. Iterate over all slashes for infractions committed within a range of (-1, +1) epochs worth of block heights (this may need to be a protocol parameter) of the infraction in question.
-2. Calculate the slash rate according to the following formula:
+At the end of each epoch, for each slash enqueued to be processed for the end of the epoch:
+1. Collect all known infractions committed within a range of [-`window_width`, +`window_width`] epochs around the infraction in question. By default, `window_width` = 1.
+2. Sum the fractional voting powers (relative to the total PoS voting power) of the misbehaving validator for each of the collected nearby infractions. 
+3. The final slash rate for the slash in question is then dependent on this sum. Using $r_\text{nom}$ as the nominal slash rate and $\text{vp}$ to indicate voting power, the slash rate is expressed as:
 
-$$ \sum_{i \in \text{validators}} \max \{ 0.01, \big(\frac{i_{voting-power}}{\sum_{i \in \text{validators}}i_{voting-power}}\big)^2\} $$
+$$  \max \{~r_{\text{nom}}~, ~9*\big(\sum_{i \in \text{infractions}}\frac{\text{vp}_i}{\text{vp}_{\text{tot}}}\big)^2~\}. $$
 
 Or, in pseudocode:
 <!-- I want to make these two code blocks toggleable as in  https://rdmd.readme.io/docs/code-blocks#tabbed-code-blocks but can't seem to get it to work-->
-```haskell =
+<!-- ```haskell =
 calculateSlashRate :: [Slash] -> Float
 
 calculateSlashRate slashes = 
@@ -24,7 +25,8 @@ calculateSlashRate slashes =
   -- minimum slash rate is 1%
   -- then exponential between 0 & 1/3 voting power
   -- we can make this a more complex function later
-```
+``` -->
+
 <!-- ```python
 class PoS:
     def __init__(self, genesis_validators : list):
@@ -50,17 +52,67 @@ class PoS:
         return slash_rate
 ``` -->
 
-As a function, it can be drawn as:
+```rust
+// Infraction type, where inner field is the slash rate for the type
+enum Infraction {
+    DuplicateVote(Decimal),
+    LightClientAttack(Decimal)
+}
 
-![cubic_slash](../images/cubic_slash.png)
+// Generic validator with an address and voting power
+struct Validator {
+    address: Vec<u8>,
+    voting_power: u64,
+}
 
-> Note: The voting power of a slash is the voting power of the validator **when they violated the protocol**, not the voting power now or at the time of any of the other infractions. This does mean that these voting powers may not sum to 1, but this method should still be close to the incentives we want, and can't really be changed without making the system easier to game.
+// Generic slash object with the misbehaving validator and infraction type
+struct Slash {
+    validator: Validator,
+    infraction_type: Infraction,
+}
+
+// Calculate the cubic slash rate for a slash in the current epoch
+fn calculate_cubic_slash_rate(
+    current_epoch: u64,
+    nominal_slash_rate: Decimal,
+    cubic_window_width: u64,
+    slashes: Map<u64, Vec<Slash>>,
+    total_voting_power: u64
+) -> Decimal {
+    let mut vp_frac_sum = Decimal::ZERO;
+
+    let start_epoch = current_epoch - cubic_window_width;
+    let end_epoch = current_epoch + cubic_window_width;
+
+    for epoch in start_epoch..=end_epoch {
+        let cur_slashes = slashes.get(epoch);
+        let vp_frac_this_epoch = cur_slashes.iter.fold(0, |sum, Slash{validator, _}|
+            { sum + validator.voting_power / total_voting_power}
+        );
+        vp_frac_sum += vp_frac_this_epoch;
+    }
+    let rate = cmp::min(
+        Decimal::ONE,
+        cmp::max(
+            slash.infraction_type.0,
+            9 * vp_frac_sum * vp_frac_sum,
+        ),
+    );
+    rate
+}
+```
+
+As a function, it can be drawn as (assuming $r_{\text{min}} = 1\%$):
+
+[<img src="../images/cubic_slash.png" width="500"/>](../images/cubic_slash.png)
 
 3. Set the slash rate on the now "finalised" slash in storage.
-4. Update the validators' stored voting power appropriately.
+4. Update the misbehaving validators' stored voting powers appropriately.
 5. Delegations to the validator can now be redelegated / start unbonding / etc.
 
-Validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the validator set starting at the epoch at pipeline offset (into `consensus`, `below_capacity` or `below_threshold` set, depending on its voting power).
+> Note: The voting power associated with a slash is the voting power of the validator **when they violated the protocol**. This does mean that these voting powers may not sum to 1, but this method should still be close to the desired incentives and cannot really be changed without making the system easier to game.
+
+A jailed validator can later submit a transaction to unjail themselves after a configurable period. When the transaction is applied and accepted, the validator updates its state to "candidate" and is added back to the appropriate validator set (depending on its new voting power) starting at the pipeline offset relative to the epoch in which the unjailing transaction was submitted.
 
 At present, funds slashed are sent to the governance treasury. 
 
@@ -69,8 +121,6 @@ At present, funds slashed are sent to the governance treasury.
 Slashes should lead to punishment for delegators who were contributing voting power to the validator at the height of the infraction, _as if_ the delegations were iterated over and slashed individually.
 
 This can be implemented as a negative inflation rate for a particular block.
-
-Instant redelegation is not supported. Redelegations must wait the unbonding period.
 
 <!--## State management
 
