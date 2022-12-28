@@ -11,8 +11,21 @@ pub const ENV_KEY: &str = "NAMADA_LOG";
 
 // Env var to enable/disable color log
 const COLOR_ENV_KEY: &str = "NAMADA_LOG_COLOR";
-// Env var to enable/disable json formatting
-const JSON_ENV_KEY: &str = "NAMADA_JSON_FMT";
+// Env var to log formatting (one of "full" (default), "json", "pretty")
+const FMT_ENV_KEY: &str = "NAMADA_LOG_FMT";
+
+#[derive(Clone, Debug)]
+enum Fmt {
+    Full,
+    Json,
+    Pretty,
+}
+
+impl Default for Fmt {
+    fn default() -> Self {
+        Self::Full
+    }
+}
 
 pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
     let filter = filter_from_env_or(default);
@@ -32,26 +45,34 @@ pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
     } else {
         true
     };
-    let json_format = if let Ok(val) = env::var(JSON_ENV_KEY) {
-        val.to_ascii_lowercase() != "false"
-    } else {
-        true
-    };
-    if json_format {
-        let my_collector = Subscriber::builder()
-            .with_ansi(with_color)
-            .json()
-            .with_env_filter(filter)
-            .finish();
-        tracing::subscriber::set_global_default(my_collector)
-            .wrap_err("Failed to set log subscriber")
-    } else {
-        let my_collector = Subscriber::builder()
-            .with_ansi(with_color)
-            .with_env_filter(filter)
-            .finish();
-        tracing::subscriber::set_global_default(my_collector)
-            .wrap_err("Failed to set log subscriber")
+    let format = env::var(FMT_ENV_KEY)
+        .ok()
+        .and_then(|val| match val.to_ascii_lowercase().as_str() {
+            "full" => Some(Fmt::Full),
+            "json" => Some(Fmt::Json),
+            "pretty" => Some(Fmt::Pretty),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let builder = Subscriber::builder()
+        .with_ansi(with_color)
+        .with_env_filter(filter);
+    match format {
+        Fmt::Full => {
+            let my_collector = builder.with_ansi(with_color).finish();
+            tracing::subscriber::set_global_default(my_collector)
+                .wrap_err("Failed to set log subscriber")
+        }
+        Fmt::Json => {
+            let my_collector = builder.json().finish();
+            tracing::subscriber::set_global_default(my_collector)
+                .wrap_err("Failed to set log subscriber")
+        }
+        Fmt::Pretty => {
+            let my_collector = builder.pretty().finish();
+            tracing::subscriber::set_global_default(my_collector)
+                .wrap_err("Failed to set log subscriber")
+        }
     }
 }
 
