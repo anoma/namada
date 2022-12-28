@@ -5,6 +5,7 @@
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
 faucet_pow_difficulty = 1
+faucet_withdrawal_limit = 1_000
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.

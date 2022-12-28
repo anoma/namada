@@ -113,6 +113,8 @@ pub mod genesis_config {
         pub native_token: String,
         /// Faucet PoW difficulty - defaults to `0` when not set
         pub faucet_pow_difficulty: Option<faucet_pow::Difficulty>,
+        /// Faucet withdrawal limit - defaults to 1000 NAM when not set
+        pub faucet_withdrawal_limit: Option<token::Amount>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -500,6 +502,7 @@ pub mod genesis_config {
             genesis_time,
             native_token,
             faucet_pow_difficulty,
+            faucet_withdrawal_limit,
             validator,
             token,
             established,
@@ -636,6 +639,7 @@ pub mod genesis_config {
             genesis_time: genesis_time.try_into().unwrap(),
             native_token,
             faucet_pow_difficulty,
+            faucet_withdrawal_limit,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -685,6 +689,7 @@ pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
     pub faucet_pow_difficulty: Option<faucet_pow::Difficulty>,
+    pub faucet_withdrawal_limit: Option<token::Amount>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -960,6 +965,7 @@ pub fn genesis() -> Genesis {
         gov_params: GovParams::default(),
         native_token: address::nam(),
         faucet_pow_difficulty: None,
+        faucet_withdrawal_limit: None,
     }
 }
 

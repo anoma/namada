@@ -22,11 +22,13 @@ pub fn init_faucet_storage<S>(
     storage: &mut S,
     address: &Address,
     difficulty: Difficulty,
+    withdrawal_limit: token::Amount,
 ) -> storage_api::Result<()>
 where
     S: StorageWrite,
 {
-    write_difficulty(storage, address, difficulty)
+    write_difficulty(storage, address, difficulty)?;
+    write_withdrawal_limit(storage, address, withdrawal_limit)
 }
 
 /// Counters are associated with transfer target addresses.
@@ -262,6 +264,8 @@ pub struct Keys {
     counters: &'static str,
     /// PoW difficulty
     difficulty: &'static str,
+    /// withdrawal limit
+    withdrawal_limit: &'static str,
 }
 
 /// Storage key prefix to the `counters` field. The rest of the key is composed
@@ -314,6 +318,30 @@ pub fn is_difficulty_key(key: &storage::Key, faucet_address: &Address) -> bool {
             DbKeySeg::AddressSeg(address),
             DbKeySeg::StringSeg(sub_key),
         ] if address == faucet_address && sub_key.as_str() == Keys::VALUES.difficulty,
+    )
+}
+
+/// Storage key to the `withdrawal_limit` field.
+pub fn withdrawal_limit_key(address: &Address) -> storage::Key {
+    storage::Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(address.clone()),
+            DbKeySeg::StringSeg(Keys::VALUES.withdrawal_limit.to_string()),
+        ],
+    }
+}
+
+/// Is the storage key for the `withdrawal_limit` field?
+pub fn is_withdrawal_limit_key(
+    key: &storage::Key,
+    faucet_address: &Address,
+) -> bool {
+    matches!(
+        &key.segments[..],
+        [
+            DbKeySeg::AddressSeg(address),
+            DbKeySeg::StringSeg(sub_key),
+        ] if address == faucet_address && sub_key.as_str() == Keys::VALUES.withdrawal_limit,
     )
 }
 
@@ -412,6 +440,32 @@ where
     storage.write(&difficulty_key(address), difficulty)
 }
 
+/// Read the withdrawal limit.
+pub fn read_withdrawal_limit<S>(
+    storage: &S,
+    address: &Address,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let withdrawal_limit = storage
+        .read(&withdrawal_limit_key(address))?
+        .expect("withdrawal_limit must always be set");
+    Ok(withdrawal_limit)
+}
+
+/// Write faucet withdrawal limit
+pub fn write_withdrawal_limit<S>(
+    storage: &mut S,
+    address: &Address,
+    withdrawal_limit: token::Amount,
+) -> Result<(), storage_api::Error>
+where
+    S: StorageWrite,
+{
+    storage.write(&withdrawal_limit_key(address), withdrawal_limit)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -444,6 +498,7 @@ mod test_with_tx_and_vp_env {
     fn test_challenge_and_solution() -> storage_api::Result<()> {
         let faucet_address = address::testing::established_address_1();
         let difficulty = Difficulty::try_new(1).unwrap();
+        let withdrawal_limit = token::Amount::whole(1_000);
 
         let mut tx_env = TestTxEnv::default();
 
@@ -454,7 +509,12 @@ mod test_with_tx_and_vp_env {
         // Ensure that the addresses exists, so we can use them in a tx
         tx_env.spawn_accounts([&faucet_address, &target, &token]);
 
-        init_faucet_storage(&mut tx_env.storage, &faucet_address, difficulty)?;
+        init_faucet_storage(
+            &mut tx_env.storage,
+            &faucet_address,
+            difficulty,
+            withdrawal_limit,
+        )?;
 
         let transfer = token::Transfer {
             source: faucet_address.clone(),

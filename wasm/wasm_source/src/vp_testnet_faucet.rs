@@ -1,15 +1,13 @@
 //! A "faucet" account for testnet.
 //!
-//! This VP allows anyone to withdraw up to [`MAX_FREE_DEBIT`] tokens without
-//! the faucet's signature.
+//! This VP allows anyone to withdraw up to
+//! [`faucet_pow::read_withdrawal_limit`] tokens without the faucet's signature,
+//! but with a valid PoW challenge solution that cannot be replayed.
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
-
-/// Allows anyone to withdraw up to 1_000 tokens in a single tx
-pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
 
 #[validity_predicate]
 fn validate_tx(
@@ -81,7 +79,12 @@ fn validate_tx(
                         Some(solution) => {
                             // Validate it
                             if solution.validate(ctx, &addr)? {
-                                change >= -MAX_FREE_DEBIT
+                                let max_free_debit =
+                                    faucet_pow::read_withdrawal_limit(
+                                        &ctx.pre(),
+                                        &addr,
+                                    )?;
+                                change >= -max_free_debit.change()
                             } else {
                                 debug_log!("Invalid PoW solution");
                                 false
@@ -197,6 +200,9 @@ mod tests {
 
     const VP_ALWAYS_TRUE_WASM: &str =
         "../../wasm_for_tests/vp_always_true.wasm";
+
+    /// Allows anyone to withdraw up to 1_000 tokens in a single tx
+    pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
 
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
@@ -361,7 +367,8 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
-        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
+        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
@@ -399,7 +406,8 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
-        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
+        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+        faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
@@ -464,7 +472,8 @@ mod tests {
 
             // Init the VP
             let difficulty = faucet_pow::Difficulty::try_new(0).unwrap();
-            faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty).unwrap();
+            let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+            faucet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();
