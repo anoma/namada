@@ -122,7 +122,7 @@ where
                     match res {
                         Some(_) => return Ok(res),
                         None => {
-                            if epoch.0 > 1
+                            if epoch.0 > 0
                                 && epoch > Self::sub_past_epochs(last_update)
                             {
                                 epoch = Epoch(epoch.0 - 1)
@@ -360,7 +360,7 @@ where
                     match res {
                         Some(_) => return Ok(res),
                         None => {
-                            if epoch.0 > 1
+                            if epoch.0 > 0
                                 && epoch > Self::sub_past_epochs(last_update)
                             {
                                 epoch = Epoch(epoch.0 - 1)
