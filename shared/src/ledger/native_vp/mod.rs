@@ -3,6 +3,7 @@
 
 pub mod governance;
 pub mod parameters;
+pub mod replay_protection;
 pub mod slash_fund;
 
 use std::cell::RefCell;

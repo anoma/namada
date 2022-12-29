@@ -69,6 +69,8 @@ mod internal {
         "ibc::IBC Mint Address                        ";
     pub const ETH_BRIDGE: &str =
         "ano::ETH Bridge Address                      ";
+    pub const REPLAY_PROTECTION: &str =
+        "ano::Replay Protection                       ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -198,6 +200,9 @@ impl Address {
                     InternalAddress::EthBridge => {
                         internal::ETH_BRIDGE.to_string()
                     }
+                    InternalAddress::ReplayProtection => {
+                        internal::REPLAY_PROTECTION.to_string()
+                    }
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -250,6 +255,9 @@ impl Address {
                 }
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
+                }
+                internal::REPLAY_PROTECTION => {
+                    Ok(Address::Internal(InternalAddress::ReplayProtection))
                 }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
@@ -466,6 +474,8 @@ pub enum InternalAddress {
     SlashFund,
     /// Bridge to Ethereum
     EthBridge,
+    /// Replay protection contains transactions' hash
+    ReplayProtection,
 }
 
 impl InternalAddress {
@@ -500,6 +510,7 @@ impl Display for InternalAddress {
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
+                Self::ReplayProtection => "ReplayProtection".to_string(),
             }
         )
     }
@@ -776,8 +787,9 @@ pub mod testing {
             InternalAddress::IbcEscrow => {}
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
-            InternalAddress::EthBridge => {} /* Add new addresses in the
-                                              * `prop_oneof` below. */
+            InternalAddress::EthBridge => {}
+            InternalAddress::ReplayProtection => {} /* Add new addresses in the
+                                                     * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -792,6 +804,7 @@ pub mod testing {
             Just(InternalAddress::Governance),
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
+            Just(InternalAddress::ReplayProtection)
         ]
     }
 
