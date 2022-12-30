@@ -42,7 +42,7 @@ use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self, Amount};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, WrapperTx,
+    EllipticCurve, PairingEngine, TxType, WrapperTx, MIN_FEE,
 };
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
@@ -585,10 +585,10 @@ where
                         masp()
                     };
                     // check that the fee payer has sufficient balance
-                    let balance = self
-                        .get_balance(&self.storage.native_token, &fee_payer);
+                    let balance =
+                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
-                    if Amount::from(100) > balance {
+                    if Amount::from(MIN_FEE) > balance {
                         response.code = 1;
                         response.log = String::from(
                             "The address given does not have sufficient \

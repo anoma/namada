@@ -159,12 +159,10 @@ where
                             masp()
                         };
                         // check that the fee payer has sufficient balance
-                        let balance = self.get_balance(
-                            &self.storage.native_token,
-                            &fee_payer,
-                        );
+                        let balance =
+                            self.get_balance(&tx.fee.token, &fee_payer);
 
-                        if Amount::from(100) <= balance {
+                        if Amount::from(MIN_FEE) <= balance {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \

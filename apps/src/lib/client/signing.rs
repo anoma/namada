@@ -7,7 +7,7 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token::Amount;
-use namada::types::transaction::{hash_tx, Fee, WrapperTx};
+use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -175,7 +175,7 @@ pub async fn sign_wrapper(
     let tx = {
         WrapperTx::new(
             Fee {
-                amount: Amount::from(100),
+                amount: Amount::from(MIN_FEE),
                 token: ctx.get(&args.fee_token),
             },
             keypair,

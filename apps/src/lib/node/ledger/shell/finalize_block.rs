@@ -6,6 +6,7 @@ use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
+use namada::types::transaction::MIN_FEE;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -142,10 +143,8 @@ where
                             address::masp()
                         };
 
-                    let balance_key = token::balance_key(
-                        &self.storage.native_token,
-                        &fee_payer,
-                    );
+                    let balance_key =
+                        token::balance_key(&wrapper.fee.token, &fee_payer);
                     let balance: Amount =
                         match self.write_log.read(&balance_key).0 {
                             Some(wal_mod) => {
@@ -177,7 +176,7 @@ where
                         };
 
                     let balance: u64 = balance.into();
-                    match balance.checked_sub(100) {
+                    match balance.checked_sub(MIN_FEE) {
                         Some(v) => {
                             self.write_log
                                 .write(
@@ -441,7 +440,7 @@ mod test_finalize_block {
             );
             let wrapper = WrapperTx::new(
                 Fee {
-                    amount: 100.into(),
+                    amount: MIN_FEE.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -640,7 +639,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 100.into(),
+                    amount: MIN_FEE.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
@@ -671,7 +670,7 @@ mod test_finalize_block {
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
-                    amount: 100.into(),
+                    amount: MIN_FEE.into(),
                     token: shell.storage.native_token.clone(),
                 },
                 &keypair,
