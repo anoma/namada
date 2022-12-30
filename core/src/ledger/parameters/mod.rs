@@ -335,35 +335,47 @@ where
     let key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp doesn't need to be
     // encoded, it's bytes already.
-    storage.write_bytes(&key, implicit_vp)
+    let (gas, _size_diff) = storage
+        .write(&key, implicit_vp)
+        .map_err(WriteError::StorageError)?;
+    Ok(gas)
+}
+
+/// Update the  parameters in storage. Returns the parameters and gas
+/// cost.
+pub fn update<DB, H, T>(
+    storage: &mut Storage<DB, H>,
+    value: &T,
+    key: Key,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+    T: BorshSerialize,
+{
+    let serialized_value = value
+        .try_to_vec()
+        .map_err(|e| WriteError::SerializeError(e.to_string()))?;
+    let (gas, _size_diff) = storage
+        .write(&key, serialized_value)
+        .map_err(WriteError::StorageError)?;
+    Ok(gas)
 }
 
 /// Read the the epoch duration parameter from store
-pub fn read_epoch_duration_parameter<S>(
-    storage: &S,
-) -> storage_api::Result<EpochDuration>
+pub fn read_epoch_duration_parameter<DB, H>(
+    storage: &Storage<DB, H>,
+) -> std::result::Result<(EpochDuration, u64), ReadError>
 where
     S: StorageRead,
 {
     // read epoch
     let epoch_key = storage::get_epoch_duration_storage_key();
-    let epoch_duration = storage.read(&epoch_key)?;
-    epoch_duration
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()
-}
-
-#[cfg(not(feature = "mainnet"))]
-/// Read the faucet account's address, if any
-pub fn read_faucet_account_parameter<S>(
-    storage: &S,
-) -> storage_api::Result<Option<Address>>
-where
-    S: StorageRead,
-{
-    let faucet_account_key = storage::get_faucet_account_key();
-    storage.read(&faucet_account_key)
-}
+    let (value, gas) =
+        storage.read(&epoch_key).map_err(ReadError::StorageError)?;
+    let epoch_duration: EpochDuration =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
 
 #[cfg(not(feature = "mainnet"))]
 /// Read the wrapper tx fees amount, if any

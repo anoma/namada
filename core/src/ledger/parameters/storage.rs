@@ -260,3 +260,13 @@ pub fn get_wrapper_tx_fees_key() -> Key {
         ],
     }
 }
+
+/// Storage key used for faucet account.
+pub fn get_faucet_account_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.faucet_account.to_string()),
+        ],
+    }
+}
