@@ -12,6 +12,7 @@ const POS_GAIN_P_KEY: &str = "pos_gain_p";
 const POS_GAIN_D_KEY: &str = "pos_gain_d";
 const STAKED_RATIO_KEY: &str = "staked_ratio_key";
 const POS_INFLATION_AMOUNT_KEY: &str = "pos_inflation_amount_key";
+const FAUCET_ACCOUNT: &str = "faucet_account";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -202,6 +203,16 @@ pub fn get_pos_inflation_amount_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(POS_INFLATION_AMOUNT_KEY.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for faucet account.
+pub fn get_faucet_account_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(FAUCET_ACCOUNT.to_string()),
         ],
     }
 }
