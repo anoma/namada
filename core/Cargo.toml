@@ -8,6 +8,7 @@ version = "0.12.2"
 
 [features]
 default = []
+mainnet = []
 ferveo-tpke = [
   "ferveo",
   "tpke",

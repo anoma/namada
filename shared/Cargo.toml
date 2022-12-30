@@ -10,6 +10,9 @@ version = "0.12.2"
 
 [features]
 default = ["abciplus"]
+mainnet = [
+  "namada_core/mainnet",
+]
 # NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
 dev = []
 ferveo-tpke = [
