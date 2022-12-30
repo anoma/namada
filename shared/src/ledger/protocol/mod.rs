@@ -92,7 +92,11 @@ where
         .map_err(Error::GasError)?;
     match tx {
         TxType::Raw(_) => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted(tx)) => {
+        TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+        }) => {
             let verifiers = execute_tx(
                 &tx,
                 &tx_index,

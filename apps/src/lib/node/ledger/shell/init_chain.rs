@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;

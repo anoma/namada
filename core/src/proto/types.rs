@@ -284,7 +284,11 @@ impl From<Tx> for ResponseDeliverTx {
             x
         }
         match process_tx(tx) {
-            Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
+            Ok(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx,
+                #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: _,
+            })) => {
                 let empty_vec = vec![];
                 let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
                 let signed =

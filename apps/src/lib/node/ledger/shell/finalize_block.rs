@@ -135,6 +135,10 @@ where
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
 
+                    #[cfg(not(feature = "mainnet"))]
+                    let has_valid_pow =
+                        self.invalidate_pow_solution_if_valid(wrapper);
+
                     // Charge fee
                     let fee_payer =
                         if wrapper.pk != address::masp_tx_key().ref_to() {
@@ -186,23 +190,33 @@ where
                                 .unwrap();
                         }
                         None => {
-                            // Burn remaining funds
-                            self.write_log
-                                .write(
-                                    &balance_key,
-                                    Amount::from(0).try_to_vec().unwrap(),
-                                )
-                                .unwrap();
-                            tx_event["log"] =
-                                "Insufficient balance for fee".into();
-                            tx_event["code"] = ErrorCodes::InvalidTx.into();
+                            #[cfg(not(feature = "mainnet"))]
+                            let reject = !has_valid_pow;
+                            #[cfg(feature = "mainnet")]
+                            let reject = true;
+                            if reject {
+                                // Burn remaining funds
+                                self.write_log
+                                    .write(
+                                        &balance_key,
+                                        Amount::from(0).try_to_vec().unwrap(),
+                                    )
+                                    .unwrap();
+                                tx_event["log"] =
+                                    "Insufficient balance for fee".into();
+                                tx_event["code"] = ErrorCodes::InvalidTx.into();
 
-                            response.events.push(tx_event);
-                            continue;
+                                response.events.push(tx_event);
+                                continue;
+                            }
                         }
                     }
 
-                    self.storage.tx_queue.push(wrapper.clone());
+                    self.storage.tx_queue.push(WrapperTxInQueue {
+                        tx: wrapper.clone(),
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow,
+                    });
                     tx_event
                 }
                 TxType::Decrypted(inner) => {
@@ -404,7 +418,7 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use namada::types::storage::Epoch;
-    use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -448,6 +462,8 @@ mod test_finalize_block {
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let tx = wrapper.sign(&keypair).expect("Test failed");
             if i > 1 {
@@ -489,7 +505,7 @@ mod test_finalize_block {
             // we cannot easily implement the PartialEq trait for WrapperTx
             // so we check the hashes of the inner txs for equality
             assert_eq!(
-                wrapper.tx_hash,
+                wrapper.tx.tx_hash,
                 valid_tx.next().expect("Test failed").tx_hash
             );
             counter += 1;
@@ -519,11 +535,17 @@ mod test_finalize_block {
             0.into(),
             raw_tx.clone(),
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
 
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
-                .to_bytes(),
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw_tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+            .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
@@ -571,6 +593,8 @@ mod test_finalize_block {
             gas_limit: 0.into(),
             inner_tx,
             tx_hash: hash_tx(&tx),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution: None,
         };
         let processed_tx = ProcessedTx {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
@@ -647,11 +671,17 @@ mod test_finalize_block {
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             shell.enqueue_tx(wrapper_tx);
             processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(raw_tx)))
-                    .to_bytes(),
+                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: raw_tx,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }))
+                .to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
                     info: "".into(),
@@ -678,6 +708,8 @@ mod test_finalize_block {
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
             valid_txs.push(wrapper_tx);
@@ -729,7 +761,7 @@ mod test_finalize_block {
         let mut counter = 0;
         for wrapper in shell.iter_tx_queue() {
             assert_eq!(
-                wrapper.tx_hash,
+                wrapper.tx.tx_hash,
                 txs.next().expect("Test failed").tx_hash
             );
             counter += 1;
