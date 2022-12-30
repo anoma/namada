@@ -176,6 +176,9 @@ pub mod wrapper_tx {
         /// sha-2 hash of the inner transaction acting as a commitment
         /// the contents of the encrypted payload
         pub tx_hash: Hash,
+        #[cfg(not(feature = "mainnet"))]
+        /// A PoW solution can be used to allow zero-fee testnet transactions
+        pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
     }
 
     impl WrapperTx {
@@ -190,6 +193,9 @@ pub mod wrapper_tx {
             gas_limit: GasLimit,
             tx: Tx,
             encryption_key: EncryptionKey,
+            #[cfg(not(feature = "mainnet"))] pow_solution: Option<
+                crate::ledger::testnet_pow::Solution,
+            >,
         ) -> WrapperTx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
@@ -199,6 +205,8 @@ pub mod wrapper_tx {
                 gas_limit,
                 inner_tx,
                 tx_hash: hash_tx(&tx.to_bytes()),
+                #[cfg(not(feature = "mainnet"))]
+                pow_solution,
             }
         }
 
@@ -367,6 +375,8 @@ pub mod wrapper_tx {
                 0.into(),
                 tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -393,6 +403,8 @@ pub mod wrapper_tx {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.tx_hash = Hash([0u8; 32]);
@@ -425,6 +437,8 @@ pub mod wrapper_tx {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             )
             .sign(&keypair)
             .expect("Test failed");

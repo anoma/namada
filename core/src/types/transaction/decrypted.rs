@@ -20,7 +20,22 @@ pub mod decrypted_tx {
     /// other validators to verify
     pub enum DecryptedTx {
         /// The decrypted payload
-        Decrypted(Tx),
+        Decrypted {
+            /// Inner tx.
+            // For some reason, we get `warning: fields `tx` and
+            // `has_valid_pow` are never read` even though they are being used!
+            #[allow(dead_code)]
+            tx: Tx,
+            #[cfg(not(feature = "mainnet"))]
+            /// A PoW solution can be used to allow zero-fee testnet
+            /// transactions.
+            /// This is true when the wrapper of this tx contains a valid
+            /// `testnet_pow::Solution`.
+            // For some reason, we get `warning: fields `tx` and
+            // `has_valid_pow` are never read` even though they are being used!
+            #[allow(dead_code)]
+            has_valid_pow: bool,
+        },
         /// The wrapper whose payload could not be decrypted
         Undecryptable(WrapperTx),
     }
@@ -29,7 +44,11 @@ pub mod decrypted_tx {
         /// Convert the inner tx value to bytes
         pub fn to_bytes(&self) -> Vec<u8> {
             match self {
-                DecryptedTx::Decrypted(tx) => tx.to_bytes(),
+                DecryptedTx::Decrypted {
+                    tx,
+                    #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: _,
+                } => tx.to_bytes(),
                 DecryptedTx::Undecryptable(wrapper) => {
                     wrapper.try_to_vec().unwrap()
                 }
@@ -40,7 +59,11 @@ pub mod decrypted_tx {
         /// wrapper tx that includes this tx as an encrypted payload.
         pub fn hash_commitment(&self) -> Hash {
             match self {
-                DecryptedTx::Decrypted(tx) => hash_tx(&tx.to_bytes()),
+                DecryptedTx::Decrypted {
+                    tx,
+                    #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: _,
+                } => hash_tx(&tx.to_bytes()),
                 DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
             }
         }
@@ -54,7 +77,7 @@ pub mod decrypted_tx {
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
     ) -> bool {
         match decrypted {
-            DecryptedTx::Decrypted(_) => true,
+            DecryptedTx::Decrypted { .. } => true,
             DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey).is_err(),
         }
     }

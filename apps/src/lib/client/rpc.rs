@@ -389,7 +389,11 @@ fn extract_payload(
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             extract_payload(
                 Tx::from(match wrapper_tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    Ok(tx) => DecryptedTx::Decrypted {
+                        tx,
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    },
                     _ => DecryptedTx::Undecryptable(wrapper_tx.clone()),
                 }),
                 wrapper,
@@ -397,7 +401,11 @@ fn extract_payload(
             );
             *wrapper = Some(wrapper_tx);
         }
-        Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
+        Ok(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: _,
+        })) => {
             let empty_vec = vec![];
             let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
             let _ = SignedTxData::try_from_slice(tx_data).map(|signed| {
