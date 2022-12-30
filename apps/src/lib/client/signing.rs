@@ -6,6 +6,7 @@ use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
+use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
@@ -14,6 +15,7 @@ use crate::cli::context::{WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::HttpClient;
 use crate::wallet::Wallet;
 
 /// Find the public key for the given address and try to load the keypair
@@ -146,6 +148,7 @@ pub async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
     let keypair = tx_signer(&mut ctx, args, default).await;
     let tx = tx.sign(&keypair);
@@ -157,7 +160,16 @@ pub async fn sign_tx(
     let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
-        sign_wrapper(&ctx, args, epoch, tx, &keypair).await
+        sign_wrapper(
+            &ctx,
+            args,
+            epoch,
+            tx,
+            &keypair,
+            #[cfg(not(feature = "mainnet"))]
+            requires_pow,
+        )
+        .await
     };
     (ctx, broadcast_data)
 }
@@ -171,12 +183,54 @@ pub async fn sign_wrapper(
     epoch: Epoch,
     tx: Tx,
     keypair: &common::SecretKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
+    let fee_amount = Amount::from(MIN_FEE);
+    let fee_token = ctx.get(&args.fee_token);
+    let source = Address::from(&keypair.ref_to());
+    let balance_key = token::balance_key(&fee_token, &source);
+    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
+    let balance =
+        rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+            .unwrap_or_default();
+    if balance < fee_amount {
+        eprintln!(
+            "The wrapper transaction source doesn't have enough balance to \
+             pay fee {fee_amount}, got {balance}."
+        );
+        if !args.force && cfg!(feature = "mainnet") {
+            cli::safe_exit(1);
+        }
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    // A PoW solution can be used to allow zero-fee testnet transactions
+    let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
+        // If the address derived from the keypair doesn't have enough balance
+        // to pay for the fee, allow to find a PoW solution instead.
+        if requires_pow || balance < fee_amount {
+            println!("The transaction requires to a PoW challenge.");
+            // Obtain a PoW challenge for faucet withdrawal
+            let challenge = rpc::get_testnet_pow_challenge(
+                source,
+                args.ledger_address.clone(),
+            )
+            .await;
+
+            // Solve the solution, this blocks until a solution is found
+            let solution = challenge.solve();
+            Some(solution)
+        } else {
+            None
+        }
+    };
+
     let tx = {
         WrapperTx::new(
             Fee {
-                amount: Amount::from(MIN_FEE),
-                token: ctx.get(&args.fee_token),
+                amount: fee_amount,
+                token: fee_token,
             },
             keypair,
             epoch,
@@ -184,6 +238,8 @@ pub async fn sign_wrapper(
             tx,
             // TODO: Actually use the fetched encryption key
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution,
         )
     };
 
