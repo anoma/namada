@@ -1240,6 +1240,8 @@ mod tests {
                 pos_gain_d: dec!(0.1),
                 staked_ratio: dec!(0.1),
                 pos_inflation_amount: 0,
+                #[cfg(not(feature = "mainnet"))]
+                faucet_account: None,
             };
             parameters.init_storage(&mut storage);
 

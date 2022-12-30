@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::types::key::*;
@@ -97,6 +98,24 @@ where
                 implicit_vp_code_path
             );
         }
+        #[cfg(not(feature = "mainnet"))]
+        // Try to find a faucet account
+        let faucet_account = {
+            genesis.established_accounts.iter().find_map(
+                |genesis::EstablishedAccount {
+                     address,
+                     vp_code_path,
+                     ..
+                 }| {
+                    if vp_code_path == "vp_testnet_faucet.wasm" {
+                        Some(address.clone())
+                    } else {
+                        None
+                    }
+                },
+            )
+        };
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
@@ -109,6 +128,8 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
         };
         parameters.init_storage(&mut self.storage);
 
