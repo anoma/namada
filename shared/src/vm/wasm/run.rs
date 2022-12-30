@@ -167,6 +167,7 @@ pub fn vp<DB, H, CA>(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<bool>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -208,6 +209,8 @@ where
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
     );
 
     let initial_memory =
@@ -562,6 +565,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .unwrap();
         assert!(passed);
@@ -589,6 +594,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .unwrap();
 
@@ -630,6 +637,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            false,
         );
         assert!(result.is_ok(), "Expected success, got {:?}", result);
 
@@ -648,6 +657,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .expect_err("Expected to run out of memory");
 
@@ -740,6 +751,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         );
         // Depending on platform, we get a different error from the running out
         // of memory
@@ -847,6 +860,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .expect_err("Expected to run out of memory");
 
@@ -903,6 +918,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
         .unwrap();
         assert!(!passed);
@@ -1013,6 +1030,8 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         )
     }
 

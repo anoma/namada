@@ -197,6 +197,8 @@ pub mod vp {
         ) -> i64;
 
         pub fn namada_vp_verify_masp(tx_ptr: u64, tx_len: u64) -> i64;
+
+        pub fn namada_vp_has_valid_pow() -> i64;
     }
 }
 

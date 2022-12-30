@@ -469,6 +469,8 @@ where
                 self.keys_changed,
                 &eval_runner,
                 &mut vp_wasm_cache,
+                #[cfg(not(feature = "mainnet"))]
+                false,
             );
             match eval_runner.eval_native_result(ctx, vp_code, input_data) {
                 Ok(result) => Ok(result),
