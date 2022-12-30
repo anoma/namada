@@ -261,6 +261,10 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
+    #[cfg(not(feature = "mainnet"))]
+    /// This is true when the wrapper of this tx contained a valid
+    /// `testnet_pow::Solution`
+    has_valid_pow: bool,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -317,6 +321,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -332,6 +337,8 @@ where
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         );
 
         Self { memory, ctx }
@@ -382,6 +389,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let address = unsafe { HostRef::new(address) };
         let storage = unsafe { HostRef::new(storage) };
@@ -412,6 +420,8 @@ where
             vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         }
     }
 }
@@ -440,6 +450,8 @@ where
             vp_wasm_cache: self.vp_wasm_cache.clone(),
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: self.has_valid_pow,
         }
     }
 }
@@ -1874,6 +1886,33 @@ where
     vp_host_fns::add_gas(gas_meter, gas)
 }
 
+/// Find if the wrapper tx had a valid `testnet_pow::Solution`
+pub fn vp_has_valid_pow<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    #[cfg(feature = "mainnet")]
+    let _ = env;
+
+    #[cfg(not(feature = "mainnet"))]
+    let has_valid_pow = env.ctx.has_valid_pow;
+    #[cfg(feature = "mainnet")]
+    let has_valid_pow = false;
+
+    Ok(if has_valid_pow {
+        HostEnvResult::Success
+    } else {
+        HostEnvResult::Fail
+    }
+    .to_i64())
+}
+
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
@@ -1955,6 +1994,7 @@ pub mod testing {
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> VpVmEnv<'static, NativeMemory, DB, H, EVAL, CA>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1977,6 +2017,8 @@ pub mod testing {
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         )
     }
 }
