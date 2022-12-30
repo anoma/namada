@@ -192,6 +192,24 @@ where
             for (key, value) in storage {
                 self.storage.write(&key, value).unwrap();
             }
+
+            // When using a faucet WASM, initialize its PoW challenge storage
+            #[cfg(not(feature = "mainnet"))]
+            if vp_code_path == "vp_testnet_faucet.wasm" {
+                let difficulty =
+                    genesis.faucet_pow_difficulty.unwrap_or_default();
+                // withdrawal limit defaults to 1000 NAM when not set
+                let withdrawal_limit = genesis
+                    .faucet_withdrawal_limit
+                    .unwrap_or_else(|| token::Amount::whole(1_000));
+                testnet_pow::init_faucet_storage(
+                    &mut self.storage,
+                    &address,
+                    difficulty,
+                    withdrawal_limit,
+                )
+                .expect("Couldn't init faucet storage")
+            }
         }
 
         // Initialize genesis implicit
