@@ -32,17 +32,7 @@ interaction with the protocol.
 There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [Tendermint](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
 
 ```shell
-make install
-```
-
-After installation, the main `namada` executable will be available on path.
-
-To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
-
-For more detailed instructions and more install options, see the [Install
-section](https://docs.namada.net/user-guide/install.html) of the User
-Guide.
-
+make in
 ## ⚙️ Development
 
 ```shell
