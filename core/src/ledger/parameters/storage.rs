@@ -20,6 +20,7 @@ struct Keys {
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
     faucet_account: &'static str,
+    wrapper_tx_fees: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -246,6 +247,16 @@ pub fn get_faucet_account_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.faucet_account.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for staked ratio parameter.
+pub fn get_wrapper_tx_fees_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.wrapper_tx_fees.to_string()),
         ],
     }
 }
