@@ -13,6 +13,7 @@ const POS_GAIN_D_KEY: &str = "pos_gain_d";
 const STAKED_RATIO_KEY: &str = "staked_ratio_key";
 const POS_INFLATION_AMOUNT_KEY: &str = "pos_inflation_amount_key";
 const FAUCET_ACCOUNT: &str = "faucet_account";
+const WRAPPER_TX_FEES: &str = "wrapper_tx_fees";
 
 /// Returns if the key is a parameter key.
 pub fn is_parameter_key(key: &Key) -> bool {
@@ -213,6 +214,16 @@ pub fn get_faucet_account_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(FAUCET_ACCOUNT.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for staked ratio parameter.
+pub fn get_wrapper_tx_fees_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(WRAPPER_TX_FEES.to_string()),
         ],
     }
 }
