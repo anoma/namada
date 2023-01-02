@@ -98,7 +98,7 @@
 //! - add arb invalid storage changes
 //! - add slashes
 
-use namada::ledger::pos::namada_proof_of_stake::{init_genesis_new, PosBase};
+use namada::ledger::pos::namada_proof_of_stake::init_genesis_new;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::GenesisValidator;
 use namada::types::storage::Epoch;

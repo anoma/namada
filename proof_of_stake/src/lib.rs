@@ -44,6 +44,7 @@ use rust_decimal::Decimal;
 use storage::{
     num_active_validators_key, params_key, validator_address_raw_hash_key,
     validator_max_commission_rate_change_key, validator_state_key,
+    ReverseOrdTokenAmount,
 };
 use thiserror::Error;
 use types::{
@@ -1783,6 +1784,7 @@ pub fn init_genesis_new<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    println!("INITIALIZING GENESIS\n");
     write_pos_params(storage, params.clone())?;
 
     let mut total_bonded = token::Amount::default();
@@ -1790,6 +1792,8 @@ where
     // Do I necessarily want to do this one here since we may not fill it?
     inactive_validator_set_handle().init(storage, current_epoch)?;
     let mut n_validators: u64 = 0;
+
+    validator_set_positions_handle().init(storage, current_epoch)?;
 
     for GenesisValidator {
         address,
@@ -1800,6 +1804,8 @@ where
     } in validators
     {
         total_bonded += tokens;
+
+        dbg!(&address, &tokens);
 
         let active_val_handle =
             active_validator_set_handle().at(&current_epoch).at(&tokens);
@@ -2088,7 +2094,7 @@ where
     let handle = validator_deltas_handle(validator);
     let offset = OffsetPipelineLen::value(params);
     let val = handle
-        .get_delta_val(storage, current_epoch, params)?
+        .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
 }
@@ -2119,22 +2125,28 @@ where
     S: StorageRead,
 {
     let mut addresses: HashSet<Address> = HashSet::new();
-
-    validator_set_handle
-        .at(&epoch)
-        .iter(storage)?
-        .for_each(|res| {
-            if let Ok((
-                NestedSubKey::Data {
-                    key: _,
-                    nested_sub_key: _,
-                },
-                address,
-            )) = res
-            {
-                addresses.insert(address);
-            }
-        });
+    let mut search_epoch = epoch.clone();
+    loop {
+        let validators = validator_set_handle.at(&search_epoch);
+        if validators.is_empty(storage)? {
+            search_epoch = search_epoch - 1;
+        } else {
+            validators.iter(storage)?.for_each(|res| {
+                if let Ok((
+                    NestedSubKey::Data {
+                        key: _,
+                        nested_sub_key: _,
+                    },
+                    address,
+                )) = res
+                {
+                    addresses.insert(address);
+                }
+            });
+            break;
+        }
+    }
+    dbg!(&addresses, &epoch);
     Ok(addresses)
 }
 
@@ -2147,27 +2159,54 @@ pub fn read_active_validator_set_addresses_with_stake<S>(
 where
     S: StorageRead,
 {
-    let mut addresses: HashSet<WeightedValidator> = HashSet::new();
+    // let mut addresses: HashSet<WeightedValidator> = HashSet::new();
 
-    validator_set_handle
-        .at(&epoch)
-        .iter(storage)?
-        .for_each(|res| {
-            if let Ok((
-                NestedSubKey::Data {
-                    key,
-                    nested_sub_key: _,
-                },
-                address,
-            )) = res
-            {
-                addresses.insert(WeightedValidator {
+    // validator_set_handle
+    //     .at(&epoch)
+    //     .iter(storage)?
+    //     .for_each(|res| {
+    //         if let Ok((
+    //             NestedSubKey::Data {
+    //                 key,
+    //                 nested_sub_key: _,
+    //             },
+    //             address,
+    //         )) = res
+    //         {
+    //             addresses.insert(WeightedValidator {
+    //                 address,
+    //                 bonded_stake: u64::from(key),
+    //             });
+    //         }
+    //     });
+    // Ok(addresses)
+
+    let mut validator_set: HashSet<WeightedValidator> = HashSet::new();
+    let mut search_epoch = epoch.clone();
+    loop {
+        let validators = validator_set_handle.at(&search_epoch);
+        if validators.is_empty(storage)? {
+            search_epoch = search_epoch - 1;
+        } else {
+            validators.iter(storage)?.for_each(|res| {
+                if let Ok((
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: _,
+                    },
                     address,
-                    bonded_stake: u64::from(key),
-                });
-            }
-        });
-    Ok(addresses)
+                )) = res
+                {
+                    validator_set.insert(WeightedValidator {
+                        bonded_stake: u64::from(stake),
+                        address,
+                    });
+                }
+            });
+            break;
+        }
+    }
+    Ok(validator_set)
 }
 
 /// Read all addresses from inactive validator set.
@@ -2235,8 +2274,8 @@ where
     let handle = total_deltas_handle();
     let offset = OffsetPipelineLen::value(params);
     let val = handle
-        .get_delta_val(storage, current_epoch, params)?
-        .unwrap();
+        .get_delta_val(storage, current_epoch + offset, params)?
+        .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
 }
 
@@ -2267,7 +2306,7 @@ pub fn bond_tokens_new<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    println!("BONDING TOKENS\n");
+    println!("BONDING TOKEN AMOUNT {}\n", amount);
     let params = read_pos_params(storage)?;
     if let Some(source) = source {
         if source != validator
@@ -2288,7 +2327,6 @@ where
     if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
-    println!("IS VALIDATOR\n");
 
     let validator_state_handle = validator_state_handle(validator);
     let source = source.unwrap_or(validator);
@@ -2306,18 +2344,18 @@ where
     }
 
     // Initialize or update the bond at the pipeline offset
-    let bond_id = BondId {
-        source: source.clone(),
-        validator: validator.clone(),
-    };
     let offset = params.pipeline_len;
     // TODO: ensure that this method of checking if the bond exists works
-    if storage.has_key(&storage::bond_amount_key(&bond_id))? {
+
+    dbg!(bond_amount_handle.get_last_update(storage).unwrap());
+
+    if !bond_amount_handle.get_data_handler().is_empty(storage)? {
+        println!("BOND EXISTS TO BEGIN WITH\n");
         let cur_amount = bond_amount_handle
-            .get_delta_val(storage, current_epoch, &params)?
+            .get_delta_val(storage, current_epoch + offset, &params)?
             .unwrap_or_default();
         let cur_remain = bond_remain_handle
-            .get_delta_val(storage, current_epoch, &params)?
+            .get_delta_val(storage, current_epoch + offset, &params)?
             .unwrap_or_default();
         bond_amount_handle.set(
             storage,
@@ -2332,25 +2370,11 @@ where
             offset,
         )?;
     } else {
+        println!("BOND DOESNT EXIST YET\n");
+
         bond_amount_handle.init(storage, amount, current_epoch, offset)?;
         bond_remain_handle.init(storage, amount, current_epoch, offset)?;
     }
-
-    dbg!(
-        validator_set_positions_handle()
-            .at(&current_epoch)
-            .get(storage, validator)?
-    );
-    dbg!(
-        validator_set_positions_handle()
-            .at(&(current_epoch + 1_u64))
-            .get(storage, validator)?
-    );
-    dbg!(
-        validator_set_positions_handle()
-            .at(&(current_epoch + 2_u64))
-            .get(storage, validator)?
-    );
 
     println!("UPDATING VALIDATOR SET NOW\n");
 
@@ -2374,6 +2398,28 @@ where
         amount,
         current_epoch,
     )?;
+    // dbg!(validator_deltas_handle(validator).get_delta_val(
+    //     storage,
+    //     current_epoch,
+    //     &params
+    // )?);
+    // dbg!(validator_deltas_handle(validator).get_delta_val(
+    //     storage,
+    //     current_epoch + 1_u64,
+    //     &params
+    // )?);
+    // dbg!(validator_deltas_handle(validator).get_delta_val(
+    //     storage,
+    //     current_epoch + 2_u64,
+    //     &params
+    // )?);
+    // dbg!(read_validator_stake(
+    //     storage,
+    //     &params,
+    //     validator,
+    //     current_epoch + 2_u64
+    // )?);
+
     update_total_deltas(storage, &params, amount, current_epoch)?;
 
     // Transfer the bonded tokens from the source to PoS
@@ -2403,7 +2449,32 @@ fn update_validator_set_new<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    if token_change == 0_i128 {
+        return Ok(());
+    }
     let epoch = current_epoch + params.pipeline_len;
+
+    // Validator sets at the pipeline offset. If these are empty, then we need
+    // to copy over the most recent filled validator set into this epoch first
+    let active_val_handle = active_validator_set.at(&epoch);
+    let inactive_val_handle = inactive_validator_set.at(&epoch);
+
+    let (is_active_empty, is_inactive_empty) = (
+        active_val_handle.is_empty(storage)?,
+        inactive_val_handle.is_empty(storage)?,
+    );
+    debug_assert_eq!(is_active_empty, is_inactive_empty);
+
+    if is_active_empty && is_inactive_empty {
+        println!("COPYING VALIDATOR SETS INTO EPOCH {}\n", epoch.clone());
+        copy_validator_sets(
+            storage,
+            epoch,
+            active_validator_set,
+            inactive_validator_set,
+        )?;
+    }
+
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
         .unwrap_or_default();
     let tokens_post = tokens_pre.change() + token_change;
@@ -2414,31 +2485,39 @@ where
     // validator_set_positions_handle().at(&current_epoch).get(storage,
     // validator)
 
-    let position: Position = read_validator_set_position(
-        storage, validator, epoch,
-    )?
-    .ok_or_err_msg("Validator must have a stored validator set position")?;
-
-    if tokens_pre == tokens_post {
-        return Ok(());
-    }
-
-    // Validator sets at the pipeline offset
-    let active_val_handle = active_validator_set.at(&epoch);
-    let inactive_val_handle = inactive_validator_set.at(&epoch);
+    let position =
+        read_validator_set_position(storage, validator, epoch, params)?
+            .ok_or_err_msg(
+                "Validator must have a stored validator set position",
+            )?;
 
     let active_vals_pre = active_val_handle.at(&tokens_pre);
+
     // TODO: consider checking the validator state instead of checking if the
     // position is in the set?
-    if active_vals_pre.contains(storage, &position)? {
+    // if active_vals_pre.contains(storage, &position)? { ---> !this line not
+    // working currently!
+    if validator_state_handle(validator).get(storage, epoch, params)?
+        == Some(ValidatorState::Candidate)
+    {
+        println!("\nTARGET VALIDATOR IS ACTIVE\n");
         // It's initially active
-        let removed = active_vals_pre.remove(storage, &position)?;
-        debug_assert!(removed.is_some());
+        let val_address = active_validator_set.get_validator(
+            storage,
+            epoch,
+            &tokens_pre,
+            &position,
+            params,
+        )?;
+        debug_assert!(val_address.is_some());
+
+        active_vals_pre.remove(storage, &position)?;
 
         let max_inactive_validator_amount =
             get_max_inactive_validator_amount(&inactive_val_handle, storage)?;
 
         if tokens_post < max_inactive_validator_amount {
+            println!("NEED TO SWAP VALIDATORS\n");
             // Place the validator into the inactive set and promote the
             // lowest position max inactive validator.
 
@@ -2479,6 +2558,7 @@ where
                 params.pipeline_len,
             )?;
         } else {
+            println!("VALIDATOR REMAINS IN ACTIVE SET\n");
             // The current validator should remain in the active set - place it
             // into a new position
             insert_validator_into_set(
@@ -2552,6 +2632,87 @@ where
     Ok(())
 }
 
+/// Validator set copying into a future epoch
+fn copy_validator_sets<S>(
+    storage: &mut S,
+    epoch: Epoch,
+    active_validator_set: &ActiveValidatorSetsNew,
+    inactive_validator_set: &InactiveValidatorSetsNew,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // TODO: need some logic to determine if the inactive validator set even
+    // needs to be copied (it may truly be empty after having one time contained
+    // validators in the past)
+
+    let mut search_epoch = epoch - 1;
+    loop {
+        let (active, inactive) = (
+            active_validator_set.at(&search_epoch),
+            inactive_validator_set.at(&search_epoch),
+        );
+        if active.is_empty(storage)? && inactive.is_empty(storage)? {
+            search_epoch = search_epoch - 1;
+        } else {
+            debug_assert!(!active.is_empty(storage)?);
+            // debug_assert!(!inactive.is_empty(storage)?);
+
+            // Need to copy into memory here to avoid borrowing a ref
+            // simultaneously as immutable and mutable
+            let mut active_in_mem: HashMap<(token::Amount, Position), Address> =
+                HashMap::new();
+            let mut inactive_in_mem: HashMap<
+                (ReverseOrdTokenAmount, Position),
+                Address,
+            > = HashMap::new();
+
+            for val in active.iter(storage)? {
+                let (
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: SubKey::Data(position),
+                    },
+                    address,
+                ) = val?;
+                active_in_mem.insert((stake, position), address);
+            }
+            for val in inactive.iter(storage)? {
+                let (
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: SubKey::Data(position),
+                    },
+                    address,
+                ) = val?;
+                inactive_in_mem.insert((stake, position), address);
+            }
+
+
+            for ((val_stake, val_position), val_address) in
+                active_in_mem.into_iter()
+            {
+                active_validator_set.at(&epoch).at(&val_stake).insert(
+                    storage,
+                    val_position,
+                    val_address,
+                )?;
+            }
+            for ((val_stake, val_position), val_address) in
+                inactive_in_mem.into_iter()
+            {
+                inactive_validator_set.at(&epoch).at(&val_stake).insert(
+                    storage,
+                    val_position,
+                    val_address,
+                )?;
+            }
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// Read the position of the validator in the subset of validators that have the
 /// same bonded stake. This information is held in its own epoched structure in
 /// addition to being inside the validator sets.
@@ -2559,12 +2720,13 @@ fn read_validator_set_position<S>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
+    params: &PosParams,
 ) -> storage_api::Result<Option<Position>>
 where
     S: StorageRead,
 {
     let handle = validator_set_positions_handle();
-    handle.at(&epoch).get(storage, validator)
+    handle.get_position(storage, &epoch, validator, params)
 }
 
 /// Find next position in a validator set or 0 if empty
@@ -2664,6 +2826,12 @@ where
     S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
+    println!(
+        "Inserting validator {} into position {:?} at epoch {}\n",
+        address.clone(),
+        next_position.clone(),
+        epoch.clone()
+    );
     handle.insert(storage, next_position, address.clone())?;
     validator_set_positions_handle().at(epoch).insert(
         storage,

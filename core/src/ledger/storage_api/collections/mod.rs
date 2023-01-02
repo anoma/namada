@@ -19,6 +19,7 @@ pub mod lazy_vec;
 pub use lazy_map::LazyMap;
 pub use lazy_vec::LazyVec;
 
+// use super::StorageRead;
 use crate::ledger::storage_api;
 use crate::ledger::vp_env::VpEnv;
 use crate::types::storage;
@@ -85,6 +86,11 @@ pub trait LazyCollection {
     ) -> storage_api::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>;
+
+    // /// Attempting an iter method
+    // fn iter<E>(
+    //     storage: &impl StorageRead,
+    // ) -> storage_api::Result<impl Iterator<Item = Result<E>>>;
 
     /// Validate changed sub-keys associated with their data and return back
     /// a vector of `Self::Action`s, if the changes are valid

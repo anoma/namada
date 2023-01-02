@@ -125,7 +125,7 @@ where
                             if epoch.0 > 0
                                 && epoch > Self::sub_past_epochs(last_update)
                             {
-                                epoch = Epoch(epoch.0 - 1)
+                                epoch = Epoch(epoch.0 - 1);
                             } else {
                                 return Ok(None);
                             }
@@ -281,7 +281,8 @@ where
             .unwrap()
     }
 
-    fn get_last_update<S>(
+    /// TODO
+    pub fn get_last_update<S>(
         &self,
         storage: &S,
     ) -> storage_api::Result<Option<Epoch>>
@@ -292,13 +293,31 @@ where
         storage.read(&key)
     }
 
-    // pub fn get_inner_by_epoch(&self) -> storage_api::Result<Data> {
+    /// TODO
+    pub fn sub_past_epochs(epoch: Epoch) -> Epoch {
+        Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    }
 
-    // }
+    // pub fn get_inner_by_epoch(&self) -> storage_api::Result<Data> {}
 
     // TODO: we may need an update_data() method, figure out when it should be
     // called (in at()?)
 }
+
+// impl<K, V, SON, FutureEpochs, const NUM_PAST_EPOCHS: u64>
+//     Epoched<
+//         LazyMap<K, V, SON>,
+//         FutureEpochs,
+//         NUM_PAST_EPOCHS,
+//         collections::Nested,
+//     >
+// where
+//     FutureEpochs: EpochOffset,
+// {
+//     pub fn get_inner_by_epoch(&self, epoch: &Epoch) -> LazyMap<K, V, SON> {
+//         self.at()
+//     }
+// }
 
 impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
     EpochedDelta<Data, FutureEpochs, NUM_PAST_EPOCHS>
@@ -359,34 +378,35 @@ where
     where
         S: StorageRead,
     {
-        let last_update = self.get_last_update(storage)?;
-        match last_update {
-            None => Ok(None),
-            Some(last_update) => {
-                let data_handler = self.get_data_handler();
-                let future_most_epoch =
-                    last_update + FutureEpochs::value(params);
-                // Epoch can be a lot greater than the epoch where
-                // a value is recorded, we check the upper bound
-                // epoch of the LazyMap data
-                let mut epoch = std::cmp::min(epoch, future_most_epoch);
-                loop {
-                    let res = data_handler.get(storage, &epoch)?;
-                    match res {
-                        Some(_) => return Ok(res),
-                        None => {
-                            if epoch.0 > 0
-                                && epoch > Self::sub_past_epochs(last_update)
-                            {
-                                epoch = Epoch(epoch.0 - 1)
-                            } else {
-                                return Ok(None);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.get_data_handler().get(storage, &epoch)
+        // let last_update = self.get_last_update(storage)?;
+        // match last_update {
+        //     None => Ok(None),
+        //     Some(last_update) => {
+        //         let data_handler = self.get_data_handler();
+        //         let future_most_epoch =
+        //             last_update + FutureEpochs::value(params);
+        //         // Epoch can be a lot greater than the epoch where
+        //         // a value is recorded, we check the upper bound
+        //         // epoch of the LazyMap data
+        //         let mut epoch = std::cmp::min(epoch, future_most_epoch);
+        //         loop {
+        //             let res = data_handler.get(storage, &epoch)?;
+        //             match res {
+        //                 Some(_) => return Ok(res),
+        //                 None => {
+        //                     if epoch.0 > 0
+        //                         && epoch > Self::sub_past_epochs(last_update)
+        //                     {
+        //                         epoch = Epoch(epoch.0 - 1);
+        //                     } else {
+        //                         return Ok(None);
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     /// Get the sum of the delta values up through the given epoch
@@ -399,11 +419,27 @@ where
     where
         S: StorageRead,
     {
+        // TODO: oddly failing to do correctly with iter over
+        // self.get_data_handler() for some reason (it only finds the
+        // first entry in iteration then None afterward). Figure
+        // this out!!!
+
+        // println!("\nGET_SUM AT EPOCH {}", epoch.clone());
         let last_update = self.get_last_update(storage)?;
         match last_update {
             None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
+                // dbg!(data_handler.get(storage, &Epoch(0)));
+                // dbg!(data_handler.get(storage, &Epoch(1)));
+                // dbg!(data_handler.get(storage, &Epoch(2)));
+                // dbg!(data_handler.len(storage)?);
+
+                // let mut it = data_handler.iter(storage)?;
+                // dbg!(it.next());
+                // dbg!(it.next());
+                // drop(it);
+
                 let future_most_epoch =
                     last_update + FutureEpochs::value(params);
                 // Epoch can be a lot greater than the epoch where
@@ -411,28 +447,42 @@ where
                 // epoch of the LazyMap data
                 let epoch = std::cmp::min(epoch, future_most_epoch);
                 let mut sum: Option<Data> = None;
-                for next in data_handler.iter(storage).unwrap() {
-                    match (&mut sum, next) {
-                        (Some(_), Ok((next_epoch, next_val))) => {
-                            if next_epoch > epoch {
-                                return Ok(sum);
-                            } else {
-                                sum = sum.map(|cur_sum| cur_sum + next_val)
-                            }
+
+                // ! BELOW IS WHAT IS DESIRED IF ITERATION IS WORKING !
+                // for next in data_handler.iter(storage).unwrap() {
+                //     match dbg!((&mut sum, next)) {
+                //         (Some(_), Ok((next_epoch, next_val))) => {
+                //             if next_epoch > epoch {
+                //                 return Ok(sum);
+                //             } else {
+                //                 sum = sum.map(|cur_sum| cur_sum + next_val)
+                //             }
+                //         }
+                //         (None, Ok((next_epoch, next_val))) => {
+                //             if epoch < next_epoch {
+                //                 return Ok(None);
+                //             } else {
+                //                 sum = Some(next_val)
+                //             }
+                //         }
+                //         (Some(_), Err(_)) => return Ok(sum),
+                //         // perhaps elaborate with an error
+                //         _ => return Ok(None),
+                //     };
+                // }
+
+                // THIS IS THE HACKY METHOD UNTIL I FIGURE OUT WTF GOING ON WITH
+                // THE ITER
+                let start_epoch = Self::sub_past_epochs(last_update);
+                for ep in (start_epoch.0)..=(epoch.0) {
+                    if let Some(val) = data_handler.get(storage, &Epoch(ep))? {
+                        if sum.is_none() {
+                            sum = Some(val);
+                        } else {
+                            sum = sum.map(|cur_sum| cur_sum + val);
                         }
-                        (None, Ok((next_epoch, next_val))) => {
-                            if epoch < next_epoch {
-                                return Ok(None);
-                            } else {
-                                sum = Some(next_val)
-                            }
-                        }
-                        (Some(_), Err(_)) => return Ok(sum),
-                        // perhaps elaborate with an error
-                        _ => return Ok(None),
-                    };
+                    }
                 }
-                // this may not be right
                 Ok(sum)
             }
         }
@@ -532,7 +582,8 @@ where
             .unwrap()
     }
 
-    fn get_last_update<S>(
+    /// Get the epoch of the most recent update
+    pub fn get_last_update<S>(
         &self,
         storage: &S,
     ) -> storage_api::Result<Option<Epoch>>
@@ -650,85 +701,89 @@ pub trait EpochOffset:
     fn dyn_offset() -> DynEpochOffset;
 }
 
-mod test {
-    use namada_core::ledger::storage::testing::TestStorage;
-    use namada_core::types::address::{self, Address};
-
-    use super::*;
-
-    #[test]
-    fn testing_epoched_new() -> storage_api::Result<()> {
-        let mut storage = TestStorage::default();
-
-        let key1 = storage::Key::parse("test_nested1").unwrap();
-        let nested1 =
-            NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
-                key1,
-            );
-        nested1.init(&mut storage, Epoch(0))?;
-
-        let key2 = storage::Key::parse("test_nested2").unwrap();
-        let nested2 = NestedEpoched::<
-            NestedMap<u64, LazyMap<u64, Address>>,
-            OffsetPipelineLen,
-        >::open(key2);
-        nested2.init(&mut storage, Epoch(0))?;
-
-        dbg!(&nested1.get_last_update_storage_key());
-        dbg!(&nested1.get_last_update(&storage));
-
-        nested1.at(&Epoch(0)).insert(
-            &mut storage,
-            address::testing::established_address_1(),
-            1432,
-        )?;
-        dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
-        dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
-
-        nested2.at(&Epoch(0)).at(&100).insert(
-            &mut storage,
-            1,
-            address::testing::established_address_2(),
-        )?;
-        dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
-        dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
-
-        // dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
-
-        // let epoch = Epoch::from(0);
-        // let addr = address::testing::established_address_1();
-        // let amount: u64 = 234235;
-
-        // nested_epoched
-        //     .at(&epoch)
-        //     .insert(&mut storage, addr.clone(), amount)?;
-
-        // let epoch = epoch + 3_u64;
-        // nested_epoched.at(&epoch).insert(
-        //     &mut storage,
-        //     addr.clone(),
-        //     999_u64,
-        // )?;
-
-        // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
-        // dbg!(
-        //     nested_epoched
-        //         .get_data_handler()
-        //         .get_data_key(&Epoch::from(3))
-        // );
-        // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
-        // dbg!(
-        //     nested_epoched
-        //         .at(&Epoch::from(0))
-        //         .get(&storage, &addr.clone())?
-        // );
-        // dbg!(
-        //     nested_epoched
-        //         .at(&Epoch::from(3))
-        //         .get(&storage, &addr.clone())?
-        // );
-        // dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
-
-        Ok(())
-    }
-}
+// mod test {
+// use namada_core::ledger::storage::testing::TestStorage;
+// use namada_core::types::address::{self, Address};
+// use namada_core::types::storage::Key;
+//
+// use super::{
+// storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
+// OffsetPipelineLen,
+// };
+//
+// #[test]
+// fn testing_epoched_new() -> storage_api::Result<()> {
+// let mut storage = TestStorage::default();
+//
+// let key1 = storage::Key::parse("test_nested1").unwrap();
+// let nested1 =
+// NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
+// key1,
+// );
+// nested1.init(&mut storage, Epoch(0))?;
+//
+// let key2 = storage::Key::parse("test_nested2").unwrap();
+// let nested2 = NestedEpoched::<
+// NestedMap<u64, LazyMap<u64, Address>>,
+// OffsetPipelineLen,
+// >::open(key2);
+// nested2.init(&mut storage, Epoch(0))?;
+//
+// dbg!(&nested1.get_last_update_storage_key());
+// dbg!(&nested1.get_last_update(&storage));
+//
+// nested1.at(&Epoch(0)).insert(
+// &mut storage,
+// address::testing::established_address_1(),
+// 1432,
+// )?;
+// dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
+// dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
+//
+// nested2.at(&Epoch(0)).at(&100).insert(
+// &mut storage,
+// 1,
+// address::testing::established_address_2(),
+// )?;
+// dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
+// dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
+//
+// dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
+//
+// let epoch = Epoch::from(0);
+// let addr = address::testing::established_address_1();
+// let amount: u64 = 234235;
+//
+// nested_epoched
+//     .at(&epoch)
+//     .insert(&mut storage, addr.clone(), amount)?;
+//
+// let epoch = epoch + 3_u64;
+// nested_epoched.at(&epoch).insert(
+//     &mut storage,
+//     addr.clone(),
+//     999_u64,
+// )?;
+//
+// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
+// dbg!(
+//     nested_epoched
+//         .get_data_handler()
+//         .get_data_key(&Epoch::from(3))
+// );
+// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
+// dbg!(
+//     nested_epoched
+//         .at(&Epoch::from(0))
+//         .get(&storage, &addr.clone())?
+// );
+// dbg!(
+//     nested_epoched
+//         .at(&Epoch::from(3))
+//         .get(&storage, &addr.clone())?
+// );
+// dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
+//
+// Ok(())
+// }
+// }

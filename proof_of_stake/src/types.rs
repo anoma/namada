@@ -12,6 +12,7 @@ use std::ops::{Add, Sub};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::{LazyMap, LazyVec};
+use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
@@ -30,6 +31,41 @@ pub type ValidatorSetPositionsNew = crate::epoched_new::NestedEpoched<
     LazyMap<Address, Position>,
     crate::epoched_new::OffsetPipelineLen,
 >;
+
+impl ValidatorSetPositionsNew {
+    /// TODO
+    pub fn get_position<S>(
+        &self,
+        storage: &S,
+        epoch: &Epoch,
+        address: &Address,
+        params: &PosParams,
+    ) -> storage_api::Result<Option<Position>>
+    where
+        S: StorageRead,
+    {
+        let last_update = self.get_last_update(storage)?;
+        if last_update.is_none() {
+            return Ok(None);
+        }
+        let last_update = last_update.unwrap();
+        let future_most_epoch: Epoch = last_update + params.pipeline_len;
+        let mut epoch = std::cmp::min(epoch.clone(), future_most_epoch);
+        loop {
+            match self.at(&epoch).get(storage, address)? {
+                Some(val) => return Ok(Some(val)),
+                None => {
+                    if epoch.0 > 0 && epoch > Self::sub_past_epochs(last_update)
+                    {
+                        epoch = Epoch(epoch.0 - 1);
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeysNew = crate::epoched_new::Epoched<
@@ -60,11 +96,87 @@ pub type ActiveValidatorSetsNew = crate::epoched_new::NestedEpoched<
     crate::epoched_new::OffsetPipelineLen,
 >;
 
+impl ActiveValidatorSetsNew {
+    /// TODO
+    pub fn get_validator<S>(
+        &self,
+        storage: &S,
+        epoch: Epoch,
+        amount: &token::Amount,
+        position: &Position,
+        params: &PosParams,
+    ) -> storage_api::Result<Option<Address>>
+    where
+        S: StorageRead,
+    {
+        let last_update = self.get_last_update(storage)?;
+        if last_update.is_none() {
+            return Ok(None);
+        }
+        let last_update = last_update.unwrap();
+        let future_most_epoch: Epoch = last_update + params.pipeline_len;
+        let mut epoch = std::cmp::min(epoch.clone(), future_most_epoch);
+        loop {
+            match self.at(&epoch).at(amount).get(storage, position)? {
+                Some(address) => return Ok(Some(address)),
+                None => {
+                    if epoch.0 > 0 && epoch > Self::sub_past_epochs(last_update)
+                    {
+                        epoch = Epoch(epoch.0 - 1);
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Epoched inactive validator sets.
 pub type InactiveValidatorSetsNew = crate::epoched_new::NestedEpoched<
     InactiveValidatorSetNew,
     crate::epoched_new::OffsetPipelineLen,
 >;
+
+impl InactiveValidatorSetsNew {
+    /// TODO
+    pub fn get_validator<S>(
+        &self,
+        storage: &S,
+        epoch: Epoch,
+        amount: &token::Amount,
+        position: &Position,
+        params: &PosParams,
+    ) -> storage_api::Result<Option<Address>>
+    where
+        S: StorageRead,
+    {
+        let last_update = self.get_last_update(storage)?;
+        if last_update.is_none() {
+            return Ok(None);
+        }
+        let last_update = last_update.unwrap();
+        let future_most_epoch: Epoch = last_update + params.pipeline_len;
+        let mut epoch = std::cmp::min(epoch.clone(), future_most_epoch);
+        loop {
+            match self
+                .at(&epoch)
+                .at(&amount.clone().into())
+                .get(storage, position)?
+            {
+                Some(address) => return Ok(Some(address)),
+                None => {
+                    if epoch.0 > 0 && epoch > Self::sub_past_epochs(last_update)
+                    {
+                        epoch = Epoch(epoch.0 - 1);
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Epoched validator's deltas.
 pub type ValidatorDeltasNew = crate::epoched_new::EpochedDelta<

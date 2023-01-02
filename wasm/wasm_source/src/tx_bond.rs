@@ -17,12 +17,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
-    use namada::ledger::pos::{BondId, GenesisValidator, PosParams, PosVP};
-    use namada::proof_of_stake::types::Bond;
+    use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::{
-        active_validator_set_handle,
+        active_validator_set_handle, bond_handle,
         read_active_validator_set_addresses_with_stake, read_total_stake,
         read_validator_stake,
     };
@@ -70,8 +69,9 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
-        let is_delegation = matches!(
-            &bond.source, Some(source) if *source != bond.validator);
+        dbg!(&initial_stake, &bond);
+        let is_delegation =
+            matches!(&bond.source, Some(source) if *source != bond.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
         let commission_rate = rust_decimal::Decimal::new(5, 2);
         let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
@@ -116,14 +116,13 @@ mod tests {
             .expect("PoS must have balance");
         assert_eq!(pos_balance_pre, initial_stake);
 
-        println!("DBG0\n");
-
         // Read some data before the tx is executed
         let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
             Vec::new();
 
+        println!("\nFILLING PRE STATE\n");
         for epoch in 0..=pos_params.unbonding_len {
             epoched_total_stake_pre.push(
                 read_total_stake(ctx(), &pos_params, Epoch(epoch))?.unwrap(),
@@ -153,11 +152,8 @@ mod tests {
         //     .unwrap();
         // let validator_sets_pre = ctx().read_validator_set().unwrap();
 
-        println!("DBG1\n");
-
         apply_tx(ctx(), tx_data)?;
-
-        println!("DBG2\n");
+        tx_host_env::commit_tx_and_block(); // Needed until #913 is done
 
         // Read the data after the tx is executed.
         // let validator_deltas_post =
@@ -169,6 +165,8 @@ mod tests {
         let mut epoched_validator_stake_post: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_set_post: Vec<HashSet<WeightedValidator>> =
             Vec::new();
+
+        println!("\nFILLING POST STATE\n");
 
         for epoch in 0..=pos_params.unbonding_len {
             epoched_total_stake_post.push(
@@ -267,17 +265,23 @@ mod tests {
             .source
             .clone()
             .unwrap_or_else(|| bond.validator.clone());
-        let bond_id = BondId {
-            validator: bond.validator.clone(),
-            source: bond_src,
-        };
-        let bonds_post = ctx().read_bond(&bond_id)?.unwrap();
+
+        let bonds_post = bond_handle(&bond_src, &bond.validator, true);
+        // let bonds_post = ctx().read_bond(&bond_id)?.unwrap();
+
+        for epoch in 0..pos_params.unbonding_len {
+            dbg!(
+                epoch,
+                bonds_post.get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+            );
+        }
 
         if is_delegation {
             // A delegation is applied at pipeline offset
             // Check that bond is empty before pipeline offset
             for epoch in 0..pos_params.pipeline_len {
-                let bond: Option<Bond> = bonds_post.get(epoch);
+                let bond =
+                    bonds_post.get_sum(ctx(), Epoch(epoch), &pos_params)?;
                 assert!(
                     bond.is_none(),
                     "Delegation before pipeline offset should be empty - \
@@ -286,12 +290,12 @@ mod tests {
             }
             // Check that bond is updated after the pipeline length
             for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-                let start_epoch = Epoch::from(pos_params.pipeline_len);
-                let expected_bond =
-                    HashMap::from_iter([(start_epoch, bond.amount)]);
-                let bond: Bond = bonds_post.get(epoch).unwrap();
+                let expected_bond_amount = bond.amount.change();
+                let bond =
+                    bonds_post.get_sum(ctx(), Epoch(epoch), &pos_params)?;
                 assert_eq!(
-                    bond.pos_deltas, expected_bond,
+                    bond,
+                    Some(expected_bond_amount),
                     "Delegation at and after pipeline offset should be equal \
                      to the bonded amount - checking epoch {epoch}"
                 );
@@ -300,29 +304,26 @@ mod tests {
             // This is a self-bond
             // Check that a bond already exists from genesis with initial stake
             // for the validator
-            let genesis_epoch = Epoch::from(0);
             for epoch in 0..pos_params.pipeline_len {
-                let expected_bond =
-                    HashMap::from_iter([(genesis_epoch, initial_stake)]);
-                let bond: Bond = bonds_post
-                    .get(epoch)
+                let expected_bond_amount = initial_stake.change();
+                let bond = bonds_post
+                    .get_sum(ctx(), Epoch(epoch), &pos_params)
                     .expect("Genesis validator should already have self-bond");
                 assert_eq!(
-                    bond.pos_deltas, expected_bond,
+                    bond,
+                    Some(expected_bond_amount),
                     "Self-bond before pipeline offset should be equal to the \
                      genesis initial stake - checking epoch {epoch}"
                 );
             }
             // Check that the bond is updated after the pipeline length
             for epoch in pos_params.pipeline_len..=pos_params.unbonding_len {
-                let start_epoch = Epoch::from(pos_params.pipeline_len);
-                let expected_bond = HashMap::from_iter([
-                    (genesis_epoch, initial_stake),
-                    (start_epoch, bond.amount),
-                ]);
-                let bond: Bond = bonds_post.get(epoch).unwrap();
+                let expected_bond_amount = initial_stake + bond.amount;
+                let bond =
+                    bonds_post.get_sum(ctx(), Epoch(epoch), &pos_params)?;
                 assert_eq!(
-                    bond.pos_deltas, expected_bond,
+                    bond,
+                    Some(expected_bond_amount.change()),
                     "Self-bond at and after pipeline offset should contain \
                      genesis stake and the bonded amount - checking epoch \
                      {epoch}"
