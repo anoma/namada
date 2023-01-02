@@ -11,9 +11,9 @@ pub fn main() -> Result<()> {
     }
     match cmd {
         cmds::NamadaNode::Ledger(sub) => match sub {
-            cmds::Ledger::Run(args) => {
+            cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
-                ledger::run(ctx.config.ledger, args.0, wasm_dir);
+                ledger::run(ctx.config.ledger, args, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
                 ledger::reset(ctx.config.ledger)
