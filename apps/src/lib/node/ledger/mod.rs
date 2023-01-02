@@ -15,6 +15,7 @@ use byte_unit::Byte;
 use futures::future::TryFutureExt;
 use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
+use namada::types::time::Utc;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::task;
@@ -22,6 +23,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
+use crate::cli::args::LedgerRun;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
@@ -156,7 +158,7 @@ impl Shell {
 }
 
 /// Run the ledger with an async runtime
-pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
+pub fn run(config: config::Ledger, args: LedgerRun, wasm_dir: PathBuf) {
     let logical_cores = num_cpus::get();
     tracing::info!("Available logical cores: {}", logical_cores);
 
@@ -181,6 +183,20 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
         .thread_name(|i| format!("ledger-rayon-worker-{}", i))
         .build_global()
         .unwrap();
+
+    if let Some(t) = args.0 {
+        // Sleep until start time if not yet reached
+        if let Ok(sleep_time) = t.0.signed_duration_since(Utc::now()).to_std() {
+            if !sleep_time.is_zero() {
+                tracing::info!(
+                    "Waiting ledger start time: {:?}, time left: {:?}",
+                    t,
+                    sleep_time
+                );
+                std::thread::sleep(sleep_time)
+            }
+        }
+    }
 
     // Start tokio runtime with the `run_aux` function
     tokio::runtime::Builder::new_multi_thread()
