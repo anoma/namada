@@ -720,6 +720,17 @@ where
     }
 
     #[cfg(not(feature = "mainnet"))]
+    /// Get fixed amount of fees for wrapper tx
+    fn get_wrapper_tx_fees(&self) -> token::Amount {
+        let (fees, _gas) =
+            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+                &self.storage,
+            )
+            .expect("Must be able to read wrapper tx fees parameter");
+        fees.unwrap_or_default()
+    }
+
+    #[cfg(not(feature = "mainnet"))]
     /// Check if the tx has a valid PoW solution and if so invalidate it to
     /// prevent replay.
     fn invalidate_pow_solution_if_valid(

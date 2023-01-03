@@ -54,6 +54,8 @@ where
                 execute_governance_proposals(self, &mut response)?;
         }
 
+        let wrapper_fees = self.get_wrapper_tx_fees();
+
         // Tracks the accepted transactions
         self.storage.block.results = BlockResults::default();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
@@ -180,13 +182,12 @@ where
                             }
                         };
 
-                    let balance: u64 = balance.into();
-                    match balance.checked_sub(100) {
-                        Some(v) => {
+                    match balance.checked_sub(wrapper_fees) {
+                        Some(amount) => {
                             self.write_log
                                 .write(
                                     &balance_key,
-                                    Amount::from(v).try_to_vec().unwrap(),
+                                    amount.try_to_vec().unwrap(),
                                 )
                                 .unwrap();
                         }
