@@ -2,6 +2,7 @@
 //! wallet.
 
 use borsh::BorshSerialize;
+use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
@@ -185,11 +186,19 @@ pub async fn sign_wrapper(
     keypair: &common::SecretKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
-    let fee_amount = Amount::from(MIN_FEE);
+    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
+
+    let fee_amount = if cfg!(feature = "mainnet") {
+        Amount::from(MIN_FEE)
+    } else {
+        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
+        rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
+            .await
+            .unwrap_or_default()
+    };
     let fee_token = ctx.get(&args.fee_token);
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
-    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
     let balance =
         rpc::query_storage_value::<token::Amount>(&client, &balance_key)
             .await
