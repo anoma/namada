@@ -182,10 +182,11 @@ track any changes in these parameters and act accordingly.
 
 ### Unshielding
 
-To prevent a possible locked-out problem in which a user doesn't have enough
-funds to pay fees (preventing any sort of operation on the chain), Namada allows
-the signer of the wrapper transaction to unshield some funds on the go to cover
-the cost of the fee. The `WrapperTx` struct must be extended as follows:
+To provide improved privay, Namada allows the signer of the wrapper transaction
+to unshield some funds on the go to cover the cost of the fee. This also
+addresses a possible locked-out problem in which a user doesn't have enough
+funds to pay fees (preventing any sort of operation on the chaind). The
+`WrapperTx` struct must be extended as follows:
 
 ```rust
 pub struct WrapperTx {
@@ -205,9 +206,9 @@ pub struct WrapperTx {
 }
 ```
 
-The new `unshield` field carries an optional tx  encoding for
-an unshielding `Transfer`. The unshielding operation is
-exempted from paying fees and doesn't charge gas.
+The new `unshield` field carries an optional tx encoding for an unshielding
+`Transfer`. The unshielding operation is exempt from paying fees and doesn't
+charge gas.
 
 The proposer and the validators must also check the validity of the optional
 unshielding transfer attached to the wrapper. More specifically the correctness
@@ -220,16 +221,16 @@ The first condition can be tested statically and requires that:
 
 1. The tx encodes a `Transfer`
 2. The `shielded` field must be set to `Some`
-3. The `source` address must be the masp
-4. The `target` address matches that of the wrapper signer
-5. The `token` match the one specified in the `Fee` struct
-6. The `amount`, added to the already available unshielded balance for that
+3. The `source` address must be the masp4. The `target` address matches that of
+   the wrapper signer
+4. The `token` match the one specified in the `Fee` struct
+5. The `amount`, added to the already available unshielded balance for that
    token, is just enough to cover the fees, i.e. the value given by
    $Fee.amount * GasLimit$ (to prevent leveraging this transfer for other
    purposes)
 
-The spending key associated with this operation could be relative to
-any address as long as the signature of the transfer itself is valid.
+The spending key associated with this operation could be relative to any address
+as long as the signature of the transfer itself is valid.
 
 If checks 1 to 5 fail, the transaction can be safely discarded, while if the
 check fails at point 6 the transaction could be kept in mempool for future
@@ -246,6 +247,14 @@ the storage changes applied by the unshieldings must be stored in the
 write-ahead log too and the balance key must be searched in the WAL before the
 storage: in case of a block rejection the WAL is discarded without committing
 the changes to storage.
+
+### Governance proposals
+
+Governance [proposals](../base-ledger/governance.md) may carry some wasm code to
+be executed in case the proposal passed. This code is embedded into a
+`DecryptedTx` directly by the validators at block processing time and is not
+inserted into the block itself. These transactions are exempt from fees and
+don't charge gas.
 
 ## Gas accounting
 
@@ -327,11 +336,11 @@ explains the last statement of the previous section.
 
 This section summarizes the checks performed in protocol.
 
-| Method                          | Checks                                                                                                                                                                                                                                                                                                                                                                                                  | If check fails         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Method                          | Checks                                                                                                                                                                                                                                                                                                                                                                                                                | If check fails         |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | `CheckTx` and `ProcessProposal` | <ul><li> Each wrapper tx `GasLimit` doesn't surpass `MaxBlockGas` protocol parameter</li><li> Fees are paid with a whitelisted token and meet the minimum amount required of fee per unit of gas</li><li>If unshielding: <ul><li>tx data must deserialize to `Transfer`</li><li>`source` must be the masp</li><li>`target` must match the wrapper signer</li><li>`token` must match the `Fee` one</li></ul></li></ul> | Reject the block       |
-| `ProcessProposal`               | <ul><li>If unshielding: <ul><li>`amount` is the minimum required</li><li>the transfer must run successfully</li></ul></li><li>Wrapper transactions are listed before decrypted transactions</li><li>Paying address has enough funds to cover fee</li><li>Cumulated `GasLimit` isn't greater than the `MaxBlockGas` parameter</li></ul>                                                                  | Reject the block       |
-| `FinalizeBlock`                 | <ul><li>For every tx, gas used isn't greater than the `GasLimit` allocated in the corresponding wrapper</li></ul>                                                                                                                                                                                                                                                                                       | Reject the transaction |
+| `ProcessProposal`               | <ul><li>If unshielding: <ul><li>`amount` is the minimum required</li><li>the transfer must run successfully</li></ul></li><li>Wrapper transactions are listed before decrypted transactions</li><li>Paying address has enough funds to cover fee</li><li>Cumulated `GasLimit` isn't greater than the `MaxBlockGas` parameter</li></ul>                                                                                | Reject the block       |
+| `FinalizeBlock`                 | <ul><li>For every tx, gas used isn't greater than the `GasLimit` allocated in the corresponding wrapper</li></ul>                                                                                                                                                                                                                                                                                                     | Reject the transaction |
 
 ## Alternatives considered
 
