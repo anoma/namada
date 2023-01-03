@@ -1,13 +1,56 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use data_encoding::HEXUPPER;
+use namada::core::hints;
+use namada::core::ledger::storage::Storage;
+use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::internal::WrapperTxInQueue;
 
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::node::ledger::shell::block_space_alloc::{
+    threshold, AllocFailure, TxBin,
+};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+
+/// Validation metadata, to keep track of used resources or
+/// transaction numbers, in a block proposal.
+#[derive(Default)]
+pub struct ValidationMeta {
+    /// Space utilized by encrypted txs.
+    pub encrypted_txs_bin: TxBin,
+    /// Space utilized by all txs.
+    pub txs_bin: TxBin,
+    /// Check if the decrypted tx queue has any elements
+    /// left.
+    ///
+    /// This field will only evaluate to true if a block
+    /// proposer didn't include all decrypted txs in a block.
+    pub decrypted_queue_has_remaining_txs: bool,
+}
+
+impl<D, H> From<&Storage<D, H>> for ValidationMeta
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn from(storage: &Storage<D, H>) -> Self {
+        let max_proposal_bytes = storage.get_max_proposal_bytes().get();
+        let encrypted_txs_bin =
+            TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
+        let txs_bin = TxBin::init(max_proposal_bytes);
+        Self {
+            #[cfg(feature = "abcipp")]
+            digests: DigestCounters::default(),
+            decrypted_queue_has_remaining_txs: false,
+            encrypted_txs_bin,
+            txs_bin,
+        }
+    }
+}
 
 impl<D, H> Shell<D, H>
 where
@@ -31,26 +74,73 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-        let tx_results = self.process_txs(&req.txs);
+        let (tx_results, metadata) = self.process_txs(&req.txs);
+
+        // Erroneous transactions were detected when processing
+        // the leader's proposal. We allow txs that do not
+        // deserialize properly, that have invalid signatures
+        // and that have invalid wasm code to reach FinalizeBlock.
+        let invalid_txs = tx_results.iter().any(|res| {
+            let error = ErrorCodes::from_u32(res.code).expect(
+                "All error codes returned from process_single_tx are valid",
+            );
+            !error.is_recoverable()
+        });
+        if invalid_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Found invalid transactions, proposed block will be rejected"
+            );
+        }
+
+        let has_remaining_decrypted_txs =
+            metadata.decrypted_queue_has_remaining_txs;
+        if has_remaining_decrypted_txs {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                "Not all decrypted txs from the previous height were included in
+                 the proposal, the block will be rejected"
+            );
+        }
+
+        let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
+
+        let status = if will_reject_proposal {
+            ProposalStatus::Reject
+        } else {
+            ProposalStatus::Accept
+        };
 
         ProcessProposal {
-            status: if tx_results.iter().any(|res| res.code > 3) {
-                ProposalStatus::Reject as i32
-            } else {
-                ProposalStatus::Accept as i32
-            },
+            status: status as i32,
             tx_results,
         }
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[TxBytes]) -> Vec<TxResult> {
+    pub fn process_txs(
+        &self,
+        txs: &[TxBytes],
+    ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
-        txs.iter()
+        let mut metadata = ValidationMeta::from(&self.storage);
+        let tx_results = txs
+            .iter()
             .map(|tx_bytes| {
-                self.process_single_tx(tx_bytes, &mut tx_queue_iter)
+                self.process_single_tx(
+                    tx_bytes,
+                    &mut tx_queue_iter,
+                    &mut metadata,
+                )
             })
-            .collect()
+            .collect();
+        metadata.decrypted_queue_has_remaining_txs =
+            !self.storage.tx_queue.is_empty() && tx_queue_iter.next().is_some();
+        (tx_results, metadata)
     }
 
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
@@ -67,6 +157,8 @@ where
     ///   3: Wasm runtime error
     ///   4: Invalid order of decrypted txs
     ///   5. More decrypted txs than expected
+    ///   6. A transaction could not be decrypted
+    ///   7. Not enough block space was available for some tx
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -75,128 +167,177 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
+        metadata: &mut ValidationMeta,
     ) -> TxResult {
-        let tx = match Tx::try_from(tx_bytes) {
-            Ok(tx) => tx,
-            Err(_) => {
-                return TxResult {
+        // try to allocate space for this tx
+        if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
+            return TxResult {
+                code: ErrorCodes::AllocationError.into(),
+                info: match e {
+                    AllocFailure::Rejected { .. } => {
+                        "No more space left in the block"
+                    }
+                    AllocFailure::OverflowsBin { .. } => {
+                        "The given tx is larger than the max configured \
+                         proposal size"
+                    }
+                }
+                .into(),
+            };
+        }
+
+        let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
+            |err| {
+                tracing::debug!(
+                    ?err,
+                    "Couldn't deserialize transaction received during \
+                     PrepareProposal"
+                );
+                Err(TxResult {
                     code: ErrorCodes::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
                         .into(),
-                };
-            }
+                })
+            },
+            |tx| {
+                process_tx(tx).map_err(|err| {
+                    // This occurs if the wrapper / protocol tx signature is
+                    // invalid
+                    TxResult {
+                        code: ErrorCodes::InvalidSig.into(),
+                        info: err.to_string(),
+                    }
+                })
+            },
+        );
+        let tx = match maybe_tx {
+            Ok(tx) => tx,
+            Err(tx_result) => return tx_result,
         };
+
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(tx) {
-            // This occurs if the wrapper / protocol tx signature is invalid
-            Err(err) => TxResult {
-                code: ErrorCodes::InvalidSig.into(),
-                info: err.to_string(),
+        match tx {
+            // If it is a raw transaction, we do no further validation
+            TxType::Raw(_) => TxResult {
+                code: ErrorCodes::InvalidTx.into(),
+                info: "Transaction rejected: Non-encrypted transactions are \
+                       not supported"
+                    .into(),
             },
-            Ok(result) => match result {
-                // If it is a raw transaction, we do no further validation
-                TxType::Raw(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Transaction rejected: Non-encrypted transactions \
-                           are not supported"
-                        .into(),
-                },
-                TxType::Protocol(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Protocol transactions are a fun new feature that \
-                           is coming soon to a blockchain near you. Patience."
-                        .into(),
-                },
-                TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(WrapperTxInQueue {
-                        tx: wrapper,
-                        #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: _,
-                    }) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
-                                    .into(),
-                            }
-                        }
-                    }
-                    None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                },
-                TxType::Wrapper(tx) => {
-                    // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
+            TxType::Protocol(_) => TxResult {
+                code: ErrorCodes::InvalidTx.into(),
+                info: "Protocol transactions are a fun new feature that is \
+                       coming soon to a blockchain near you. Patience."
+                    .into(),
+            },
+            TxType::Decrypted(tx) => match tx_queue_iter.next() {
+                Some(WrapperTxInQueue {
+                    tx: wrapper,
+                    #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: _,
+                }) => {
+                    if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: format!(
-                                "The ciphertext of the wrapped tx {} is \
-                                 invalid",
-                                hash_tx(tx_bytes)
-                            ),
+                            code: ErrorCodes::InvalidOrder.into(),
+                            info: "Process proposal rejected a decrypted \
+                                   transaction that violated the tx order \
+                                   determined in the previous block"
+                                .into(),
+                        }
+                    } else if verify_decrypted_correctly(&tx, privkey) {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
                         }
                     } else {
-                        // If the public key corresponds to the MASP sentinel
-                        // transaction key, then the fee payer is effectively
-                        // the MASP, otherwise derive
-                        // they payer from public key.
-                        let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                            tx.fee_payer()
-                        } else {
-                            masp()
-                        };
-                        // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
-
-                        // In testnets, tx is allowed to skip fees if it
-                        // includes a valid PoW
-                        #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow = self.has_valid_pow_solution(&tx);
-                        #[cfg(feature = "mainnet")]
-                        let has_valid_pow = false;
-
-                        if has_valid_pow
-                            || self.get_wrapper_tx_fees() <= balance
-                        {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
-                                       sufficient balance to pay fee"
-                                    .into(),
-                            }
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The encrypted payload of tx was \
+                                   incorrectly marked as un-decryptable"
+                                .into(),
                         }
                     }
                 }
+                None => TxResult {
+                    code: ErrorCodes::ExtraTxs.into(),
+                    info: "Received more decrypted txs than expected".into(),
+                },
             },
+            TxType::Wrapper(tx) => {
+                // try to allocate space for this encrypted tx
+                if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
+                    return TxResult {
+                        code: ErrorCodes::AllocationError.into(),
+                        info: match e {
+                            AllocFailure::Rejected { .. } => {
+                                "No more space left in the block for wrapper \
+                                 txs"
+                            }
+                            AllocFailure::OverflowsBin { .. } => {
+                                "The given wrapper tx is larger than 1/3 of \
+                                 the available block space"
+                            }
+                        }
+                        .into(),
+                    };
+                }
+                if hints::unlikely(self.encrypted_txs_not_allowed()) {
+                    return TxResult {
+                        code: ErrorCodes::AllocationError.into(),
+                        info: "Wrapper txs not allowed at the current block \
+                               height"
+                            .into(),
+                    };
+                }
+
+                // validate the ciphertext via Ferveo
+                if !tx.validate_ciphertext() {
+                    TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: format!(
+                            "The ciphertext of the wrapped tx {} is invalid",
+                            hash_tx(tx_bytes)
+                        ),
+                    }
+                } else {
+                    // If the public key corresponds to the MASP sentinel
+                    // transaction key, then the fee payer is effectively
+                    // the MASP, otherwise derive
+                    // they payer from public key.
+                    let fee_payer = if tx.pk != masp_tx_key().ref_to() {
+                        tx.fee_payer()
+                    } else {
+                        masp()
+                    };
+                    // check that the fee payer has sufficient balance
+                    let balance = self.get_balance(&tx.fee.token, &fee_payer);
+
+                    // In testnets, tx is allowed to skip fees if it
+                    // includes a valid PoW
+                    #[cfg(not(feature = "mainnet"))]
+                    let has_valid_pow = self.has_valid_pow_solution(&tx);
+                    #[cfg(feature = "mainnet")]
+                    let has_valid_pow = false;
+
+                    if has_valid_pow || self.get_wrapper_tx_fees() <= balance {
+                        TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process proposal accepted this transaction"
+                                .into(),
+                        }
+                    } else {
+                        TxResult {
+                            code: ErrorCodes::InvalidTx.into(),
+                            info: "The address given does not have sufficient \
+                                   balance to pay fee"
+                                .into(),
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -205,6 +346,14 @@ where
         _req: shim::request::RevertProposal,
     ) -> shim::response::RevertProposal {
         Default::default()
+    }
+
+    /// Checks if it is not possible to include encrypted txs at the current
+    /// block height.
+    fn encrypted_txs_not_allowed(&self) -> bool {
+        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        is_2nd_height_off || is_3rd_height_off
     }
 }
 
