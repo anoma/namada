@@ -380,7 +380,7 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    genesis.consensus_params.block = Some(block::Size {
+    let size = block::Size {
         // maximum size of a serialized Tendermint block
         // cannot go over 100 MiB
         max_bytes: (100 << 20) - 1, /* unsure if we are dealing with an open
@@ -389,7 +389,10 @@ async fn write_tm_genesis(
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,
-    });
+    };
+    #[cfg(not(feature = "abcipp"))]
+    let size = Some(size);
+    genesis.consensus_params.block = size;
     #[cfg(feature = "abcipp")]
     {
         genesis.consensus_params.timeout.commit =
