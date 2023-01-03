@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage;
 
-/// Should be passed as `tx_data` alongside `tx_write_storage_key`.
+/// Should be passed as `tx_data` alongside `tx_write`.
 #[derive(
     Clone,
     Debug,

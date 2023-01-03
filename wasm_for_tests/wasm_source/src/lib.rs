@@ -59,7 +59,7 @@ pub mod main {
 }
 
 /// A tx that attempts to write arbitrary data to the given key
-#[cfg(feature = "tx_write_storage_key")]
+#[cfg(feature = "tx_write")]
 pub mod main {
     use namada_tx_prelude::*;
 
