@@ -9,10 +9,8 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
-#[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::node::ledger::shell::{process_tx, ShellMode};
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
 // TODO: remove this hard-coded value; Tendermint, and thus
 // Namada uses 20 MiB max block sizes by default; 5 MiB leaves
@@ -50,32 +48,6 @@ where
             // filter in half of the new txs from Tendermint, only keeping
             // wrappers
             let mut total_proposal_size = 0;
-            #[cfg(feature = "abcipp")]
-            let mut txs: Vec<TxRecord> = req
-                .txs
-                .into_iter()
-                .map(|tx_bytes| {
-                    if let Ok(Ok(TxType::Wrapper(_))) =
-                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                    {
-                        record::keep(tx_bytes)
-                    } else {
-                        record::remove(tx_bytes)
-                    }
-                })
-                .take_while(|tx_record| {
-                    let new_size = total_proposal_size + tx_record.tx.len();
-                    if new_size > HALF_MAX_PROPOSAL_SIZE
-                        || tx_record.action != TxAction::Unmodified as i32
-                    {
-                        false
-                    } else {
-                        total_proposal_size = new_size;
-                        true
-                    }
-                })
-                .collect();
-            #[cfg(not(feature = "abcipp"))]
             let mut txs: Vec<TxBytes> = req
                 .txs
                 .into_iter()
@@ -100,28 +72,29 @@ where
                 .collect();
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.wl_storage.storage.tx_queue.iter().map(
-                |WrapperTxInQueue {
-                     tx,
-                     #[cfg(not(feature = "mainnet"))]
-                     has_valid_pow,
-                 }| {
-                    Tx::from(match tx.decrypt(privkey) {
-                        Ok(tx) => DecryptedTx::Decrypted {
-                            tx,
-                            #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: *has_valid_pow,
-                        },
-                        _ => DecryptedTx::Undecryptable(tx.clone()),
-                    })
-                    .to_bytes()
-                },
-            );
-            #[cfg(feature = "abcipp")]
-            let mut decrypted_txs: Vec<_> =
-                decrypted_txs.map(record::add).collect();
-            #[cfg(not(feature = "abcipp"))]
-            let mut decrypted_txs: Vec<_> = decrypted_txs.collect();
+            let mut decrypted_txs = self
+                .wl_storage
+                .storage
+                .tx_queue
+                .iter()
+                .map(
+                    |WrapperTxInQueue {
+                         tx,
+                         #[cfg(not(feature = "mainnet"))]
+                         has_valid_pow,
+                     }| {
+                        Tx::from(match tx.decrypt(privkey) {
+                            Ok(tx) => DecryptedTx::Decrypted {
+                                tx,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow: *has_valid_pow,
+                            },
+                            _ => DecryptedTx::Undecryptable(tx.clone()),
+                        })
+                        .to_bytes()
+                    },
+                )
+                .collect();
 
             txs.append(&mut decrypted_txs);
             txs
@@ -129,50 +102,7 @@ where
             vec![]
         };
 
-        #[cfg(feature = "abcipp")]
-        {
-            response::PrepareProposal {
-                tx_records: txs,
-                ..Default::default()
-            }
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            response::PrepareProposal { txs }
-        }
-    }
-}
-
-/// Functions for creating the appropriate TxRecord given the
-/// numeric code
-#[cfg(feature = "abcipp")]
-pub(super) mod record {
-    use super::*;
-
-    /// Keep this transaction in the proposal
-    pub fn keep(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Unmodified as i32,
-            tx,
-        }
-    }
-
-    /// A transaction added to the proposal not provided by
-    /// Tendermint from the mempool
-    pub fn add(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Added as i32,
-            tx,
-        }
-    }
-
-    /// Remove this transaction from the set provided
-    /// by Tendermint from the mempool
-    pub fn remove(tx: TxBytes) -> TxRecord {
-        TxRecord {
-            action: TxAction::Removed as i32,
-            tx,
-        }
+        response::PrepareProposal { txs }
     }
 }
 
@@ -200,12 +130,6 @@ mod test_prepare_proposal {
             max_tx_bytes: 0,
             ..Default::default()
         };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(tx.to_bytes())]
-        );
-        #[cfg(not(feature = "abcipp"))]
         assert!(shell.prepare_proposal(req).txs.is_empty());
     }
 
@@ -248,12 +172,6 @@ mod test_prepare_proposal {
             max_tx_bytes: 0,
             ..Default::default()
         };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.prepare_proposal(req).tx_records,
-            vec![record::remove(wrapper)]
-        );
-        #[cfg(not(feature = "abcipp"))]
         assert!(shell.prepare_proposal(req).txs.is_empty());
     }
 
@@ -310,50 +228,18 @@ mod test_prepare_proposal {
             .iter()
             .map(|tx| tx.data.clone().expect("Test failed"))
             .collect();
-        #[cfg(feature = "abcipp")]
-        {
-            let received: Vec<Vec<u8>> = shell
-                .prepare_proposal(req)
-                .tx_records
-                .iter()
-                .filter_map(
-                    |TxRecord {
-                         tx: tx_bytes,
-                         action,
-                     }| {
-                        if *action == (TxAction::Unmodified as i32)
-                            || *action == (TxAction::Added as i32)
-                        {
-                            Some(
-                                Tx::try_from(tx_bytes.as_slice())
-                                    .expect("Test failed")
-                                    .data
-                                    .expect("Test failed"),
-                            )
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let received: Vec<Vec<u8>> = shell
-                .prepare_proposal(req)
-                .txs
-                .into_iter()
-                .map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice())
-                        .expect("Test failed")
-                        .data
-                        .expect("Test failed")
-                })
-                .collect();
-            // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
-        }
+        let received: Vec<Vec<u8>> = shell
+            .prepare_proposal(req)
+            .txs
+            .into_iter()
+            .map(|tx_bytes| {
+                Tx::try_from(tx_bytes.as_slice())
+                    .expect("Test failed")
+                    .data
+                    .expect("Test failed")
+            })
+            .collect();
+        // check that the order of the txs is correct
+        assert_eq!(received, expected_txs);
     }
 }
