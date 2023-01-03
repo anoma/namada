@@ -2556,11 +2556,20 @@ dependencies = [
  "borsh",
  "derivative",
  "namada_core",
+ "once_cell",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "namada_test_utils"
+version = "0.12.2"
+dependencies = [
+ "borsh",
+ "namada_core",
 ]
 
 [[package]]
@@ -2574,6 +2583,8 @@ dependencies = [
  "ibc-proto",
  "ibc-relayer",
  "namada",
+ "namada_core",
+ "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",
@@ -2637,6 +2648,7 @@ version = "0.13.3"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",

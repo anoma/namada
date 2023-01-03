@@ -2,8 +2,7 @@
 //! Namada transaction.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-
-use super::storage;
+use namada_core::types::storage;
 
 /// Represents an arbitrary write to storage at the specified key. This should
 /// be used alongside the test `tx_write.wasm`.
