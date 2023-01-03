@@ -43,8 +43,6 @@ where
             TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
         let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
-            #[cfg(feature = "abcipp")]
-            digests: DigestCounters::default(),
             decrypted_queue_has_remaining_txs: false,
             encrypted_txs_bin,
             txs_bin,
@@ -374,14 +372,14 @@ mod test_process_proposal {
     use crate::facade::tendermint_proto::abci::RequestInitChain;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
-        gen_keypair, ProcessProposal, TestError, TestShell,
+        self, gen_keypair, ProcessProposal, TestError,
     };
 
     /// Test that if a wrapper tx is not signed, it is rejected
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -429,7 +427,7 @@ mod test_process_proposal {
     /// Test that a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -514,8 +512,8 @@ mod test_process_proposal {
     /// non-zero, [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_unknown_address() {
-        let (mut shell, _) = TestShell::new();
-        let keypair = crate::wallet::defaults::keys().remove(0).1;
+        let (mut shell, _) = test_utils::setup();
+        let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
@@ -535,17 +533,19 @@ mod test_process_proposal {
         )
         .sign(&keypair)
         .expect("Test failed");
-        let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes()],
-        };
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![wrapper.to_bytes()],
+            };
+            if let [resp] = shell
+                .process_proposal(request)
+                .expect("Test failed")
+                .as_slice()
+            {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
         };
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
         assert_eq!(
@@ -560,7 +560,7 @@ mod test_process_proposal {
     /// [`process_proposal`] rejects that tx
     #[test]
     fn test_wrapper_insufficient_balance_address() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token fee
         let balance_key = token::balance_key(
@@ -619,7 +619,7 @@ mod test_process_proposal {
     /// validated, [`process_proposal`] rejects it
     #[test]
     fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
@@ -647,38 +647,26 @@ mod test_process_proposal {
                 has_valid_pow: false,
             })));
         }
-        let req_1 = ProcessProposal {
-            txs: vec![txs[0].to_bytes()],
-        };
-        let response_1 = if let [resp] = shell
-            .process_proposal(req_1)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response_1.result.code, u32::from(ErrorCodes::Ok));
-
-        let req_2 = ProcessProposal {
-            txs: vec![txs[2].to_bytes()],
-        };
-
-        let response_2 = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(req_2)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![
+                    txs[0].to_bytes(),
+                    txs[2].to_bytes(),
+                    txs[1].to_bytes(),
+                ],
+            };
+            if let Err(TestError::RejectProposal(mut resp)) =
+                shell.process_proposal(request)
+            {
+                assert_eq!(resp.len(), 3);
+                resp.remove(1)
             } else {
                 panic!("Test failed")
             }
-        } else {
-            panic!("Test failed")
         };
-        assert_eq!(response_2.result.code, u32::from(ErrorCodes::InvalidOrder));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidOrder));
         assert_eq!(
-            response_2.result.info,
+            response.result.info,
             String::from(
                 "Process proposal rejected a decrypted transaction that \
                  violated the tx order determined in the previous block"
@@ -690,7 +678,7 @@ mod test_process_proposal {
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         let keypair = gen_keypair();
 
         let tx = Tx::new(
@@ -743,7 +731,7 @@ mod test_process_proposal {
     /// undecryptable but still accepted
     #[test]
     fn test_invalid_hash_commitment() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         shell.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -799,7 +787,7 @@ mod test_process_proposal {
     /// marked undecryptable and the errors handled correctly
     #[test]
     fn test_undecryptable() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
         shell.init_chain(RequestInitChain {
             time: Some(Timestamp {
                 seconds: 0,
@@ -851,7 +839,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -888,7 +876,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
