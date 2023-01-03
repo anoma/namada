@@ -121,7 +121,7 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
     InvalidTx = 1,
@@ -130,6 +130,16 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
+    AllocationError = 7, /* NOTE: keep these values in sync with
+                          * [`ErrorCodes::is_recoverable`] */
+}
+
+impl ErrorCodes {
+    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(&self) -> bool {
+        (*self as u32) <= 3
+    }
 }
 
 impl From<ErrorCodes> for u32 {
