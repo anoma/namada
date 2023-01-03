@@ -7,6 +7,7 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 impl<D, H> Shell<D, H>
 where
@@ -43,7 +44,7 @@ where
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
+    pub fn process_txs(&self, txs: &[TxBytes]) -> Vec<TxResult> {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
