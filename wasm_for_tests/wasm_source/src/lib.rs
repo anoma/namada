@@ -62,7 +62,7 @@ pub mod main {
 #[cfg(feature = "tx_write")]
 pub mod main {
     use borsh::BorshDeserialize;
-    use namada_tx_prelude::tx_data::TxWriteData;
+    use namada_test_utils::tx_data::TxWriteData;
     use namada_tx_prelude::{
         log_string, transaction, Ctx, ResultExt, SignedTxData, StorageRead,
         StorageWrite, TxResult,

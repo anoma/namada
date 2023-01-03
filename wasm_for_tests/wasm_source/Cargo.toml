@@ -25,6 +25,7 @@ vp_read_storage_key = []
 tx_proposal_code = []
 
 [dependencies]
+namada_test_utils = {path = "../../test_utils"}
 namada_tx_prelude = {path = "../../tx_prelude"}
 namada_vp_prelude = {path = "../../vp_prelude"}
 borsh = "0.9.1"

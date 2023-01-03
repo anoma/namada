@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use namada::ledger::eth_bridge;
 use namada_core::types::storage;
 use namada_core::types::storage::KeySeg;
-use namada_core::types::tx_data::TxWriteData;
+use namada_test_utils::tx_data::TxWriteData;
 
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
