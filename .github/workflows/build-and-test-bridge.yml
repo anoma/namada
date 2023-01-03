@@ -151,7 +151,7 @@ jobs:
             suffix: ''
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_artifact: tendermint-v0.37.0-rc1
 
     env:
       CARGO_INCREMENTAL: 0
@@ -357,14 +357,14 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_artifact: tendermint-v0.37.0-rc1
             wait_for: namada-release-eth (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-ad825dcadbd4b98c3f91ce5a711e4fb36a69c377
+            tendermint_artifact: tendermint-v0.37.0-rc1
             wait_for: namada-release-eth (ubuntu-20.04, 1.7.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
