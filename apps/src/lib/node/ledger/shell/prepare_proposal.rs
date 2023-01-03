@@ -18,6 +18,8 @@ use super::block_space_alloc::states::{
     NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
 };
 use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};

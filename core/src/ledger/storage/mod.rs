@@ -12,6 +12,7 @@ pub mod write_log;
 
 use core::fmt::Debug;
 
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
