@@ -103,7 +103,7 @@ impl AbcippShim {
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let unprocessed_txs = block.txs.clone();
-                    let processing_results =
+                    let (processing_results, _) =
                         self.service.process_txs(&block.txs);
                     let mut txs = Vec::with_capacity(unprocessed_txs.len());
                     for (result, tx) in processing_results
