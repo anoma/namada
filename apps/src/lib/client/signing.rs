@@ -188,13 +188,19 @@ pub async fn sign_wrapper(
 ) -> TxBroadcastData {
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
-    let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::from(100)
-    } else {
-        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
-            .await
-            .unwrap_or_default()
+    let fee_amount = 
+    if requires_pow {
+        Amount::from(0)
+    }
+    else {
+        if cfg!(feature = "mainnet") {
+            Amount::from(100)
+        } else {
+            let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
+            rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
+                .await
+                .unwrap_or_default()
+        }
     };
     let fee_token = ctx.get(&args.fee_token);
     let source = Address::from(&keypair.ref_to());
@@ -203,6 +209,7 @@ pub async fn sign_wrapper(
         rpc::query_storage_value::<token::Amount>(&client, &balance_key)
             .await
             .unwrap_or_default();
+    
     if balance < fee_amount {
         eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
@@ -219,7 +226,7 @@ pub async fn sign_wrapper(
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
         if requires_pow || balance < fee_amount {
-            println!("The transaction requires to a PoW challenge.");
+            println!("This transaction requires the completion of a PoW challenge.");
             // Obtain a PoW challenge for faucet withdrawal
             let challenge = rpc::get_testnet_pow_challenge(
                 source,
