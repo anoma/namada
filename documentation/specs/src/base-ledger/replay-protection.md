@@ -149,8 +149,13 @@ digests will be computed on the **unsigned** transactions, to support replay
 protection even for [multisigned](multisignature.md) transactions: in this case,
 if hashes were taken from the signed transactions, a different set of signatures
 on the same tx would produce a different hash, effectively allowing for a
-replay. To support this, we'll need a subspace in storage headed by a
-`ReplayProtection` internal address:
+replay. To support this, we'll first need to update the `WrapperTx` hash field
+to contain the hash of the unsigned inner tx, instead of the signed one: this
+doesn't affect the overall safety of Namada (since the wrapper is still signed
+over all of its bytes, including the inner signature) and allows for early
+replay attack checks in mempool and at wrapper block-inclusion time.
+Additionally, we need a subspace in storage headed by a `ReplayProtection`
+internal address:
 
 ```
 /\$ReplayProtectionAddress/\$tx0_hash: None
@@ -230,6 +235,19 @@ that even if one of the attacks explained in this section is performed:
   these transactions for free
 - The invalid unshielding transaction must still be a valid transaction per the
   VPs triggered
+
+#### Governance proposals
+
+Governance [proposals](../base-ledger/governance.md) may carry some wasm code to
+be executed in case the proposal passed. This code is embedded into a
+`DecryptedTx` directly by the validators at block processing time and is not
+inserted into the block itself.
+
+Given that the wasm code is attached to the transaction initiating the proposal,
+it could be extracted from here and inserted in a transaction before the
+proposal is executed. Therefore, replay protection is not a solution to prevent
+attacks on governance proposals' code. Instead, to protect these transactions,
+Namada relies on its proposal id mechanism in conjunction with the VP set.
 
 ### Forks
 
