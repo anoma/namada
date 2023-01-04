@@ -136,7 +136,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
         let mut in_memory = self.in_memory.write().unwrap();
         if let Some(module) = in_memory.get(&hash) {
-            tracing::info!(
+            tracing::trace!(
                 "{} found {} in cache.",
                 N::name(),
                 hash.to_string()
