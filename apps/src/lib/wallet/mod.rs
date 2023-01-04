@@ -332,6 +332,16 @@ impl Wallet {
         )
     }
 
+    /// Find the stored address by a secret key
+    pub fn find_address_by_key(
+        &self,
+        key: &common::SecretKey,
+    ) -> Option<&Address> {
+        let pk = key.ref_to();
+        let alias = self.store.find_alias_by_pkh(&(&pk).into())?;
+        self.find_address(alias.to_string())
+    }
+
     /// Decrypt stored key, if it's not stored un-encrypted.
     /// If a given storage key needs to be decrypted, prompt for password from
     /// stdin and if successfully decrypted, store it in a cache.

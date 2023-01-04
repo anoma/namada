@@ -4,7 +4,7 @@
 use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
-use namada::types::address::{Address, ImplicitAddress};
+use namada::types::address::{masp, masp_tx_key, Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -197,7 +197,16 @@ pub async fn sign_wrapper(
             .unwrap_or_default()
     };
     let fee_token = ctx.get(&args.fee_token);
-    let source = Address::from(&keypair.ref_to());
+
+    let source = if keypair.to_string() == masp_tx_key().to_string() {
+        masp()
+    } else {
+        ctx.wallet
+            .find_address_by_key(keypair)
+            .expect("Couldn't find source address")
+            .to_owned()
+    };
+
     let balance_key = token::balance_key(&fee_token, &source);
     let balance =
         rpc::query_storage_value::<token::Amount>(&client, &balance_key)
