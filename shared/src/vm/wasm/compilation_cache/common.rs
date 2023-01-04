@@ -116,6 +116,16 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         }
     }
 
+    /// Get the current number of items in the cache
+    pub fn get_size(&self) -> usize {
+        self.in_memory.read().unwrap().len()
+    }
+
+    /// Get the current weight of the cache
+    pub fn get_cache_size(&self) -> usize {
+        self.in_memory.read().unwrap().weight()
+    }
+
     /// Get a WASM module from LRU cache, from a file or compile it and cache
     /// it. Updates the position in the LRU cache.
     fn get_or_compile(
