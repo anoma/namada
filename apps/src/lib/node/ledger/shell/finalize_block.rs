@@ -265,7 +265,7 @@ where
             {
                 Ok(result) => {
                     if result.is_accepted() {
-                        tracing::info!(
+                        tracing::trace!(
                             "all VPs accepted transaction {} storage \
                              modification {:#?}",
                             tx_event["hash"],
@@ -297,7 +297,7 @@ where
                             }
                         }
                     } else {
-                        tracing::info!(
+                        tracing::trace!(
                             "some VPs rejected transaction {} storage \
                              modification {:#?}",
                             tx_event["hash"],
@@ -326,6 +326,11 @@ where
             }
             response.events.push(tx_event);
         }
+        tracing::info!(
+            "Applied {} txs at height {}",
+            response.events.len(),
+            self.storage.last_height
+        );
 
         if new_epoch {
             self.update_epoch(&mut response);

@@ -219,7 +219,9 @@ pub async fn sign_wrapper(
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
         if requires_pow || balance < fee_amount {
-            println!("The transaction requires the completion of a PoW challenge.");
+            println!(
+                "The transaction requires the completion of a PoW challenge."
+            );
             // Obtain a PoW challenge for faucet withdrawal
             let challenge = rpc::get_testnet_pow_challenge(
                 source,
