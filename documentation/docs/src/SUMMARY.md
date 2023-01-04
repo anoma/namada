@@ -17,6 +17,7 @@
     - [Paper wallet](./user-guide/wallet/paper-wallet.md)
     - [Hardware wallet](./user-guide/wallet/hardware-wallet.md)
     - [Sending and receiving NAM](./user-guide/wallet/send-and-receive-nam-tokens.md)
+    - [Fees on Namada](./user-guide/wallet/fees.md)
   - [Shielded transfers](./user-guide/ledger/masp.md)
   - [Interacting with PoS](./user-guide/ledger/pos.md)
     - [Staking](./user-guide/ledger/staking.md)
@@ -30,3 +31,4 @@
   - [Running your genesis validator](./testnets/run-your-genesis-validator.md)
   - [Running a full node](./testnets/running-a-full-node.md)
   - [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
+  - [Proof of Work on Namada](./testnets/pow.md)

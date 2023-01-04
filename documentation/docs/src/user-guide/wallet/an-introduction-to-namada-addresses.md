@@ -6,7 +6,7 @@ All accounts in Namada have a unique address, exactly one Validity Predicate and
 
 There are currently 3 types of account addresses:
 - **Implicit *(not fully supported yet)*:** An implicit account is derived from your keypair and can be used to authorize certain transactions from the account. They can be used as recipients of transactions even if the account has not been used on-chain before.
-- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (e.g. [initialize an account](#initialize-an-established-account)). The address is generated on-chain and is not known until the transaction is applied (the user provides randomness).
+- **Established:** Used for accounts that allow the deployment of custom validation logic. These must be created on-chain via a transaction (e.g. [initialize an account](./send-and-receive-nam-tokens.md). The address is generated on-chain and is not known until the transaction is applied (the user provides randomness).
 - **Internal:** Special internal accounts, such as protocol parameters account, PoS and IBC.
 
 ## Manage keypairs
