@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::ledger::replay_protection;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -578,49 +579,109 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    ///
+    /// Error codes:
+    /// 1 - Tx format
+    /// 2 - Wrapper Tx signature
+    /// 3 - Tx type
+    /// 4 - wrapper tx hash
+    /// 5 - inner tx hash
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
-        match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(tx) => {
-                // Check balance for fee
-                if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
-                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                        wrapper.fee_payer()
-                    } else {
-                        masp()
-                    };
-                    // check that the fee payer has sufficient balance
-                    let balance =
-                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
-                    // In testnets with a faucet, tx is allowed to skip fees if
-                    // it includes a valid PoW
-                    #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-                    #[cfg(feature = "mainnet")]
-                    let has_valid_pow = false;
-
-                    if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
-                        response.code = 1;
-                        response.log = String::from(
-                            "The address given does not have sufficient \
-                             balance to pay fee",
-                        );
-                        return response;
-                    }
-                }
-
-                response.log = String::from("Mempool validation passed");
-            }
+        // Tx format check
+        let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
+            Ok(t) => t,
             Err(msg) => {
                 response.code = 1;
                 response.log = msg.to_string();
+                return response;
             }
+        };
+
+        // Tx signature check
+        let tx_type = match process_tx(tx) {
+            Ok(ty) => ty,
+            Err(msg) => {
+                response.code = 2;
+                response.log = msg.to_string();
+                return response;
+            }
+        };
+
+        // Tx type check
+        if let TxType::Wrapper(wrapper) = tx_type {
+            // Replay protection check
+            let inner_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+            match self.storage.has_key(&inner_hash_key) {
+                Ok((found, _)) => {
+                    if found {
+                        response.code = 4;
+                        response.log = "Wrapper transaction hash already in storage, replay attempt".to_string();
+                        return response;
+                    }
+                }
+                Err(msg) => {
+                    response.code = 4;
+                    response.log = msg.to_string();
+                    return response;
+                }
+            }
+
+            let wrapper_hash_key =
+                replay_protection::get_tx_hash_key(&hash_tx(tx_bytes));
+            match self.storage.has_key(&wrapper_hash_key) {
+                Ok((found, _)) => {
+                    if found {
+                        response.code = 5;
+                        response.log = "Inner transaction hash already in storage, replay attempt".to_string();
+                        return response;
+                    }
+                }
+                Err(msg) => {
+                    response.code = 5;
+                    response.log = msg.to_string();
+                    return response;
+                }
+            }
+
+            // Check balance for fee
+            let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                wrapper.fee_payer()
+            } else {
+                masp()
+            };
+            // check that the fee payer has sufficient balance
+            let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+
+            // In testnets with a faucet, tx is allowed to skip fees if
+            // it includes a valid PoW
+            #[cfg(not(feature = "mainnet"))]
+            let has_valid_pow = self.has_valid_pow_solution(&wrapper);
+            #[cfg(feature = "mainnet")]
+            let has_valid_pow = false;
+
+            if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
+                response.code = 1;
+                response.log = String::from(
+                    "The address given does not have sufficient \
+                         balance to pay fee",
+                );
+                return response;
+            }
+        } else {
+            response.code = 3;
+            response.log = "Unsupported tx type".to_string();
+            return response;
         }
+
+        response.log = "Mempool validation passed".to_string();
+
         response
     }
 
