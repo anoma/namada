@@ -46,7 +46,7 @@ export HERMES_CONFIG="<path-to-toml.toml>"
 > - `chains.key_name` specifies the key of the signer who signs a transaction from the relayer. The key should be generated before starting the relayer.
 
 ### Create IBC client/connection/channel between instances
-Hermes CLI has commands to create them. Before the creation, a node of each instance should be running.
+Before the creation, a node of each instance should be running. Please refer to [here](#setup-nodes-for-namada-instances) if you want to set up nodes on your machine.
 
 #### Install Hermes
 Before IBC operations, we have to build our Hermes from source.
@@ -67,8 +67,8 @@ Check the binary:
 >
 > It would be useful to copy the binary to your path or set the target release directory to your path. The following explanation assumes that the binary has been set to your path and you can call it just `hermes`.
 
-### Create IBC channel
-The creating channel command creates not only IBC channel but also necessary IBC client, connection.
+#### Create IBC channel
+The creating channel command with `--new-client-connection` creates not only IBC channel but also necessary IBC client, connection.
 ```bash
 hermes -c $HERMES_CONFIG \
   create channel $CHAIN_A_ID \
@@ -82,8 +82,13 @@ hermes -c $HERMES_CONFIG \
 >
 > But the above CHAIN_IDs will depend on your own setup, so do check this for yourself!
 
-This command will ask you with the following message. You can continue with `y`.
+This command will ask you with the following messages. You can continue with `y`.
 ```
+WARN: Are you sure you want a new connection & clients to be created? Hermes will use default security parameters.
+Hint: Consider using the default invocation
+
+hermes create channel --port-a <PORT-ID> --port-b <PORT-ID> <CHAIN-A-ID> <CONNECTION-A-ID>
+
 to re-use a pre-existing connection. [y/n]
 ```
 
@@ -143,7 +148,7 @@ Success: Channel {
 }
 ```
 
-### Run Hermes
+#### Run Hermes
 Once you run Hermes, it monitors instances via the nodes and relays packets according to monitored events.
 ```bash
 hermes -c $HERMES_CONFIG start
@@ -232,6 +237,10 @@ killall namadan
 
 ## Transferring assets over IBC
 This will make transfers across chains by Namada CLI. This assumes that a channel has been created and Hermes is running with the proper config.
+
+> **Note**
+>
+> You can transfer assets over IBC without creating a channel and running Hermes (and your node) on your side. If someone started Hermes and shared the channel ID which is corresponding to your source instance and your destination instance, you can transfer a token by `ibc-transfer` command with the channel ID via any node of the source instance.
 
 In order to do this by Namada's `ibc-transfer` command, we will need to know the `base-dir` and `ledger-address` of each instance (and other transfer parameters).
 `base-dir` is the base directory of each node. If you have used the script, the direcotry is `${IBC_RS}/data/namada-*/.namada`.
