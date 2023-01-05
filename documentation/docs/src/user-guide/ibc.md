@@ -2,204 +2,262 @@
 
 This document describes using the inter-blockchain communication (IBC) protocol with Namada. This documentation covers being able to create connections through IBC as well as setting up local fractal instances of Namada for testing purposes.
 
-:::warning
-Warning! This is quite an advanced feature at the moment and is currently in development
-:::
+> **Warning**
+>
+> This is quite an advanced feature at the moment and is currently in development
 
-This document will cover three essential steps for using IBC with namada
+This document will cover three essential steps for using IBC with Namada
 
-1. Configuring the client for IBC
-2. Creating channels between nodes
-3. Setting up the relayer (which handles all connections between channels)
-4. Transferring assets over connections
+1. [Setup Hermes](#setup-hermes)
+2. [Setup nodes for Namada instances](#setup-nodes-for-namada-instances)
+3. [Transferring assets over IBC](#transferring-assets-over-IBC)
 
-## Configuring the Client
+The below is intended for those that wish to conduct IBC message transfer between two Namada chains. There is of course the cabablitiy to do this between any two IBC compatible chains (such as a cosmos chain). In this case, it is necessary to have a node of both the destination and the source chain running in order to make any package transfers. Below, we discuss first how to enable this connection between two pre-existing chains by Hermes, and second setting up 2 Namada local instances or joining two pre-existing Namada instances for this purpose.
 
-The below is intended for those that wish to conduct IBC message transfer between two Namada chains. There is of course the cabablitiy to do this between any two IBC compatible chains (such as a cosmos chain). In this case, it is necessary to have a node of both the destination and the source chain running in order to make any package transfers. Below, we discuss first how to enable this connection between two pre-existing chains, and second setting up 2 Namada local instances for this purpose.
+## Setup Hermes
+Hermes is an IBC relayer to relay packets between chains(instances). We have our [Hermes supporting Namada instances](https://github.com/heliaxdev/ibc-rs/tree/yuji/v0.14.0_namada).
+Before packet relay, we need the following step to configure and start Hermes.
 
-## Between two pre-existing chains
-### Configuring Hermes.toml
-One essential piece of the puzzle is to create a  `Hermes.toml` file that describes what connections will be set up that the relayer will be responsible for.
+1. Make Hermes config file
+2. Create IBC client/connection/channel between instances
+3. Run Hermes
+
+### Make Hermes config file
+One essential piece of the puzzle is to create a `config.toml` file that describes what connections will be set up that the relayer will be responsible for.
 
 Make a relayer config toml file (Hermes' config.toml). If you don't specify the file, `~/.hermes/config.toml` is read as default.
 
-1. Create the file found [here](https://hackmd.io/l6HNSqJmQt6QfkjfTmSfbw) in the ibc-rs head directory
+You can find an example of the config file [here](https://hackmd.io/l6HNSqJmQt6QfkjfTmSfbw). Basically, you change only the chain IDs, the RPC addresses, and the key names to the config file for Namada. If you don't have nodes, please set up nodes manually or [scripts](#setup-nodes-for-namada-instances).
 
-Once this has created, you can export the true path of the new file to a varaible, which will be useful for later
-```bash!
+Once this has created, you can export the true path of the new file to a varaible, which will be useful for later.
+```bash
 export HERMES_CONFIG="<path-to-toml.toml>"
 ```
-    
-**Interpreting the toml**
-Each chain configuration is specified under the `[[chains]]` object.
+> **Note**
+>
+> **Interpreting the toml**
+>
+> Each chain configuration is specified under the `[[chains]]` object.
+>
+> These are the pieces of this puzzle you want to keep your :eyes: on:
+> - `chains.id` is the name of the chain
+> - `chains.rpc_address` specifies the port that the channel is communicating through, and will be the argument for the `ledger_address` of Namada when interacting with the ledger (will become clearer later)
+>     - Make sure to change the IP address to the IP address of your local machine that is running this node!
+> - `chains.key_name` specifies the key of the signer who signs a transaction from the relayer. The key should be generated before starting the relayer.
 
-These are the pieces of this puzzle you want to keep your :eyes: on:
-- `chains.id` is the name of the chain
-- `chains.rpc_address` specifies the port that the channel is communicating through, and will be the argument for the `net_address` when interacting with the ledger (will become clearer later)
-    - Make sure to change the IP address to the IP address of your local machine that is running this node!
-- `chains.key_name` specifies the key of the signer who signs a transaction from the relayer. The key should be generated before starting the relayer.
+### Create IBC client/connection/channel between instances
+Hermes CLI has commands to create them. Before the creation, a node of each instance should be running.
 
-## Setting up the relayer
-
-In order to create the relayer that is able to set up IBC connections, the following repo will need to be cloned. Then we enter the directory.
-
-```bash=
-export COMMIT="b50df2af6149f86aac6829a0c9be810785137c39\"
+#### Install Hermes
+Before IBC operations, we have to build our Hermes from source.
+```bash
+export COMMIT="97554eab9a30a6efdea3d97e230b827fa7ab053a"
 git clone git@github.com:heliaxdev/ibc-rs.git
 git checkout $COMMIT
 cd ibc-rs
+cargo build --release --bin hermes
+export IBC_RS=$(pwd) # if needed
 ```
-
-The relayer is then started by running 
+Check the binary:
 ```bash
-cargo run --bin hermes -- -c ${HERMES_CONFIG} start
-```
-### Running the chains
-
-In order to make IBC transfers across two Namada chains, one must be running two nodes of Namada at once. In order to do this, two CHAIN-IDs will need to be retrieved. Either this can be done by using the chain-ids found in [this link](https://hackmd.io/l6HNSqJmQt6QfkjfTmSfbw).
-
-However, it is also possible to do this locally.
-
-Below, we discuss how to setup connections between two local namada testnets. If one wishes to make ibc-transfers across a devnet and a testnet, one must be running a node on each. We discuss how to set these up as well.
-
-#### Running the testnet and devnet
-First, export the correct chain-ids:
-```bash!
-export TESTNET_CHAIN_ID="<found-in-link>"
-export DEVNET_CHAIN_ID="<found-in-link>"
-```
-Run 
-```bash!
-mkdir testnet
-cd testnet
-namadac utils join-network --chain-id $TESTNET_CHAIN_ID
-export BASE_DIR_A=$(pwd)/.namada
-```
-Then run 
-```bash!
-namadan ledger run
+./target/release/hermes --version
 ```
 
-Follow up by following the same instructions for the devnet
-```bash!
-cd ../
-mkdir devnet
-cd devnet
-namadac utils join-network --chain-id $DEVNET_CHAIN_ID
-export BASE_DIR_B=$(pwd)/.namada
+> **Note**
+>
+> It would be useful to copy the binary to your path or set the target release directory to your path. The following explanation assumes that the binary has been set to your path and you can call it just `hermes`.
+
+### Create IBC channel
+The creating channel command creates not only IBC channel but also necessary IBC client, connection.
+```bash
+hermes -c $HERMES_CONFIG \
+  create channel $CHAIN_A_ID \
+  --chain-b $CHAIN_B_ID \
+  --port-a transfer \
+  --port-b transfer \
+  --new-client-connection
 ```
 
+> **Note**
+>
+> But the above CHAIN_IDs will depend on your own setup, so do check this for yourself!
 
-#### Setting up 2 local Namada fractal instances
-In order to setup two local testnets, we have created an easy script that does this for you. The following command will setup two local testnets.
+This command will ask you with the following message. You can continue with `y`.
+```
+to re-use a pre-existing connection. [y/n]
+```
 
-In order for this to be completed, one must have cloned the namada directory and built the wasm scripts. This is achieved by the following commands
+When the creation has been completed, you can see the channel IDs. For example, the following text shows that a channel with ID `7` has been created on Chain A `namada-test.0a4c6786dbda39f786`, and a channel with ID `12` has been created on Chain B `namada-test.647287156defa8728c`. You will need the channel IDs for a transfer over IBC. It means that you have to specify `channel-7` as a channel ID (The prefix `channel-` is always required) for a transfer from Chain A to Chain B. Also, you have to specify `channel-12` as a channel ID for a transfer from Chain B to Chain A.
+```
+Success: Channel {
+    ordering: Unordered,
+    a_side: ChannelSide {
+        chain: BaseChainHandle {
+            chain_id: ChainId {
+                id: "namada-test.0a4c6786dbda39f786",
+                version: 0,
+            },
+            runtime_sender: Sender { .. },
+        },
+        client_id: ClientId(
+            "07-tendermint-0",
+        ),
+        connection_id: ConnectionId(
+            "connection-3",
+        ),
+        port_id: PortId(
+            "transfer",
+        ),
+        channel_id: Some(
+            ChannelId(
+                7,
+            ),
+        ),
+        version: None,
+    },
+    b_side: ChannelSide {
+        chain: BaseChainHandle {
+            chain_id: ChainId {
+                id: "namada-test.647287156defa8728c",
+                version: 0,
+            },
+            runtime_sender: Sender { .. },
+        },
+        client_id: ClientId(
+            "07-tendermint-1",
+        ),
+        connection_id: ConnectionId(
+            "connection-2",
+        ),
+        port_id: PortId(
+            "transfer",
+        ),
+        channel_id: Some(
+            ChannelId(
+                12,
+            ),
+        ),
+        version: None,
+    },
+    connection_delay: 0ns,
+}
+```
 
-```bash=
-git clone 
-#Make sure you are in the home directory
-cd ~
-#Now clone
-git@github.com:anoma/namada.git && cd namada
+### Run Hermes
+Once you run Hermes, it monitors instances via the nodes and relays packets according to monitored events.
+```bash
+hermes -c $HERMES_CONFIG start
+```
+
+## Setup nodes for Namada instances
+We need a node for each instance to be monitored by Hermes. In this document, we will set up two local nodes for two instances. But, of course, the node doesn't have to be on the same machine as Hermes.
+
+We will explain for two cases:
+- Set up nodes to join existing Namada instances
+- Set up local Namada instances for testing purposes
+
+Before running the following scripts, you have to build Namada and wasm.
+```bash
+git clone git@github.com:anoma/namada.git
+cd namada
+git checkout v0.12.2
+make build-release
 make build-wasm-scripts
-export NAMADA_DIR=${HOME}/namada
+export NAMADA_DIR=$(pwd) # if needed
 ```
 
-The second command requires the executor to be located in the achieved in the ibc-rs directory.
+You can use scripts in [our Hermes branch](https://github.com/heliaxdev/ibc-rs/tree/yuji/v0.14.0_namada).
 
+### Set up nodes to join existing Namada instances
+The script `join-namada.sh` will set up two nodes for two instances, copy necessary files for Hermes, and make an account for Hermes on each ledger. Also, it will make a Hermes' config file `config_for_namada.toml` in the `ibc-rs` directory.
 
-
-```bash=
-cd ~/ibc-rs/
-./scripts/setup-namada.sh ${NAMADA_DIR}
-#Followed by
-cargo run --bin hermes -- -c namada_e2e_config.toml start
+The script requires the Namada directory path and chain IDs.
+```bash
+git clone git@github.com:heliaxdev/ibc-rs.git
+git checkout $COMMIT # The branch is the same as our Hermes
+cd ibc-rs
+./scripts/join-namada.sh $NAMADA_DIR $CHAIN_ID_A $CHAIN_ID_B
 ```
 
-Congratulaitons, you now (hopefully) have 2 local namada chains running in the background.
+You need to wait to sync each node with the corresponding instance. After the sync, you can create the channel and start Hermes as we explain [above](#create-ibc-channel).
+```bash
+# create a channel
+hermes -c $HERMES_CONFIG \
+  create channel $CHAIN_A_ID \
+  --chain-b $CHAIN_B_ID \
+  --port-a transfer \
+  --port-b transfer \
+  --new-client-connection
 
-We finally export some useful variables for later
-```bash!
-export BASE_DIR_A="$HOME/ibc-rs/data/namada-a/.namada"
-```
-```bash!
-export BASE_DIR_B="$HOME/ibc-rs/data/namada-b/.namada"
-```
-
-```bash!
-export HERMES_CONFIG=$(pwd)/namada_e2e_config.toml
-```
-
-
-## Creating channels
-You should now have what is required in order to setup communication channels
-
-We will begin by collecting the CHAIN_IDs for the different blockchains we want to establish a connection between.
-
-A simple way to find these chain ids is to run
-
-```bash=
-ls ~/ibc-rs/.anoma
+# Run Hermes
+hermes -c $HERMES_CONFIG start
 ```
 
-This should show something like
+Each node data and configuration files are in `${IBC_RS}/data/namada-*/.namada`.
 
-```bash=
-ls .anoma/
-global-config.toml                   namada-test.d9efda6aeb93cf8c38
-namada-test.79d9d85f3dbfa1afa2       namada-test.d9efda6aeb93cf8c38.toml
-namada-test.79d9d85f3dbfa1afa2.toml
-
+In order to close any ledgers setup by the script, one can run
+```bash
+killall namadan
 ```
 
-In this case, the 2 chain ids of interest are 
-
-```bash!
-export CHAIN_A_ID=namada-test.d9efda6aeb93cf8c38
-export CHAIN_B_ID= namada-test.79d9d85f3dbfa1afa2
+### Set up local Namada instances
+The script `setup-namada.sh` will set up two instances with one validator node, copy necessary files for Hermes, and make an account for Hermes on each ledger. Also, it will make a Hermes' config file `config_for_namada.toml` in the `ibc-rs` directory.
+```bash
+git clone git@github.com:heliaxdev/ibc-rs.git
+git checkout $COMMIT # The branch is the same as our Hermes
+cd ibc-rs
+./scripts/setup-namada.sh $NAMADA_DIR $CHAIN_ID_A $CHAIN_ID_B
 ```
 
-:::info
-But the above CHAIN_IDs will depend on your own setup, so do check this for yourself!
-:::
+In this case, we don't have to wait for sync. You can create a channel and start Hermes immediately as we explain [above](#create-ibc-channel). You find these chain IDs of the instances in the config file `config_for_namada.toml`. One can run `grep "id" ${HERMES_CONFIG}`.
+```bash
+# create a channel
+hermes -c $HERMES_CONFIG \
+  create channel $CHAIN_A_ID \
+  --chain-b $CHAIN_B_ID \
+  --port-a transfer \
+  --port-b transfer \
+  --new-client-connection
 
-Finally,
-
-```bash!
-cargo run --bin hermes -- -c ${HERMES_CONFIG} \
-create channel ${CHAIN_A_ID} --chain-b ${CHAIN_B_ID} \
---port-a transfer --port-b transfer \
---new-client-connection
+# Run Hermes
+hermes -c $HERMES_CONFIG start
 ```
 
-## Transferring assets across
-This will establish a connection that will allow you to make transfers across chains.
+Each node data and configuration files are in `ibc-rs/data/namada-*/.namada`.
 
-In order to do this, we will need to know the ledger-address of each chain.
-
-These can be found in the relevant `hermes.config` files.
-
-One can run `grep "rpc_address" ${HERMES_CONFIG}`
-
-
-:::info
-**For the local testnets ONLY**
-To find your ledger address for CHAIN_A, you can run the following command
-```bash!
-export LEDGER_ADDRESS_A = "$(grep "rpc_address" ~/ibc-rs/data/namada-a/.anoma/${CHAIN_A_ID}/setup/validator-0/.anoma/${CHAIN_A_ID}/config.toml)"
+In order to close any ledgers setup by the script, one can run
+```bash
+killall namadan
 ```
-:::
-And then the channel-id for this chain will depend on the order in which one created the channels. Since we have only opened one channel, the `channel-id` is `channel-0`, but as more are created, these increase by index incremented by 1.
+
+## Transferring assets over IBC
+This will make transfers across chains by Namada CLI. This assumes that a channel has been created and Hermes is running with the proper config.
+
+In order to do this by Namada's `ibc-transfer` command, we will need to know the `base-dir` and `ledger-address` of each instance (and other transfer parameters).
+`base-dir` is the base directory of each node. If you have used the script, the direcotry is `${IBC_RS}/data/namada-*/.namada`.
+`ledger-address` is `rpc_addr` in the relevant hermes' config files.
+One can run `grep "rpc_addr" ${HERMES_CONFIG}`.
+
+> **Note**
+>
+> **For the local node ONLY**
+>
+> To find your ledger address for Chain A, you can run the following command
+> ```bash
+> export BASE_DIR_A = "${IBC_RS}/data/namada-a/.namada"
+> export LEDGER_ADDRESS_A = "$(grep "rpc_address" ${BASE_DIR_A}/${CHAIN_A_ID}/setup/validator-0/.namada/${CHAIN_A_ID}/config.toml)"
+> ```
+
+And then the channel ID for this chain will depend on the order in which one created the channel. Since we have only opened one channel, the `channel-id` is `channel-0`, but as more are created, these increase by index incremented by 1. Please refer to [here](#create-ibc-channel).
 
 So one can go ahead and run
-```bash!
+```bash
 export CHANNEL_ID = "channel-0"
 ```
 
+Such transfers from Chain A can be achieved by
 
-Such transfers can be achieved by
-
-```bash!
+```bash
 namadac --base-dir ${BASE_DIR_A}
     ibc-transfer \
         --amount ${AMOUNT} \
@@ -209,25 +267,17 @@ namadac --base-dir ${BASE_DIR_A}
         --channel-id ${CHANNEL_ID} \
         --ledger-address ${LEDGER_ADDRESS_A}
 ```
-Where the above variables in `${VARIABLE}` must be substituted with appropriate values.
+Where the above variables in `${VARIABLE}` must be substituted with appropriate values. The raw address of the receiver can be found by `namadaw --base-dir ${BASE_DIR_B} address find --alias ${RECEIVER}`.
 
 E.g
 
-```bash!
+```bash
 namadac --base-dir ${BASE_DIR_A}
     ibc-transfer \
     --amount 100 \
     --source albert \
-    --receiver cosmos1lkp4xrhd5hh3f7u5n2aj429upuur3wk28qgtll \
-    --token xan \
+    --receiver atest1d9khqw36g56nqwpkgezrvvejg3p5xv2z8y6nydehxprygvp5g4znj3phxfpyv3pcgcunws2x0wwa76 \
+    --token nam \
     --channel-id channel-0 \
     --ledger-address 127.0.0.1:27657
 ```
-
-
-
-
-In order to close any ledgers setup by the script, one can run
-
-`killall namadan`
-
