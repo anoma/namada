@@ -242,6 +242,7 @@ impl EthereumBridgeConfig {
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::types::ethereum_events::EthAddress;
 
     use crate::parameters::{
@@ -273,5 +274,29 @@ mod tests {
 
         assert_eq!(config, deserialized);
         Ok(())
+    }
+
+    #[test]
+    fn test_ethereum_bridge_config_read_write_storage() {
+        let mut storage = TestStorage::default();
+        let config = EthereumBridgeConfig {
+            min_confirmations: MinimumConfirmations::default(),
+            contracts: Contracts {
+                native_erc20: EthAddress([42; 20]),
+                bridge: UpgradeableContract {
+                    address: EthAddress([23; 20]),
+                    version: ContractVersion::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([18; 20]),
+                    version: ContractVersion::default(),
+                },
+            },
+        };
+        config.init_storage(&mut storage);
+
+        let read = EthereumBridgeConfig::read(&storage).unwrap();
+
+        assert_eq!(config, read);
     }
 }
