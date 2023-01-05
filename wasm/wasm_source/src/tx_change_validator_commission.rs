@@ -18,8 +18,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::cmp;
-
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proto::Tx;
     use namada::types::storage::Epoch;
@@ -104,6 +102,9 @@ mod tests {
             .read_validator_commission_rate(&commission_change.validator)?
             .unwrap();
 
+        dbg!(&commission_rates_pre);
+        dbg!(&commission_rates_post);
+
         // Before pipeline, the commission rates should not change
         for epoch in 0..pos_params.pipeline_len {
             assert_eq!(
@@ -159,24 +160,13 @@ mod tests {
             .prop_map(|num| Decimal::from(num) / Decimal::from(100_000_u64))
     }
 
-    fn arb_new_rate(
-        min: Decimal,
-        max: Decimal,
-        rate_pre: Decimal,
-    ) -> impl Strategy<Value = Decimal> {
-        arb_rate(min, max).prop_filter(
-            "New rate must not be equal to the previous epoch's rate",
-            move |v| v != &rate_pre,
-        )
-    }
-
     fn arb_commission_change(
         rate_pre: Decimal,
         max_change: Decimal,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
-        let min = cmp::max(rate_pre - max_change, Decimal::ZERO);
-        let max = cmp::min(rate_pre + max_change, Decimal::ONE);
-        (arb_established_address(), arb_new_rate(min, max, rate_pre)).prop_map(
+        let min = rate_pre - max_change;
+        let max = rate_pre + max_change;
+        (arb_established_address(), arb_rate(min, max)).prop_map(
             |(validator, new_rate)| transaction::pos::CommissionChange {
                 validator: Address::Established(validator),
                 new_rate,

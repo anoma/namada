@@ -563,14 +563,15 @@ pub trait PosActions: PosReadOnly {
                 }
             };
         let params = self.read_pos_params()?;
+
         let rate_at_pipeline = *commission_rates
             .get_at_offset(current_epoch, DynEpochOffset::PipelineLen, &params)
             .expect("Could not find a rate in given epoch");
-
-        // Return early with no further changes if there is no rate change
-        // instead of returning an error
         if new_rate == rate_at_pipeline {
-            return Ok(());
+            return Err(CommissionRateChangeError::ChangeIsZero(
+                validator.clone(),
+            )
+            .into());
         }
 
         let rate_before_pipeline = *commission_rates
@@ -1017,6 +1018,8 @@ pub enum CommissionRateChangeError {
     NegativeRate(Decimal, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
     RateChangeTooLarge(Decimal, Address),
+    #[error("The rate change is 0 for validator {0}")]
+    ChangeIsZero(Address),
     #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
