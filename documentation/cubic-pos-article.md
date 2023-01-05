@@ -2,11 +2,11 @@
 
 Namada is a L1 proof-of-stake blockchain that provides interchain asset-agnostic privacy. Namada is based on a byzantine fault-tolerant (BFT) consensus mechanism widely used in the Cosmos ecosystem, provided by Tendermint ([Go implementation]((https://github.com/tendermint/tendermint)) with the [rust bindings]((https://github.com/informalsystems/tendermint-rs)))., that enables fast block finality times and much lower computational overhead than in proof-of-work (PoW) consensus mechanisms, as in Bitcoin. For consensus to be achieved in a BFT system, at least a 2/3 majority of the nodes (called validators) must be honest and behave according to the protocol.
 
-Namada uses proof-of-stake (PoS) to provide security against Sybil attacks on the network, wherein a malicious entity achieves enough voting power to disrupt consensus of the true chain. Rather than miners competing to create the next block by hashing with lots of computing power in PoW systems, the block proposer is selected from a set of validators with probability proportional to the validator's bonded stake (or voting power). This voting power is then used by the validators to determine if the 2/3 majority of consensus has been achieved. Furthermore, the block proposer mechanism also allows PoS chains to be much greener than PoW chains that need to consume massive amounts of energy to reach consensus.
+Namada uses proof-of-stake (PoS) to provide security against Sybil attacks on the network, wherein a malicious entity achieves enough voting power to disrupt consensus of the chain. Rather than miners competing to create the next block by hashing with lots of computing power in PoW systems, the block proposer is selected from a set of validators with probability proportional to the validator's bonded stake (or voting power). This voting power is then used by the validators to determine if the 2/3 majority of consensus has been achieved. Furthermore, the block proposer mechanism also allows PoS chains to be much greener than PoW chains that need to consume massive amounts of energy to reach consensus.
 
 Namada's PoS module is inspired in large part by the PoS system of the Cosmos Hub and by [prior discussions](https://github.com/cosmos/cosmos-sdk/blob/019444ae4328beaca32f2f8416ee5edbac2ef30b/docs/architecture/adr-039-epoched-staking.md#pipelining-the-epochs) on its future improvements, which have not yet been implemented. The ["nothing at stake" problem](https://blog.ethereum.org/2014/01/15/slasher-a-punitive-proof-of-stake-algorithm) is solved by slashing misbehaving validators, which amounts primarily to confiscating their bonded tokens.
 
-In the PoS system, both users and validators are incentivized with rewards to contribute to the security of the network by bonding tokens in the PoS module. Namada has a regular schedule for minting new tokens (inflation), many of which are owed to accounts that have bonded tokens. Non-validating accounts can participate by *delegating* their tokens to a particular validator: the tokens are locked in the PoS system and the target validator can then use those tokens as voting power in the consensus mechanism and governance.
+In the PoS system, both delegators and validators are incentivized with rewards to contribute to the security of the network by bonding tokens in the PoS module. Namada has a regular schedule for minting new tokens (inflation), many of which are owed to accounts that have bonded tokens. Non-validating accounts can participate by *delegating* their tokens to a particular validator: the tokens are locked in the PoS system and the target validator can then use those tokens as voting power in the consensus mechanism and governance.
 
 This article is divided into three main sections. First, we describe the mechanics and configuration of the epoched PoS system. Then we describe Namada's novel approach to slashing for validator misbehavior. Finally, we describe the inflation and rewards system within the PoS module.
 
@@ -103,28 +103,28 @@ The inflation mechanism based on the PD controller is now described in detail. F
 Then there are some protocol values dependent on the epoch:
 - `S`: the total supply of tokens
 - `L`: the total number of staked tokens (locked in the PoS system)
-- `I`: the most recent inflation amount (in units of tokens per epoch)
+- `π`: the most recent inflation amount (in units of tokens per epoch)
 - `R_last`: the staked token ratio of the most recent epoch
 
-The mechanism to calculate the new inflation amount `I_new` then follows:
+The mechanism to calculate the new inflation amount `π_new` then follows:
 1. Calculate some initial values that will be useful in the next steps
-	- Max possible inflation `I_max = S * r_max / epochs_per_yr`
+	- Max possible inflation `π_max = S * r_max / epochs_per_yr`
 	- The gain factors for the new epoch
-		- `KD = KD_nom * I_max`
-		- `KP = KP_nom * I_max`
+		- `KD = KD_nom * π_max`
+		- `KP = KP_nom * π_max`
 2. Calculate the error values for the PD controller
 	- `EP = R_target - L/S`
 	- `ED = EP - EP_last = R_last - L/S`
 3. Calculate the control value for the PD controller
 	- `C = KP * EP - KD * ED`
 4. Calculate the new inflation amount
-	- `I_new = max(0, min( I + C , I_max ))`
+	- `π_new = max(0, min( π + C , π_max ))`
 
 **Rewards distribution**
 
-Once the inflation amount `I_new` has been determined, the new tokens are minted to the PoS account address, where they remain until a validator or delegator withdraws after an unbonding. The [reward distribution](https://specs.namada.net/economics/proof-of-stake/reward-distribution.html) scheme employed in Namada, based on the [F1 Fee distribution](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf), allows for staking rewards to autocompound and be effectively automatically rebonded. Thus, no user transaction is required to claim staking rewards in Namada. In order to accomplish these things, the protocol must track the rewards owed to validators and delegators over the lifetime of their bonds.
+Once the inflation amount `π_new` has been determined, the new tokens are minted to the PoS account address, where they remain until a validator or delegator withdraws after an unbonding. The [reward distribution](https://specs.namada.net/economics/proof-of-stake/reward-distribution.html) scheme employed in Namada, based on the [F1 Fee distribution](https://drops.dagstuhl.de/opus/volltexte/2020/11974/pdf/OASIcs-Tokenomics-2019-10.pdf), allows for staking rewards to autocompound and be effectively automatically rebonded. Thus, no user transaction is required to claim staking rewards in Namada. In order to accomplish these things, the protocol must track the rewards owed to validators and delegators over the lifetime of their bonds.
 
-The procedure for tracking the rewards is described as follows. First, over the course of an epoch, the Namada protocol tracks the fraction of the block rewards owed to each validator in the `consensus` validator set (the only validators who can earn rewards). Once an epoch has concluded, these fractions can be used to determine the number of tokens from `I_new` that are owed to each validator and their respective delegators. For each validator, the protocol keeps in storage a list of values ordered by epoch, where each value indicates the fractional increase in the validator's bonded stake due to the rewards earned since epoch 0. We call these lists the *rewards products*. Particularly, each entry of a validator's *rewards products*, corresponding to an epoch $e$, looks like:
+The procedure for tracking the rewards is described as follows. First, over the course of an epoch, the Namada protocol tracks the fraction of the block rewards owed to each validator in the `consensus` validator set (the only validators who can earn rewards). Once an epoch has concluded, these fractions can be used to determine the number of tokens from `π_new` that are owed to each validator and their respective delegators. For each validator, the protocol keeps in storage a list of values ordered by epoch, where each value indicates the fractional increase in the validator's bonded stake due to the rewards earned since epoch 0. We call these lists the *rewards products*. Particularly, each entry of a validator's *rewards products*, corresponding to an epoch $e$, looks like:
 
 $$\prod_{e=0}^e \big(1 + \frac{r_V(e)}{s_V(e)} \big),$$
 
