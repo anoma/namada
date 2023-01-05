@@ -1,7 +1,7 @@
 //! Proof of Stake data types
 
 use core::fmt::Debug;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -231,6 +231,28 @@ pub enum SlashType {
     DuplicateVote,
     /// Light client attack.
     LightClientAttack,
+}
+
+/// VoteInfo inspired from tendermint
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct VoteInfo {
+    /// the first 20 bytes of the validator public key hash (SHA-256) taken
+    /// from tendermint
+    pub validator_address: Vec<u8>,
+    /// validator voting power
+    pub validator_vp: u64,
+    /// whether the validator signature was included in the last block
+    /// was the validator signature was included in the last block?
+    pub signed_last_block: bool,
+}
+
+/// Validator voting record
+#[derive(Debug, Default, Clone, BorshDeserialize, BorshSerialize)]
+pub struct ValidatorVotingRecord {
+    /// The vector of votes
+    pub votes: VecDeque<bool>,
+    /// The height to remove the data, if so
+    pub epoch_to_clear: Option<u64>,
 }
 
 impl Display for BondId {

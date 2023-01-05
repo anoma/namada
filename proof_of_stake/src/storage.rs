@@ -27,6 +27,8 @@ const UNBOND_STORAGE_KEY: &str = "unbond";
 const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 
+const VALIDATOR_VOTING_RECORD_KEY: &str = "validator_voting_record";
+
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
     match &key.segments.get(0) {
@@ -334,6 +336,13 @@ pub fn is_total_deltas_key(key: &Key) -> bool {
                     if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY)
 }
 
+/// Storage key for validator's voting record.
+pub fn validator_voting_record_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_VOTING_RECORD_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Get validator address from bond key
 pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     match key.get_at(3) {
@@ -395,6 +404,15 @@ where
         key: &namada_core::types::address::Address,
     ) -> Option<types::ValidatorDeltas> {
         let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
+        value.map(|value| decode(value).unwrap())
+    }
+
+    fn read_validator_voting_record(
+        &self,
+        key: &namada_core::types::address::Address,
+    ) -> Option<types::ValidatorVotingRecord> {
+        let (value, _gas) =
+            self.read(&validator_voting_record_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 

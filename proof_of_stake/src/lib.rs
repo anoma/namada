@@ -27,19 +27,20 @@ use std::num::TryFromIntError;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
-use namada_core::ledger::storage_api;
+use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{DbKeySeg, Epoch};
 use namada_core::types::token;
 pub use parameters::PosParams;
 use rust_decimal::Decimal;
+use storage::bonds_prefix;
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, CommissionRates, GenesisValidator, Slash,
     SlashType, Slashes, TotalDeltas, Unbond, Unbonds, ValidatorConsensusKeys,
     ValidatorDeltas, ValidatorSet, ValidatorSetUpdate, ValidatorSets,
-    ValidatorState, ValidatorStates,
+    ValidatorState, ValidatorStates, ValidatorVotingRecord,
 };
 
 use crate::btree_set::BTreeSetShims;
@@ -647,6 +648,11 @@ pub trait PosBase {
     fn read_validator_set(&self) -> ValidatorSets;
     /// Read PoS total deltas of all validators (active and inactive).
     fn read_total_deltas(&self) -> TotalDeltas;
+    /// Read PoS validator's voting record
+    fn read_validator_voting_record(
+        &self,
+        key: &Address,
+    ) -> Option<ValidatorVotingRecord>;
 
     /// Write PoS parameters.
     fn write_pos_params(&mut self, params: &PosParams);
@@ -1628,6 +1634,98 @@ fn withdraw_unbonds(
         withdrawn: withdrawn_amount,
         slashed,
     })
+}
+
+/// Unbond all tokens associated with a validator
+pub fn unbond_all_tokens<S>(
+    storage: &mut S,
+    validator: &Address,
+) -> Result<(), storage_api::Error>
+where
+    S: PosBase + PosReadOnly + for<'a> StorageRead<'a> + StorageWrite,
+{
+    // This is currently the only way I can think of getting all source
+    // addresses attached to a particular validator
+    let mut sources: HashSet<Address> = HashSet::new();
+    sources.insert(validator.clone());
+
+    let prefix = bonds_prefix();
+    let all_bonds = storage_api::iter_prefix::<Bonds>(storage, &prefix)?;
+    all_bonds.for_each(|a| {
+        let (key, _) = a.unwrap();
+        let num_segments = key.segments.len();
+        let (src, val) = (
+            key.segments[num_segments - 2].clone(),
+            key.segments[num_segments - 1].clone(),
+        );
+        if let (DbKeySeg::AddressSeg(src), DbKeySeg::AddressSeg(val)) =
+            (src, val)
+        {
+            if val == validator.clone() {
+                sources.insert(src);
+            }
+        }
+    });
+
+    let current_epoch = storage.get_block_epoch()?;
+    let params = PosReadOnly::read_pos_params(storage)?;
+
+    // Unbond tokens for each delegation and the self-bond (included in sources)
+    for source in sources.into_iter() {
+        let bond_id = BondId {
+            source: source.clone(),
+            validator: validator.clone(),
+        };
+        let amount = storage.bond_amount(&bond_id, current_epoch)?;
+        // Copy this code from the PosActions::unbond_tokens
+        let mut bond = match storage.read_bond(&bond_id)? {
+            Some(val) => val,
+            None => return Err(UnbondError::NoBondFound.into()),
+        };
+        let unbond = storage.read_unbond(&bond_id)?;
+        let mut validator_deltas =
+            PosReadOnly::read_validator_deltas(storage, validator)?
+                .ok_or_else(|| {
+                    UnbondError::ValidatorHasNoBonds(validator.clone())
+                })?;
+        let slashes = PosReadOnly::read_validator_slashes(storage, validator)?;
+        let mut total_deltas = PosReadOnly::read_total_deltas(storage)?;
+        let mut validator_set = PosReadOnly::read_validator_set(storage)?;
+
+        let UnbondData { unbond } = unbond_tokens(
+            &params,
+            &bond_id,
+            &mut bond,
+            unbond,
+            amount,
+            slashes,
+            &mut validator_deltas,
+            &mut total_deltas,
+            &mut validator_set,
+            current_epoch,
+        )?;
+
+        let total_bonds = bond.get_at_offset(
+            current_epoch,
+            DynEpochOffset::PipelineLen,
+            &params,
+        );
+        match total_bonds {
+            Some(total_bonds) if total_bonds.sum() != 0.into() => {
+                storage.write_bond(&bond_id, &bond);
+            }
+            _ => {
+                // If the bond is left empty, delete it
+                storage.delete(&storage::bond_key(&bond_id))?
+            }
+        }
+        storage.write(&storage::unbond_key(&bond_id), unbond)?;
+        storage.write_validator_deltas(validator, &validator_deltas);
+        storage.write_total_deltas(&total_deltas);
+        storage.write_validator_set(&validator_set);
+    }
+
+    Ok(())
 }
 
 impl From<BecomeValidatorError> for storage_api::Error {

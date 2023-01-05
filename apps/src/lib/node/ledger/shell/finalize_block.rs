@@ -1,8 +1,12 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use namada::ledger::pos::types::into_tm_voting_power;
+use namada::ledger::pos::namada_proof_of_stake::unbond_all_tokens;
+use namada::ledger::pos::types::{into_tm_voting_power, VoteInfo};
 use namada::ledger::protocol;
+use namada::proof_of_stake::types::decimal_mult_u64;
 use namada::types::storage::{BlockHash, BlockResults, Header};
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -49,6 +53,79 @@ where
         if new_epoch {
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
+        }
+
+        if !req.votes.is_empty() {
+            dbg!(&req.votes);
+            // TODO: need a way to reset the voting record info in storage if a
+            // validator is no-longer in consensus/active set
+            for VoteInfo {
+                validator_address,
+                validator_vp: _,
+                signed_last_block,
+            } in &req.votes
+            {
+                let tm_raw_hash_string =
+                    tm_raw_hash_to_string(validator_address);
+                let address = self
+                    .storage
+                    .read_validator_address_raw_hash(tm_raw_hash_string)
+                    .expect(
+                        "Unable to find a Namada validator for the tendermint \
+                         raw address",
+                    );
+                let mut voting_record = self
+                    .storage
+                    .read_validator_voting_record(&address)
+                    .unwrap_or_default();
+
+                let num_votes: u64 =
+                    voting_record.votes.iter().fold(0_u64, |sum, voted| {
+                        if *voted { sum + 1 } else { sum }
+                    });
+
+                // TODO: make configurable params?
+                let num_blocks_to_track = 1000;
+                let threshold = Decimal::ONE / dec!(3);
+
+                // If `epoch_to_clear` is Some(epoch), then it has already been
+                // decided that the validator will be completely unbonded at
+                // `epoch`. In this case, no further tracking needs to be done.
+                // Otherwise, if None, keep a running record of the last
+                // `num_blocks_to_track` votes.
+                if voting_record.epoch_to_clear.is_none() {
+                    if voting_record.votes.len() >= num_blocks_to_track {
+                        if num_votes
+                            < decimal_mult_u64(
+                                threshold,
+                                num_blocks_to_track as u64,
+                            )
+                        {
+                            // Fully unbond the validator. !! This is a bit
+                            // tricky rn since unbonding is called from the
+                            // PosActions trait, which is only implemented for a
+                            // Ctx, which we don't have here. Can try to do it
+                            // manually but seems like a pain
+                            unbond_all_tokens(&mut self.storage, &address)
+                                .unwrap();
+
+                            // Set the epoch in which this data will be reset
+                            voting_record.epoch_to_clear =
+                                Some(self.storage.block.epoch.0 + 2);
+                        } else {
+                            voting_record.votes.pop_front();
+                            voting_record.votes.push_back(*signed_last_block);
+                        }
+                    } else {
+                        voting_record.votes.push_back(*signed_last_block);
+                    }
+                } else {
+                    if voting_record.epoch_to_clear
+                        == Some(self.storage.block.epoch.0)
+                    {
+                    }
+                }
+            }
         }
 
         // Tracks the accepted transactions
