@@ -1,6 +1,6 @@
 # Using IBC with Namada
 
-This document describes using the inter-blockchain communication (IBC) protocol with Namada. This documentation covers being able to create connections through IBC as well as setting up local fractal instances of Namada for testing purposes.
+This document describes using the inter-blockchain communication (IBC) protocol with Namada. This documentation covers being able to create connections through IBC as well as setting up local instances of Namada for testing purposes.
 
 > **Warning**
 >
