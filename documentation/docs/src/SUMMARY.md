@@ -24,6 +24,7 @@
   - [Governance](./user-guide/ledger/governance.md)
     - [On-chain proposals](./user-guide/ledger/on-chain-governance.md)
     - [Off-chain proposals](./user-guide/ledger/off-chain-governance.md)
+  - [IBC](./user-guide/ibc.md)
 - [Testnets](./testnets/README.md)
   - [Environment setup](./testnets/environment-setup.md)
   - [Pre-genesis validator](./testnets/pre-genesis-validator.md)
