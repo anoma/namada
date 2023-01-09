@@ -218,6 +218,8 @@ impl EthereumBridgeConfig {
     }
 }
 
+/// Reads the value of `key` from `storage` and deserializes it, or panics
+/// otherwise.
 fn must_read_key<DB, H, T: BorshDeserialize>(
     storage: &Storage<DB, H>,
     key: &Key,
