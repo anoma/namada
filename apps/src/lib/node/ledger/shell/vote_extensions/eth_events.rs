@@ -538,14 +538,16 @@ mod test_vote_extensions {
         assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
     }
 
-    /// Test that an [`ethereum_events::Vext`] that incorrectly labels what
-    /// block it was included on in a vote extension is rejected
+    /// Test for ABCI++ that an [`ethereum_events::Vext`] that incorrectly
+    /// labels what block it was included on in a vote extension is
+    /// rejected. For ABCI+, test that it is rejected if the block height is
+    /// greater than latest block height.
     #[test]
     fn reject_incorrect_block_number() {
         let (shell, _, _) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         #[allow(clippy::redundant_clone)]
-        let ethereum_events = ethereum_events::Vext {
+        let mut ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
@@ -556,17 +558,18 @@ mod test_vote_extensions {
             }],
             block_height: shell.storage.last_height,
             validator_addr: address.clone(),
-        }
-        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        };
 
         #[cfg(feature = "abcipp")]
         {
+            let signed_vext = ethereum_events
+                .sign(shell.mode.get_protocol_key().expect("Test failed"));
             let req = request::VerifyVoteExtension {
                 hash: vec![],
                 validator_address: address.try_to_vec().expect("Test failed"),
                 height: 0,
                 vote_extension: VoteExtension {
-                    ethereum_events: ethereum_events.clone(),
+                    ethereum_events: signed_vext.clone(),
                     validator_set_update: None,
                 }
                 .try_to_vec()
@@ -578,10 +581,16 @@ mod test_vote_extensions {
                 i32::from(VerifyStatus::Reject)
             );
         }
-        assert!(shell.validate_eth_events_vext(
-            ethereum_events,
-            shell.storage.last_height
-        ))
+
+        ethereum_events.block_height = shell.storage.last_height + 1;
+        let signed_vext = ethereum_events
+            .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        assert!(
+            !shell.validate_eth_events_vext(
+                signed_vext,
+                shell.storage.last_height
+            )
+        )
     }
 
     /// Test if we reject Ethereum events vote extensions

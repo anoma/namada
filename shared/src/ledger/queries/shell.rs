@@ -398,7 +398,7 @@ where
         let signed_root: MultiSignedMerkleRoot = match ctx
             .storage
             .read(&get_signed_root_key())
-            .expect("Reading the database should not faile")
+            .expect("Reading the database should not fail")
         {
             (Some(bytes), _) => {
                 BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
@@ -458,8 +458,6 @@ where
                     validator_args: Default::default(),
                     root: signed_root,
                     proof,
-                    // TODO: Use real nonce
-                    nonce: 0.into(),
                 })
                 .try_to_vec()
                 .into_storage_result()?;
@@ -625,7 +623,6 @@ mod test {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
-                nonce: 0.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -666,7 +663,6 @@ mod test {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
-                nonce: 0.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -726,7 +722,6 @@ mod test {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
-                nonce: 0.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -748,6 +743,7 @@ mod test {
             sigs: Default::default(),
             root: transfer.keccak256(),
             height: Default::default(),
+            nonce: 0.into(),
         };
 
         // commit the changes and increase block height
@@ -802,8 +798,6 @@ mod test {
             validator_args: Default::default(),
             root: signed_root,
             proof,
-            // TODO: Use a real nonce
-            nonce: 0.into(),
         }
         .encode()
         .into_inner();
@@ -822,7 +816,6 @@ mod test {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
-                nonce: 0.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -844,6 +837,7 @@ mod test {
             sigs: Default::default(),
             root: transfer.keccak256(),
             height: Default::default(),
+            nonce: 0.into(),
         };
 
         // commit the changes and increase block height

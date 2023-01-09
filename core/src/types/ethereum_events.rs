@@ -4,11 +4,12 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use ethabi::Uint as ethUint;
+use ethabi::{Token, Uint as ethUint};
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
+use crate::types::eth_abi::Encode;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
@@ -32,6 +33,12 @@ use crate::types::token::Amount;
 )]
 pub struct Uint(pub [u64; 4]);
 
+impl Encode<1> for Uint {
+    fn tokenize(&self) -> [Token; 1] {
+        [Token::Uint(self.into())]
+    }
+}
+
 impl From<ethUint> for Uint {
     fn from(value: ethUint) -> Self {
         Self(value.0)
@@ -40,6 +47,12 @@ impl From<ethUint> for Uint {
 
 impl From<Uint> for ethUint {
     fn from(value: Uint) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<&Uint> for ethUint {
+    fn from(value: &Uint) -> Self {
         Self(value.0)
     }
 }

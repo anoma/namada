@@ -1,21 +1,25 @@
 //! Extend Tendermint votes with Ethereum bridge logic.
 
+pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-#[cfg(feature = "abcipp")]
 use borsh::BorshDeserialize;
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
-#[cfg(feature = "abcipp")]
+use namada::core::ledger::eth_bridge::storage::bridge_pool::get_nonce_key;
+use namada::core::types::eth_abi::Encode;
 use namada::ledger::pos::PosQueries;
-use namada::proto::Signed;
+use namada::ledger::storage::StoreType;
+use namada::proto::{Signed, SignedKeccakAbi};
+use namada::types::ethereum_events::Uint;
+use namada::types::keccak::KeccakHash;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
 use namada::types::vote_extensions::{
-    ethereum_events, validator_set_update, VoteExtension,
+    bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
 };
 
 use super::*;
@@ -84,6 +88,7 @@ where
     pub fn craft_extension(&mut self) -> VoteExtension {
         VoteExtension {
             ethereum_events: self.extend_vote_with_ethereum_events(),
+            bridge_pool_root: self.extend_vote_with_bp_roots(),
             validator_set_update: self.extend_vote_with_valset_update(),
         }
     }
@@ -123,6 +128,49 @@ where
         ext.sign(protocol_key)
     }
 
+    /// Extend PreCommit votes with [`bridge_pool_roots::Vext`] instances.
+    pub fn extend_vote_with_bp_roots(
+        &mut self,
+    ) -> Signed<bridge_pool_roots::Vext> {
+        let validator_addr = self
+            .mode
+            .get_validator_address()
+            .expect(VALIDATOR_EXPECT_MSG)
+            .to_owned();
+        let bp_root: KeccakHash = self
+            .storage
+            .block
+            .tree
+            .sub_root(&StoreType::BridgePool)
+            .into();
+        let nonce = Uint::try_from_slice(
+            &self
+                .storage
+                .read(&get_nonce_key())
+                .expect("Reading Bridge pool nonce shouldn't fail.")
+                .0
+                .expect("Reading Bridge pool nonce shouldn't fail."),
+        )
+        .expect("Deserializing Bridge pool nonce shouldn't fail.")
+        .encode()
+        .into_inner();
+        let to_sign = [bp_root.encode().into_inner(), nonce].concat();
+        let eth_key = self
+            .mode
+            .get_eth_bridge_keypair()
+            .expect(VALIDATOR_EXPECT_MSG);
+        let signed = Signed::<Vec<u8>, SignedKeccakAbi>::new(eth_key, to_sign);
+
+        let ext = bridge_pool_roots::Vext {
+            block_height: self.storage.last_height,
+            validator_addr,
+            sig: signed.sig,
+        };
+        let protocol_key =
+            self.mode.get_protocol_key().expect(VALIDATOR_EXPECT_MSG);
+        ext.sign(protocol_key)
+    }
+
     /// Extend PreCommit votes with [`validator_set_update::Vext`]
     /// instances.
     pub fn extend_vote_with_valset_update(
@@ -155,13 +203,10 @@ where
                     block_height: self.storage.last_height,
                 };
 
-                let eth_key = match &self.mode {
-                    ShellMode::Validator { data, .. } => {
-                        &data.keys.eth_bridge_keypair
-                    }
-                    _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
-                };
-
+                let eth_key = self
+                    .mode
+                    .get_eth_bridge_keypair()
+                    .expect("{VALIDATOR_EXPECT_MSG}");
                 ext.sign(eth_key)
             })
     }
@@ -322,6 +367,7 @@ pub fn deserialize_vote_extensions<'shell>(
             TxType::Protocol(ProtocolTx {
                 tx:
                     ProtocolTxType::EthEventsVext(_)
+                    | ProtocolTxType::BridgePoolVext(_)
                     | ProtocolTxType::ValSetUpdateVext(_),
                 ..
             }) => {
@@ -356,10 +402,15 @@ pub fn iter_protocol_txs(
 pub fn iter_protocol_txs(
     ext: VoteExtension,
 ) -> impl Iterator<Item = ProtocolTxType> {
+    let VoteExtension {
+        ethereum_events,
+        bridge_pool_root,
+        validator_set_update,
+    } = ext;
     [
-        Some(ProtocolTxType::EthEventsVext(ext.ethereum_events)),
-        ext.validator_set_update
-            .map(ProtocolTxType::ValSetUpdateVext),
+        Some(ProtocolTxType::EthEventsVext(ethereum_events)),
+        Some(ProtocolTxType::BridgePoolVext(bridge_pool_root)),
+        validator_set_update.map(ProtocolTxType::ValSetUpdateVext),
     ]
     .into_iter()
     .flatten()
