@@ -12,6 +12,7 @@ pub mod internal;
 pub mod keccak;
 pub mod key;
 pub mod masp;
+pub mod proof;
 pub mod storage;
 pub mod time;
 pub mod token;
