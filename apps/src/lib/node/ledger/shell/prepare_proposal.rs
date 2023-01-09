@@ -481,14 +481,24 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
+    #[cfg(feature = "abcipp")]
+    use namada::proto::SignedKeccakAbi;
     use namada::proto::{Signed, SignedTxData};
+    #[cfg(feature = "abcipp")]
+    use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::EthereumEvent;
+    #[cfg(feature = "abcipp")]
+    use namada::types::ethereum_events::Uint;
+    #[cfg(feature = "abcipp")]
+    use namada::types::keccak::KeccakHash;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
@@ -564,29 +574,48 @@ mod test_prepare_proposal {
 
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
+        let validator_addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .to_owned();
         let evts = {
-            let validator_addr = shell
-                .mode
-                .get_validator_address()
-                .expect("Test failed")
-                .to_owned();
-
             let prev_height = shell.storage.last_height;
-
-            let ext = ethereum_events::Vext::empty(prev_height, validator_addr);
-
+            let ext = ethereum_events::Vext::empty(
+                prev_height,
+                validator_addr.clone(),
+            );
             let protocol_key = match &shell.mode {
                 ShellMode::Validator { data, .. } => {
                     &data.keys.protocol_keypair
                 }
                 _ => panic!("Test failed"),
             };
-
             ext.sign(protocol_key)
+        };
+
+        let bp_root = {
+            let to_sign = [
+                KeccakHash([0; 32]).encode().into_inner(),
+                Uint::from(0).encode().into_inner(),
+            ]
+            .concat();
+            let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                to_sign,
+            )
+            .sig;
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr,
+                sig,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
         };
 
         let vote_extension = VoteExtension {
             ethereum_events: evts,
+            bridge_pool_root: bp_root,
             validator_set_update: None,
         }
         .try_to_vec()
@@ -862,7 +891,7 @@ mod test_prepare_proposal {
         };
         let ethereum_events = {
             let ext = ethereum_events::Vext {
-                validator_addr,
+                validator_addr: validator_addr.clone(),
                 block_height: LAST_HEIGHT,
                 ethereum_events: vec![ethereum_event],
             }
@@ -870,8 +899,27 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+        let bp_root = {
+            let to_sign = [
+                KeccakHash([0; 32]).encode().into_inner(),
+                Uint::from(0).encode().into_inner(),
+            ]
+            .concat();
+            let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                to_sign,
+            )
+            .sig;
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr,
+                sig,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        };
         let vote_extension = VoteExtension {
             ethereum_events,
+            bridge_pool_root: bp_root,
             validator_set_update: None,
         };
         let vote = ExtendedVoteInfo {
@@ -1033,10 +1081,34 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+
         #[cfg(feature = "abcipp")]
         {
+            let bp_root = {
+                let to_sign = [
+                    KeccakHash([0; 32]).encode().into_inner(),
+                    Uint::from(0).encode().into_inner(),
+                ]
+                .concat();
+                let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                    to_sign,
+                )
+                .sig;
+                bridge_pool_roots::Vext {
+                    block_height: shell.storage.last_height,
+                    validator_addr: shell
+                        .mode
+                        .get_validator_address()
+                        .unwrap()
+                        .clone(),
+                    sig,
+                }
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            };
             let vote_extension = VoteExtension {
                 ethereum_events: signed_eth_ev_vote_extension,
+                bridge_pool_root: bp_root,
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
