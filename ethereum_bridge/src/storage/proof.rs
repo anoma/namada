@@ -41,6 +41,16 @@ impl<T> EthereumProof<T> {
             self.signatures.insert((addr, height), sig);
         }
     }
+
+    /// Add a new batch of signatures to this [`EthereumProof`].
+    pub fn attach_signature_batch<I>(&mut self, batch: I)
+    where
+        I: IntoIterator<Item = ((Address, BlockHeight), common::Signature)>,
+    {
+        for ((address, block_height), signature) in batch {
+            self.attach_signature(address, block_height, signature);
+        }
+    }
 }
 
 #[cfg(test)]

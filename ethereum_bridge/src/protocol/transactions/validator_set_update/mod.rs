@@ -17,6 +17,7 @@ use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, Votes};
+use crate::storage::proof::EthereumProof;
 use crate::storage::vote_tallies;
 
 impl utils::GetVoters for validator_set_update::VextDigest {
@@ -53,8 +54,6 @@ where
     })
 }
 
-// TODO: change Keys<T>: add (HashSet<Signature>, VotingPowersMap) as body;
-// extend signatures set instead of voting powers map!
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     ext: validator_set_update::VextDigest,
@@ -86,7 +85,7 @@ where
     };
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
-    let maybe_body = 'check_storage: {
+    let maybe_proof = 'check_storage: {
         let Some(seen) = votes::storage::maybe_read_seen(storage, &valset_upd_keys)? else {
             break 'check_storage None;
         };
@@ -94,13 +93,12 @@ where
             tracing::debug!("Validator set update tally is already seen");
             return Ok(ChangedKeys::default());
         }
-        let body: HashMap<_, _> =
-            votes::storage::read_body(storage, &valset_upd_keys)?;
-        Some(body)
+        let proof = votes::storage::read_body(storage, &valset_upd_keys)?;
+        Some(proof)
     };
 
     let mut seen_by = Votes::default();
-    for (address, block_height) in ext.signatures.into_keys() {
+    for (address, block_height) in ext.signatures.keys().cloned() {
         if let Some(present) = seen_by.insert(address, block_height) {
             // TODO(namada#770): this shouldn't be happening in any case and we
             // should be refactoring to get rid of `BlockHeight`
@@ -108,7 +106,9 @@ where
         }
     }
 
-    let (tally, body, changed, confirmed) = if let Some(mut body) = maybe_body {
+    let (tally, proof, changed, confirmed) = if let Some(mut proof) =
+        maybe_proof
+    {
         tracing::debug!(
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
@@ -120,8 +120,8 @@ where
             return Ok(changed);
         }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
-        body.extend(ext.voting_powers);
-        (tally, body, changed, confirmed)
+        proof.attach_signature_batch(ext.signatures);
+        (tally, proof, changed, confirmed)
     } else {
         tracing::debug!(
             %valset_upd_keys.prefix,
@@ -129,18 +129,19 @@ where
             "New validator set update vote aggregation started"
         );
         let tally = votes::calculate_new(seen_by, &voting_powers)?;
-        let body: HashMap<_, _> = ext.voting_powers.into_iter().collect();
+        let mut proof = EthereumProof::new(ext.voting_powers);
+        proof.attach_signature_batch(ext.signatures);
         let changed = valset_upd_keys.into_iter().collect();
         let confirmed = tally.seen;
-        (tally, body, changed, confirmed)
+        (tally, proof, changed, confirmed)
     };
 
     tracing::debug!(
         ?tally,
-        voting_powers = ?body,
+        ?proof,
         "Applying validator set update state changes"
     );
-    votes::storage::write(storage, &valset_upd_keys, &body, &tally)?;
+    votes::storage::write(storage, &valset_upd_keys, &proof, &tally)?;
 
     if confirmed {
         tracing::debug!(
