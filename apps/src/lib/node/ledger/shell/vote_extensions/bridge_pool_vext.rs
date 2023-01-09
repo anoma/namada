@@ -332,10 +332,9 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert_eq!(vote_ext, shell.extend_vote_with_bp_roots());
-        assert!(shell.validate_bp_roots_vext(
-            vote_ext,
-            shell.storage.get_current_decision_height()
-        ))
+        assert!(
+            shell.validate_bp_roots_vext(vote_ext, shell.storage.last_height,)
+        )
     }
 
     /// Test that Bridge pool roots signed by a non-validator are rejected
