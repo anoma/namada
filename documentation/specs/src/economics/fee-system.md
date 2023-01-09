@@ -256,6 +256,12 @@ be executed in case the proposal passed. This code is embedded into a
 inserted into the block itself. These transactions are exempt from fees and
 don't charge gas.
 
+### Protocol transactions
+
+Protocol transactions can only be correctly crafted by validators and serve a
+role in allowing the chain to function properly. Given these, they are not
+subject to fees and do not charge gas.
+
 ## Gas accounting
 
 We provide a mapping between all the whitelisted transactions and VPs to their
