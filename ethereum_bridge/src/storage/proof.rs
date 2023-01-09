@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::address::Address;
-use namada_core::types::key::secp256k1;
+use namada_core::types::key::{common, secp256k1};
 use namada_core::types::storage::BlockHeight;
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
@@ -19,4 +19,52 @@ pub struct EthereumProof<T> {
     pub signatures: BTreeMap<(Address, BlockHeight), secp256k1::Signature>,
     /// The signed data.
     pub data: T,
+}
+
+impl<T> EthereumProof<T> {
+    /// Return an incomplete [`EthereumProof`].
+    pub fn new(data: T) -> Self {
+        Self {
+            data,
+            signatures: BTreeMap::new(),
+        }
+    }
+
+    /// Add a new signature to this [`EthereumProof`].
+    pub fn attach_signature(
+        &mut self,
+        addr: Address,
+        height: BlockHeight,
+        signature: common::Signature,
+    ) {
+        if let common::Signature::Secp256k1(sig) = signature {
+            self.signatures.insert((addr, height), sig);
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_ethbridge_proofs {
+    //! Test ethereum bridge proofs.
+
+    use namada_core::proto::Signed;
+    use namada_core::types::{address, key};
+
+    use super::*;
+
+    /// Test that adding a non-secp256k1 signature to an [`EthereumProof`] is a
+    /// NOOP.
+    #[test]
+    fn test_add_non_secp256k1_is_noop() {
+        let mut proof = EthereumProof::new(());
+        assert!(proof.signatures.is_empty());
+        let key = key::testing::keypair_1();
+        let signed = Signed::<&'static str>::new(&key, ":)))))))");
+        proof.attach_signature(
+            address::testing::established_address_1(),
+            777.into(),
+            signed.sig,
+        );
+        assert!(proof.signatures.is_empty());
+    }
 }
