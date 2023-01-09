@@ -194,7 +194,7 @@ impl EthereumBridgeConfig {
             &min_confirmations_key,
         )
         .unwrap_or_else(|err| {
-            panic!("Could not Borsh-deserialize {min_confirmations_key}: {err:?}")
+            panic!("Could not read {min_confirmations_key}: {err:?}")
         }) else {
             // The bridge has not been configured yet
             return None;
@@ -229,7 +229,7 @@ where
     H: storage::traits::StorageHasher,
 {
     StorageRead::read::<T>(storage, key).map_or_else(
-        |err| panic!("Could not Borsh-deserialize {key}: {err:?}"),
+        |err| panic!("Could not read {key}: {err:?}"),
         |value| {
             value.unwrap_or_else(|| {
                 panic!(
@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Could not Borsh-deserialize")]
+    #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut storage = TestStorage::default();
         let config = EthereumBridgeConfig {
