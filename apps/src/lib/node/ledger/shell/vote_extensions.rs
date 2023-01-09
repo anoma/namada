@@ -60,6 +60,8 @@ pub enum VoteExtensionError {
          equivalent field in storage."
     )]
     DivergesFromStorage,
+    #[error("The signature of the Bridge pool root is invalid")]
+    InvalidBPRootSig,
 }
 
 impl<D, H> Shell<D, H>
