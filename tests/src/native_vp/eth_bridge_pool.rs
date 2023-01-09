@@ -125,7 +125,6 @@ mod test_bridge_pool_vp {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: Amount::from(TOKENS),
-                nonce: Default::default(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),
@@ -147,7 +146,6 @@ mod test_bridge_pool_vp {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: Amount::from(TOKENS),
-                nonce: Default::default(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),
@@ -169,7 +167,6 @@ mod test_bridge_pool_vp {
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: Amount::from(TOKENS),
-                nonce: Default::default(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),

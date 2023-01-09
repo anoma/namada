@@ -19,6 +19,7 @@ pub const BRIDGE_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::EthBridgePool);
 /// Sub-segment for getting the latest signed
 const SIGNED_ROOT_SEG: &str = "signed_root";
+const NONCE: &str = "bridge_pool_nonce";
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -47,6 +48,17 @@ pub fn get_signed_root_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
             DbKeySeg::StringSeg(SIGNED_ROOT_SEG.into()),
+        ],
+    }
+}
+
+/// Get the storage key for the batch nonce of
+/// the bridge pool. Used for replay protection.
+pub fn get_nonce_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
+            DbKeySeg::StringSeg(NONCE.into()),
         ],
     }
 }
@@ -388,7 +400,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -412,7 +423,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -440,7 +450,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -475,7 +484,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -502,7 +510,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -532,7 +539,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1u64.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -556,7 +562,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1u64.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -592,7 +597,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
                 amount: 1.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -610,7 +614,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 1u64.into(),
-                nonce: 42u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -642,7 +645,6 @@ mod test_bridge_pool_tree {
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 0.into(),
-                nonce: 0.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -671,7 +673,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -701,7 +702,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -731,7 +731,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -759,7 +758,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -787,7 +785,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -815,7 +812,6 @@ mod test_bridge_pool_tree {
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
                     amount: (i as u64).into(),
-                    nonce: 42u64.into(),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -836,31 +832,27 @@ mod test_bridge_pool_tree {
     fn random_transfers(
         number: usize,
     ) -> impl Strategy<Value = Vec<PendingTransfer>> {
-        prop::collection::vec(
-            (prop::array::uniform20(0u8..), prop::num::u64::ANY),
-            0..=number,
-        )
-        .prop_flat_map(|addrs| {
-            Just(
-                addrs
-                    .into_iter()
-                    .map(|(addr, nonce)| PendingTransfer {
-                        transfer: TransferToEthereum {
-                            asset: EthAddress(addr),
-                            sender: bertha_address(),
-                            recipient: EthAddress(addr),
-                            amount: Default::default(),
-                            nonce: nonce.into(),
-                        },
-                        gas_fee: GasFee {
-                            amount: Default::default(),
-                            payer: bertha_address(),
-                        },
-                    })
-                    .dedup()
-                    .collect::<Vec<PendingTransfer>>(),
-            )
-        })
+        prop::collection::vec(prop::array::uniform20(0u8..), 0..=number)
+            .prop_flat_map(|addrs| {
+                Just(
+                    addrs
+                        .into_iter()
+                        .map(|addr| PendingTransfer {
+                            transfer: TransferToEthereum {
+                                asset: EthAddress(addr),
+                                sender: bertha_address(),
+                                recipient: EthAddress(addr),
+                                amount: Default::default(),
+                            },
+                            gas_fee: GasFee {
+                                amount: Default::default(),
+                                payer: bertha_address(),
+                            },
+                        })
+                        .dedup()
+                        .collect::<Vec<PendingTransfer>>(),
+                )
+            })
     }
 
     prop_compose! {

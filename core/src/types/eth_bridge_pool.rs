@@ -43,8 +43,6 @@ pub struct TransferToEthereum {
     pub sender: Address,
     /// The amount to be transferred
     pub amount: Amount,
-    /// a nonce for replay protection
-    pub nonce: Uint,
 }
 
 /// A transfer message to Ethereum sitting in the
@@ -71,8 +69,8 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
-impl Encode<8> for PendingTransfer {
-    fn tokenize(&self) -> [Token; 8] {
+impl Encode<7> for PendingTransfer {
+    fn tokenize(&self) -> [Token; 7] {
         // TODO: This version should be looked up from storage
         let version = Token::Uint(1.into());
         let namespace = Token::String(NAMESPACE.into());
@@ -81,8 +79,7 @@ impl Encode<8> for PendingTransfer {
         let to = Token::Address(self.transfer.recipient.0.into());
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
-        let nonce = Token::Uint(self.transfer.nonce.clone().into());
-        [version, namespace, from, to, amount, fee, fee_from, nonce]
+        [version, namespace, from, to, amount, fee, fee_from]
     }
 }
 
@@ -131,17 +128,21 @@ pub struct MultiSignedMerkleRoot {
     pub root: KeccakHash,
     /// The block height at which this root was valid
     pub height: BlockHeight,
+    /// A nonce for the next transfer batch for replay protection
+    pub nonce: Uint,
 }
 
-impl Encode<2> for MultiSignedMerkleRoot {
-    fn tokenize(&self) -> [Token; 2] {
-        let MultiSignedMerkleRoot { sigs, root, .. } = self;
+impl Encode<3> for MultiSignedMerkleRoot {
+    fn tokenize(&self) -> [Token; 3] {
+        let MultiSignedMerkleRoot {
+            sigs, root, nonce, ..
+        } = self;
         // TODO: check the tokenization of the signatures
         let sigs = Token::Array(
             sigs.iter().map(|sig| sig.tokenize()[0].clone()).collect(),
         );
         let root = Token::FixedBytes(root.0.to_vec());
-        [sigs, root]
+        [sigs, root, Token::Uint(nonce.clone().into())]
     }
 }
 
@@ -155,23 +156,13 @@ pub struct RelayProof {
     pub root: MultiSignedMerkleRoot,
     /// A membership proof
     pub proof: BridgePoolProof,
-    /// A nonce for the batch for replay protection
-    pub nonce: Uint,
 }
 
 impl Encode<7> for RelayProof {
     fn tokenize(&self) -> [Token; 7] {
         let [val_set_args] = self.validator_args.tokenize();
-        let [sigs, root] = self.root.tokenize();
+        let [sigs, root, nonce] = self.root.tokenize();
         let [proof, transfers, flags] = self.proof.tokenize();
-        [
-            val_set_args,
-            sigs,
-            transfers,
-            root,
-            proof,
-            flags,
-            Token::Uint(self.nonce.clone().into()),
-        ]
+        [val_set_args, sigs, transfers, root, proof, flags, nonce]
     }
 }

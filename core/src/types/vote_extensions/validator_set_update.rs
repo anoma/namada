@@ -329,7 +329,7 @@ mod tag {
     use serde::{Deserialize, Serialize};
 
     use super::{bheight_to_token, Vext, VotingPowersMapExt};
-    use crate::proto::SignedSerialize;
+    use crate::proto::Signable;
     use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
 
@@ -338,10 +338,10 @@ mod tag {
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
     pub struct SerializeWithAbiEncode;
 
-    impl SignedSerialize<Vext> for SerializeWithAbiEncode {
+    impl Signable<Vext> for SerializeWithAbiEncode {
         type Output = [u8; 32];
 
-        fn serialize(ext: &Vext) -> Self::Output {
+        fn as_signable(ext: &Vext) -> Self::Output {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
                 .voting_powers
                 .get_bridge_and_gov_hashes(ext.block_height);
