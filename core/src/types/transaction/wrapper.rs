@@ -17,9 +17,7 @@ pub mod wrapper_tx {
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{
-        hash_tx, EncryptionKey, Hash, TxError, TxType,
-    };
+    use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -206,7 +204,7 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 inner_tx,
-                tx_hash: hash_tx(&tx.to_bytes()),
+                tx_hash: tx.unsigned_hash(),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -227,7 +225,7 @@ pub mod wrapper_tx {
 
         /// Decrypt the wrapped transaction.
         ///
-        /// Will fail if the inner transaction does match the
+        /// Will fail if the inner transaction doesn't match the
         /// hash commitment or we are unable to recover a
         /// valid Tx from the decoded byte stream.
         pub fn decrypt(
@@ -236,14 +234,15 @@ pub mod wrapper_tx {
         ) -> Result<Tx, WrapperTxErr> {
             // decrypt the inner tx
             let decrypted = self.inner_tx.decrypt(privkey);
+            let decrypted_tx = Tx::try_from(decrypted.as_ref())
+                .map_err(|_| WrapperTxErr::InvalidTx)?;
+
             // check that the hash equals commitment
-            if hash_tx(&decrypted) != self.tx_hash {
-                Err(WrapperTxErr::DecryptedHash)
-            } else {
-                // convert back to Tx type
-                Tx::try_from(decrypted.as_ref())
-                    .map_err(|_| WrapperTxErr::InvalidTx)
+            if decrypted_tx.unsigned_hash() != self.tx_hash {
+                return Err(WrapperTxErr::DecryptedHash);
             }
+
+            Ok(decrypted_tx)
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
@@ -348,6 +347,7 @@ pub mod wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
         use crate::types::address::nam;
+        use crate::types::transaction::hash_tx;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
