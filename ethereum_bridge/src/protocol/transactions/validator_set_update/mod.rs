@@ -84,7 +84,18 @@ where
     };
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
-    let (exists_in_storage, _) = storage.has_key(&valset_upd_keys.seen())?;
+    let maybe_body = 'check_storage: {
+        let Some(seen) = votes::storage::maybe_read_seen(storage, &valset_upd_keys)? else {
+            break 'check_storage None;
+        };
+        if seen {
+            tracing::debug!("Validator set update tally is already seen");
+            return Ok(ChangedKeys::default());
+        }
+        let body: HashMap<_, _> =
+            votes::storage::read_body(storage, &valset_upd_keys)?;
+        Some(body)
+    };
 
     let mut seen_by = Votes::default();
     for (address, block_height) in ext.signatures.into_keys() {
@@ -95,17 +106,7 @@ where
         }
     }
 
-    let (tally, changed, confirmed) = if !exists_in_storage {
-        tracing::debug!(
-            %valset_upd_keys.prefix,
-            ?ext.voting_powers,
-            "New validator set update vote aggregation started"
-        );
-        let tally = votes::calculate_new(seen_by, &voting_powers)?;
-        let changed = valset_upd_keys.into_iter().collect();
-        let confirmed = tally.seen;
-        (tally, changed, confirmed)
-    } else {
+    let (tally, body, changed, confirmed) = if let Some(mut body) = maybe_body {
         tracing::debug!(
             %valset_upd_keys.prefix,
             "Validator set update votes already in storage",
@@ -117,20 +118,27 @@ where
             return Ok(changed);
         }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
-        (tally, changed, confirmed)
+        body.extend(ext.voting_powers);
+        (tally, body, changed, confirmed)
+    } else {
+        tracing::debug!(
+            %valset_upd_keys.prefix,
+            ?ext.voting_powers,
+            "New validator set update vote aggregation started"
+        );
+        let tally = votes::calculate_new(seen_by, &voting_powers)?;
+        let body: HashMap<_, _> = ext.voting_powers.into_iter().collect();
+        let changed = valset_upd_keys.into_iter().collect();
+        let confirmed = tally.seen;
+        (tally, body, changed, confirmed)
     };
 
     tracing::debug!(
         ?tally,
-        ?ext.voting_powers,
+        voting_powers = ?body,
         "Applying validator set update state changes"
     );
-    votes::storage::write(
-        storage,
-        &valset_upd_keys,
-        &ext.voting_powers,
-        &tally,
-    )?;
+    votes::storage::write(storage, &valset_upd_keys, &body, &tally)?;
 
     if confirmed {
         tracing::debug!(
