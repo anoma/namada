@@ -47,6 +47,7 @@ impl<T> EthereumProof<T> {
 mod test_ethbridge_proofs {
     //! Test ethereum bridge proofs.
 
+    use assert_matches::assert_matches;
     use namada_core::proto::Signed;
     use namada_core::types::{address, key};
 
@@ -59,6 +60,7 @@ mod test_ethbridge_proofs {
         let mut proof = EthereumProof::new(());
         assert!(proof.signatures.is_empty());
         let key = key::testing::keypair_1();
+        assert_matches!(&key, common::SecretKey::Ed25519(_));
         let signed = Signed::<&'static str>::new(&key, ":)))))))");
         proof.attach_signature(
             address::testing::established_address_1(),
