@@ -23,7 +23,7 @@ use crate::types::storage::BlockHeight;
     BorshDeserialize,
     BorshSchema,
 )]
-pub struct BridePoolRootVext {
+pub struct BridgePoolRootVext {
     /// The validator sending the vote extension
     pub validator_addr: Address,
     /// The block height at which the vote extensions was
@@ -39,12 +39,12 @@ pub struct BridePoolRootVext {
 }
 
 /// Alias for [`BridgePoolRootVext`].
-pub type Vext = BridePoolRootVext;
+pub type Vext = BridgePoolRootVext;
 
 /// A signed [`BridgePoolRootVext`].
 /// Note that this is serialized with Ethereum's
 /// ABI encoding schema.
-pub type SignedVext = Signed<BridePoolRootVext>;
+pub type SignedVext = Signed<BridgePoolRootVext>;
 
 impl Vext {
     /// Creates a new signed [`Vext`].
