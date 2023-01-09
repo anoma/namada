@@ -53,6 +53,8 @@ where
     })
 }
 
+// TODO: change Keys<T>: add (HashSet<Signature>, VotingPowersMap) as body;
+// extend signatures set instead of voting powers map!
 fn apply_update<D, H>(
     storage: &mut Storage<D, H>,
     ext: validator_set_update::VextDigest,
