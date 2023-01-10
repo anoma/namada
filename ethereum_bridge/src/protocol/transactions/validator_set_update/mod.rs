@@ -155,7 +155,9 @@ where
 
 #[cfg(test)]
 mod test_valset_upd_state_changes {
+    use namada_core::types::key::RefTo;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
+    use namada_core::types::voting_power::FractionalVotingPower;
     use namada_core::types::{address, key};
 
     use super::*;
@@ -166,6 +168,9 @@ mod test_valset_upd_state_changes {
     #[test]
     fn test_seen_has_complete_proof() {
         let mut storage = test_utils::setup_default_storage();
+        // NOTE: we should actually be using an eth bridge key to sign
+        // validator set updates, but it works out in our test
+        // to use protocol keys for this purpose
         let sk = key::testing::keypair_1();
 
         let last_height = storage.last_height;
@@ -182,7 +187,7 @@ mod test_valset_upd_state_changes {
         )
         .expect("Test failed");
 
-        // let's make sure we changed storage
+        // let's make sure we updated storage
         assert!(!tx_result.changed_keys.is_empty());
 
         let epoch = storage
@@ -199,14 +204,38 @@ mod test_valset_upd_state_changes {
                 .contains(&valset_upd_keys.voting_power())
         );
 
-        // check if the event is seen
+        // check if the valset upd is marked as "seen"
         let tally = votes::storage::read(&storage, &valset_upd_keys)
             .expect("Test failed");
         assert!(tally.seen);
 
+        // read the proof in storage and make sure its signature is
+        // from the configured validator
+        let proof = votes::storage::read_body(&storage, &valset_upd_keys)
+            .expect("Test failed");
+        assert_eq!(proof.data, VotingPowersMap::new());
+
+        let mut proof_sigs: Vec<_> = proof.signatures.into_keys().collect();
+        assert_eq!(proof_sigs.len(), 1);
+
+        let (addr, height) = proof_sigs.pop().expect("Test failed");
+        assert_eq!(height, last_height);
+        assert_eq!(addr, address::testing::established_address_1());
+
         // since only one validator is configured, we should
         // have reached a complete proof
+        let total_voting_power =
+            storage.get_total_voting_power(Some(epoch)).into();
+        let validator_voting_power: u64 = storage
+            .get_validator_from_protocol_pk(&sk.ref_to(), Some(epoch))
+            .expect("Test failed")
+            .power;
+        let voting_power = FractionalVotingPower::new(
+            validator_voting_power,
+            total_voting_power,
+        )
+        .expect("Test failed");
 
-        // TODO: check that we have >2/3 voting power behind proof
+        assert!(voting_power > FractionalVotingPower::TWO_THIRDS);
     }
 }
