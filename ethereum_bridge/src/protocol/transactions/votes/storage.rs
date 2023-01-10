@@ -24,9 +24,8 @@ where
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn read<D, H, T>(
-    storage: &mut Storage<D, H>,
+    storage: &Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Tally>
 where
@@ -147,7 +146,7 @@ mod tests {
             )
             .unwrap();
 
-        let result = read(&mut storage, &keys);
+        let result = read(&storage, &keys);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), tally);
