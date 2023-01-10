@@ -21,9 +21,8 @@ pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada_core::ledger::storage::types::encode;
 pub use namada_core::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
-    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
-    StorageWrite,
+    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
+    StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::proto::{Signed, SignedTxData};
@@ -186,17 +185,6 @@ impl StorageRead<'_> for Ctx {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             namada_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
-        Ok(KeyValIterator(iter_id, PhantomData))
-    }
-
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
-        let prefix = prefix.to_string();
-        let iter_id = unsafe {
-            namada_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
         };
         Ok(KeyValIterator(iter_id, PhantomData))
     }

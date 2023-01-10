@@ -20,8 +20,8 @@ pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters;
 pub use namada_core::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
-    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
+    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
+    StorageRead,
 };
 pub use namada_core::ledger::vp_env::VpEnv;
 pub use namada_core::proto::{Signed, SignedTxData};
@@ -258,14 +258,6 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_impl(prefix)
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
-        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        rev_iter_prefix_impl(prefix)
-    }
-
     fn eval(
         &self,
         vp_code: Vec<u8>,
@@ -354,13 +346,6 @@ impl StorageRead<'_> for CtxPreStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
-        rev_iter_prefix_impl(prefix)
-    }
-
     fn get_chain_id(&self) -> Result<String, Error> {
         get_chain_id()
     }
@@ -424,13 +409,6 @@ impl StorageRead<'_> for CtxPostStorageRead<'_> {
         iter_prefix_impl(prefix)
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
-        rev_iter_prefix_impl(prefix)
-    }
-
     fn get_chain_id(&self) -> Result<String, Error> {
         get_chain_id()
     }
@@ -462,16 +440,6 @@ fn iter_prefix_impl(
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         namada_vp_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-    };
-    Ok(KeyValIterator(iter_id, PhantomData))
-}
-
-fn rev_iter_prefix_impl(
-    prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
-    let prefix = prefix.to_string();
-    let iter_id = unsafe {
-        namada_vp_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
     };
     Ok(KeyValIterator(iter_id, PhantomData))
 }
