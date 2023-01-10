@@ -3635,7 +3635,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -3692,7 +3692,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -3778,7 +3778,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3832,7 +3832,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "itertools",
@@ -3843,7 +3843,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "derivative",
@@ -3866,7 +3866,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -3910,7 +3910,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "hex",
@@ -3936,7 +3936,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "namada_core",
