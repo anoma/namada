@@ -334,7 +334,7 @@ where
     }
 
     /// Get the sub-key of a given element
-    fn get_data_key(&self, key: &K) -> storage::Key {
+    pub fn get_data_key(&self, key: &K) -> storage::Key {
         let key_str = key.to_db_key();
         self.get_data_prefix().push(&key_str).unwrap()
     }

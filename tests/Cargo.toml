@@ -9,6 +9,9 @@ version = "0.12.2"
 
 [features]
 default = ["abciplus", "wasm-runtime"]
+mainnet = [
+  "namada/mainnet",
+]
 abciplus = [
   "namada/abciplus",
   "namada/ibc-mocks",

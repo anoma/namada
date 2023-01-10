@@ -8,6 +8,7 @@ version = "0.12.2"
 
 [features]
 default = []
+mainnet = []
 ferveo-tpke = [
   "ferveo",
   "tpke",
@@ -28,13 +29,14 @@ abcipp = [
   "ibc-proto-abcipp",
   "ibc-abcipp",
   "tendermint-abcipp",
-  "tendermint-proto-abcipp"
+  "tendermint-proto-abcipp",
 ]
 abciplus = [
   "ibc",
   "ibc-proto",
   "tendermint",
   "tendermint-proto",
+  "namada_tests/abciplus",
 ]
 
 ibc-mocks = [
@@ -99,6 +101,7 @@ tracing = "0.1.30"
 zeroize = {version = "1.5.5", features = ["zeroize_derive"]}
 
 [dev-dependencies]
+namada_tests = {path = "../tests", default-features = false, features = ["wasm-runtime"]}
 assert_matches = "1.5.0"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9"}
 pretty_assertions = "0.7.2"

@@ -3804,6 +3804,7 @@ dependencies = [
  "libsecp256k1",
  "masp_primitives",
  "namada_macros",
+ "namada_tests",
  "pretty_assertions",
  "proptest",
  "prost",

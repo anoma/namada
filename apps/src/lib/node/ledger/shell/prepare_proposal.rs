@@ -2,6 +2,7 @@
 
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -97,13 +98,23 @@ where
                 .collect();
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.storage.tx_queue.iter().map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
-                })
-                .to_bytes()
-            });
+            let decrypted_txs = self.storage.tx_queue.iter().map(
+                |WrapperTxInQueue {
+                     tx,
+                     #[cfg(not(feature = "mainnet"))]
+                     has_valid_pow,
+                 }| {
+                    Tx::from(match tx.decrypt(privkey) {
+                        Ok(tx) => DecryptedTx::Decrypted {
+                            tx,
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: *has_valid_pow,
+                        },
+                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                    })
+                    .to_bytes()
+                },
+            );
             #[cfg(feature = "abcipp")]
             let mut decrypted_txs: Vec<_> =
                 decrypted_txs.map(record::add).collect();
@@ -221,6 +232,8 @@ mod test_prepare_proposal {
                     0.into(),
                     tx,
                     Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
                 )
                 .try_to_vec()
                 .expect("Test failed"),
@@ -264,8 +277,11 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            expected_decrypted
-                .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
+            expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
+                tx: tx.clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
@@ -276,6 +292,8 @@ mod test_prepare_proposal {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
             shell.enqueue_tx(wrapper_tx);

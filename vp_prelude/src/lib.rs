@@ -18,12 +18,12 @@ use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::ledger::governance::storage as gov_storage;
-pub use namada_core::ledger::parameters;
 pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead,
 };
 pub use namada_core::ledger::vp_env::VpEnv;
+pub use namada_core::ledger::{parameters, testnet_pow};
 pub use namada_core::proto::{Signed, SignedTxData};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
@@ -151,6 +151,12 @@ impl Ctx {
     /// via [`trait@StorageRead`].
     pub fn post(&self) -> CtxPostStorageRead<'_> {
         CtxPostStorageRead { _ctx: self }
+    }
+
+    /// Check if the wrapper tx contained a valid testnet PoW
+    pub fn has_valid_pow(&self) -> bool {
+        let valid = unsafe { namada_vp_has_valid_pow() };
+        HostEnvResult::is_success(valid)
     }
 }
 

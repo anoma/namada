@@ -48,25 +48,39 @@ impl From<bool> for HostEnvResult {
 mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
-    use crate::types::transaction::WrapperTx;
+    /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
+    /// add `has_valid_pow` flag for only used in testnets.
+    #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+    pub struct WrapperTxInQueue {
+        /// Wrapper tx
+        pub tx: crate::types::transaction::WrapperTx,
+        #[cfg(not(feature = "mainnet"))]
+        /// A PoW solution can be used to allow zero-fee testnet
+        /// transactions.
+        /// This is true when the wrapper of this tx contains a valid
+        /// `testnet_pow::Solution`
+        pub has_valid_pow: bool,
+    }
 
     #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
     /// Wrapper txs to be decrypted in the next block proposal
-    pub struct TxQueue(std::collections::VecDeque<WrapperTx>);
+    pub struct TxQueue(std::collections::VecDeque<WrapperTxInQueue>);
 
     impl TxQueue {
         /// Add a new wrapper at the back of the queue
-        pub fn push(&mut self, wrapper: WrapperTx) {
+        pub fn push(&mut self, wrapper: WrapperTxInQueue) {
             self.0.push_back(wrapper);
         }
 
         /// Remove the wrapper at the head of the queue
-        pub fn pop(&mut self) -> Option<WrapperTx> {
+        pub fn pop(&mut self) -> Option<WrapperTxInQueue> {
             self.0.pop_front()
         }
 
         /// Get an iterator over the queue
-        pub fn iter(&self) -> impl std::iter::Iterator<Item = &WrapperTx> {
+        pub fn iter(
+            &self,
+        ) -> impl std::iter::Iterator<Item = &WrapperTxInQueue> {
             self.0.iter()
         }
 
@@ -79,4 +93,4 @@ mod tx_queue {
 }
 
 #[cfg(feature = "ferveo-tpke")]
-pub use tx_queue::TxQueue;
+pub use tx_queue::{TxQueue, WrapperTxInQueue};

@@ -41,6 +41,9 @@ path = "src/bin/namada-wallet/main.rs"
 
 [features]
 default = ["std", "abciplus"]
+mainnet = [
+  "namada/mainnet",
+]
 dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std"]
 # for integration tests and test utilies

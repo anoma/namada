@@ -19,6 +19,7 @@ struct Keys {
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
+    faucet_account: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -235,6 +236,16 @@ pub fn get_max_proposal_bytes_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.max_proposal_bytes.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for faucet account.
+pub fn get_faucet_account_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.faucet_account.to_string()),
         ],
     }
 }
