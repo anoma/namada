@@ -89,9 +89,7 @@ The above hardfork was meant to take effect on Block Height `37370`, but some is
 
 - Namada public testnet 1.1:
   - From date: 2nd of January 2023  
-  - Namada protocol version: `v0.12.2` 
-- Namada public testnet 1:
-  - Namada protocol version: `v0.12.0`
+  - Namada protocol version: `v0.13.0` 
   - Tendermint version: `v0.1.4-abciplus`
   - Genesis time: 20th of December 2022 at 17:00 UTC
   - CHAIN_ID: `public-testnet-1.0.05ab4adb9db`
