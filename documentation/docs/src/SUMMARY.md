@@ -31,3 +31,4 @@
   - [Running your genesis validator](./testnets/run-your-genesis-validator.md)
   - [Running a full node](./testnets/running-a-full-node.md)
   - [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
+  - [Troubleshooting](./testnets/troubleshooting.md)
