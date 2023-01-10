@@ -78,6 +78,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            wrapper_tx_fees,
         } = genesis.parameters;
         // borrow necessary for release build, annoys clippy on dev build
         #[allow(clippy::needless_borrow)]
@@ -131,6 +132,8 @@ where
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
         };
         parameters.init_storage(&mut self.storage);
 
