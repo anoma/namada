@@ -8,7 +8,7 @@ use crate::types::key::*;
 /// not found.
 pub fn get<S>(storage: &S, owner: &Address) -> Result<Option<common::PublicKey>>
 where
-    S: for<'iter> StorageRead<'iter>,
+    S: StorageRead,
 {
     let key = pk_key(owner);
     storage.read(&key)

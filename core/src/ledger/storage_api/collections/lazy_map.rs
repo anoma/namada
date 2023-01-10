@@ -323,7 +323,7 @@ where
     /// Returns whether the set contains a value.
     pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         storage.has_key(&self.get_data_key(key))
     }
@@ -363,7 +363,7 @@ where
     /// map.
     pub fn iter<'iter>(
         &'iter self,
-        storage: &'iter impl StorageRead<'iter>,
+        storage: &'iter impl StorageRead,
     ) -> Result<
         impl Iterator<
             Item = Result<(
@@ -406,7 +406,7 @@ where
         val: V,
     ) -> Result<Option<V>>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let previous = self.get(storage, &key)?;
 
@@ -420,7 +420,7 @@ where
     /// was previously in the map.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<Option<V>>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let value = self.get(storage, key)?;
 
@@ -433,7 +433,7 @@ where
     /// Returns the value corresponding to the key, if any.
     pub fn get<S>(&self, storage: &S, key: &K) -> Result<Option<V>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let data_key = self.get_data_key(key);
         Self::read_key_val(storage, &data_key)
@@ -442,7 +442,7 @@ where
     /// Returns whether the map contains no elements.
     pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let mut iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
@@ -457,7 +457,7 @@ where
     #[allow(clippy::len_without_is_empty)]
     pub fn len<S>(&self, storage: &S) -> Result<u64>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let iter =
             storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
@@ -473,7 +473,7 @@ where
     /// map.
     pub fn iter<'iter>(
         &self,
-        storage: &'iter impl StorageRead<'iter>,
+        storage: &'iter impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'iter> {
         let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
@@ -493,7 +493,7 @@ where
         storage_key: &storage::Key,
     ) -> Result<Option<V>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let res = storage.read(storage_key)?;
         Ok(res)
