@@ -6,7 +6,6 @@ use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
-use namada::types::transaction::MIN_FEE;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -435,7 +434,7 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use namada::types::storage::Epoch;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
