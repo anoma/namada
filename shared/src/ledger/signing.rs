@@ -6,15 +6,16 @@ use crate::ledger::tx::Error;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::Tx;
-use crate::tendermint_rpc::Client;
 use crate::types::key::*;
 use crate::types::storage::Epoch;
 use crate::types::transaction::{hash_tx, Fee, WrapperTx};
 
+use crate::ledger::queries::MutClient;
+
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Errors if the key cannot be found or loaded.
 pub async fn find_keypair<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -77,7 +78,7 @@ pub enum TxSigningKey {
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
 pub async fn tx_signer<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -135,7 +136,7 @@ pub async fn tx_signer<
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
