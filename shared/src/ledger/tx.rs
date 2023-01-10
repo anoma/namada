@@ -25,7 +25,6 @@ use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
-use crate::tendermint_rpc::Client;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
@@ -34,6 +33,8 @@ use crate::types::transaction::{pos, InitAccount, UpdateVp};
 use crate::types::{storage, token};
 use crate::vm::WasmValidationError;
 use crate::{ledger, vm};
+
+use crate::ledger::queries::MutClient;
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -161,7 +162,7 @@ pub enum Error {
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -204,7 +205,7 @@ pub async fn process_tx<
 }
 
 pub async fn submit_reveal_pk<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -226,7 +227,7 @@ pub async fn submit_reveal_pk<
 }
 
 pub async fn reveal_pk_if_needed<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -246,7 +247,7 @@ pub async fn reveal_pk_if_needed<
 }
 
 pub async fn has_revealed_pk<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     client: &C,
     addr: &Address,
@@ -255,7 +256,7 @@ pub async fn has_revealed_pk<
 }
 
 pub async fn submit_reveal_pk_aux<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -310,7 +311,7 @@ pub async fn submit_reveal_pk_aux<
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: Client + Sync>(
+pub async fn broadcast_tx<C: MutClient + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, Error> {
@@ -358,7 +359,7 @@ pub async fn broadcast_tx<C: Client + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn submit_tx<C: MutClient + crate::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, Error> {
@@ -470,7 +471,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 }
 
 pub async fn submit_validator_commission_change<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -571,7 +572,7 @@ pub async fn submit_validator_commission_change<
 }
 
 pub async fn submit_withdraw<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -646,7 +647,7 @@ pub async fn submit_withdraw<
 }
 
 pub async fn submit_unbond<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -726,7 +727,7 @@ pub async fn submit_unbond<
 }
 
 pub async fn submit_bond<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -786,7 +787,7 @@ pub async fn submit_bond<
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
 pub async fn is_safe_voting_window<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     client: &C,
     proposal_id: u64,
@@ -815,7 +816,7 @@ pub async fn is_safe_voting_window<
 }
 
 pub async fn submit_ibc_transfer<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -910,7 +911,7 @@ pub async fn submit_ibc_transfer<
 }
 
 pub async fn submit_transfer<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     V: WalletUtils,
     U: ShieldedUtils<C = C>,
 >(
@@ -1049,7 +1050,7 @@ pub async fn submit_transfer<
 }
 
 pub async fn submit_init_account<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -1084,7 +1085,7 @@ pub async fn submit_init_account<
 }
 
 pub async fn submit_update_vp<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -1164,7 +1165,7 @@ pub async fn submit_update_vp<
 }
 
 pub async fn submit_custom<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -1184,7 +1185,7 @@ pub async fn submit_custom<
 
 async fn expect_dry_broadcast<
     T,
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     to_broadcast: TxBroadcastData,
     client: &C,
@@ -1211,7 +1212,7 @@ fn lift_rpc_error<T>(res: Result<T, RpcError>) -> Result<T, Error> {
 /// otherwise returns an error, force forces the address through even
 /// if it isn't a validator
 async fn known_validator_or_err<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     validator: Address,
     force: bool,
@@ -1245,7 +1246,7 @@ async fn address_exists_or_err<C, F>(
     err: F,
 ) -> Result<Address, Error>
 where
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
     F: FnOnce(Address) -> Error,
 {
     let addr_exists = rpc::known_address::<C>(client, &addr).await;
@@ -1265,7 +1266,7 @@ where
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
 async fn token_exists_or_err<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     token: Address,
     force: bool,
@@ -1287,7 +1288,7 @@ async fn token_exists_or_err<
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
 async fn source_exists_or_err<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     token: Address,
     force: bool,
@@ -1309,7 +1310,7 @@ async fn source_exists_or_err<
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
 async fn target_exists_or_err<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     token: Address,
     force: bool,
@@ -1331,7 +1332,7 @@ async fn target_exists_or_err<
 /// given amount, along with the balance even existing. force
 /// overrides this
 async fn check_balance_too_low_err<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: MutClient + crate::ledger::queries::Client + Sync,
 >(
     token: &Address,
     source: &Address,

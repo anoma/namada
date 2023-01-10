@@ -1,3 +1,7 @@
+use tendermint::block::Height;
+use tendermint_rpc::query::Query;
+use tendermint_rpc::Order;
+
 use crate::ledger::events::log::EventLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
@@ -8,6 +12,7 @@ use crate::vm::wasm::{TxCache, VpCache};
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::WasmCacheRoAccess;
 
+use crate::tendermint_rpc::error::Error as RpcError;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]
@@ -94,6 +99,42 @@ pub trait Client {
         height: Option<BlockHeight>,
         prove: bool,
     ) -> Result<EncodedResponseQuery, Self::Error>;
+}
+
+#[async_trait::async_trait]
+pub trait MutClient {
+    async fn broadcast_tx_sync(
+        &self,
+        tx: tendermint::abci::Transaction,
+    ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>;
+
+    async fn latest_block(
+        &self,
+    ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>;
+
+    async fn block_search(
+        &self,
+        query: Query,
+        page: u32,
+        per_page: u8,
+        order: Order,
+    ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>;
+
+    async fn block_results<H>(
+        &self,
+        height: H,
+    ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
+    where
+        H: Into<Height> + Send;
+
+    async fn tx_search(
+        &self,
+        query: Query,
+        prove: bool,
+        page: u32,
+        per_page: u8,
+        order: Order,
+    ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError>;
 }
 
 /// Temporary domain-type for `tendermint_proto::abci::RequestQuery`, copied

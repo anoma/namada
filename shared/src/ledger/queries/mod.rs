@@ -5,7 +5,8 @@ use shell::{Shell, SHELL};
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
+    EncodedResponseQuery, MutClient, RequestCtx, RequestQuery, ResponseQuery,
+    Router,
 };
 use vp::{Vp, VP};
 
