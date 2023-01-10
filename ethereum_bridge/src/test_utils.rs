@@ -86,6 +86,7 @@ pub fn setup_default_storage() -> Storage<MockDB, Sha256Hasher> {
         &ValidatorEthKey::init(cold_key.ref_to(), 0, &params),
     );
 
+    storage.last_height = 3.into();
     storage
 }
 
