@@ -297,8 +297,7 @@ pub fn deserialize_vote_extensions(
 }
 
 /// Given a slice of [`TxBytes`], return an iterator over the
-/// ones we could deserialize to vote extension [`ProtocolTx`]
-/// instances.
+/// ones we could deserialize to vote extension protocol txs.
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
