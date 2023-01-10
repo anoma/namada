@@ -152,3 +152,36 @@ where
 
     Ok(changed)
 }
+
+#[cfg(test)]
+mod test_valset_upd_state_changes {
+    use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
+    use namada_core::types::{address, key};
+
+    use super::*;
+    use crate::test_utils;
+
+    /// Test that if a validator set update becomes "seen", then
+    /// it should have a complete proof backing it up in storage.
+    #[test]
+    fn test_seen_has_complete_proof() {
+        let mut storage = test_utils::setup_default_storage();
+        let sk = key::testing::keypair_1();
+
+        let last_height = storage.last_height;
+        let tx_result = aggregate_votes(
+            &mut storage,
+            validator_set_update::VextDigest::singleton(
+                validator_set_update::Vext {
+                    voting_powers: VotingPowersMap::new(),
+                    validator_addr: address::testing::established_address_1(),
+                    block_height: last_height,
+                }
+                .sign(&sk),
+            ),
+        )
+        .expect("Test failed");
+
+        assert!(!tx_result.changed_keys.is_empty());
+    }
+}
