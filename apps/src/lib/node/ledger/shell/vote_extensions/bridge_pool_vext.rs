@@ -21,7 +21,7 @@ where
     /// pool root and nonce.
     ///
     /// Checks that at epoch of the provided height:
-    ///  * The Tendermint address corresponds to an active validator.
+    ///  * The inner Namada address corresponds to an active validator.
     ///  * The validator correctly signed the extension.
     ///  * The validator signed over the correct height inside of the extension.
     ///  * Check that the inner signature is valid.
