@@ -14,10 +14,10 @@ use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 // TODO: remove this hard-coded value; Tendermint, and thus
-// Namada uses 20 MiB max block sizes by default; 16 MiB leaves
+// Namada uses 20 MiB max block sizes by default; 5 MiB leaves
 // plenty of room for header data, evidence and protobuf serialization
 // overhead
-const MAX_PROPOSAL_SIZE: usize = 16 << 20;
+const MAX_PROPOSAL_SIZE: usize = 5 << 20;
 const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
 
 impl<D, H> Shell<D, H>
