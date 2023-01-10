@@ -139,7 +139,7 @@ tower-abci-abcipp = {package = "tower-abci", git = "https://github.com/heliaxdev
 tower-abci = {version = "0.1.0", optional = true}
 tracing = "0.1.30"
 tracing-log = "0.1.2"
-tracing-subscriber = {version = "0.3.7", features = ["env-filter"]}
+tracing-subscriber = {version = "0.3.7", features = ["env-filter", "json"]}
 websocket = "0.26.2"
 winapi = "0.3.9"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
