@@ -9,7 +9,6 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
-use crate::types::hash;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -361,18 +360,6 @@ impl Tx {
 
     pub fn hash(&self) -> [u8; 32] {
         SigningTx::from(self.clone()).hash()
-    }
-
-    /// Returns the hash of the unsigned transaction (if signed), otherwise the hash of
-    /// entire tx.
-    pub fn unsigned_hash(&self) -> hash::Hash {
-        match SignedTxData::try_from_slice(&self.to_bytes()) {
-            Ok(signed) => {
-                // Exclude the signature from the digest computation
-                hash_tx(signed.data.unwrap_or_default().as_ref())
-            }
-            Err(_) => hash_tx(&self.to_bytes()),
-        }
     }
 
     pub fn code_hash(&self) -> [u8; 32] {

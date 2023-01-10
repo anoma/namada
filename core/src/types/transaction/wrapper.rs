@@ -17,7 +17,9 @@ pub mod wrapper_tx {
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
+    use crate::types::transaction::{
+        self, EncryptionKey, Hash, TxError, TxType,
+    };
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -204,7 +206,7 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 inner_tx,
-                tx_hash: tx.unsigned_hash(),
+                tx_hash: transaction::unsigned_hash_tx(&tx.to_bytes()),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -238,7 +240,7 @@ pub mod wrapper_tx {
                 .map_err(|_| WrapperTxErr::InvalidTx)?;
 
             // check that the hash equals commitment
-            if decrypted_tx.unsigned_hash() != self.tx_hash {
+            if transaction::unsigned_hash_tx(&decrypted) != self.tx_hash {
                 return Err(WrapperTxErr::DecryptedHash);
             }
 
