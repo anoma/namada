@@ -1,6 +1,6 @@
 # 1) Environment setup
 ```admonish note
-If you don't want to build Namada from source (recommended) you can [install Namada from binaries](../user-guide/install/from-binary.md)
+If you don't want to build Namada from source you can [install Namada from binaries](../user-guide/install/from-binary.md)
 ```
 
 Export the following variables:
