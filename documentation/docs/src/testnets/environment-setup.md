@@ -2,7 +2,7 @@
 <!--  - *NOTE*: if you don't want to build namada you can download the binaries from [HERE](https://github.com/anoma/namada/releases/tag/v0.8.1). -->
 - Export the following variables:
     ```bash
-    export NAMADA_TAG=v0.12.2
+    export NAMADA_TAG=v0.13.0
     export TM_HASH=v0.1.4-abciplus
     ```
 
@@ -51,4 +51,4 @@
 - Make sure you are using the correct tendermint version
     - `tendermint version` should output `0.1.4-abciplus`
 - Make sure you are using the correct Namada version
-    - `namada --version` should output `Namada v0.12.2`
+    - `namada --version` should output `Namada v0.13.0`
