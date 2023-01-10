@@ -182,6 +182,31 @@ mod test_valset_upd_state_changes {
         )
         .expect("Test failed");
 
+        // let's make sure we changed storage
         assert!(!tx_result.changed_keys.is_empty());
+
+        let epoch = storage
+            .get_epoch(last_height)
+            .expect("The epoch of the last block height should be known");
+        let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen_by()));
+        assert!(
+            tx_result
+                .changed_keys
+                .contains(&valset_upd_keys.voting_power())
+        );
+
+        // check if the event is seen
+        let tally = votes::storage::read(&storage, &valset_upd_keys)
+            .expect("Test failed");
+        assert!(tally.seen);
+
+        // since only one validator is configured, we should
+        // have reached a complete proof
+
+        // TODO: check that we have >2/3 voting power behind proof
     }
 }
