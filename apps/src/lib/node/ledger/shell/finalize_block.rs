@@ -47,9 +47,23 @@ where
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
+        let current_epoch = self.storage.block.epoch;
+
         if new_epoch {
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
+
+            // Copy the new_epoch + pipeline_len - 1 validator set into
+            // new_epoch + pipeline_len
+            let pos_params =
+                namada_proof_of_stake::read_pos_params(&self.storage).unwrap();
+            namada_proof_of_stake::copy_validator_sets(
+                &mut self.storage,
+                current_epoch + pos_params.pipeline_len,
+                &namada_proof_of_stake::active_validator_set_handle(),
+                &namada_proof_of_stake::inactive_validator_set_handle(),
+            )
+            .unwrap();
         }
 
         // Tracks the accepted transactions

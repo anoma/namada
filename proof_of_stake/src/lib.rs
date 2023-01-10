@@ -1941,6 +1941,14 @@ where
         &ADDRESS,
         total_bonded,
     );
+    // Copy the genesis validator set into the pipeline epoch as well
+    copy_validator_sets(
+        storage,
+        current_epoch + params.pipeline_len,
+        &active_validator_set_handle(),
+        &inactive_validator_set_handle(),
+    )?;
+
     println!("FINISHED GENESIS\n");
 
     Ok(())
@@ -2459,22 +2467,6 @@ where
     let active_val_handle = active_validator_set.at(&epoch);
     let inactive_val_handle = inactive_validator_set.at(&epoch);
 
-    let (is_active_empty, is_inactive_empty) = (
-        active_val_handle.is_empty(storage)?,
-        inactive_val_handle.is_empty(storage)?,
-    );
-    debug_assert_eq!(is_active_empty, is_inactive_empty);
-
-    if is_active_empty && is_inactive_empty {
-        println!("COPYING VALIDATOR SETS INTO EPOCH {}\n", epoch.clone());
-        copy_validator_sets(
-            storage,
-            epoch,
-            active_validator_set,
-            inactive_validator_set,
-        )?;
-    }
-
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
         .unwrap_or_default();
     let tokens_post = tokens_pre.change() + token_change;
@@ -2633,7 +2625,7 @@ where
 }
 
 /// Validator set copying into a future epoch
-fn copy_validator_sets<S>(
+pub fn copy_validator_sets<S>(
     storage: &mut S,
     epoch: Epoch,
     active_validator_set: &ActiveValidatorSetsNew,
