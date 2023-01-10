@@ -18,6 +18,7 @@ struct Keys {
     staked_ratio: &'static str,
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
+    max_proposal_bytes: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -118,6 +119,14 @@ pub fn is_pos_inflation_amount_key(key: &Key) -> bool {
     ] if addr == &ADDRESS && pos_inflation_amount == Keys::VALUES.pos_inflation_amount)
 }
 
+/// Returns if the key is the max proposal bytes key.
+pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+        DbKeySeg::AddressSeg(addr),
+        DbKeySeg::StringSeg(max_proposal_bytes),
+    ] if addr == &ADDRESS && max_proposal_bytes == Keys::VALUES.max_proposal_bytes)
+}
+
 /// Storage key used for epoch parameter.
 pub fn get_epoch_duration_storage_key() -> Key {
     Key {
@@ -216,6 +225,16 @@ pub fn get_pos_inflation_amount_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.pos_inflation_amount.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for the max proposal bytes.
+pub fn get_max_proposal_bytes_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.max_proposal_bytes.to_string()),
         ],
     }
 }
