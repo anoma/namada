@@ -52,6 +52,7 @@ testing = [
 ]
 
 [dependencies]
+namada_macros = {path = "../macros"}
 ark-bls12-381 = {version = "0.3"}
 ark-ec = {version = "0.3", optional = true}
 ark-serialize = {version = "0.3"}
