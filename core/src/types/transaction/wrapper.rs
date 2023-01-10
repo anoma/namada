@@ -21,6 +21,8 @@ pub mod wrapper_tx {
         hash_tx, EncryptionKey, Hash, TxError, TxType,
     };
 
+    /// Minimum fee amount in micro NAMs
+    pub const MIN_FEE: u64 = 100;
     /// TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
 
