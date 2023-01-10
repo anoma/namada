@@ -176,15 +176,20 @@ Both in `mempool_validation` and `process_proposal` we will perform a check
 (together with others, see the [relative](#wrapper-checks) section) on both the
 digests against the storage to check that neither of the transactions has
 already been executed: if this doesn't hold, the `WrapperTx` will not be
-included into the mempool/block respectively. If both checks pass then the
-transaction is included in the block and executed. In the `finalize_block`
-function we will add the transaction's hash to storage to prevent re-executions.
-We will first add the hash of the wrapper transaction. After that, in the
-following block, we deserialize the inner transaction, check the correct order
-of the transactions in the block and execute the tx: if it runs out of gas then
-we'll avoid storing its hash to allow rewrapping and executing the transaction,
-otherwise we'll add the hash in storage (both in case of success or failure of
-the tx).
+included into the mempool/block respectively. If both checks pass then both of
+the hashes are added to the write ahead log in `process_proposal` to be then
+committed to storage: using the WAL allows us to prevent a replay of a
+transaction in the same block. The transaction is then included in the block and
+executed.
+
+In the next block we deserialize the inner transaction, check the validity of
+the decrypted txs and their correct order: if the order is off a new round of
+tendermint will start. If instead an error is found in any single decrypted tx,
+we remove from storage the previously inserted hash of the inner tx to allow it
+to be rewrapped, and discard the tx itself. Finally, in `finalize_block` we
+execute the tx: if it runs out of gas then we'll remove its hash from storage,
+again to allow rewrapping and executing the transaction, otherwise we'll keep
+the hash in storage (both in case of success or failure of the tx).
 
 #### Optional unshielding
 
@@ -411,7 +416,7 @@ All these checks are also run in `process_proposal` with a few additions:
   [relative](#block-rejection) section)
 - The unshielding tx (if present) releases the minimum amount of tokens required
   to pay fees
-- The unshielding tx (if present) runs succesffuly
+- The unshielding tx (if present) runs succesfully
 
 The `expiration` parameter also justifies that the check on funds is only done
 in `process_proposal` and not in mempool. Without it, the transaction could be
