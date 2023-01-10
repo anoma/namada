@@ -1,10 +1,14 @@
 # 1) Environment setup
-<!--  - *NOTE*: if you don't want to build namada you can download the binaries from [HERE](https://github.com/anoma/namada/releases/tag/v0.8.1). -->
-- Export the following variables:
-    ```bash
-    export NAMADA_TAG=v0.13.0
-    export TM_HASH=v0.1.4-abciplus
-    ```
+```admonish note
+If you don't want to build Namada from source (recommended) you can [install Namada from binaries](../user-guide/install/from-binary.md)
+```
+
+Export the following variables:
+
+```bash
+export NAMADA_TAG=v0.13.0
+export TM_HASH=v0.1.4-abciplus
+```
 
 ## Installing Namada
 - Clone namada repository and build binaries
