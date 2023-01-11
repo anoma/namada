@@ -348,14 +348,13 @@ where
     event_log: EventLog,
 }
 
-/// Handle for communicating with an Ethereum oracle running in another
-/// thread.
-pub struct EthereumOracleHandle {
+/// Channels for communicating with an Ethereum oracle.
+pub struct EthereumOracleChannels {
     events_receiver: Receiver<EthereumEvent>,
     control_sender: oracle::control::Sender,
 }
 
-impl EthereumOracleHandle {
+impl EthereumOracleChannels {
     pub fn new(
         events_receiver: Receiver<EthereumEvent>,
         control_sender: oracle::control::Sender,
@@ -379,7 +378,7 @@ where
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        eth_oracle: Option<EthereumOracleHandle>,
+        eth_oracle: Option<EthereumOracleChannels>,
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -433,7 +432,7 @@ where
                         .map(|data| {
                             let (ethereum_recv, ethereum_control) =
                                 match eth_oracle {
-                                    Some(EthereumOracleHandle {
+                                    Some(EthereumOracleChannels {
                                         events_receiver,
                                         control_sender,
                                     }) => (
@@ -463,7 +462,7 @@ where
                         wallet::defaults::validator_keys();
 
                     let (ethereum_recv, ethereum_control) = match eth_oracle {
-                        Some(EthereumOracleHandle {
+                        Some(EthereumOracleChannels {
                             events_receiver,
                             control_sender,
                         }) => (
@@ -1126,7 +1125,7 @@ mod test_utils {
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let (control_sender, _) = oracle::control::channel();
-            let eth_oracle = EthereumOracleHandle {
+            let eth_oracle = EthereumOracleChannels {
                 events_receiver: eth_receiver,
                 control_sender,
             };
@@ -1273,7 +1272,7 @@ mod test_utils {
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle = EthereumOracleHandle {
+        let eth_oracle = EthereumOracleChannels {
             events_receiver: receiver,
             control_sender,
         };
@@ -1342,7 +1341,7 @@ mod test_utils {
         let (_, receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle = EthereumOracleHandle {
+        let eth_oracle = EthereumOracleChannels {
             events_receiver: receiver,
             control_sender,
         };

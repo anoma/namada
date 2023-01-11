@@ -24,7 +24,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
-use self::shell::EthereumOracleHandle;
+use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
 use crate::config::{ethereum_bridge, TendermintMode};
@@ -229,11 +229,11 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let eth_node = maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
-    let (eth_oracle_comms, oracle) =
+    let (eth_oracle_channels, oracle) =
         match maybe_start_ethereum_oracle(&mut spawner, &config).await {
             EthereumOracleTask::NotEnabled { handle } => (None, handle),
-            EthereumOracleTask::Enabled { handle, eth_oracle } => {
-                (Some(eth_oracle), handle)
+            EthereumOracleTask::Enabled { handle, channels } => {
+                (Some(channels), handle)
             }
         };
 
@@ -241,7 +241,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // node)
     let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
         &mut spawner,
-        eth_oracle_comms,
+        eth_oracle_channels,
         wasm_dir,
         setup_data,
         config,
@@ -389,7 +389,7 @@ async fn run_aux_setup(
 /// a new OS thread, to drive the ABCI server.
 fn start_abci_broadcaster_shell(
     spawner: &mut AbortableSpawner,
-    eth_oracle: Option<EthereumOracleHandle>,
+    eth_oracle: Option<EthereumOracleChannels>,
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
@@ -621,7 +621,7 @@ enum EthereumOracleTask {
     },
     Enabled {
         handle: task::JoinHandle<()>,
-        eth_oracle: EthereumOracleHandle,
+        channels: EthereumOracleChannels,
     },
 }
 
@@ -648,7 +648,7 @@ async fn maybe_start_ethereum_oracle(
 
             EthereumOracleTask::Enabled {
                 handle,
-                eth_oracle: EthereumOracleHandle::new(
+                channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
                 ),
@@ -695,7 +695,7 @@ async fn maybe_start_ethereum_oracle(
                 });
             EthereumOracleTask::Enabled {
                 handle,
-                eth_oracle: EthereumOracleHandle::new(
+                channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
                 ),
