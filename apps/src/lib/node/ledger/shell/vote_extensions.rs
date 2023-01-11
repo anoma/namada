@@ -152,9 +152,7 @@ where
                 .0
                 .expect("Reading Bridge pool nonce shouldn't fail."),
         )
-        .expect("Deserializing Bridge pool nonce shouldn't fail.")
-        .encode()
-        .into_inner();
+        .expect("Deserializing Bridge pool nonce shouldn't fail.");
         let to_sign = [bp_root.encode().into_inner(), nonce].concat();
         let eth_key = self
             .mode
