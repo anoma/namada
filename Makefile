@@ -67,7 +67,8 @@ clippy-abcipp:
 		--features "std testing abcipp" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./proof_of_stake/Cargo.toml \
-		--features "testing" && \
+		--no-default-features \
+		--features "testing abcipp" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./core/Cargo.toml \
 		--no-default-features \
