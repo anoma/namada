@@ -1,7 +1,7 @@
 ## From Binaries
 
 ```admonish warning
-Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
+Prebuilt binaries might not be available for a specific release or architecture, in this case you have to build [From Source](#from-source).
 ```
 
 If you'd like to install Namada from binaries you will have to install some dependencies first: [Tendermint](https://docs.tendermint.com/v0.34/introduction/install.html) `0.34.x` and GLIBC `v2.29` or higher.
@@ -11,7 +11,7 @@ Let's install Tendermint.
 You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/v0.34/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/main/scripts/get_tendermint.sh) and execute it (will ask you for `root` access):
 
 ```shell
-curl -LO https://raw.githubusercontent.com/namada/namada/main/scripts/install/get_tendermint.sh
+curl -LO https://raw.githubusercontent.com/anoma/namada/main/scripts/get_tendermint.sh
 chmod +x get_tendermint.sh
 ./get_tendermint.sh
 ```
