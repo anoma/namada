@@ -411,7 +411,10 @@ mod tests {
             .map(|item| item.unwrap());
 
         // The order in post also has to be sorted
-        let expected_post = sub_keys.iter().sorted().map(|i| {
+        let mut expected_keys = sub_keys.to_vec();
+        // Add value from `new_key`
+        expected_keys.push(11);
+        let expected_post = expected_keys.iter().sorted().map(|i| {
             let val = if *i == 5 { 100 } else { *i };
             (prefix.push(i).unwrap(), val)
         });
