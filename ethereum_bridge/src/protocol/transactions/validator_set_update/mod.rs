@@ -239,4 +239,86 @@ mod test_valset_upd_state_changes {
 
         assert!(voting_power > FractionalVotingPower::TWO_THIRDS);
     }
+
+    /// Test that if a validator set update is not "seen" yet, then
+    /// it should never have a complete proof backing it up in storage.
+    #[test]
+    fn test_not_seen_has_incomplete_proof() {
+        let (mut storage, keys) =
+            test_utils::setup_storage_with_validators(HashMap::from_iter([
+                // the first validator has exactly 2/3 of the total stake
+                (address::testing::established_address_1(), 50_000_u64.into()),
+                (address::testing::established_address_2(), 25_000_u64.into()),
+            ]));
+
+        let last_height = storage.last_height;
+        let tx_result = aggregate_votes(
+            &mut storage,
+            validator_set_update::VextDigest::singleton(
+                validator_set_update::Vext {
+                    voting_powers: VotingPowersMap::new(),
+                    validator_addr: address::testing::established_address_1(),
+                    block_height: last_height,
+                }
+                .sign(
+                    &keys
+                        .get(&address::testing::established_address_1())
+                        .expect("Test failed")
+                        .eth_bridge,
+                ),
+            ),
+        )
+        .expect("Test failed");
+
+        // let's make sure we updated storage
+        assert!(!tx_result.changed_keys.is_empty());
+
+        let epoch = storage
+            .get_epoch(last_height)
+            .expect("The epoch of the last block height should be known");
+        let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
+        assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen_by()));
+        assert!(
+            tx_result
+                .changed_keys
+                .contains(&valset_upd_keys.voting_power())
+        );
+
+        // assert the validator set update is not "seen" yet
+        let tally = votes::storage::read(&storage, &valset_upd_keys)
+            .expect("Test failed");
+        assert!(!tally.seen);
+
+        // read the proof in storage and make sure its signature is
+        // from the configured validator
+        let proof = votes::storage::read_body(&storage, &valset_upd_keys)
+            .expect("Test failed");
+        assert_eq!(proof.data, VotingPowersMap::new());
+
+        let mut proof_sigs: Vec<_> = proof.signatures.into_keys().collect();
+        assert_eq!(proof_sigs.len(), 1);
+
+        let (addr, height) = proof_sigs.pop().expect("Test failed");
+        assert_eq!(height, last_height);
+        assert_eq!(addr, address::testing::established_address_1());
+
+        // make sure we do not have a complete proof yet
+        let total_voting_power =
+            storage.get_total_voting_power(Some(epoch)).into();
+        let validator_voting_power: u64 = storage
+            .get_validator_from_address(&addr, Some(epoch))
+            .expect("Test failed")
+            .0
+            .into();
+        let voting_power = FractionalVotingPower::new(
+            validator_voting_power,
+            total_voting_power,
+        )
+        .expect("Test failed");
+
+        assert!(voting_power <= FractionalVotingPower::TWO_THIRDS);
+    }
 }
