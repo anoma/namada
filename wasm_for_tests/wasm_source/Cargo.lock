@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "borsh",
  "eyre",
