@@ -8,6 +8,7 @@
     - [From source](./user-guide/install/from-source.md)
     - [From binaries](./user-guide/install/from-binary.md)
     - [From docker](./user-guide/install/from-docker.md)
+    - [Installing Tendermint](./user-guide/install/installing-tendermint.md)
   - [Overview of binaries](./user-guide/overview-of-binaries.md)
   - [The Ledger](./user-guide/ledger.md)
   - [Wallet guide](./user-guide/wallet/README.md)
