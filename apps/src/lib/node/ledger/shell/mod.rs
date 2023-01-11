@@ -131,6 +131,7 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
+<<<<<<< HEAD
     AllocationError = 7,
 }
 
@@ -146,6 +147,9 @@ impl ErrorCodes {
             InvalidOrder | ExtraTxs | Undecryptable | AllocationError => false,
         }
     }
+=======
+    ReplayTx = 7,
+>>>>>>> c00cb14a6 (Fixes error codes)
 }
 
 impl From<ErrorCodes> for u32 {
@@ -602,11 +606,10 @@ where
     /// rejected.
     ///
     /// Error codes:
-    /// 1 - Tx format
-    /// 2 - Wrapper Tx signature
-    /// 3 - Tx type
-    /// 4 - Inner tx hash
-    /// 5 - Wrapper tx hash
+    ///    0: Ok
+    ///    1: Invalid tx
+    ///    2: Tx is invalidly signed
+    ///    7: Replay attack
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -618,7 +621,7 @@ where
         let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(t) => t,
             Err(msg) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = msg.to_string();
                 return response;
             }
@@ -628,7 +631,7 @@ where
         let tx_type = match process_tx(tx) {
             Ok(ty) => ty,
             Err(msg) => {
-                response.code = 2;
+                response.code = ErrorCodes::InvalidSig.into();
                 response.log = msg.to_string();
                 return response;
             }
@@ -639,37 +642,31 @@ where
             // Replay protection check
             let inner_hash_key =
                 replay_protection::get_tx_hash_key(&wrapper.tx_hash);
-            match self.wl_storage.storage.has_key(&inner_hash_key) {
-                Ok((found, _)) => {
-                    if found {
-                        response.code = 4;
-                        response.log = "Wrapper transaction hash already in storage, replay attempt".to_string();
-                        return response;
-                    }
-                }
-                Err(msg) => {
-                    response.code = 4;
-                    response.log = msg.to_string();
-                    return response;
-                }
+            if self
+                .wl_storage
+                .storage
+                .has_key(&inner_hash_key)
+                .expect("Error while checking inner tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!("Inner transaction hash {} already in storage, replay attempt", wrapper.tx_hash);
+                return response;
             }
 
-            let wrapper_hash_key = replay_protection::get_tx_hash_key(
-                &transaction::unsigned_hash_tx(tx_bytes),
-            );
-            match self.wl_storage.storage.has_key(&wrapper_hash_key) {
-                Ok((found, _)) => {
-                    if found {
-                        response.code = 5;
-                        response.log = "Inner transaction hash already in storage, replay attempt".to_string();
-                        return response;
-                    }
-                }
-                Err(msg) => {
-                    response.code = 5;
-                    response.log = msg.to_string();
-                    return response;
-                }
+            let wrapper_hash = transaction::unsigned_hash_tx(tx_bytes);
+            let wrapper_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper_hash);
+            if self
+                .wl_storage
+                .storage
+                .has_key(&wrapper_hash_key)
+                .expect("Error while checking wrapper tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash);
+                return response;
             }
 
             // Check balance for fee
@@ -697,7 +694,7 @@ where
                 return response;
             }
         } else {
-            response.code = 3;
+            response.code = ErrorCodes::InvalidTx.into();
             response.log = "Unsupported tx type".to_string();
             return response;
         }
@@ -1215,12 +1212,12 @@ mod test_mempool_validate {
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, 2);
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
         result = shell.mempool_validate(
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, 2);
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
     }
 
     /// Mempool validation must reject wrappers with an invalid signature
@@ -1292,12 +1289,12 @@ mod test_mempool_validate {
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, 2);
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
         result = shell.mempool_validate(
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, 2);
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
     }
 
     /// Mempool validation must reject non-wrapper txs
@@ -1312,7 +1309,8 @@ mod test_mempool_validate {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, 3);
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(result.log, "Unsupported tx type")
     }
 
     /// Mempool validation must reject already applied wrapper and decrypted transactions
@@ -1364,13 +1362,15 @@ mod test_mempool_validate {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, 5);
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.log, format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash));
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, 5);
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.log, format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash));
 
         // Write inner hash in storage
         let inner_hash_key =
@@ -1386,12 +1386,26 @@ mod test_mempool_validate {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, 4);
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        );
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, 4);
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        )
     }
 }
