@@ -40,7 +40,11 @@ impl HostEnvResult {
 
 impl From<bool> for HostEnvResult {
     fn from(success: bool) -> Self {
-        if success { Self::Success } else { Self::Fail }
+        if success {
+            Self::Success
+        } else {
+            Self::Fail
+        }
     }
 }
 

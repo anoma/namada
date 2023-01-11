@@ -7,8 +7,6 @@ use namada::core::ledger::storage::WlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::internal::WrapperTxInQueue;
 
-use namada::ledger::storage::write_log::StorageModification;
-
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
@@ -69,23 +67,11 @@ where
         Default::default()
     }
 
-<<<<<<< HEAD
     /// Check all the txs in a block. Some txs may be incorrect,
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
     // TODO: add block space alloc validation logic to ProcessProposal
-=======
-    /// Check all the txs in a block.
-    /// We reject the entire block when:
-    ///    - decrypted txs violate the committed order
-    ///    - more decrypted txs than expected
-    ///    - checks on wrapper tx fail
-    ///
-    /// We cannot reject the block for failed checks on the decrypted txs since
-    /// their order has already been committed in storage, so we simply discard
-    /// the single invalid inner tx
->>>>>>> 5decfc96c (Replay protection checks in `process_proposal`)
     pub fn process_proposal(
         &mut self,
         req: RequestProcessProposal,
@@ -132,18 +118,7 @@ where
         };
 
         ProcessProposal {
-<<<<<<< HEAD
             status: status as i32,
-=======
-            status: if tx_results.iter().any(|res| match res.code {
-                1 | 2 | 4 | 5 => true,
-                _ => false,
-            }) {
-                ProposalStatus::Reject as i32
-            } else {
-                ProposalStatus::Accept as i32
-            },
->>>>>>> 5decfc96c (Replay protection checks in `process_proposal`)
             tx_results,
         }
     }
@@ -154,7 +129,6 @@ where
         txs: &[TxBytes],
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
-<<<<<<< HEAD
         let mut metadata = ValidationMeta::from(&self.wl_storage);
         let tx_results = txs
             .iter()
@@ -164,25 +138,6 @@ where
                     &mut tx_queue_iter,
                     &mut metadata,
                 )
-=======
-        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
-        txs.iter()
-            .map(|tx_bytes| {
-                let result = self.process_single_tx(
-                    tx_bytes,
-                    &mut tx_queue_iter,
-                    &mut temp_wl_storage,
-                );
-                if result.code == 0 || result.code == 9 {
-                    // Commit write log in case of success or if the decrypted
-                    // tx was invalid to remove its hash from storage
-                    //FIXME: better to the case 9 in finalize_block?
-                    temp_wl_storage.write_log.commit_tx();
-                } else {
-                    temp_wl_storage.write_log.drop_tx();
-                }
-                result
->>>>>>> 5decfc96c (Replay protection checks in `process_proposal`)
             })
             .collect();
         metadata.decrypted_queue_has_remaining_txs =
@@ -215,7 +170,6 @@ where
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
-<<<<<<< HEAD
         metadata: &mut ValidationMeta,
     ) -> TxResult {
         // try to allocate space for this tx
@@ -243,15 +197,6 @@ where
                      PrepareProposal"
                 );
                 Err(TxResult {
-=======
-        temp_wl_storage: &mut TempWlStorage<D, H>,
-    ) -> TxResult {
-        //FIXME: unit test
-        let tx = match Tx::try_from(tx_bytes) {
-            Ok(tx) => tx,
-            Err(_) => {
-                return TxResult {
->>>>>>> 5decfc96c (Replay protection checks in `process_proposal`)
                     code: ErrorCodes::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
                         .into(),
@@ -304,32 +249,38 @@ where
                                 info: "Process proposal rejected a decrypted \
                                        transaction that violated the tx order \
                                        determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
+                                            .into(),
+                                }
+                            } else if verify_decrypted_correctly(&tx, privkey) {
+                                TxResult {
+                                    code: ErrorCodes::Ok.into(),
+                                    info: "Process Proposal accepted this \
                                        transaction"
-                                    .into(),
-                            }
-                        } else {
-                            // Remove decrypted transaction hash from storage
-                            let inner_hash_key =
-                                replay_protection::get_tx_hash_key(
-                                    &wrapper.tx_hash,
-                                );
-                            temp_wl_storage.write_log.delete(&inner_hash_key).expect(
+                                        .into(),
+                                }
+                            } else {
+                                // Remove decrypted transaction hash from storage
+                                let inner_hash_key =
+                                    replay_protection::get_tx_hash_key(
+                                        &wrapper.tx.tx_hash,
+                                    );
+                                temp_wl_storage.write_log.delete(&inner_hash_key).expect(
                                 "Couldn't delete transaction hash from write log",
                             );
 
-                            TxResult {
-                                code: ErrorCodes::Undecryptable.into(),
-                                info: "The encrypted payload of tx was \
+                                TxResult {
+                                    code: ErrorCodes::Undecryptable.into(),
+                                    info: "The encrypted payload of tx was \
                                        incorrectly marked as un-decryptable"
-                                    .into(),
+                                        .into(),
+                                }
                             }
                         }
+                        None => TxResult {
+                            code: ErrorCodes::ExtraTxs.into(),
+                            info: "Received more decrypted txs than expected"
+                                .into(),
+                        },
                     }
                     None => TxResult {
                         code: ErrorCodes::ExtraTxs.into(),
@@ -410,114 +361,11 @@ where
                                 .into(),
                         }
                     } else {
-<<<<<<< HEAD
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: "The address given does not have sufficient \
                                    balance to pay fee"
                                 .into(),
-=======
-                        // Replay protection checks
-                        // Decrypted txs hash may be removed from storage in
-                        // case the tx was invalid. Txs in the block, though,
-                        // are listed with the Wrapper txs before the decrypted
-                        // ones, so there's no need to check the WAL before the
-                        // storage
-                        let inner_hash_key =
-                            replay_protection::get_tx_hash_key(&tx.tx_hash);
-                        if temp_wl_storage
-                            .storage
-                            .has_key(&inner_hash_key)
-                            .expect("Error while checking inner tx hash key in storage")
-                            .0
-                        {
-                            return TxResult {
-                                        code: ErrorCodes::InvalidTx.into(),
-                                        info: format!("Inner transaction hash {} already in storage, replay attempt", &tx.tx_hash)
-                                    };
-                        }
-                        if let (Some(m), _) =
-                            temp_wl_storage.write_log.read(&inner_hash_key)
-                        {
-                            // Check in WAL for replay attack in the same block
-                            if let StorageModification::Write { value: _ } = m {
-                                return TxResult {
-                                            code: ErrorCodes::InvalidTx.into(),
-                                        info: format!("Inner transaction hash {} already in storage, replay attempt", &tx.tx_hash)
-                                        };
-                            }
-                        }
-
-                        // Write inner hash to WAL
-                        temp_wl_storage.write_log.write(&inner_hash_key, vec![]).expect("Couldn't write inner tranasction hash to write log");
-
-                        let wrapper_hash =
-                            transaction::unsigned_hash_tx(tx_bytes);
-                        let wrapper_hash_key =
-                            replay_protection::get_tx_hash_key(&wrapper_hash);
-                        if temp_wl_storage.storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage").0 {
-                                               return TxResult {
-                                        code: ErrorCodes::InvalidTx.into(),
-                                        info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
-                                    };
-                                }
-                        if let (Some(m), _) =
-                            temp_wl_storage.write_log.read(&wrapper_hash_key)
-                        {
-                            // Check in WAL for replay attack in the same block
-                            if let StorageModification::Write { value: _ } = m {
-                                return TxResult {
-                                            code: ErrorCodes::InvalidTx.into(),
-                                        info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
-                                        };
-                            }
-                        }
-
-                        // Write wrapper hash to WAL
-                        temp_wl_storage
-                            .write_log
-                            .write(&wrapper_hash_key, vec![])
-                            .expect(
-                                "Couldn't write wrapper tx hash to write log",
-                            );
-
-                        // If the public key corresponds to the MASP sentinel
-                        // transaction key, then the fee payer is effectively
-                        // the MASP, otherwise derive
-                        // they payer from public key.
-                        let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                            tx.fee_payer()
-                        } else {
-                            masp()
-                        };
-                        // check that the fee payer has sufficient balance
-                        let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
-
-                        // In testnets, tx is allowed to skip fees if it
-                        // includes a valid PoW
-                        #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow = self.has_valid_pow_solution(&tx);
-                        #[cfg(feature = "mainnet")]
-                        let has_valid_pow = false;
-
-                        if has_valid_pow
-                            || self.get_wrapper_tx_fees() <= balance
-                        {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            }
-                        } else {
-                            TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
-                                       sufficient balance to pay fee"
-                                    .into(),
-                            }
->>>>>>> 5decfc96c (Replay protection checks in `process_proposal`)
                         }
                     }
                 }
