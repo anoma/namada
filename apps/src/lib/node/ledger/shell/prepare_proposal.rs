@@ -184,7 +184,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let (eth_events, valset_upds) = split_vote_extensions(
+        let (eth_events, bp_roots, valset_upds) = split_vote_extensions(
             local_last_commit
                 .expect(
                     "Honest Namada validators will always sign \
@@ -200,6 +200,10 @@ where
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
+            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+
+        let bp_roots = self
+            .compress_bridge_pool_roots(bp_roots)
             .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
         let validator_set_update =
@@ -221,6 +225,7 @@ where
 
         let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
+            bridge_pool_roots: bp_roots,
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
@@ -606,7 +611,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.last_height,
+                block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
                 sig,
             }
@@ -911,7 +916,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.last_height,
+                block_height: shell.storage.get_current_decision_height(),
                 validator_addr,
                 sig,
             }

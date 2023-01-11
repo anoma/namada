@@ -1,12 +1,14 @@
 //! Extend Tendermint votes with signatures of the Ethereum
 //! bridge pool root and nonce seen by a quorum of validators.
-
+use itertools::Itertools;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::{Signable, Signed};
 use namada::types::storage::BlockHeight;
 use namada::types::token;
+#[cfg(feature = "abcipp")]
+use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -176,13 +178,14 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_bp_roots_vext_and_get_it_back(
                 vote_extension,
-                self.storage.last_height,
+                self.storage.get_current_decision_height(),
             )
         })
     }
 
     /// Takes a list of signed Bridge pool root vote extensions,
-    /// and filters out invalid instances.
+    /// and filters out invalid instances. This also de-dduplicates
+    /// the iterator to be unique per validator address.
     #[inline]
     pub fn filter_invalid_bp_roots_vexts<'iter>(
         &'iter self,
@@ -192,11 +195,64 @@ where
     {
         self.validate_bp_roots_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
+            .dedup_by(|(_, ext_1), (_, ext_2)| {
+                ext_1.data.validator_addr == ext_2.data.validator_addr
+            })
+    }
+
+    /// Compresses a set of signed Bridge pool roots into a single
+    /// [`bridge_pool_roots::MultiSignedVext`], whilst filtering invalid
+    /// [`Signed<bridge_pool_roots::Vext>`] instances in the process.
+    #[cfg(feature = "abcipp")]
+    pub fn compress_bridge_pool_roots(
+        &self,
+        vote_extensions: Vec<Signed<bridge_pool_roots::Vext>>,
+    ) -> Option<bridge_pool_roots::MultiSignedVext> {
+        let vexts_epoch =
+            self.storage.get_epoch(self.storage.last_height).expect(
+                "The epoch of the last block height should always be known",
+            );
+        let total_voting_power =
+            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        let mut voting_power = FractionalVotingPower::default();
+
+        let mut bp_root_sigs = bridge_pool_roots::MultiSignedVext::default();
+
+        for (validator_voting_power, vote_extension) in
+            self.filter_invalid_bp_roots_vexts(vote_extensions)
+        {
+            // update voting power
+            let validator_voting_power = u64::from(validator_voting_power);
+            voting_power += FractionalVotingPower::new(
+                validator_voting_power,
+                total_voting_power,
+            )
+            .expect(
+                "The voting power we obtain from storage should always be \
+                 valid",
+            );
+            tracing::debug!(
+                ?vote_extension.sig,
+                ?vote_extension.data.validator_addr,
+                "Inserting signature into bridge_pool_roots::MultSignedVext"
+            );
+            bp_root_sigs.insert(vote_extension);
+        }
+        if voting_power <= FractionalVotingPower::TWO_THIRDS {
+            tracing::error!(
+                "Tendermint has decided on a block including Ethereum events \
+                 reflecting <= 2/3 of the total stake"
+            );
+            return None;
+        }
+        Some(bp_root_sigs)
     }
 }
 
 #[cfg(test)]
 mod test_vote_extensions {
+    #[cfg(feature = "abcipp")]
+    use borsh::BorshDeserialize;
     use borsh::BorshSerialize;
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
@@ -211,6 +267,12 @@ mod test_vote_extensions {
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::vote_extensions::bridge_pool_roots;
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::VoteExtension;
+    #[cfg(feature = "abcipp")]
+    use tendermint_proto_abcipp::abci::response_verify_vote_extension::VerifyStatus;
+    #[cfg(feature = "abcipp")]
+    use tower_abci_abcipp::request;
 
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -309,7 +371,7 @@ mod test_vote_extensions {
     /// payload passes validation.
     #[test]
     fn test_happy_flow() {
-        let (mut shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _) = setup_at_height(3u64);
         let address = shell
             .mode
             .get_validator_address()
@@ -326,15 +388,101 @@ mod test_vote_extensions {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.storage.get_current_decision_height(),
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert_eq!(vote_ext, shell.extend_vote_with_bp_roots());
-        assert!(
-            shell.validate_bp_roots_vext(vote_ext, shell.storage.last_height,)
+        assert!(shell.validate_bp_roots_vext(
+            vote_ext,
+            shell.storage.get_current_decision_height(),
+        ))
+    }
+
+    /// Test that signed bridge pool Merkle roots and nonces
+    /// are added to vote extensions and pass verification.
+    #[cfg(feature = "abcipp")]
+    #[test]
+    fn test_bp_root_vext() {
+        let (mut shell, _, _) = setup_at_height(3u64);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        let vote_extension =
+            <VoteExtension as BorshDeserialize>::try_from_slice(
+                &shell.extend_vote(Default::default()).vote_extension[..],
+            )
+            .expect("Test failed");
+        let to_sign = [
+            KeccakHash([0; 32]).encode().into_inner(),
+            Uint::from(0).encode().into_inner(),
+        ]
+        .concat();
+        let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+            to_sign,
         )
+        .sig;
+        let bp_root = bridge_pool_roots::Vext {
+            block_height: shell.storage.get_current_decision_height(),
+            validator_addr: address.clone(),
+            sig,
+        }
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+
+        assert_eq!(vote_extension.bridge_pool_root, bp_root);
+        let req = request::VerifyVoteExtension {
+            hash: vec![],
+            validator_address: address
+                .raw_hash()
+                .expect("Test failed")
+                .as_bytes()
+                .to_vec(),
+            height: 0,
+            vote_extension: vote_extension.try_to_vec().expect("Test failed"),
+        };
+        let res = shell.verify_vote_extension(req);
+        assert_eq!(res.status, i32::from(VerifyStatus::Accept));
+    }
+
+    /// Test that we de-duplicate the bridge pool vexts
+    /// in a block proposal by validator address.
+    #[test]
+    fn test_vexts_are_de_duped() {
+        let (shell, _, _) = setup_at_height(3u64);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let to_sign = [
+            KeccakHash([0; 32]).encode().into_inner(),
+            Uint::from(0).encode().into_inner(),
+        ]
+        .concat();
+        let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+            to_sign,
+        )
+        .sig;
+        let vote_ext = bridge_pool_roots::Vext {
+            block_height: shell.storage.get_current_decision_height(),
+            validator_addr: address,
+            sig,
+        }
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        let valid = shell
+            .filter_invalid_bp_roots_vexts(vec![
+                vote_ext.clone(),
+                vote_ext.clone(),
+            ])
+            .map(|(_, vext)| vext)
+            .collect::<Vec<_>>();
+        assert_eq!(valid, vec![vote_ext]);
     }
 
     /// Test that Bridge pool roots signed by a non-validator are rejected

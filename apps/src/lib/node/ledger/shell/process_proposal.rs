@@ -64,6 +64,8 @@ where
 pub struct DigestCounters {
     /// The number of Ethereum events vote extensions found thus far.
     pub eth_ev_digest_num: usize,
+    /// The number of Bridge pool root vote extensions found thus far.
+    pub bridge_pool_roots: usize,
     /// The number of validator set update vote extensions found thus far.
     pub valset_upd_digest_num: usize,
 }
@@ -114,6 +116,21 @@ where
             );
         }
 
+        // We should not have more than one `bridge_pool_roots::VextDigest` in
+        // a proposal from some round's leader.
+        let invalid_num_of_bp_root_digests =
+            !self.has_proper_bp_roots_num(&metadata);
+        if invalid_num_of_bp_root_digests {
+            tracing::warn!(
+                proposer = ?HEXUPPER.encode(&req.proposer_address),
+                height = req.height,
+                hash = ?HEXUPPER.encode(&req.hash),
+                eth_ev_digest_num = metadata.digests.bridge_pool_roots,
+                "Found invalid number of Ethereum bridge pool root vote extension \
+                 digests, proposed block will be rejected."
+            );
+        }
+
         let invalid_num_of_valset_upd_digests =
             !self.has_proper_valset_upd_num(&metadata);
         if invalid_num_of_valset_upd_digests {
@@ -159,6 +176,7 @@ where
         }
 
         let will_reject_proposal = invalid_num_of_eth_ev_digests
+            || invalid_num_of_bp_root_digests
             || invalid_num_of_valset_upd_digests
             || invalid_txs
             || has_remaining_decrypted_txs;
@@ -488,6 +506,17 @@ where
 
                     self.validate_vexts_in_proposal(valid_extensions)
                 }
+                ProtocolTxType::BridgePool(digest) => {
+                    #[cfg(feature = "abcipp")]
+                    {
+                        metadata.digests.bridge_pool_roots += 1;
+                    }
+                    let valid_extensions =
+                        self.validate_bp_roots_vext_list(digest).map(
+                            |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
+                        );
+                    self.validate_vexts_in_proposal(valid_extensions)
+                }
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self.storage.can_send_validator_set_update(
                         SendValsetUpd::AtPrevHeight,
@@ -632,6 +661,13 @@ where
         self.storage.last_height.0 == 0 || meta.digests.eth_ev_digest_num == 1
     }
 
+    /// Checks if we have found the correct number of Ethereum bridge pool
+    /// root vote extensions in [`DigestCounters`].
+    #[cfg(feature = "abcipp")]
+    fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
+        self.storage.last_height.0 == 0 || meta.digests.bridge_pool_roots == 1
+    }
+
     /// Checks if we have found the correct number of validator set update
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
@@ -674,11 +710,15 @@ mod test_process_proposal {
     use namada::types::token;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee};
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError, TestShell,
     };
@@ -709,6 +749,19 @@ mod test_process_proposal {
         })
         .sign(protocol_key)
         .to_bytes()
+    }
+
+    /// Craft the tx bytes for the block proposal digest containing
+    /// all the Bridge pool root vote extensions.
+    #[cfg(feature = "abcipp")]
+    fn get_bp_roots_vext(shell: &TestShell) -> Vec<u8> {
+        let bp_root = shell.extend_vote_with_bp_roots();
+        let tx = shell
+            .compress_bridge_pool_roots(vec![bp_root])
+            .expect("Test failed");
+        ProtocolTxType::BridgePool(tx)
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            .to_bytes()
     }
 
     /// Test that if a proposal contains more than one
@@ -753,6 +806,26 @@ mod test_process_proposal {
         let results = shell.process_proposal(request);
         assert_matches!(
             results, Err(TestError::RejectProposal(s)) if s.len() == 2
+        );
+    }
+
+    /// Test that if more than one bridge pool root vote extension
+    /// is added to a block, we reject the proposal.
+    #[cfg(feature = "abcipp")]
+    #[test]
+    fn check_multiple_bp_root_vexts_rejected() {
+        let (mut shell, _, _) = setup_at_height(3u64);
+        let vext = shell.extend_vote_with_bp_roots();
+        let tx =
+            ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
+                .sign(shell.mode.get_protocol_key().expect("Test failed."))
+                .to_bytes();
+        assert!(
+            shell
+                .process_proposal(ProcessProposal {
+                    txs: vec![tx.clone(), tx]
+                })
+                .is_err()
         );
     }
 
@@ -1013,9 +1086,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![tx, get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    tx,
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1109,10 +1186,14 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![new_tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    new_tx.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
 
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1173,9 +1254,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    wrapper.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1237,9 +1322,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![wrapper.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    wrapper.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1376,9 +1465,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    tx.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1447,9 +1540,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    tx.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1508,9 +1605,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![signed.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    signed.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
@@ -1585,9 +1686,13 @@ mod test_process_proposal {
         #[cfg(feature = "abcipp")]
         let response = {
             let request = ProcessProposal {
-                txs: vec![tx.to_bytes(), get_empty_eth_ev_digest(&shell)],
+                txs: vec![
+                    tx.to_bytes(),
+                    get_empty_eth_ev_digest(&shell),
+                    get_bp_roots_vext(&shell),
+                ],
             };
-            if let [resp, _] = shell
+            if let [resp, _, _] = shell
                 .process_proposal(request)
                 .expect("Test failed")
                 .as_slice()
