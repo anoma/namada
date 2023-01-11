@@ -177,7 +177,12 @@ mod test_valset_upd_state_changes {
                     validator_addr: address::testing::established_address_1(),
                     block_height: last_height,
                 }
-                .sign(&keys.eth_bridge),
+                .sign(
+                    &keys
+                        .get(&address::testing::established_address_1())
+                        .expect("Test failed")
+                        .eth_bridge,
+                ),
             ),
         )
         .expect("Test failed");
