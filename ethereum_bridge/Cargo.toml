@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_ethereum_bridge"
 resolver = "2"
-version = "0.11.0"
+version = "0.13.0"
 
 [features]
 default = ["abciplus"]
