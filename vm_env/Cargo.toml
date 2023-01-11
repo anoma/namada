@@ -10,6 +10,11 @@ version = "0.12.1"
 default = ["abciplus"]
 abciplus = [
   "namada_core/abciplus",
+  "namada_core/tendermint",
+]
+abcipp = [
+  "namada_core/abcipp",
+  "namada_core/tendermint-abcipp",
 ]
 
 [dependencies]
