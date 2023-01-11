@@ -67,7 +67,8 @@ clippy-abcipp:
 		--features "std testing abcipp" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./proof_of_stake/Cargo.toml \
-		--features "testing" && \
+		--no-default-features \
+		--features "testing abcipp" && \
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./core/Cargo.toml \
 		--no-default-features \
@@ -75,7 +76,15 @@ clippy-abcipp:
 	$(cargo) +$(nightly) clippy --all-targets \
 		--manifest-path ./shared/Cargo.toml \
 		--no-default-features \
-		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke"
+		--features "testing wasm-runtime abcipp ibc-mocks-abcipp ferveo-tpke" && \
+	$(cargo) +$(nightly) clippy \
+		--all-targets \
+		--manifest-path ./vm_env/Cargo.toml \
+		--no-default-features \
+		--features "abcipp" && \
+	make -C $(wasms) clippy && \
+	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
 
