@@ -40,7 +40,7 @@ where
 
         ProcessProposal {
             status: if tx_results.iter().any(|res| match res.code {
-                1 | 2 | 4 | 5 => true,
+                1 | 2 | 4 | 5 | 7 => true,
                 _ => false,
             }) {
                 ProposalStatus::Reject as i32
@@ -62,10 +62,9 @@ where
                     &mut tx_queue_iter,
                     &mut temp_wl_storage,
                 );
-                if result.code == 0 || result.code == 9 {
+                if result.code == 0 || result.code == 6 {
                     // Commit write log in case of success or if the decrypted
                     // tx was invalid to remove its hash from storage
-                    //FIXME: better to the case 9 in finalize_block?
                     temp_wl_storage.write_log.commit_tx();
                 } else {
                     temp_wl_storage.write_log.drop_tx();
@@ -88,7 +87,9 @@ where
     ///   2: Tx is invalidly signed
     ///   3: Wasm runtime error
     ///   4: Invalid order of decrypted txs
-    ///   5. More decrypted txs than expected
+    ///   5: More decrypted txs than expected
+    ///   6: Undecryptable inner tx
+    ///   7: Replay attack  
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if the
     /// proposal is rejected (unless we can simply overwrite them in the
@@ -204,7 +205,7 @@ where
                             .0
                         {
                             return TxResult {
-                                        code: ErrorCodes::InvalidTx.into(),
+                                        code: ErrorCodes::ReplayTx.into(),
                                         info: format!("Inner transaction hash {} already in storage, replay attempt", &tx.tx_hash)
                                     };
                         }
@@ -214,7 +215,7 @@ where
                             // Check in WAL for replay attack in the same block
                             if let StorageModification::Write { value: _ } = m {
                                 return TxResult {
-                                            code: ErrorCodes::InvalidTx.into(),
+                                            code: ErrorCodes::ReplayTx.into(),
                                         info: format!("Inner transaction hash {} already in storage, replay attempt", &tx.tx_hash)
                                         };
                             }
@@ -229,7 +230,7 @@ where
                             replay_protection::get_tx_hash_key(&wrapper_hash);
                         if temp_wl_storage.storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage").0 {
                                                return TxResult {
-                                        code: ErrorCodes::InvalidTx.into(),
+                                        code: ErrorCodes::ReplayTx.into(),
                                         info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
                                     };
                                 }
@@ -239,7 +240,7 @@ where
                             // Check in WAL for replay attack in the same block
                             if let StorageModification::Write { value: _ } = m {
                                 return TxResult {
-                                            code: ErrorCodes::InvalidTx.into(),
+                                            code: ErrorCodes::ReplayTx.into(),
                                         info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
                                         };
                             }
