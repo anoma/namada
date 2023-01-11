@@ -53,7 +53,7 @@ pub struct ParsedTxTransferArgs {
     pub amount: token::Amount,
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait ShieldedTransferContext {
     async fn collect_unspent_notes(
         &mut self,
@@ -70,7 +70,7 @@ pub trait ShieldedTransferContext {
     async fn query_epoch(&self, ledger_address: TendermintAddress) -> Epoch;
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl ShieldedTransferContext for Context {
     async fn collect_unspent_notes(
         &mut self,

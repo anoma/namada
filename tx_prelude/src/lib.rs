@@ -22,9 +22,8 @@ pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada_core::ledger::storage::types::encode;
 pub use namada_core::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, rev_iter_prefix,
-    rev_iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
-    StorageWrite,
+    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
+    StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::proto::{Signed, SignedTxData};
@@ -114,8 +113,8 @@ pub type TxResult = EnvResult<()>;
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
-impl StorageRead<'_> for Ctx {
-    type PrefixIter = KeyValIterator<(String, Vec<u8>)>;
+impl StorageRead for Ctx {
+    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
 
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
@@ -181,10 +180,10 @@ impl StorageRead<'_> for Ctx {
         Ok(Address::decode(address_str).expect("Cannot decode native address"))
     }
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, Error> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             namada_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -192,20 +191,9 @@ impl StorageRead<'_> for Ctx {
         Ok(KeyValIterator(iter_id, PhantomData))
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter, Error> {
-        let prefix = prefix.to_string();
-        let iter_id = unsafe {
-            namada_tx_rev_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
-        };
-        Ok(KeyValIterator(iter_id, PhantomData))
-    }
-
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Error> {
         let read_result = unsafe { namada_tx_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
@@ -245,7 +233,7 @@ impl StorageWrite for Ctx {
     }
 }
 
-impl TxEnv<'_> for Ctx {
+impl TxEnv for Ctx {
     fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
         let read_result = unsafe { namada_tx_get_block_time() };
         let time_value = read_from_buffer(read_result, namada_tx_result_buffer)

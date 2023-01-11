@@ -51,10 +51,13 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
+    use borsh::BorshSerialize;
+    use itertools::Itertools;
     use namada::ledger::storage::types;
-    use namada::types::address;
+    use namada::ledger::storage_api;
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
+    use namada::types::{address, storage};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -344,5 +347,46 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    /// Test the prefix iterator with RocksDB.
+    #[test]
+    fn test_persistent_storage_prefix_iter() {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
+
+        let prefix = storage::Key::parse("prefix").unwrap();
+        let mismatched_prefix = storage::Key::parse("different").unwrap();
+        // We'll write sub-key in some random order to check prefix iter's order
+        let sub_keys = [2_i32, 1, i32::MAX, -1, 260, -2, i32::MIN, 5, 0];
+
+        for i in sub_keys.iter() {
+            let key = prefix.push(i).unwrap();
+            let value = i.try_to_vec().unwrap();
+            storage.write(&key, value).unwrap();
+
+            let key = mismatched_prefix.push(i).unwrap();
+            let value = (i / 2).try_to_vec().unwrap();
+            storage.write(&key, value).unwrap();
+        }
+        storage.commit().unwrap();
+
+        // Then try to iterate over their prefix
+        let iter = storage_api::iter_prefix(&storage, &prefix)
+            .unwrap()
+            .map(Result::unwrap);
+
+        // The order has to be sorted by sub-key value
+        let expected = sub_keys
+            .iter()
+            .sorted()
+            .map(|i| (prefix.push(i).unwrap(), *i));
+        itertools::assert_equal(iter, expected);
     }
 }

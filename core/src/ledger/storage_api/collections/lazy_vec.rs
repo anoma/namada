@@ -358,7 +358,7 @@ impl<T> LazyVec<T> {
     #[allow(clippy::len_without_is_empty)]
     pub fn len<S>(&self, storage: &S) -> Result<u64>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         let len = storage.read(&self.get_len_key())?;
         Ok(len.unwrap_or_default())
@@ -367,7 +367,7 @@ impl<T> LazyVec<T> {
     /// Returns `true` if the vector contains no elements.
     pub fn is_empty<S>(&self, storage: &S) -> Result<bool>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         Ok(self.len(storage)? == 0)
     }
@@ -396,7 +396,7 @@ where
     /// Appends an element to the back of a collection.
     pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let len = self.len(storage)?;
         let data_key = self.get_data_key(len);
@@ -410,7 +410,7 @@ where
     /// Note that an empty vector is completely removed from storage.
     pub fn pop<S>(&self, storage: &mut S) -> Result<Option<T>>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let len = self.len(storage)?;
         if len == 0 {
@@ -435,7 +435,7 @@ where
     /// will fail with `UpdateError::InvalidIndex`.
     pub fn update<S>(&self, storage: &mut S, index: Index, val: T) -> Result<()>
     where
-        S: StorageWrite + for<'iter> StorageRead<'iter>,
+        S: StorageWrite + StorageRead,
     {
         let len = self.len(storage)?;
         if index >= len {
@@ -449,7 +449,7 @@ where
     /// Read an element at the index or `Ok(None)` if out of bounds.
     pub fn get<S>(&self, storage: &S, index: Index) -> Result<Option<T>>
     where
-        S: for<'iter> StorageRead<'iter>,
+        S: StorageRead,
     {
         storage.read(&self.get_data_key(index))
     }
@@ -463,7 +463,7 @@ where
     /// set.
     pub fn iter<'iter>(
         &self,
-        storage: &'iter impl StorageRead<'iter>,
+        storage: &'iter impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<T>> + 'iter> {
         let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {

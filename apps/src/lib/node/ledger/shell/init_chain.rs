@@ -2,6 +2,8 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[cfg(not(feature = "mainnet"))]
+use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{into_tm_voting_power, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
@@ -84,6 +86,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            wrapper_tx_fees,
         } = genesis.parameters;
         // borrow necessary for release build, annoys clippy on dev build
         #[allow(clippy::needless_borrow)]
@@ -105,6 +108,24 @@ where
                 implicit_vp_code_path
             );
         }
+        #[cfg(not(feature = "mainnet"))]
+        // Try to find a faucet account
+        let faucet_account = {
+            genesis.established_accounts.iter().find_map(
+                |genesis::EstablishedAccount {
+                     address,
+                     vp_code_path,
+                     ..
+                 }| {
+                    if vp_code_path == "vp_testnet_faucet.wasm" {
+                        Some(address.clone())
+                    } else {
+                        None
+                    }
+                },
+            )
+        };
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
@@ -117,6 +138,10 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
         };
         parameters.init_storage(&mut self.storage);
 
@@ -139,6 +164,8 @@ where
         // Initialize genesis established accounts
         self.initialize_established_accounts(
             genesis.established_accounts,
+            genesis.faucet_pow_difficulty,
+            genesis.faucet_withdrawal_limit,
             &mut vp_code_cache,
         )?;
 
@@ -166,6 +193,8 @@ where
     fn initialize_established_accounts(
         &mut self,
         accounts: Vec<genesis::EstablishedAccount>,
+        faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+        faucet_withdrawal_limit: Option<Amount>,
         vp_code_cache: &mut HashMap<String, Vec<u8>>,
     ) -> Result<()> {
         for genesis::EstablishedAccount {
@@ -216,6 +245,23 @@ where
 
             for (key, value) in storage {
                 self.storage.write(&key, value).unwrap();
+            }
+
+            // When using a faucet WASM, initialize its PoW challenge storage
+            #[cfg(not(feature = "mainnet"))]
+            if vp_code_path == "vp_testnet_faucet.wasm" {
+                let difficulty =
+                    faucet_pow_difficulty.unwrap_or_default();
+                // withdrawal limit defaults to 1000 NAM when not set
+                let withdrawal_limit = faucet_withdrawal_limit
+                    .unwrap_or_else(|| token::Amount::whole(1_000));
+                testnet_pow::init_faucet_storage(
+                    &mut self.storage,
+                    &address,
+                    difficulty,
+                    withdrawal_limit,
+                )
+                .expect("Couldn't init faucet storage")
             }
         }
         Ok(())

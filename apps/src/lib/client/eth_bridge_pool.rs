@@ -48,7 +48,7 @@ pub async fn add_to_eth_bridge_pool(
     let data = transfer.try_to_vec().unwrap();
     let transfer_tx = Tx::new(tx_code, Some(data));
     // this should not initialize any new addresses, so we ignore the result.
-    process_tx(ctx, tx, transfer_tx, TxSigningKey::None).await;
+    process_tx(ctx, tx, transfer_tx, TxSigningKey::None, false).await;
 }
 
 /// Construct a proof that a set of transfers are in the bridge pool.

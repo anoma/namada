@@ -107,8 +107,15 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
-    let (ctx, initialized_accounts) =
-        process_tx(ctx, &args.tx, tx, TxSigningKey::None).await;
+    let (ctx, initialized_accounts) = process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::None,
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -163,7 +170,15 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.addr)).await;
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.addr),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
@@ -188,9 +203,15 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) =
-        process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-            .await;
+    let (ctx, initialized_accounts) = process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.source),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
     save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
@@ -371,9 +392,15 @@ pub async fn submit_init_validator(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
-    let (mut ctx, initialized_accounts) =
-        process_tx(ctx, &tx_args, tx, TxSigningKey::WalletAddress(source))
-            .await;
+    let (mut ctx, initialized_accounts) = process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        TxSigningKey::WalletAddress(source),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address) =
             match &initialized_accounts[..] {
@@ -1608,7 +1635,6 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
     };
 
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -1646,6 +1672,10 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
         _ => None,
     };
+
+    #[cfg(not(feature = "mainnet"))]
+    let is_source_faucet =
+        rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
 
     let transfer = token::Transfer {
         source,
@@ -1702,10 +1732,19 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-
+    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
-    process_tx(ctx, &args.tx, tx, signing_address).await;
+
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        signing_address,
+        #[cfg(not(feature = "mainnet"))]
+        is_source_faucet,
+    )
+    .await;
 }
 
 pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
@@ -1815,8 +1854,15 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(args.source))
-        .await;
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(args.source),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
@@ -1954,8 +2000,15 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let tx = Tx::new(tx_code, Some(data));
 
-        process_tx(ctx, &args.tx, tx, TxSigningKey::WalletAddress(signer))
-            .await;
+        process_tx(
+            ctx,
+            &args.tx,
+            tx,
+            TxSigningKey::WalletAddress(signer),
+            #[cfg(not(feature = "mainnet"))]
+            false,
+        )
+        .await;
     }
 }
 
@@ -2092,6 +2145,8 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     &args.tx,
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),
+                    #[cfg(not(feature = "mainnet"))]
+                    false,
                 )
                 .await;
             }
@@ -2174,7 +2229,16 @@ pub async fn submit_reveal_pk_aux(
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
-        super::signing::sign_wrapper(ctx, args, epoch, tx, &keypair).await
+        super::signing::sign_wrapper(
+            ctx,
+            args,
+            epoch,
+            tx,
+            &keypair,
+            #[cfg(not(feature = "mainnet"))]
+            false,
+        )
+        .await
     };
 
     if args.dry_run {
@@ -2353,6 +2417,8 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
     )
     .await;
 }
@@ -2426,6 +2492,8 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
     )
     .await;
 }
@@ -2499,6 +2567,8 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
     )
     .await;
 }
@@ -2581,6 +2651,8 @@ pub async fn submit_validator_commission_change(
         &args.tx,
         tx,
         TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
     )
     .await;
 }
@@ -2592,8 +2664,17 @@ pub async fn process_tx(
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
-    let (ctx, to_broadcast) = sign_tx(ctx, tx, args, default_signer).await;
+    let (ctx, to_broadcast) = sign_tx(
+        ctx,
+        tx,
+        args,
+        default_signer,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await;
     // NOTE: use this to print the request JSON body:
 
     // let request =

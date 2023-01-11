@@ -6,6 +6,8 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+#[cfg(not(feature = "mainnet"))]
+use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
 #[cfg(feature = "dev")]
 use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
@@ -36,6 +38,8 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    #[cfg(not(feature = "mainnet"))]
+    use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
@@ -118,6 +122,12 @@ pub mod genesis_config {
         // Name of the native token - this must one of the tokens included in
         // the `token` field
         pub native_token: String,
+        #[cfg(not(feature = "mainnet"))]
+        /// Testnet faucet PoW difficulty - defaults to `0` when not set
+        pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+        #[cfg(not(feature = "mainnet"))]
+        /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
+        pub faucet_withdrawal_limit: Option<token::Amount>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -270,6 +280,9 @@ pub mod genesis_config {
         pub pos_gain_p: Decimal,
         /// PoS gain d
         pub pos_gain_d: Decimal,
+        #[cfg(not(feature = "mainnet"))]
+        /// Fix wrapper tx fees
+        pub wrapper_tx_fees: Option<token::Amount>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -535,6 +548,10 @@ pub mod genesis_config {
         let GenesisConfig {
             genesis_time,
             native_token,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_pow_difficulty,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_withdrawal_limit,
             validator,
             token,
             established,
@@ -625,6 +642,7 @@ pub mod genesis_config {
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Decimal::ZERO,
             pos_inflation_amount: 0,
+            wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
         let GovernanceParamsConfig {
@@ -672,6 +690,10 @@ pub mod genesis_config {
         let mut genesis = Genesis {
             genesis_time: genesis_time.try_into().unwrap(),
             native_token,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_pow_difficulty,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_withdrawal_limit,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -721,6 +743,10 @@ pub mod genesis_config {
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
+    #[cfg(not(feature = "mainnet"))]
+    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+    #[cfg(not(feature = "mainnet"))]
+    pub faucet_withdrawal_limit: Option<token::Amount>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -865,6 +891,9 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Fixed Wrapper tx fees
+    #[cfg(not(feature = "mainnet"))]
+    pub wrapper_tx_fees: Option<token::Amount>,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -936,6 +965,7 @@ pub fn genesis() -> Genesis {
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
+        wrapper_tx_fees: Some(token::Amount::whole(0)),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -1025,6 +1055,10 @@ pub fn genesis() -> Genesis {
             },
         }),
         native_token: address::nam(),
+        #[cfg(not(feature = "mainnet"))]
+        faucet_pow_difficulty: None,
+        #[cfg(not(feature = "mainnet"))]
+        faucet_withdrawal_limit: None,
     }
 }
 

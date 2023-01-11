@@ -312,8 +312,10 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 3. Submit a transaction to update an account's validity predicate
 /// 4. Submit a custom tx
 /// 5. Submit a tx to initialize a new account
-/// 6. Query token balance
-/// 7. Query the raw bytes of a storage key
+/// 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+///    solution)
+/// 7. Query token balance
+/// 8. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
@@ -371,7 +373,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
@@ -436,6 +438,24 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--ledger-address",
             &validator_one_rpc,
         ],
+    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+    //    solution)
+        vec![
+            "transfer",
+            "--source",
+            "faucet",
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            // Faucet withdrawal requires an explicit signer
+            "--signer",
+            ALBERT,
+            "--ledger-address",
+            &validator_one_rpc,
+        ],
     ];
 
     for tx_args in &txs_args {
@@ -457,7 +477,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
 
     let query_args_and_expected_response = vec![
-        // 6. Query token balance
+        // 7. Query token balance
         (
             vec![
                 "balance",
@@ -484,7 +504,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
-        // 7. Query storage key and get hex-encoded raw bytes
+        // 8. Query storage key and get hex-encoded raw bytes
         (
             vec![
                 "query-bytes",

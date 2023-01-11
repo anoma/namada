@@ -108,6 +108,8 @@ where
             vp_wasm_cache: &mut ctx.vp_wasm_cache,
             tx_wasm_cache: &mut ctx.tx_wasm_cache,
         },
+        #[cfg(not(feature = "mainnet"))]
+        true,
     )
     .into_storage_result()?;
     let data = data.try_to_vec().into_storage_result()?;

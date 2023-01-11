@@ -312,22 +312,6 @@ where
     Ok(iter)
 }
 
-/// Storage prefix iterator, reverse ordered by storage keys. It will try to get
-/// an iterator from the storage.
-pub fn rev_iter_prefix<'a, DB, H>(
-    gas_meter: &mut VpGasMeter,
-    storage: &'a Storage<DB, H>,
-    prefix: &Key,
-) -> EnvResult<<DB as storage::DBIter<'a>>::PrefixIter>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-{
-    let (iter, gas) = storage.rev_iter_prefix(prefix);
-    add_gas(gas_meter, gas)?;
-    Ok(iter)
-}
-
 /// Storage prefix iterator for prior state (before tx execution). It will try
 /// to read from the storage.
 pub fn iter_pre_next<DB>(
