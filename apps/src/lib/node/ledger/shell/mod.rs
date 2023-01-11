@@ -781,10 +781,16 @@ where
                         // TODO: there is a possible race condition here where
                         // the oracle may not have processed the previous
                         // command yet, would it be better to hang here?
-                        panic!("This channel should never fill up!")
+                        panic!(
+                            "The Ethereum oracle communication channel is \
+                             full!"
+                        )
                     }
                     tokio::sync::mpsc::error::TrySendError::Closed(_) => {
-                        panic!("Stop everything")
+                        panic!(
+                            "The Ethereum oracle can no longer be \
+                             communicated with"
+                        )
                     }
                 }
             }
