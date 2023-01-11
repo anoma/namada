@@ -123,7 +123,7 @@ where
         for key in keys_changed {
             if is_params_key(key) {
                 return governance::utils::is_proposal_accepted(
-                    self.ctx.storage,
+                    &self.ctx.pre(),
                     tx_data,
                 )
                 .map_err(Error::NativeVpError);

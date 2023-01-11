@@ -58,15 +58,16 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 impl Shell {
     fn load_proposals(&mut self) {
         let proposals_key = gov_storage::get_commiting_proposals_prefix(
-            self.storage.last_epoch.0,
+            self.wl_storage.storage.last_epoch.0,
         );
 
-        let (proposal_iter, _) = self.storage.iter_prefix(&proposals_key);
+        let (proposal_iter, _) =
+            self.wl_storage.storage.iter_prefix(&proposals_key);
         for (key, _, _) in proposal_iter {
             let key =
                 Key::from_str(key.as_str()).expect("Key should be parsable");
             if gov_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.storage.last_epoch.0
+                != self.wl_storage.storage.last_epoch.0
             {
                 // NOTE: `iter_prefix` iterate over the matching prefix. In this
                 // case  a proposal with grace_epoch 110 will be

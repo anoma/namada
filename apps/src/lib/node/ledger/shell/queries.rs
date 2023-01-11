@@ -1,6 +1,6 @@
 //! Shell methods for querying state
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use ferveo_common::TendermintValidator;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
@@ -23,7 +23,7 @@ where
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
         let ctx = RequestCtx {
-            storage: &self.storage,
+            wl_storage: &self.wl_storage,
             event_log: self.event_log(),
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
@@ -32,7 +32,7 @@ where
 
         // Convert request to domain-type
         let request = match namada::ledger::queries::RequestQuery::try_from_tm(
-            &self.storage,
+            &self.wl_storage,
             query,
         ) {
             Ok(request) => request,
@@ -70,7 +70,7 @@ where
         owner: &Address,
     ) -> token::Amount {
         let balance = storage_api::StorageRead::read(
-            &self.storage,
+            &self.wl_storage,
             &token::balance_key(token, owner),
         );
         // Storage read must not fail, but there might be no value, in which
@@ -90,11 +90,11 @@ where
             .try_to_vec()
             .expect("Serializing public key should not fail");
         // get the current epoch
-        let (current_epoch, _) = self.storage.get_current_epoch();
+        let (current_epoch, _) = self.wl_storage.storage.get_current_epoch();
         // get the PoS params
-        let pos_params = self.storage.read_pos_params();
+        let pos_params = self.wl_storage.read_pos_params();
         // get the active validator set
-        self.storage
+        self.wl_storage
             .read_validator_set()
             .get(current_epoch)
             .expect("Validators for the next epoch should be known")
@@ -102,34 +102,26 @@ where
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
-                match self.storage.read(&pk_key) {
-                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                match self.wl_storage.read_bytes(&pk_key) {
+                    Ok(Some(bytes)) => bytes == pk_bytes,
                     _ => false,
                 }
             })
             .map(|validator| {
                 let dkg_key =
                     key::dkg_session_keys::dkg_pk_key(&validator.address);
-                let bytes = self
-                    .storage
+                let dkg_publickey: DkgPublicKey = self
+                    .wl_storage
                     .read(&dkg_key)
                     .expect("Validator should have public dkg key")
-                    .0
                     .expect("Validator should have public dkg key");
-                let dkg_publickey =
-                    &<DkgPublicKey as BorshDeserialize>::deserialize(
-                        &mut bytes.as_ref(),
-                    )
-                    .expect(
-                        "DKG public key in storage should be deserializable",
-                    );
                 TendermintValidator {
                     power: into_tm_voting_power(
                         pos_params.tm_votes_per_token,
                         validator.bonded_stake,
                     ) as u64,
                     address: validator.address.to_string(),
-                    public_key: dkg_publickey.into(),
+                    public_key: (&dkg_publickey).into(),
                 }
             })
     }

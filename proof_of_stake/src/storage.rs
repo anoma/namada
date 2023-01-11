@@ -1,7 +1,7 @@
 //! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
 
 use namada_core::ledger::storage::types::{decode, encode};
-use namada_core::ledger::storage::{self, Storage, StorageHasher};
+use namada_core::ledger::storage::{self, StorageHasher, WlStorage};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::types::{key, token};
@@ -345,7 +345,7 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     }
 }
 
-impl<D, H> PosBase for Storage<D, H>
+impl<D, H> PosBase for WlStorage<D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -355,11 +355,11 @@ where
         super::SLASH_POOL_ADDRESS;
 
     fn staking_token_address(&self) -> namada_core::types::address::Address {
-        self.native_token.clone()
+        self.storage.native_token.clone()
     }
 
     fn read_pos_params(&self) -> PosParams {
-        let (value, _gas) = self.read(&params_key()).unwrap();
+        let (value, _gas) = self.storage.read(&params_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -368,6 +368,7 @@ where
         raw_hash: impl AsRef<str>,
     ) -> Option<namada_core::types::address::Address> {
         let (value, _gas) = self
+            .storage
             .read(&validator_address_raw_hash_key(raw_hash))
             .unwrap();
         value.map(|value| decode(value).unwrap())
@@ -377,8 +378,10 @@ where
         &self,
         key: &namada_core::types::address::Address,
     ) -> Option<ValidatorConsensusKeys> {
-        let (value, _gas) =
-            self.read(&validator_consensus_key_key(key)).unwrap();
+        let (value, _gas) = self
+            .storage
+            .read(&validator_consensus_key_key(key))
+            .unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -386,7 +389,8 @@ where
         &self,
         key: &namada_core::types::address::Address,
     ) -> Option<ValidatorStates> {
-        let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
+        let (value, _gas) =
+            self.storage.read(&validator_state_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -394,7 +398,8 @@ where
         &self,
         key: &namada_core::types::address::Address,
     ) -> Option<types::ValidatorDeltas> {
-        let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
+        let (value, _gas) =
+            self.storage.read(&validator_deltas_key(key)).unwrap();
         value.map(|value| decode(value).unwrap())
     }
 
@@ -402,7 +407,8 @@ where
         &self,
         key: &namada_core::types::address::Address,
     ) -> types::Slashes {
-        let (value, _gas) = self.read(&validator_slashes_key(key)).unwrap();
+        let (value, _gas) =
+            self.storage.read(&validator_slashes_key(key)).unwrap();
         value
             .map(|value| decode(value).unwrap())
             .unwrap_or_default()
@@ -412,8 +418,10 @@ where
         &self,
         key: &namada_core::types::address::Address,
     ) -> CommissionRates {
-        let (value, _gas) =
-            self.read(&validator_commission_rate_key(key)).unwrap();
+        let (value, _gas) = self
+            .storage
+            .read(&validator_commission_rate_key(key))
+            .unwrap();
         decode(value.unwrap()).unwrap()
     }
 
@@ -422,23 +430,24 @@ where
         key: &namada_core::types::address::Address,
     ) -> Decimal {
         let (value, _gas) = self
+            .storage
             .read(&validator_max_commission_rate_change_key(key))
             .unwrap();
         decode(value.unwrap()).unwrap()
     }
 
     fn read_validator_set(&self) -> ValidatorSets {
-        let (value, _gas) = self.read(&validator_set_key()).unwrap();
+        let (value, _gas) = self.storage.read(&validator_set_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
     fn read_total_deltas(&self) -> TotalDeltas {
-        let (value, _gas) = self.read(&total_deltas_key()).unwrap();
+        let (value, _gas) = self.storage.read(&total_deltas_key()).unwrap();
         decode(value.unwrap()).unwrap()
     }
 
     fn write_pos_params(&mut self, params: &PosParams) {
-        self.write(&params_key(), encode(params)).unwrap();
+        self.storage.write(&params_key(), encode(params)).unwrap();
     }
 
     fn write_validator_address_raw_hash(
@@ -447,7 +456,8 @@ where
         consensus_key: &namada_core::types::key::common::PublicKey,
     ) {
         let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
-        self.write(&validator_address_raw_hash_key(raw_hash), encode(address))
+        self.storage
+            .write(&validator_address_raw_hash_key(raw_hash), encode(address))
             .unwrap();
     }
 
@@ -456,7 +466,8 @@ where
         key: &namada_core::types::address::Address,
         value: &CommissionRates,
     ) {
-        self.write(&validator_commission_rate_key(key), encode(value))
+        self.storage
+            .write(&validator_commission_rate_key(key), encode(value))
             .unwrap();
     }
 
@@ -465,11 +476,12 @@ where
         key: &namada_core::types::address::Address,
         value: &rust_decimal::Decimal,
     ) {
-        self.write(
-            &validator_max_commission_rate_change_key(key),
-            encode(value),
-        )
-        .unwrap();
+        self.storage
+            .write(
+                &validator_max_commission_rate_change_key(key),
+                encode(value),
+            )
+            .unwrap();
     }
 
     fn write_validator_consensus_key(
@@ -477,7 +489,8 @@ where
         key: &namada_core::types::address::Address,
         value: &ValidatorConsensusKeys,
     ) {
-        self.write(&validator_consensus_key_key(key), encode(value))
+        self.storage
+            .write(&validator_consensus_key_key(key), encode(value))
             .unwrap();
     }
 
@@ -486,7 +499,8 @@ where
         key: &namada_core::types::address::Address,
         value: &ValidatorStates,
     ) {
-        self.write(&validator_state_key(key), encode(value))
+        self.storage
+            .write(&validator_state_key(key), encode(value))
             .unwrap();
     }
 
@@ -495,7 +509,8 @@ where
         key: &namada_core::types::address::Address,
         value: &ValidatorDeltas,
     ) {
-        self.write(&validator_deltas_key(key), encode(value))
+        self.storage
+            .write(&validator_deltas_key(key), encode(value))
             .unwrap();
     }
 
@@ -506,20 +521,25 @@ where
     ) {
         let mut slashes = PosBase::read_validator_slashes(self, validator);
         slashes.push(value);
-        self.write(&validator_slashes_key(validator), encode(&slashes))
+        self.storage
+            .write(&validator_slashes_key(validator), encode(&slashes))
             .unwrap();
     }
 
     fn write_bond(&mut self, key: &BondId, value: &Bonds) {
-        self.write(&bond_key(key), encode(value)).unwrap();
+        self.storage.write(&bond_key(key), encode(value)).unwrap();
     }
 
     fn write_validator_set(&mut self, value: &ValidatorSets) {
-        self.write(&validator_set_key(), encode(value)).unwrap();
+        self.storage
+            .write(&validator_set_key(), encode(value))
+            .unwrap();
     }
 
     fn write_total_deltas(&mut self, value: &TotalDeltas) {
-        self.write(&total_deltas_key(), encode(value)).unwrap();
+        self.storage
+            .write(&total_deltas_key(), encode(value))
+            .unwrap();
     }
 
     fn credit_tokens(
@@ -530,6 +550,7 @@ where
     ) {
         let key = token::balance_key(token, target);
         let new_balance = match self
+            .storage
             .read(&key)
             .expect("Unable to read token balance for PoS system")
         {
@@ -540,7 +561,8 @@ where
             }
             _ => amount,
         };
-        self.write(&key, encode(&new_balance))
+        self.storage
+            .write(&key, encode(&new_balance))
             .expect("Unable to write token balance for PoS system");
     }
 
@@ -554,6 +576,7 @@ where
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         if let (Some(src_balance), _gas) = self
+            .storage
             .read(&src_key)
             .expect("Unable to read token balance for PoS system")
         {
@@ -569,15 +592,18 @@ where
                 return;
             }
             src_balance.spend(&amount);
-            let (dest_balance, _gas) = self.read(&dest_key).unwrap_or_default();
+            let (dest_balance, _gas) =
+                self.storage.read(&dest_key).unwrap_or_default();
             let mut dest_balance: namada_core::types::token::Amount =
                 dest_balance
                     .and_then(|b| decode(b).ok())
                     .unwrap_or_default();
             dest_balance.receive(&amount);
-            self.write(&src_key, encode(&src_balance))
+            self.storage
+                .write(&src_key, encode(&src_balance))
                 .expect("Unable to write token balance for PoS system");
-            self.write(&dest_key, encode(&dest_balance))
+            self.storage
+                .write(&dest_key, encode(&dest_balance))
                 .expect("Unable to write token balance for PoS system");
         } else {
             tracing::error!(
@@ -710,7 +736,7 @@ macro_rules! impl_pos_read_only {
 }
 
 impl_pos_read_only! {
-    impl<DB, H> PosReadOnly for Storage<DB, H>
+    impl<DB, H> PosReadOnly for WlStorage<DB, H>
         where
             DB: storage::DB + for<'iter> storage::DBIter<'iter> +'static,
             H: StorageHasher +'static,

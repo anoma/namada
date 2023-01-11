@@ -50,9 +50,10 @@ where
                 )
             })?;
 
-        let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
+        let votes =
+            get_proposal_votes(&shell.wl_storage, proposal_end_epoch, id);
         let is_accepted = votes.and_then(|votes| {
-            compute_tally(&shell.storage, proposal_end_epoch, votes)
+            compute_tally(&shell.wl_storage, proposal_end_epoch, votes)
         });
 
         let transfer_address = match is_accepted {
@@ -82,6 +83,7 @@ where
                         let pending_execution_key =
                             gov_storage::get_proposal_execution_key(id);
                         shell
+                            .wl_storage
                             .storage
                             .write(&pending_execution_key, "")
                             .expect("Should be able to write to storage.");
@@ -92,19 +94,20 @@ where
                                 * need it here. */
                             TxIndex::default(),
                             &mut BlockGasMeter::default(),
-                            &mut shell.write_log,
-                            &shell.storage,
+                            &mut shell.wl_storage.write_log,
+                            &shell.wl_storage.storage,
                             &mut shell.vp_wasm_cache,
                             &mut shell.tx_wasm_cache,
                         );
                         shell
+                            .wl_storage
                             .storage
                             .delete(&pending_execution_key)
                             .expect("Should be able to delete the storage.");
                         match tx_result {
                             Ok(tx_result) => {
                                 if tx_result.is_accepted() {
-                                    shell.write_log.commit_tx();
+                                    shell.wl_storage.write_log.commit_tx();
                                     let proposal_event: Event =
                                         ProposalEvent::new(
                                             EventType::Proposal.to_string(),
@@ -119,7 +122,7 @@ where
 
                                     proposal_author
                                 } else {
-                                    shell.write_log.drop_tx();
+                                    shell.wl_storage.write_log.drop_tx();
                                     let proposal_event: Event =
                                         ProposalEvent::new(
                                             EventType::Proposal.to_string(),
@@ -136,7 +139,7 @@ where
                                 }
                             }
                             Err(_e) => {
-                                shell.write_log.drop_tx();
+                                shell.wl_storage.write_log.drop_tx();
                                 let proposal_event: Event = ProposalEvent::new(
                                     EventType::Proposal.to_string(),
                                     TallyResult::Passed,
@@ -201,9 +204,9 @@ where
             }
         };
 
-        let native_token = shell.storage.native_token.clone();
+        let native_token = shell.wl_storage.storage.native_token.clone();
         // transfer proposal locked funds
-        shell.storage.transfer(
+        shell.wl_storage.transfer(
             &native_token,
             funds,
             &gov_address,

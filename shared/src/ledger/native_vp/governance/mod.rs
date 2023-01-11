@@ -531,7 +531,7 @@ where
 
     /// Validate a governance parameter
     pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
-        utils::is_proposal_accepted(self.ctx.storage, tx_data)
+        utils::is_proposal_accepted(&self.ctx.pre(), tx_data)
             .map_err(Error::NativeVpError)
     }
 

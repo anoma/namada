@@ -51,8 +51,7 @@ fn new_blake2b() -> Blake2b {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use namada::ledger::storage::testing::TestWlStorage;
-    use namada::ledger::storage::types;
+    use namada::ledger::storage::{types, WlStorage};
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
@@ -359,7 +358,7 @@ mod tests {
             address::nam(),
             None,
         );
-        let mut storage = TestWlStorage {
+        let mut storage = WlStorage {
             storage,
             write_log: Default::default(),
         };
