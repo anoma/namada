@@ -1,7 +1,8 @@
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::Storage;
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::ethereum_events::{EthAddress, Uint};
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
@@ -20,6 +21,15 @@ pub enum SendValsetUpd {
 }
 
 pub trait EthBridgeQueries {
+
+    /// Get the latest nonce for the Ethereum bridge
+    /// pool.
+    fn get_bride_pool_nonce(&self) -> Uint;
+
+    /// Get the latest root of the Ethereum bridge
+    /// pool Merkle tree.
+    fn get_bridge_pool_root(&self) -> KeccakHash;
+
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
