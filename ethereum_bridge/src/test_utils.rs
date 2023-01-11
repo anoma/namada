@@ -20,6 +20,16 @@ use namada_proof_of_stake::PosBase;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 
+/// Validator keys used for testing purposes.
+pub struct TestValidatorKeys {
+    /// Protocol keypair.
+    pub protocol: key::common::SecretKey,
+    /// Ethereum hot keypair.
+    pub eth_bridge: key::common::SecretKey,
+    /// Ethereum cold keypair.
+    pub eth_gov: key::common::SecretKey,
+}
+
 /// Set up a [`TestStorage`] initialized at genesis with validators of equal
 /// power.
 pub fn setup_storage_with_validators(
@@ -43,7 +53,8 @@ pub fn setup_storage_with_validators(
 
 /// Set up a [`TestStorage`] initialized at genesis with some default
 /// validators.
-pub fn setup_default_storage() -> Storage<MockDB, Sha256Hasher> {
+pub fn setup_default_storage()
+-> (Storage<MockDB, Sha256Hasher>, TestValidatorKeys) {
     let sole_validator = address::testing::established_address_1();
 
     let mut storage = setup_storage_with_validators(HashSet::from_iter([
@@ -86,8 +97,17 @@ pub fn setup_default_storage() -> Storage<MockDB, Sha256Hasher> {
         &ValidatorEthKey::init(cold_key.ref_to(), 0, &params),
     );
 
+    // set last height to a reasonable value;
+    // it should allow vote extensions to be cast
     storage.last_height = 3.into();
-    storage
+
+    let keys = TestValidatorKeys {
+        protocol: key::testing::keypair_1(),
+        eth_bridge: hot_key,
+        eth_gov: cold_key,
+    };
+
+    (storage, keys)
 }
 
 /// Generate a random secp256k1 keypair.

@@ -155,10 +155,9 @@ where
 
 #[cfg(test)]
 mod test_valset_upd_state_changes {
-    use namada_core::types::key::RefTo;
+    use namada_core::types::address;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
-    use namada_core::types::{address, key};
 
     use super::*;
     use crate::test_utils;
@@ -167,11 +166,7 @@ mod test_valset_upd_state_changes {
     /// it should have a complete proof backing it up in storage.
     #[test]
     fn test_seen_has_complete_proof() {
-        let mut storage = test_utils::setup_default_storage();
-        // NOTE: we should actually be using an eth bridge key to sign
-        // validator set updates, but it works out in our test
-        // to use protocol keys for this purpose
-        let sk = key::testing::keypair_1();
+        let (mut storage, keys) = test_utils::setup_default_storage();
 
         let last_height = storage.last_height;
         let tx_result = aggregate_votes(
@@ -182,7 +177,7 @@ mod test_valset_upd_state_changes {
                     validator_addr: address::testing::established_address_1(),
                     block_height: last_height,
                 }
-                .sign(&sk),
+                .sign(&keys.eth_bridge),
             ),
         )
         .expect("Test failed");
@@ -227,9 +222,10 @@ mod test_valset_upd_state_changes {
         let total_voting_power =
             storage.get_total_voting_power(Some(epoch)).into();
         let validator_voting_power: u64 = storage
-            .get_validator_from_protocol_pk(&sk.ref_to(), Some(epoch))
+            .get_validator_from_address(&addr, Some(epoch))
             .expect("Test failed")
-            .power;
+            .0
+            .into();
         let voting_power = FractionalVotingPower::new(
             validator_voting_power,
             total_voting_power,
