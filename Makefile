@@ -52,6 +52,9 @@ check-abcipp:
 		--no-default-features \
 		--features "abcipp ibc-mocks-abcipp testing"
 
+check-mainnet:
+	$(cargo) check --workspace --features "mainnet"
+
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
@@ -84,6 +87,9 @@ clippy-abcipp:
 		--features "abcipp" && \
 	make -C $(wasms) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+
+clippy-mainnet:
+	$(cargo) +$(nightly) clippy --all-targets --features "mainnet" -- -D warnings
 
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
@@ -157,6 +163,13 @@ test-unit:
 			$(TEST_FILTER) -- \
 			--skip e2e \
 			-Z unstable-options --report-time
+
+test-unit-mainnet:
+	$(cargo) test \
+		--features "mainnet" \
+		$(TEST_FILTER) -- \
+		--skip e2e \
+		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) test \

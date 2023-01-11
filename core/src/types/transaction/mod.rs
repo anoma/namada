@@ -436,6 +436,8 @@ pub mod tx_types {
                 0.into(),
                 tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             )
             .sign(&keypair)
             .expect("Test failed");
@@ -471,6 +473,8 @@ pub mod tx_types {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
 
             let tx = Tx::new(
@@ -492,10 +496,18 @@ pub mod tx_types {
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
-        let decrypted = DecryptedTx::Decrypted(payload.clone());
+        let decrypted = DecryptedTx::Decrypted {
+            tx: payload.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        };
         let tx = Tx::from(TxType::Decrypted(decrypted));
         match process_tx(tx).expect("Test failed") {
-            TxType::Decrypted(DecryptedTx::Decrypted(processed)) => {
+            TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: processed,
+                #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: _,
+            }) => {
                 assert_eq!(payload, processed);
             }
             _ => panic!("Test failed"),
@@ -511,7 +523,11 @@ pub mod tx_types {
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
-        let decrypted = DecryptedTx::Decrypted(payload.clone());
+        let decrypted = DecryptedTx::Decrypted {
+            tx: payload.clone(),
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        };
         // Invalid signed data
         let ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
@@ -527,7 +543,11 @@ pub mod tx_types {
         let tx =
             Tx::new(vec![], Some(signed.try_to_vec().expect("Test failed")));
         match process_tx(tx).expect("Test failed") {
-            TxType::Decrypted(DecryptedTx::Decrypted(processed)) => {
+            TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: processed,
+                #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: _,
+            }) => {
                 assert_eq!(payload, processed);
             }
             _ => panic!("Test failed"),

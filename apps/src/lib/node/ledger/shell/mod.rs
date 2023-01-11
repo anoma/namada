@@ -12,6 +12,7 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
+mod stats;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
@@ -34,15 +35,19 @@ use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
+use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::{self, Tx};
+use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
+use namada::types::token::{self, Amount};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, WrapperTx,
+    EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
@@ -477,7 +482,7 @@ where
 
     /// Iterate over the wrapper txs in order
     #[allow(dead_code)]
-    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTx> {
+    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTxInQueue> {
         self.storage.tx_queue.iter()
     }
 
@@ -767,8 +772,34 @@ where
                              added to the mempool"
                         );
                     }
-                    Ok(TxType::Wrapper(_)) => {
-                        response.log = String::from(VALID_MSG);
+                    Ok(TxType::Wrapper(wrapper)) => {
+                        let fee_payer = if wrapper.pk != masp_tx_key().ref_to()
+                        {
+                            wrapper.fee_payer()
+                        } else {
+                            masp()
+                        };
+                        // check that the fee payer has sufficient balance
+                        let balance = self
+                            .storage
+                            .get_balance(&wrapper.fee.token, &fee_payer);
+
+                        // In testnets with a faucet, tx is allowed to skip fees
+                        // if it includes a valid PoW
+                        #[cfg(not(feature = "mainnet"))]
+                        let has_valid_pow =
+                            self.has_valid_pow_solution(&wrapper);
+                        #[cfg(feature = "mainnet")]
+                        let has_valid_pow = false;
+
+                        if !has_valid_pow && Amount::from(MIN_FEE) > balance {
+                            response.code = 1;
+                            response.log = String::from(
+                                "The address given does not have sufficient \
+                                 balance to pay fee",
+                            );
+                            return response;
+                        }
                     }
                     Ok(TxType::Raw(_)) => {
                         response.code = 1;
@@ -833,6 +864,67 @@ where
             )
         })
     }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Check if the tx has a valid PoW solution. Unlike
+    /// `apply_pow_solution_if_valid`, this won't invalidate the solution.
+    fn has_valid_pow_solution(
+        &self,
+        tx: &namada::types::transaction::WrapperTx,
+    ) -> bool {
+        if let Some(solution) = &tx.pow_solution {
+            if let (Some(faucet_address), _gas) =
+                namada::ledger::parameters::read_faucet_account_parameter(
+                    &self.storage,
+                )
+                .expect("Must be able to read faucet account parameter")
+            {
+                let source = Address::from(&tx.pk);
+                return solution
+                    .validate(&self.storage, &faucet_address, source)
+                    .expect("Must be able to validate PoW solutions");
+            }
+        }
+        false
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Get fixed amount of fees for wrapper tx
+    fn get_wrapper_tx_fees(&self) -> token::Amount {
+        let (fees, _gas) =
+            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+                &self.storage,
+            )
+            .expect("Must be able to read wrapper tx fees parameter");
+        fees.unwrap_or_default()
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Check if the tx has a valid PoW solution and if so invalidate it to
+    /// prevent replay.
+    fn invalidate_pow_solution_if_valid(
+        &mut self,
+        tx: &namada::types::transaction::WrapperTx,
+    ) -> bool {
+        if let Some(solution) = &tx.pow_solution {
+            if let (Some(faucet_address), _gas) =
+                namada::ledger::parameters::read_faucet_account_parameter(
+                    &self.storage,
+                )
+                .expect("Must be able to read faucet account parameter")
+            {
+                let source = Address::from(&tx.pk);
+                return solution
+                    .invalidate_if_valid(
+                        &mut self.storage,
+                        &faucet_address,
+                        &source,
+                    )
+                    .expect("Must be able to validate PoW solutions");
+            }
+        }
+        false
+    }
 }
 
 impl<'a, D, H> From<&'a mut Shell<D, H>>
@@ -867,7 +959,7 @@ mod test_utils {
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
-    use namada::types::transaction::Fee;
+    use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1075,7 +1167,11 @@ mod test_utils {
         /// in the current block proposal
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.tx_queue.push(wrapper);
+            self.shell.storage.tx_queue.push(WrapperTxInQueue {
+                tx: wrapper,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            });
         }
     }
 
@@ -1171,8 +1267,14 @@ mod test_utils {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
-        shell.storage.tx_queue.push(wrapper);
+        shell.storage.tx_queue.push(WrapperTxInQueue {
+            tx: wrapper,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();

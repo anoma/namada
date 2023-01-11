@@ -71,6 +71,13 @@ impl Amount {
         Self { micro: u64::MAX }
     }
 
+    /// Checked subtraction
+    pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
+        self.micro
+            .checked_sub(amount.micro)
+            .map(|result| Self { micro: result })
+    }
+
     /// Create amount from Change
     ///
     /// # Panics

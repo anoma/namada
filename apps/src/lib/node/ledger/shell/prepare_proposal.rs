@@ -130,10 +130,13 @@ where
             .storage
             .tx_queue
             .iter()
-            .map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
+            .map(|queued_tx| {
+                Tx::from(match queued_tx.tx.decrypt(privkey) {
+                    Ok(decrypted_tx) => DecryptedTx::Decrypted {
+                        tx: decrypted_tx,
+                        has_valid_pow: queued_tx.has_valid_pow,
+                    },
+                    _ => DecryptedTx::Undecryptable(queued_tx.tx.clone()),
                 })
                 .to_bytes()
             })
@@ -1112,6 +1115,8 @@ mod test_prepare_proposal {
                     0.into(),
                     tx,
                     Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
                 )
                 .try_to_vec()
                 .expect("Test failed"),
@@ -1152,8 +1157,11 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            expected_decrypted
-                .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
+            expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
+                tx: tx.clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
@@ -1164,6 +1172,8 @@ mod test_prepare_proposal {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
             shell.enqueue_tx(wrapper_tx);

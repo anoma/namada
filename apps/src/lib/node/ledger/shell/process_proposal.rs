@@ -5,6 +5,7 @@ use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::Storage;
 use namada::ledger::pos::{PosQueries, SendValsetUpd};
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
@@ -359,7 +360,7 @@ where
     pub(crate) fn check_proposal_tx<'a>(
         &self,
         tx_bytes: &[u8],
-        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
     ) -> TxResult {
         // try to allocate space for this tx
@@ -502,7 +503,11 @@ where
                 },
             },
             TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                Some(wrapper) => {
+                Some(WrapperTxInQueue {
+                    tx: wrapper,
+                    #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: _,
+                }) => {
                     if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
                             code: ErrorCodes::InvalidOrder.into(),
@@ -581,7 +586,14 @@ where
                     let balance =
                         self.storage.get_balance(&tx.fee.token, &fee_payer);
 
-                    if tx.fee.amount <= balance {
+                    // In testnets, tx is allowed to skip fees if it
+                    // includes a valid PoW
+                    #[cfg(not(feature = "mainnet"))]
+                    let has_valid_pow = self.has_valid_pow_solution(&tx);
+                    #[cfg(feature = "mainnet")]
+                    let has_valid_pow = false;
+
+                    if has_valid_pow || tx.fee.amount <= balance {
                         TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process proposal accepted this transaction"
@@ -655,7 +667,7 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
@@ -985,6 +997,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         let tx = Tx::new(
             vec![],
@@ -1048,6 +1062,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -1149,6 +1165,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -1197,6 +1215,15 @@ mod test_process_proposal {
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
+        // reduce address balance to match the 100 token fee
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(99).try_to_vec().unwrap())
+            .unwrap();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1212,6 +1239,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -1277,9 +1306,15 @@ mod test_process_proposal {
                 0.into(),
                 tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
+            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            })));
         }
         #[cfg(feature = "abcipp")]
         let response = {
@@ -1349,6 +1384,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         shell.enqueue_tx(wrapper.clone());
 
@@ -1417,6 +1454,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         wrapper.tx_hash = Hash([0; 32]);
 
@@ -1480,6 +1519,8 @@ mod test_process_proposal {
             gas_limit: 0.into(),
             inner_tx,
             tx_hash: hash_tx(&tx),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution: None,
         };
 
         shell.enqueue_tx(wrapper.clone());
@@ -1531,7 +1572,11 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx)));
+        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        }));
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -1627,6 +1672,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed")

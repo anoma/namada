@@ -776,7 +776,7 @@ pub mod cmds {
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 run.or(reset)
                     // The `run` command is the default if no sub-command given
-                    .or(Some(Self::Run(LedgerRun)))
+                    .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
         }
 
@@ -792,17 +792,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct LedgerRun;
+    pub struct LedgerRun(pub args::LedgerRun);
 
     impl SubCmd for LedgerRun {
         const CMD: &'static str = "run";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerRun::parse(matches)))
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("Run Namada ledger node.")
+            App::new(Self::CMD)
+                .about("Run Namada ledger node.")
+                .add_args::<args::LedgerRun>()
         }
     }
 
@@ -1637,6 +1641,7 @@ pub mod args {
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
+    use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
@@ -1715,6 +1720,7 @@ pub mod args {
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PIN: ArgFlag = flag("pin");
@@ -1811,6 +1817,24 @@ pub mod args {
                     "The mode in which to run Namada. Options are \n\t * \
                      Validator (default)\n\t * Full\n\t * Seed",
                 ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRun(pub Option<DateTimeUtc>);
+
+    impl Args for LedgerRun {
+        fn parse(matches: &ArgMatches) -> Self {
+            let time = NAMADA_START_TIME.parse(matches);
+            Self(time)
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                NAMADA_START_TIME
+                    .def()
+                    .about("The start time of the ledger."),
+            )
         }
     }
 

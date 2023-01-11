@@ -1,13 +1,17 @@
 //! Ledger read-only queries can be handled and dispatched via the [`RPC`]
 //! defined via `router!` macro.
 
-use shell::{Shell, SHELL};
+// Re-export to show in rustdoc!
+pub use shell::Shell;
+use shell::SHELL;
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
-use vp::{Vp, VP};
+use vp::VP;
+// Re-export to show in rustdoc!
+pub use vp::{Pos, Vp};
 
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
@@ -109,7 +113,7 @@ pub mod tm {
         InvalidHeight(BlockHeight),
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl Client for crate::tendermint_rpc::HttpClient {
         type Error = Error;
 
@@ -208,7 +212,7 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,
