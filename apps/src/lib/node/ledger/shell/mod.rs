@@ -743,7 +743,6 @@ where
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
     /// to signal it to start, using an initial configuration based on
     /// Ethereum bridge parameters in blockchain storage.
-    // TODO: return Result
     fn ensure_ethereum_oracle_started(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
