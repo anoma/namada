@@ -39,8 +39,6 @@ use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-use crate::ledger::storage_api;
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
@@ -1002,116 +1000,6 @@ where
         self.block.tree.delete(key)?;
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
-    }
-}
-
-impl<D, H> StorageRead for Storage<D, H>
-where
-    D: DB + for<'iter_> DBIter<'iter_>,
-    H: StorageHasher,
-{
-    type PrefixIter<'iter> = <D as DBIter<'iter>>::PrefixIter
-where
-        Self: 'iter
-    ;
-
-    fn read_bytes(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
-        self.db.read_subspace_val(key).into_storage_result()
-    }
-
-    fn has_key(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<bool, storage_api::Error> {
-        self.block.tree.has_key(key).into_storage_result()
-    }
-
-    fn iter_prefix<'iter>(
-        &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        Ok(self.db.iter_prefix(prefix))
-    }
-
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
-    {
-        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
-    }
-
-    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.chain_id.to_string())
-    }
-
-    fn get_block_height(
-        &self,
-    ) -> std::result::Result<BlockHeight, storage_api::Error> {
-        Ok(self.block.height)
-    }
-
-    fn get_block_hash(
-        &self,
-    ) -> std::result::Result<BlockHash, storage_api::Error> {
-        Ok(self.block.hash.clone())
-    }
-
-    fn get_block_epoch(
-        &self,
-    ) -> std::result::Result<Epoch, storage_api::Error> {
-        Ok(self.block.epoch)
-    }
-
-    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
-        Ok(self.tx_index)
-    }
-
-    fn get_native_token(
-        &self,
-    ) -> std::result::Result<Address, storage_api::Error> {
-        Ok(self.native_token.clone())
-    }
-}
-
-impl<D, H> StorageWrite for Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    fn write_bytes(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::write`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        let val = val.as_ref();
-        self.block.tree.update(key, val).into_storage_result()?;
-        let _ = self
-            .db
-            .write_subspace_val(self.block.height, key, val)
-            .into_storage_result()?;
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &crate::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::delete`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        self.block.tree.delete(key).into_storage_result()?;
-        let _ = self
-            .db
-            .delete_subspace_val(self.block.height, key)
-            .into_storage_result()?;
-        Ok(())
     }
 }
 
