@@ -432,27 +432,11 @@ where
                     );
                     wallet
                         .take_validator_data()
-                        .map(|data| {
-                            let (ethereum_recv, ethereum_control) =
-                                match eth_oracle {
-                                    Some(EthereumOracleChannels {
-                                        events_receiver,
-                                        control_sender,
-                                    }) => (
-                                        Some(EthereumReceiver::new(
-                                            events_receiver,
-                                        )),
-                                        Some(control_sender),
-                                    ),
-                                    None => (None, None),
-                                };
-                            ShellMode::Validator {
-                                data,
-                                broadcast_sender,
-                                ethereum_recv,
-                                ethereum_control,
-                                ethereum_oracle_started: false,
-                            }
+                        .map(|data| ShellMode::Validator {
+                            data,
+                            broadcast_sender,
+                            eth_oracle,
+                            eth_oracle_started: false,
                         })
                         .expect(
                             "Validator data should have been stored in the \
