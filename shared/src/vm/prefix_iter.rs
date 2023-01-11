@@ -3,6 +3,8 @@
 
 use std::collections::HashMap;
 
+use namada_core::ledger::storage::PrefixIter;
+
 use crate::ledger::storage;
 
 /// A temporary iterators storage, used during a wasm run after which it's
@@ -10,18 +12,18 @@ use crate::ledger::storage;
 #[derive(Debug)]
 pub struct PrefixIterators<'iter, DB>
 where
-    DB: storage::DBIter<'iter>,
+    DB: storage::DB + storage::DBIter<'iter>,
 {
     index: PrefixIteratorId,
-    iterators: HashMap<PrefixIteratorId, DB::PrefixIter>,
+    iterators: HashMap<PrefixIteratorId, PrefixIter<'iter, DB>>,
 }
 
 impl<'iter, DB> PrefixIterators<'iter, DB>
 where
-    DB: storage::DBIter<'iter>,
+    DB: storage::DB + storage::DBIter<'iter>,
 {
     /// Insert a new prefix iterator to the temporary storage.
-    pub fn insert(&mut self, iter: DB::PrefixIter) -> PrefixIteratorId {
+    pub fn insert(&mut self, iter: PrefixIter<'iter, DB>) -> PrefixIteratorId {
         let id = self.index;
         self.iterators.insert(id, iter);
         self.index = id.next_id();
@@ -32,7 +34,7 @@ where
     pub fn next(
         &mut self,
         id: PrefixIteratorId,
-    ) -> Option<<DB::PrefixIter as Iterator>::Item> {
+    ) -> Option<<PrefixIter<'iter, DB> as Iterator>::Item> {
         self.iterators.get_mut(&id).and_then(|i| i.next())
     }
 
@@ -40,14 +42,14 @@ where
     pub fn get_mut(
         &mut self,
         id: PrefixIteratorId,
-    ) -> Option<&mut DB::PrefixIter> {
+    ) -> Option<&mut PrefixIter<'iter, DB>> {
         self.iterators.get_mut(&id)
     }
 }
 
 impl<'iter, DB> Default for PrefixIterators<'iter, DB>
 where
-    DB: storage::DBIter<'iter>,
+    DB: storage::DB + storage::DBIter<'iter>,
 {
     fn default() -> Self {
         Self {
