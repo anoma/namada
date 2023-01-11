@@ -794,7 +794,6 @@ where
                     }
                 }
             }
-            // TODO: listen to channel in Command::Send for response
             *ethereum_oracle_started = true;
         }
     }
