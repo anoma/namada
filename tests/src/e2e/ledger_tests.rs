@@ -116,7 +116,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -151,7 +151,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
             ALBERT,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             ledger_rpc,
         ]
     };
@@ -311,7 +311,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ],
         // Submit a token transfer tx (from an implicit account)
@@ -331,7 +331,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ],
         // 3. Submit a transaction to update an account's validity
@@ -348,7 +348,7 @@ fn ledger_txs_and_queries() -> Result<()> {
              "0",
              "--gas-token",
              NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ],
         // 4. Submit a custom tx
@@ -366,7 +366,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         // 5. Submit a tx to initialize a new account
@@ -387,7 +387,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ],
     // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
@@ -405,7 +405,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             // Faucet withdrawal requires an explicit signer
             "--signer",
             ALBERT,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ],
     ];
@@ -437,7 +437,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 BERTHA,
                 "--token",
                 NAM,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             // expect a decimal
@@ -462,7 +462,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "query-bytes",
                 "--storage-key",
                 &storage_key,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             // expect hex encoded of borsh encoded bytes
@@ -541,7 +541,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "No balance found",
@@ -558,7 +558,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "No balance found",
@@ -575,7 +575,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "Transaction is valid",
@@ -594,7 +594,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "10",
                 "--signer",
                 ALBERT,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "No balance found",
@@ -613,7 +613,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "Transaction is valid",
@@ -632,7 +632,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "Transaction is valid",
@@ -651,7 +651,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--signer",
                 ALBERT,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "is lower than the amount to be transferred and fees",
@@ -670,7 +670,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "6",
                 "--signer",
                 ALBERT,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "Transaction is valid",
@@ -683,7 +683,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 AA_VIEWING_KEY,
                 "--token",
                 BTC,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "No shielded BTC balance found",
@@ -696,7 +696,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 AA_VIEWING_KEY,
                 "--token",
                 ETH,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "No shielded ETH balance found",
@@ -707,7 +707,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "balance",
                 "--owner",
                 AB_VIEWING_KEY,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "BTC : 20",
@@ -726,7 +726,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "20",
                 "--signer",
                 BERTHA,
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ],
             "Transaction is valid",
@@ -807,7 +807,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_PAYMENT_ADDRESS,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -826,7 +826,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_PAYMENT_ADDRESS,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -849,7 +849,7 @@ fn masp_pinned_txs() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -867,7 +867,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_PAYMENT_ADDRESS,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -886,7 +886,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_PAYMENT_ADDRESS,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -908,7 +908,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_PAYMENT_ADDRESS,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -974,7 +974,7 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -992,7 +992,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1010,7 +1010,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1033,7 +1033,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1054,7 +1054,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1075,7 +1075,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1099,7 +1099,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1117,7 +1117,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1138,7 +1138,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1166,7 +1166,7 @@ fn masp_incentives() -> Result<()> {
             ETH,
             "--amount",
             "30",
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1184,7 +1184,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             ETH,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1202,7 +1202,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1223,7 +1223,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             ETH,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1241,7 +1241,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1263,7 +1263,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1294,7 +1294,7 @@ fn masp_incentives() -> Result<()> {
             "30",
             "--signer",
             BERTHA,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1312,7 +1312,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             ETH,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1332,7 +1332,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1355,7 +1355,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1386,7 +1386,7 @@ fn masp_incentives() -> Result<()> {
             "20",
             "--signer",
             ALBERT,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1404,7 +1404,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             BTC,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1422,7 +1422,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1444,7 +1444,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1469,7 +1469,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1490,7 +1490,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1512,7 +1512,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1544,7 +1544,7 @@ fn masp_incentives() -> Result<()> {
             &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
             "--signer",
             BERTHA,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1571,7 +1571,7 @@ fn masp_incentives() -> Result<()> {
             &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
             "--signer",
             ALBERT,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1589,7 +1589,7 @@ fn masp_incentives() -> Result<()> {
             AA_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1607,7 +1607,7 @@ fn masp_incentives() -> Result<()> {
             AB_VIEWING_KEY,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1625,7 +1625,7 @@ fn masp_incentives() -> Result<()> {
             MASP,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             &validator_one_rpc
         ],
         Some(300)
@@ -1692,7 +1692,7 @@ fn invalid_transactions() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -1750,7 +1750,7 @@ fn invalid_transactions() -> Result<()> {
         // Force to ignore client check that fails on the balance check of the
         // source address
         "--force",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -1823,7 +1823,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client =
@@ -1846,7 +1846,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -1866,7 +1866,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client =
@@ -1889,7 +1889,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -1929,7 +1929,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client =
@@ -1950,7 +1950,7 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2023,7 +2023,7 @@ fn pos_init_validator() -> Result<()> {
         "0.05",
         "--max-commission-rate-change",
         "0.01",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2048,7 +2048,7 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2069,7 +2069,7 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2093,7 +2093,7 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2113,7 +2113,7 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2189,7 +2189,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
     ]);
 
     // 2. Spawn threads each submitting token transfer tx
@@ -2300,7 +2300,7 @@ fn proposal_submission() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2316,7 +2316,7 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
@@ -2328,7 +2328,7 @@ fn proposal_submission() -> Result<()> {
         "query-proposal",
         "--proposal-id",
         "0",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2343,7 +2343,7 @@ fn proposal_submission() -> Result<()> {
         ALBERT,
         "--token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2358,7 +2358,7 @@ fn proposal_submission() -> Result<()> {
         GOVERNANCE_ADDRESS,
         "--token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2414,7 +2414,7 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         invalid_proposal_json_path.to_str().unwrap(),
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
@@ -2430,7 +2430,7 @@ fn proposal_submission() -> Result<()> {
         "query-proposal",
         "--proposal-id",
         "1",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2445,7 +2445,7 @@ fn proposal_submission() -> Result<()> {
         ALBERT,
         "--token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2468,7 +2468,7 @@ fn proposal_submission() -> Result<()> {
         "yay",
         "--signer",
         "validator-0",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2490,7 +2490,7 @@ fn proposal_submission() -> Result<()> {
         "nay",
         "--signer",
         BERTHA,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2508,7 +2508,7 @@ fn proposal_submission() -> Result<()> {
         "yay",
         "--signer",
         ALBERT,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2529,7 +2529,7 @@ fn proposal_submission() -> Result<()> {
         "query-proposal-result",
         "--proposal-id",
         "0",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2550,7 +2550,7 @@ fn proposal_submission() -> Result<()> {
         ALBERT,
         "--token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2565,7 +2565,7 @@ fn proposal_submission() -> Result<()> {
         GOVERNANCE_ADDRESS,
         "--token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2576,7 +2576,7 @@ fn proposal_submission() -> Result<()> {
     // // 14. Query parameters
     let query_protocol_parameters = vec![
         "query-protocol-parameters",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2621,7 +2621,7 @@ fn proposal_offline() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2663,7 +2663,7 @@ fn proposal_offline() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--offline",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2689,7 +2689,7 @@ fn proposal_offline() -> Result<()> {
         "--signer",
         ALBERT,
         "--offline",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -2707,7 +2707,7 @@ fn proposal_offline() -> Result<()> {
         "--data-path",
         test.test_dir.path().to_str().unwrap(),
         "--offline",
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
 
@@ -3071,7 +3071,7 @@ fn test_genesis_validators() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client =
@@ -3108,7 +3108,7 @@ fn test_genesis_validators() -> Result<()> {
             validator_1_alias,
             "--token",
             NAM,
-            "--ledger-address",
+            "--node",
             ledger_rpc,
         ]
     };
@@ -3247,7 +3247,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
-        "--ledger-address",
+        "--node",
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -3298,7 +3298,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 NAM,
                 "--amount",
                 "10.1",
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ]
             .into_iter()
@@ -3315,7 +3315,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 source,
                 "--amount",
                 "10.1",
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ]
             .into_iter()
@@ -3331,7 +3331,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "init-proposal",
                 "--data-path",
                 valid_proposal_json_path.to_str().unwrap(),
-                "--ledger-address",
+                "--node",
                 &validator_one_rpc,
             ]
             .into_iter()
@@ -3366,7 +3366,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             NAM,
             "--amount",
             "1000",
-            "--ledger-address",
+            "--node",
             &validator_one_rpc,
         ];
         let mut client = run!(test, Bin::Client, credit_args, Some(40))?;

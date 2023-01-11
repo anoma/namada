@@ -127,7 +127,7 @@ pub fn find_bonded_stake(
             "bonded-stake",
             "--validator",
             alias.as_ref(),
-            "--ledger-address",
+            "--node",
             ledger_address
         ],
         Some(10)
@@ -151,7 +151,7 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
     let mut find = run!(
         test,
         Bin::Client,
-        &["epoch", "--ledger-address", ledger_address],
+        &["epoch", "--node", ledger_address],
         Some(10)
     )?;
     let (unread, matched) = find.exp_regex("Last committed epoch: .*")?;
@@ -174,7 +174,7 @@ pub fn get_height(test: &Test, ledger_address: &str) -> Result<u64> {
     let mut find = run!(
         test,
         Bin::Client,
-        &["block", "--ledger-address", ledger_address],
+        &["block", "--node", ledger_address],
         Some(10)
     )?;
     let (unread, matched) = find.exp_regex("Last committed block ID: .*")?;
