@@ -157,16 +157,32 @@ pub fn read_temp(
 pub fn has_key_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
     storage: &Storage<DB, H>,
+    write_log: &WriteLog,
     key: &Key,
 ) -> EnvResult<bool>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (present, gas) =
-        storage.has_key(key).map_err(RuntimeError::StorageError)?;
+    // Try to read from the write log first
+    let (log_val, gas) = write_log.read_pre(key);
     add_gas(gas_meter, gas)?;
-    Ok(present)
+    match log_val {
+        Some(&write_log::StorageModification::Write { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Delete) => {
+            // The given key has been deleted
+            Ok(false)
+        }
+        Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+        None => {
+            // When not found in write log, try to check the storage
+            let (present, gas) =
+                storage.has_key(key).map_err(RuntimeError::StorageError)?;
+            add_gas(gas_meter, gas)?;
+            Ok(present)
+        }
+    }
 }
 
 /// Storage `has_key` in posterior state (after tx execution). It will try to
