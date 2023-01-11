@@ -145,11 +145,14 @@ where
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
         match &mut self.mode {
             ShellMode::Validator {
-                ethereum_recv: Some(ethereum_recv),
+                eth_oracle:
+                    Some(EthereumOracleChannels {
+                        ethereum_receiver, ..
+                    }),
                 ..
             } => {
-                ethereum_recv.fill_queue();
-                ethereum_recv.get_events()
+                ethereum_receiver.fill_queue();
+                ethereum_receiver.get_events()
             }
             _ => vec![],
         }

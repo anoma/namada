@@ -172,8 +172,7 @@ pub(super) enum ShellMode {
     Validator {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
-        ethereum_recv: Option<EthereumReceiver>,
-        ethereum_control: Option<oracle::control::Sender>,
+        eth_oracle: Option<EthereumOracleChannels>,
         ethereum_oracle_started: bool,
     },
     Full,
@@ -239,11 +238,15 @@ impl ShellMode {
     /// Remove an Ethereum event from the internal queue
     pub fn dequeue_eth_event(&mut self, event: &EthereumEvent) {
         if let ShellMode::Validator {
-            ethereum_recv: Some(ethereum_recv),
+            eth_oracle:
+                Some(EthereumOracleChannels {
+                    ethereum_receiver: events_receiver,
+                    ..
+                }),
             ..
         } = self
         {
-            ethereum_recv.remove_event(event);
+            events_receiver.remove_event(event);
         }
     }
 
@@ -349,8 +352,9 @@ where
 }
 
 /// Channels for communicating with an Ethereum oracle.
+#[derive(Debug)]
 pub struct EthereumOracleChannels {
-    events_receiver: Receiver<EthereumEvent>,
+    ethereum_receiver: EthereumReceiver,
     control_sender: oracle::control::Sender,
 }
 
@@ -360,7 +364,7 @@ impl EthereumOracleChannels {
         control_sender: oracle::control::Sender,
     ) -> Self {
         Self {
-            events_receiver,
+            ethereum_receiver: EthereumReceiver::new(events_receiver),
             control_sender,
         }
     }
@@ -460,17 +464,6 @@ where
                 {
                     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
                         wallet::defaults::validator_keys();
-
-                    let (ethereum_recv, ethereum_control) = match eth_oracle {
-                        Some(EthereumOracleChannels {
-                            events_receiver,
-                            control_sender,
-                        }) => (
-                            Some(EthereumReceiver::new(events_receiver)),
-                            Some(control_sender),
-                        ),
-                        None => (None, None),
-                    };
                     ShellMode::Validator {
                         data: wallet::ValidatorData {
                             address: wallet::defaults::validator_address(),
@@ -481,8 +474,7 @@ where
                             },
                         },
                         broadcast_sender,
-                        ethereum_recv,
-                        ethereum_control,
+                        eth_oracle,
                         ethereum_oracle_started: false,
                     }
                 }
@@ -755,7 +747,7 @@ where
     // TODO: return Result
     fn ensure_ethereum_oracle_started(&mut self) {
         if let ShellMode::Validator {
-            ethereum_control: Some(ethereum_control),
+            eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
             ethereum_oracle_started,
             ..
         } = &mut self.mode
@@ -783,7 +775,7 @@ where
                 ?config,
                 "Starting the Ethereum oracle using values from block storage"
             );
-            if let Err(error) = ethereum_control
+            if let Err(error) = control_sender
                 .try_send(oracle::control::Command::Start { initial: config })
             {
                 match error {
@@ -1125,10 +1117,8 @@ mod test_utils {
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let (control_sender, _) = oracle::control::channel();
-            let eth_oracle = EthereumOracleChannels {
-                events_receiver: eth_receiver,
-                control_sender,
-            };
+            let eth_oracle =
+                EthereumOracleChannels::new(eth_receiver, control_sender);
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1269,13 +1259,11 @@ mod test_utils {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
         // we have to use RocksDB for this test
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (_, receiver) =
+        let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle = EthereumOracleChannels {
-            events_receiver: receiver,
-            control_sender,
-        };
+        let eth_oracle =
+            EthereumOracleChannels::new(eth_receiver, control_sender);
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let native_token = address::nam();
@@ -1338,13 +1326,11 @@ mod test_utils {
 
         // Drop the shell
         std::mem::drop(shell);
-        let (_, receiver) =
+        let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle = EthereumOracleChannels {
-            events_receiver: receiver,
-            control_sender,
-        };
+        let eth_oracle =
+            EthereumOracleChannels::new(eth_receiver, control_sender);
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
