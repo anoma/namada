@@ -1,7 +1,7 @@
 ## From Binaries
 
 ```admonish warning
-Prebuilt binaries might not be available for a specific release or architecture, in this case you have to build [From Source](#from-source).
+Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
 ```
 
 If you'd like to install Namada from binaries you will have to install some dependencies first: [Tendermint](https://docs.tendermint.com/v0.34/introduction/install.html) `0.34.x` and GLIBC `v2.29` or higher.
