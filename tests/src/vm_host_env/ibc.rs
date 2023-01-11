@@ -115,6 +115,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
     tx: &'a Tx,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
     let (verifiers, keys_changed) = tx_env
+        .wl_storage
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
     let addr = Address::Internal(InternalAddress::Ibc);
@@ -129,8 +130,8 @@ pub fn validate_ibc_vp_from_tx<'a>(
 
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.storage,
-        &tx_env.write_log,
+        &tx_env.wl_storage.storage,
+        &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
         VpGasMeter::new(0),
@@ -150,6 +151,7 @@ pub fn validate_token_vp_from_tx<'a>(
     target: &Key,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
     let (verifiers, keys_changed) = tx_env
+        .wl_storage
         .write_log
         .verifiers_and_changed_keys(&tx_env.verifiers);
     if !keys_changed.contains(target) {
@@ -164,8 +166,8 @@ pub fn validate_token_vp_from_tx<'a>(
 
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.storage,
-        &tx_env.write_log,
+        &tx_env.wl_storage.storage,
+        &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
         VpGasMeter::new(0),
@@ -181,10 +183,14 @@ pub fn validate_token_vp_from_tx<'a>(
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
     tx_host_env::with(|env| {
-        init_genesis_storage(&mut env.storage);
+        init_genesis_storage(&mut env.wl_storage.storage);
         // block header to check timeout timestamp
-        env.storage.set_header(tm_dummy_header()).unwrap();
-        env.storage
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        env.wl_storage
+            .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .unwrap();
     });

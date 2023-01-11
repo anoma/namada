@@ -512,11 +512,11 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::testing::TestWlStorage;
 
     #[test]
     fn test_lazy_map_basics() -> storage_api::Result<()> {
-        let mut storage = TestStorage::default();
+        let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_map = LazyMap::<u32, String>::open(key);

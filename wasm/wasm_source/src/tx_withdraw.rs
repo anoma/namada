@@ -92,7 +92,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
-            let native_token = tx_env.storage.native_token.clone();
+            let native_token = tx_env.wl_storage.storage.native_token.clone();
             if is_delegation {
                 let source = withdraw.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -134,11 +134,12 @@ mod tests {
         // withdraw the unbonded tokens
         tx_host_env::with(|env| {
             for _ in 0..pos_params.unbonding_len {
-                env.storage.block.epoch = env.storage.block.epoch.next();
+                env.wl_storage.storage.block.epoch =
+                    env.wl_storage.storage.block.epoch.next();
             }
         });
         assert_eq!(
-            tx_host_env::with(|env| env.storage.block.epoch),
+            tx_host_env::with(|env| env.wl_storage.storage.block.epoch),
             Epoch(pos_params.unbonding_len)
         );
 

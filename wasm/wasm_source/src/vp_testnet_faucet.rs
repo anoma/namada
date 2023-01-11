@@ -291,7 +291,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
@@ -303,6 +303,7 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.commit_genesis();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -330,7 +331,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
         let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
@@ -343,9 +344,10 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would
-        let challenge = testnet_pow::Challenge::new(&mut tx_env.storage, &vp_owner, target.clone()).unwrap();
+        let challenge = testnet_pow::Challenge::new(&mut tx_env.wl_storage, &vp_owner, target.clone()).unwrap();
         let solution = challenge.solve();
         let solution_bytes = solution.try_to_vec().unwrap();
         // The signature itself doesn't matter and is not being checked in this
@@ -391,7 +393,7 @@ mod tests {
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
             let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-            testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();

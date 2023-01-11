@@ -117,17 +117,20 @@ pub fn init_pos(
     tx_host_env::with(|tx_env| {
         // Ensure that all the used
         // addresses exist
-        let native_token = tx_env.storage.native_token.clone();
+        let native_token = tx_env.wl_storage.storage.native_token.clone();
         tx_env.spawn_accounts([&native_token]);
         for validator in genesis_validators {
             tx_env.spawn_accounts([&validator.address]);
         }
-        tx_env.storage.block.epoch = start_epoch;
+        tx_env.wl_storage.storage.block.epoch = start_epoch;
         // Initialize PoS storage
         tx_env
-            .storage
+            .wl_storage
             .init_genesis(params, genesis_validators.iter(), start_epoch)
             .unwrap();
+
+        // Commit changes in WL to genesis state
+        tx_env.commit_genesis();
     });
 }
 
@@ -248,7 +251,7 @@ mod tests {
                     if !test_state.is_current_tx_valid {
                         // Clear out the changes
                         tx_host_env::with(|env| {
-                            env.write_log.drop_tx();
+                            env.wl_storage.drop_tx();
                         });
                     }
 
@@ -262,13 +265,13 @@ mod tests {
                     tx_host_env::with(|env| {
                         // Clear out the changes
                         if !test_state.is_current_tx_valid {
-                            env.write_log.drop_tx();
+                            env.wl_storage.drop_tx();
                         }
                         // Also commit the last transaction(s) changes, if any
                         env.commit_tx_and_block();
 
-                        env.storage.block.epoch =
-                            env.storage.block.epoch.next();
+                        env.wl_storage.storage.block.epoch =
+                            env.wl_storage.storage.block.epoch.next();
                     });
 
                     // Starting a new tx
@@ -298,7 +301,7 @@ mod tests {
 
                     // Clear out the invalid changes
                     tx_host_env::with(|env| {
-                        env.write_log.drop_tx();
+                        env.wl_storage.drop_tx();
                     })
                 }
             }
@@ -851,7 +854,7 @@ pub mod testing {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
                 env.gas_meter.reset();
-                env.storage.block.epoch
+                env.wl_storage.storage.block.epoch
             });
             println!("Current epoch {}", current_epoch);
 
