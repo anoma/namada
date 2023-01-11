@@ -40,7 +40,11 @@ impl HostEnvResult {
 
 impl From<bool> for HostEnvResult {
     fn from(success: bool) -> Self {
-        if success { Self::Success } else { Self::Fail }
+        if success {
+            Self::Success
+        } else {
+            Self::Fail
+        }
     }
 }
 
@@ -88,6 +92,12 @@ mod tx_queue {
         #[allow(dead_code)]
         pub fn is_empty(&self) -> bool {
             self.0.is_empty()
+        }
+
+        /// Get reference to the element at the given index.
+        /// Returns [`None`] if index exceeds the queue lenght.
+        pub fn get(&self, index: usize) -> Option<&WrapperTxInQueue> {
+            self.0.get(index)
         }
     }
 }

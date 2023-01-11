@@ -1,10 +1,9 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::internal::WrapperTxInQueue;
-
-use namada::ledger::storage::write_log::StorageModification;
 
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
@@ -134,51 +133,50 @@ where
                            is coming soon to a blockchain near you. Patience."
                         .into(),
                 },
-                TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(WrapperTxInQueue {
-                        tx: wrapper,
-                        #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: _,
-                    }) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
+                TxType::Decrypted(tx) => {
+                    match tx_queue_iter.next() {
+                        Some(wrapper) => {
+                            if wrapper.tx.tx_hash != tx.hash_commitment() {
+                                TxResult {
+                                    code: ErrorCodes::InvalidOrder.into(),
+                                    info:
+                                        "Process proposal rejected a decrypted \
                                        transaction that violated the tx order \
                                        determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
+                                            .into(),
+                                }
+                            } else if verify_decrypted_correctly(&tx, privkey) {
+                                TxResult {
+                                    code: ErrorCodes::Ok.into(),
+                                    info: "Process Proposal accepted this \
                                        transaction"
-                                    .into(),
-                            }
-                        } else {
-                            // Remove decrypted transaction hash from storage
-                            let inner_hash_key =
-                                replay_protection::get_tx_hash_key(
-                                    &wrapper.tx_hash,
-                                );
-                            temp_wl_storage.write_log.delete(&inner_hash_key).expect(
+                                        .into(),
+                                }
+                            } else {
+                                // Remove decrypted transaction hash from storage
+                                let inner_hash_key =
+                                    replay_protection::get_tx_hash_key(
+                                        &wrapper.tx.tx_hash,
+                                    );
+                                temp_wl_storage.write_log.delete(&inner_hash_key).expect(
                                 "Couldn't delete transaction hash from write log",
                             );
 
-                            TxResult {
-                                code: ErrorCodes::Undecryptable.into(),
-                                info: "The encrypted payload of tx was \
+                                TxResult {
+                                    code: ErrorCodes::Undecryptable.into(),
+                                    info: "The encrypted payload of tx was \
                                        incorrectly marked as un-decryptable"
-                                    .into(),
+                                        .into(),
+                                }
                             }
                         }
+                        None => TxResult {
+                            code: ErrorCodes::ExtraTxs.into(),
+                            info: "Received more decrypted txs than expected"
+                                .into(),
+                        },
                     }
-                    None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                },
+                }
                 TxType::Wrapper(tx) => {
                     // validate the ciphertext via Ferveo
                     if !tx.validate_ciphertext() {
