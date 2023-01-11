@@ -3,9 +3,9 @@
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
-use namada::ledger::pos::PosQueries;
 #[cfg(feature = "abcipp")]
-use namada::ledger::pos::SendValsetUpd;
+use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;

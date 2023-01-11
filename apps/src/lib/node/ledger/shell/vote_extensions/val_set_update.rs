@@ -306,6 +306,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[cfg(feature = "abcipp")]
     use borsh::BorshSerialize;
+    use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;

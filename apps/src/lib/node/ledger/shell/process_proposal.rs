@@ -4,7 +4,8 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::Storage;
-use namada::ledger::pos::{PosQueries, SendValsetUpd};
+use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+use namada::ledger::pos::PosQueries;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;

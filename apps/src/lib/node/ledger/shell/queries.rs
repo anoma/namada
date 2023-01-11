@@ -121,7 +121,8 @@ where
 #[cfg(test)]
 #[cfg(not(feature = "abcipp"))]
 mod test_queries {
-    use namada::ledger::pos::{PosQueries, SendValsetUpd};
+    use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+    use namada::ledger::pos::PosQueries;
     use namada::types::storage::Epoch;
 
     use super::*;
