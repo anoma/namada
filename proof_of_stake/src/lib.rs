@@ -2854,7 +2854,12 @@ where
             );
         }
     }
-    if !storage.has_key(&validator_state_key(validator))? {
+    let state = validator_state_handle(validator).get(
+        storage,
+        current_epoch,
+        &params,
+    )?;
+    if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
 
