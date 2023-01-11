@@ -26,7 +26,13 @@ The above requires that golang is correctly installed with the correct $PATH set
 - tendermint is in `build/tendermint`
 
 
-## Installing GLIBC
+You can either follow the instructions on the [Tendermint guide](https://docs.tendermint.com/v0.34/introduction/install.html) or download the `get_tendermint.sh` script from the [Namada repository](https://github.com/anoma/namada/blob/main/scripts/get_tendermint.sh) and execute it (will ask you for `root` access):
+
+```shell
+curl -LO https://raw.githubusercontent.com/anoma/namada/main/scripts/get_tendermint.sh
+chmod +x get_tendermint.sh
+./get_tendermint.sh
+```
 
 Finally, you should have GLIBC `v2.29` or higher.
 
@@ -38,9 +44,7 @@ Finally, you should have GLIBC `v2.29` or higher.
 
 ### Downloading the binaries
 
-## Downloading the binaries
-
-Now that you have all dependencies installed, you can download the latest binary release from our [releases page](https://github.com/anoma/namada/releases) by choosing the appropriate architecture.
+Now, that you have all dependencies installed you can download the latest binary release from our [releases page](https://github.com/anoma/namada/releases) by choosing the appropriate architecture.
 
 ## Placing the binaries onto `$PATH`
 For ubuntu and mac machines, the following command should work for placing namada into path
