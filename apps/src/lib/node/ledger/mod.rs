@@ -229,7 +229,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let eth_node = maybe_start_geth(&mut spawner, &config).await;
 
     // Start oracle if necessary
-    let (eth_oracle_channels, oracle) =
+    let (eth_oracle_channels, eth_oracle) =
         match maybe_start_ethereum_oracle(&mut spawner, &config).await {
             EthereumOracleTask::NotEnabled { handle } => (None, handle),
             EthereumOracleTask::Enabled { handle, channels } => {
@@ -251,8 +251,13 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let aborted = spawner.wait_for_abort().await.child_terminated();
 
     // Wait for all managed tasks to finish.
-    let res =
-        tokio::try_join!(tendermint_node, eth_node, abci, oracle, broadcaster);
+    let res = tokio::try_join!(
+        tendermint_node,
+        eth_node,
+        abci,
+        eth_oracle,
+        broadcaster
+    );
 
     match res {
         Ok((tendermint_res, _, abci_res, _, _)) => {

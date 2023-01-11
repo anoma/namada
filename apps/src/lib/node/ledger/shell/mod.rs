@@ -173,7 +173,7 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
-        ethereum_oracle_started: bool,
+        eth_oracle_started: bool,
     },
     Full,
     Seed,
@@ -240,13 +240,12 @@ impl ShellMode {
         if let ShellMode::Validator {
             eth_oracle:
                 Some(EthereumOracleChannels {
-                    ethereum_receiver: events_receiver,
-                    ..
+                    ethereum_receiver, ..
                 }),
             ..
         } = self
         {
-            events_receiver.remove_event(event);
+            ethereum_receiver.remove_event(event);
         }
     }
 
@@ -475,7 +474,7 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
-                        ethereum_oracle_started: false,
+                        eth_oracle_started: false,
                     }
                 }
             }
@@ -748,7 +747,7 @@ where
     fn ensure_ethereum_oracle_started(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
-            ethereum_oracle_started,
+            eth_oracle_started: ethereum_oracle_started,
             ..
         } = &mut self.mode
         {
