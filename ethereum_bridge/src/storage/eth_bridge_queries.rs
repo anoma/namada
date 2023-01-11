@@ -19,7 +19,7 @@ pub enum SendValsetUpd {
     AtPrevHeight,
 }
 
-pub trait EthBridgeQueries: PosQueries {
+pub trait EthBridgeQueries {
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
