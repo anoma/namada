@@ -232,8 +232,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     let (eth_oracle_comms, oracle) =
         match maybe_start_ethereum_oracle(&mut spawner, &config).await {
             EthereumOracleTask::NotEnabled { handle } => (None, handle),
-            EthereumOracleTask::Oracle { handle, eth_oracle }
-            | EthereumOracleTask::EventsEndpoint { handle, eth_oracle } => {
+            EthereumOracleTask::Enabled { handle, eth_oracle } => {
                 (Some(eth_oracle), handle)
             }
         };
@@ -611,18 +610,16 @@ fn start_tendermint(
         })
 }
 
-/// Represents an Ethereum oracle task and associated channels.
+/// Represents a [`tokio::task`] in which an Ethereum oracle may be running, and
+/// if so, channels for communicating with it.
 enum EthereumOracleTask {
     NotEnabled {
         // TODO(namada#459): we have to return a dummy handle for the moment,
-        // until `run_aux` is refactored
+        // until `run_aux` is refactored - at which point, we no longer need an
+        // enum to represent the Ethereum oracle being on/off.
         handle: task::JoinHandle<()>,
     },
-    Oracle {
-        handle: task::JoinHandle<()>,
-        eth_oracle: EthereumOracleHandle,
-    },
-    EventsEndpoint {
+    Enabled {
         handle: task::JoinHandle<()>,
         eth_oracle: EthereumOracleHandle,
     },
@@ -649,7 +646,7 @@ async fn maybe_start_ethereum_oracle(
                 control_receiver,
             );
 
-            EthereumOracleTask::Oracle {
+            EthereumOracleTask::Enabled {
                 handle,
                 eth_oracle: EthereumOracleHandle::new(
                     eth_receiver,
@@ -696,7 +693,7 @@ async fn maybe_start_ethereum_oracle(
                         }
                     }
                 });
-            EthereumOracleTask::EventsEndpoint {
+            EthereumOracleTask::Enabled {
                 handle,
                 eth_oracle: EthereumOracleHandle::new(
                     eth_receiver,
