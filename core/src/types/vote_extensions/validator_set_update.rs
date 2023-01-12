@@ -326,39 +326,6 @@ impl Encode<1> for ValidatorSetArgs {
     }
 }
 
-/// All the information to relay to Ethereum
-/// that a complete proof for a validator set
-/// exists in Namada.
-pub struct RelayProof {
-    /// Information about the signing validators.
-    ///
-    /// These validators will be sorted in descending
-    /// order by their respective voting powers.
-    pub current_validator_args: ValidatorSetArgs,
-    /// The hash reflecting the next set of validators,
-    /// as stored in the `Bridge` smart contract.
-    pub next_bridge_validator_set_hash: KeccakHash,
-    /// The hash reflecting the next set of validators,
-    /// as stored in the `Governance` smart contract.
-    pub next_governance_validator_set_hash: KeccakHash,
-    /// The signatures of all the current validators,
-    /// sorted by 
-    pub current_validator_signatures: 
-    /// A nonce for replay protection.
-    ///
-    /// In the context of a validator set update
-    /// [`RelayProof`], this value corresponds to
-    /// the 2nd block height offset within the epoch
-    /// where the next set of validators will be active.
-    ///
-    /// For instance, with a fixed epoch length of 10
-    /// blocks, the contract's nonces will be 2, then 12,
-    /// 22, 32, 42, and so on. So, for each of these
-    /// values, the next nonce values would equate to
-    /// 12, then 22, 32, 42, 52, etc.
-    pub next_validator_set_nonce: Uint,
-}
-
 // this is only here so we don't pollute the
 // outer namespace with serde traits
 mod tag {
