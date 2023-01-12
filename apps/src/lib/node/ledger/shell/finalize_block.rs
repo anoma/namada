@@ -174,7 +174,8 @@ where
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
-                // Tx hash has already been removed from storage in process_proposal
+                // Tx hash has already been removed from storage in
+                // process_proposal
                 if let TxType::Decrypted(_) = &tx_type {
                     self.wl_storage.storage.tx_queue.pop();
                 }
