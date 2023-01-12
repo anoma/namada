@@ -38,6 +38,13 @@ It may be resolved by running
 sudo apt install build-essential
 ```
 
+Another solution can sometimes be installing `libcland-dev`. This can be achieved through:
+
+```bash
+sudo apt-get update -y
+sudo apt-get install -y libclang-dev
+```
+
 
 #### WASM32-unknown-unknown
 Another issue the compiler may run into is that it cannot find the wasm32-unknown-unknown target.

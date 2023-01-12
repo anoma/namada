@@ -35,3 +35,4 @@
   - [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
   - [Proof of Work on Namada](./testnets/pow.md)
   - [Troubleshooting](./testnets/troubleshooting.md)
+- [FAQ](./user-guide/FAQ.md)
