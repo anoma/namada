@@ -10,15 +10,20 @@ use crate::types::key::common;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
-pub trait VpEnv<'view> {
+pub trait VpEnv<'view>
+where
+    Self: 'view,
+{
     /// Storage read prefix iterator
-    type PrefixIter;
+    type PrefixIter<'iter>
+    where
+        Self: 'iter;
 
     /// Type to read storage state before the transaction execution
-    type Pre: StorageRead<'view, PrefixIter = Self::PrefixIter>;
+    type Pre: StorageRead<PrefixIter<'view> = Self::PrefixIter<'view>>;
 
     /// Type to read storage state after the transaction execution
-    type Post: StorageRead<'view, PrefixIter = Self::PrefixIter>;
+    type Post: StorageRead<PrefixIter<'view> = Self::PrefixIter<'view>>;
 
     /// Read storage state before the transaction execution
     fn pre(&'view self) -> Self::Pre;
@@ -42,40 +47,32 @@ pub trait VpEnv<'view> {
     ) -> Result<Option<Vec<u8>>, storage_api::Error>;
 
     /// Getting the chain ID.
-    fn get_chain_id(&'view self) -> Result<String, storage_api::Error>;
+    fn get_chain_id(&self) -> Result<String, storage_api::Error>;
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_height(&'view self)
-    -> Result<BlockHeight, storage_api::Error>;
+    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_hash(&'view self) -> Result<BlockHash, storage_api::Error>;
+    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error>;
+    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error>;
 
     /// Get the shielded transaction index.
-    fn get_tx_index(&'view self) -> Result<TxIndex, storage_api::Error>;
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error>;
 
     /// Get the address of the native token.
-    fn get_native_token(&'view self) -> Result<Address, storage_api::Error>;
+    fn get_native_token(&self) -> Result<Address, storage_api::Error>;
 
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
-    fn iter_prefix(
-        &'view self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error>;
-
-    /// Storage prefix iterator, reverse ordered by storage keys. It will try to
-    /// get an iterator from the storage.
-    fn rev_iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error>;
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error>;
 
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
@@ -157,24 +154,5 @@ pub trait VpEnv<'view> {
         key: &Key,
     ) -> Result<bool, storage_api::Error> {
         self.post().has_key(key)
-    }
-
-    /// Storage prefix iterator for prior state (before tx execution). It will
-    /// try to read from the storage.
-    fn iter_pre_next(
-        &'view self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.pre().iter_next(iter)
-    }
-
-    /// Storage prefix iterator next for posterior state (after tx execution).
-    /// It will try to read from the write log first and if no entry found
-    /// then from the storage.
-    fn iter_post_next(
-        &'view self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.post().iter_next(iter)
     }
 }

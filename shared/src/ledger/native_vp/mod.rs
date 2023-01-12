@@ -169,14 +169,14 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageRead<'view>
+impl<'view, 'a: 'view, DB, H, CA> StorageRead
     for CtxPreStorageRead<'view, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
+    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -203,16 +203,9 @@ where
         .into_storage_result()
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &crate::types::storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
-        self.ctx.rev_iter_prefix(prefix).into_storage_result()
-    }
-
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
         vp_host_fns::iter_pre_next::<DB>(
             &mut self.ctx.gas_meter.borrow_mut(),
@@ -224,10 +217,10 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
         self.ctx.iter_prefix(prefix)
     }
 
@@ -256,14 +249,14 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageRead<'view>
+impl<'view, 'a: 'view, DB, H, CA> StorageRead
     for CtxPostStorageRead<'view, 'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
+    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self:'iter;
 
     fn read_bytes(
         &self,
@@ -291,16 +284,9 @@ where
         .into_storage_result()
     }
 
-    fn rev_iter_prefix(
-        &self,
-        prefix: &crate::types::storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter> {
-        self.ctx.rev_iter_prefix(prefix).into_storage_result()
-    }
-
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
         vp_host_fns::iter_post_next::<DB>(
             &mut self.ctx.gas_meter.borrow_mut(),
@@ -313,10 +299,10 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix(
-        &self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
         self.ctx.iter_prefix(prefix)
     }
 
@@ -353,7 +339,7 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
     type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
-    type PrefixIter = <DB as storage::DBIter<'a>>::PrefixIter;
+    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -388,7 +374,7 @@ where
         .into_storage_result()
     }
 
-    fn get_chain_id(&'view self) -> Result<String, storage_api::Error> {
+    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
         vp_host_fns::get_chain_id(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -396,9 +382,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_height(
-        &'view self,
-    ) -> Result<BlockHeight, storage_api::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
         vp_host_fns::get_block_height(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -406,7 +390,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_hash(&'view self) -> Result<BlockHash, storage_api::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
         vp_host_fns::get_block_hash(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -414,7 +398,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_epoch(&'view self) -> Result<Epoch, storage_api::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         vp_host_fns::get_block_epoch(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -422,7 +406,7 @@ where
         .into_storage_result()
     }
 
-    fn get_tx_index(&'view self) -> Result<TxIndex, storage_api::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         vp_host_fns::get_tx_index(
             &mut self.gas_meter.borrow_mut(),
             self.tx_index,
@@ -430,7 +414,7 @@ where
         .into_storage_result()
     }
 
-    fn get_native_token(&'view self) -> Result<Address, storage_api::Error> {
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
         vp_host_fns::get_native_token(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -438,23 +422,11 @@ where
         .into_storage_result()
     }
 
-    fn iter_prefix(
-        &'view self,
+    fn iter_prefix<'iter>(
+        &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
         vp_host_fns::iter_prefix(
-            &mut self.gas_meter.borrow_mut(),
-            self.storage,
-            prefix,
-        )
-        .into_storage_result()
-    }
-
-    fn rev_iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> Result<Self::PrefixIter, storage_api::Error> {
-        vp_host_fns::rev_iter_prefix(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
             prefix,
@@ -497,6 +469,8 @@ where
                 self.keys_changed,
                 &eval_runner,
                 &mut vp_wasm_cache,
+                #[cfg(not(feature = "mainnet"))]
+                false,
             );
             match eval_runner.eval_native_result(ctx, vp_code, input_data) {
                 Ok(result) => Ok(result),
@@ -539,55 +513,38 @@ where
     }
 
     fn read_pre<T: borsh::BorshDeserialize>(
-        &'view self,
+        &self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
         self.pre().read(key).map_err(Into::into)
     }
 
     fn read_bytes_pre(
-        &'view self,
+        &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         self.pre().read_bytes(key).map_err(Into::into)
     }
 
     fn read_post<T: borsh::BorshDeserialize>(
-        &'view self,
+        &self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
         self.post().read(key).map_err(Into::into)
     }
 
     fn read_bytes_post(
-        &'view self,
+        &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, storage_api::Error> {
         self.post().read_bytes(key).map_err(Into::into)
     }
 
-    fn has_key_pre(&'view self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key_pre(&self, key: &Key) -> Result<bool, storage_api::Error> {
         self.pre().has_key(key).map_err(Into::into)
     }
 
-    fn has_key_post(
-        &'view self,
-        key: &Key,
-    ) -> Result<bool, storage_api::Error> {
+    fn has_key_post(&self, key: &Key) -> Result<bool, storage_api::Error> {
         self.post().has_key(key).map_err(Into::into)
-    }
-
-    fn iter_pre_next(
-        &'view self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.pre().iter_next(iter).map_err(Into::into)
-    }
-
-    fn iter_post_next(
-        &'view self,
-        iter: &mut Self::PrefixIter,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        self.post().iter_next(iter).map_err(Into::into)
     }
 }

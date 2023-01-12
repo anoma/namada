@@ -6,7 +6,7 @@ license = "GPL-3.0"
 name = "namada_proof_of_stake"
 readme = "../README.md"
 resolver = "2"
-version = "0.12.2"
+version = "0.13.0"
 
 [features]
 default = ["abciplus"]
