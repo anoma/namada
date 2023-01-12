@@ -788,7 +788,8 @@ pub mod testing {
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
-            InternalAddress::ReplayProtection => {} /* Add new addresses in the
+            InternalAddress::ReplayProtection => {} /* Add new addresses in
+                                                     * the
                                                      * `prop_oneof` below. */
         };
         prop_oneof![

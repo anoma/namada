@@ -56,8 +56,8 @@ pub mod decrypted_tx {
         }
 
         /// Return the hash used as a commitment to the tx's contents in the
-        /// wrapper tx that includes this tx as an encrypted payload. The commitment
-        /// is computed on the unsigned tx if tx is signed
+        /// wrapper tx that includes this tx as an encrypted payload. The
+        /// commitment is computed on the unsigned tx if tx is signed
         pub fn hash_commitment(&self) -> Hash {
             match self {
                 DecryptedTx::Decrypted {

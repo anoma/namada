@@ -146,7 +146,8 @@ where
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
-                // Tx hash has already been removed from storage in process_proposal
+                // Tx hash has already been removed from storage in
+                // process_proposal
                 if let TxType::Decrypted(_) = &tx_type {
                     self.wl_storage.storage.tx_queue.pop();
                 }
@@ -960,7 +961,7 @@ mod test_finalize_block {
         let wrapper_tx = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -975,6 +976,7 @@ mod test_finalize_block {
         let inner_hash_key =
             replay_protection::get_tx_hash_key(&wrapper_tx.tx_hash);
         shell
+            .wl_storage
             .storage
             .write(&inner_hash_key, vec![])
             .expect("Test failed");
@@ -1000,11 +1002,12 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
 
-        //FIXME: @grarco, uncomment when proper gas metering is in place
+        // FIXME: @grarco, uncomment when proper gas metering is in place
         // // Check inner tx hash has been removed from storage
         // assert_eq!(event.event_type.to_string(), String::from("applied"));
-        // let code = event.attributes.get("code").expect("Test failed").as_str();
-        // assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        // let code = event.attributes.get("code").expect("Test
+        // failed").as_str(); assert_eq!(code,
+        // String::from(ErrorCodes::WasmRuntimeError).as_str());
 
         // assert!(
         //     !shell

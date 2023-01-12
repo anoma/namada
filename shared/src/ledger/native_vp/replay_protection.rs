@@ -2,11 +2,10 @@
 
 use std::collections::BTreeSet;
 
-use thiserror::Error;
-
 use namada_core::ledger::{replay_protection, storage};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
+use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::vm::WasmCacheAccess;
@@ -38,9 +37,9 @@ where
     H: 'static + storage::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    const ADDR: InternalAddress = InternalAddress::ReplayProtection;
-
     type Error = Error;
+
+    const ADDR: InternalAddress = InternalAddress::ReplayProtection;
 
     fn validate_tx(
         &self,
