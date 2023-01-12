@@ -75,6 +75,10 @@ router! {SHELL,
     ( "eth_bridge_pool" / "proof" )
         -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
 
+    // Request a proof of a validator set signed off for
+    // the given epoch.
+    ( "validator_set" / "proof" / [epoch: Epoch] )
+        -> EthereumProof<VotingPowersMap> = (),
 }
 
 // Handlers:
