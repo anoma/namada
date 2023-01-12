@@ -916,6 +916,52 @@ format!("Wrapper transaction hash {} already in storage, replay attempt", wrappe
         }
     }
 
+    /// Test that a block containing two identical wrapper txs is rejected
+    #[test]
+    fn test_wrapper_tx_hash_same_block() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+        );
+        let signed = wrapper.sign(&keypair).expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(); 2],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                // The checks happens on the inner hash first, do the tx is rejected because of this
+                // hash, not the wrapper one
+                assert_eq!(
+            response[1].result.info,
+format!("Inner transaction hash {} already in storage, replay attempt", wrapper.tx_hash)
+                   );
+            }
+        }
+    }
+
     /// Test that if the unsigned inner tx hash is known (replay attack), the
     /// block is rejected
     #[test]
@@ -961,6 +1007,65 @@ format!("Wrapper transaction hash {} already in storage, replay attempt", wrappe
                 );
                 assert_eq!(
             response[0].result.info,
+format!("Inner transaction hash {} already in storage, replay attempt", inner_unsigned_hash)
+                   );
+            }
+        }
+    }
+
+    /// Test that a block containing two identical inner transactions is rejected
+    #[test]
+    fn test_inner_tx_hash_same_block() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair_2 = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+        );
+        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let signed = wrapper.sign(&keypair).expect("Test failed");
+
+        let new_wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair_2,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+        );
+        let new_signed = new_wrapper.sign(&keypair).expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(), new_signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+            response[1].result.info,
 format!("Inner transaction hash {} already in storage, replay attempt", inner_unsigned_hash)
                    );
             }
