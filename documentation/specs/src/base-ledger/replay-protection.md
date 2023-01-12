@@ -254,6 +254,16 @@ proposal is executed. Therefore, replay protection is not a solution to prevent
 attacks on governance proposals' code. Instead, to protect these transactions,
 Namada relies on its proposal id mechanism in conjunction with the VP set.
 
+#### Protocol transactions
+
+At the moment, protocol transactions are only used for ETH bridge related
+operations. The current implementation already takes care of replay attempts by
+keeping track of the validators' signature on the events: this also includes
+replay attacks in the same block.
+
+In the future, new types of protocol transactions may be supported: in this
+case, a review of the replay protection mechanism might be required.
+
 ### Forks
 
 In the case of a fork, the transaction hash is not enough to prevent replay
