@@ -174,13 +174,14 @@ where
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
+                // Tx hash has already been removed from storage in process_proposal
                 if let TxType::Decrypted(_) = &tx_type {
                     self.wl_storage.storage.tx_queue.pop();
                 }
                 continue;
             }
 
-            let mut tx_event = match &tx_type {
+            let (mut tx_event, tx_unsigned_hash) = match &tx_type {
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
 
@@ -244,11 +245,16 @@ where
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
-                    tx_event
+                    (tx_event, None)
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    self.wl_storage.storage.tx_queue.pop();
+                    let wrapper = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue");
                     let mut event = Event::new_tx_event(&tx_type, height.0);
 
                     match inner {
@@ -267,8 +273,7 @@ where
                             event["code"] = ErrorCodes::Undecryptable.into();
                         }
                     }
-
-                    event
+                    (event, Some(wrapper.tx.tx_hash))
                 }
                 TxType::Raw(_) => {
                     tracing::error!(
@@ -361,6 +366,27 @@ where
                         msg
                     );
                     stats.increment_errored_txs();
+                    self.wl_storage.drop_tx();
+                    // FIXME: unit test
+
+                    // If transaction type is Decrypted and failed because of
+                    // out of gas, remove its hash from storage to allow
+                    // repwrapping it
+                    if let Some(hash) = tx_unsigned_hash {
+                        if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
+                            msg
+                        {
+                            let tx_hash_key =
+                                replay_protection::get_tx_hash_key(&hash);
+                            self.wl_storage
+                                .storage
+                                .delete(&tx_hash_key)
+                                .expect(
+                                "Error while deleting tx hash key from storage",
+                            );
+                        }
+                    }
+
                     self.wl_storage.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter
@@ -846,12 +872,8 @@ mod test_finalize_block {
         InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
-<<<<<<< HEAD
     use rust_decimal_macros::dec;
     use test_log::test;
-=======
-    use namada_test_utils::TestWasms;
->>>>>>> da1152e8c (Update namada_apps to use test wasm utility code)
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
@@ -1072,7 +1094,7 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
-        // Add unshielded balance for fee paymenty
+        // Add unshielded balance for fee payment
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
