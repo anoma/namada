@@ -1,8 +1,8 @@
-## Hardware Requirements
+# Hardware Requirements
 
 This section covers the minimum and recommended hardware requirements for engaging with Namada as a validator node.
 
-### Minimal Hardware Requirements
+## Minimal Hardware Requirements
 
 | Hardware | Minimal Specifications |
 | -------- | -------- |

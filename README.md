@@ -86,6 +86,5 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires that [Tendermint version 0.34.x](https://github.com/tendermint/tendermint) is installed and available on path. [The pre-built binaries and the source for 0.34.8 are here](https://github.com/tendermint/tendermint/releases/tag/v0.34.8), also directly available in some package managers.
+The ledger currently requires that the Heliax fork of tendermint[v0.1.4-abciplus] is installed and available on path. This can be achieved through following [these instructions](https://docs.namada.net/user-guide/install/installing-tendermint.html)
 
-This can be installed by `make install` command (which runs [scripts/install/get_tendermint.sh](scripts/install/get_tendermint.sh) script).
