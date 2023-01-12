@@ -51,7 +51,7 @@ namadac transfer \
     --amount 1000 \
     --source faucet \
     --target [your-established-account-alias] \
-    --signer [your-established-account-alias]
+    --signer [your-implicit-account-alias]
 ```
 
 Now that you have a transparent account with some tokens, you can generate a Spending Key to hold your shielded balances.
@@ -116,7 +116,7 @@ namadac transfer \
     --target [some-payment-address] \
     --token btc \
     --amount 50 \
-    --signer [your-established-account-alias]
+    --signer [your-implicit-account-alias]
 ```
 
 ### Deshielding tranfers
@@ -129,7 +129,7 @@ namadac transfer \
     --target [some-transparent-address-alias] \
     --token btc \
     --amount 50 \
-    --signer [your-established-account-alias]
+    --signer [your-implicit-account-alias]
 ```
 
 ### Shielded Address/Key Generation
