@@ -78,7 +78,7 @@ router! {SHELL,
     // Request a proof of a validator set signed off for
     // the given epoch.
     ( "validator_set" / "proof" / [epoch: Epoch] )
-        -> EthereumProof<VotingPowersMap> = (),
+        -> EncodeCell<EthereumProof<VotingPowersMap>> = (),
 }
 
 // Handlers:
