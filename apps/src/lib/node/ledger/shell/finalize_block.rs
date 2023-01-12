@@ -345,7 +345,9 @@ where
                     // out of gas, remove its hash from storage to allow
                     // repwrapping it
                     if let Some(hash) = tx_unsigned_hash {
-                        if let Error::GasOverflow = msg {
+                        if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
+                            msg
+                        {
                             let tx_hash_key =
                                 replay_protection::get_tx_hash_key(&hash);
                             self.wl_storage
@@ -715,7 +717,7 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
-        // Add unshielded balance for fee paymenty
+        // Add unshielded balance for fee payment
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
@@ -938,5 +940,78 @@ mod test_finalize_block {
             // Store the state after commit for the next iteration
             last_storage_state = store_block_state(&shell);
         }
+    }
+
+    /// Test that if a decrypted transaction fails because of out-of-gas, its
+    /// hash is removed from storage to allow rewrapping it
+    #[test]
+    fn test_remove_tx_hash() {
+        let (mut shell, _) = setup();
+        let keypair = gen_keypair();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code.clone(),
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+
+        // Write inner hash in storage
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_tx.tx_hash);
+        shell
+            .storage
+            .write(&inner_hash_key, vec![])
+            .expect("Test failed");
+
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw_tx.clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+            .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        shell.enqueue_tx(wrapper_tx);
+
+        let _event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        //FIXME: @grarco, uncomment when proper gas metering is in place
+        // // Check inner tx hash has been removed from storage
+        // assert_eq!(event.event_type.to_string(), String::from("applied"));
+        // let code = event.attributes.get("code").expect("Test failed").as_str();
+        // assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+
+        // assert!(
+        //     !shell
+        //         .storage
+        //         .has_key(&inner_hash_key)
+        //         .expect("Test failed")
+        //         .0
+        // )
     }
 }

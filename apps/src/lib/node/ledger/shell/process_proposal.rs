@@ -885,6 +885,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         let signed = wrapper.sign(&keypair).expect("Test failed");
 
@@ -936,6 +938,8 @@ format!("Wrapper transaction hash {} already in storage, replay attempt", wrappe
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
         let signed = wrapper.sign(&keypair).expect("Test failed");
