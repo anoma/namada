@@ -241,6 +241,10 @@ impl VotingPowersMapExt for VotingPowersMap {
                 // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
                 const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
 
+                // TODO: check if this code is buggy. the total voting power
+                // that ends up in `voting_powers` might be greater than 2^32.
+                // we should write a proptest to check if it overflows 2^32 with
+                // some specific set of input values.
                 let voting_power = Ratio::new(voting_power, total_voting_power)
                     * NORMALIZED_VOTING_POWER;
                 let voting_power = voting_power.round().to_integer();
@@ -273,9 +277,8 @@ fn bheight_to_token(BlockHeight(h): BlockHeight) -> Token {
 
 /// Compute the keccak hash of a validator set update.
 ///
-/// For more information, check the Ethereum bridge smart contracts:
-//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Governance.sol#L232>
-//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
+/// For more information, check the specs of the Ethereum bridge smart contracts.
+// TODO: add version field to hash computation
 #[inline]
 fn compute_hash(
     block_height: BlockHeight,
@@ -321,6 +324,39 @@ impl Encode<1> for ValidatorSetArgs {
         let nonce = Token::Uint(self.nonce.clone().into());
         [Token::Tuple(vec![addrs, powers, nonce])]
     }
+}
+
+/// All the information to relay to Ethereum
+/// that a complete proof for a validator set
+/// exists in Namada.
+pub struct RelayProof {
+    /// Information about the signing validators.
+    ///
+    /// These validators will be sorted in descending
+    /// order by their respective voting powers.
+    pub current_validator_args: ValidatorSetArgs,
+    /// The hash reflecting the next set of validators,
+    /// as stored in the `Bridge` smart contract.
+    pub next_bridge_validator_set_hash: KeccakHash,
+    /// The hash reflecting the next set of validators,
+    /// as stored in the `Governance` smart contract.
+    pub next_governance_validator_set_hash: KeccakHash,
+    /// The signatures of all the current validators,
+    /// sorted by 
+    pub current_validator_signatures: 
+    /// A nonce for replay protection.
+    ///
+    /// In the context of a validator set update
+    /// [`RelayProof`], this value corresponds to
+    /// the 2nd block height offset within the epoch
+    /// where the next set of validators will be active.
+    ///
+    /// For instance, with a fixed epoch length of 10
+    /// blocks, the contract's nonces will be 2, then 12,
+    /// 22, 32, 42, and so on. So, for each of these
+    /// values, the next nonce values would equate to
+    /// 12, then 22, 32, 42, 52, etc.
+    pub next_validator_set_nonce: Uint,
 }
 
 // this is only here so we don't pollute the
