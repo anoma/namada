@@ -2,7 +2,7 @@
 
 After genesis, you can still join the network as a user and become a validator through self-bonding. 
 
-After following step 4), create a user account through the following command
+After following [step 4)](running-a-full-node.md), create a user account through the following command
 
 ```bash
 namada wallet address gen --alias my-account
