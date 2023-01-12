@@ -100,7 +100,6 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
     ) -> TxResult {
-        //FIXME: unit test
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
             Err(_) => {
@@ -325,7 +324,7 @@ mod test_process_proposal {
         gen_keypair, ProcessProposal, TestError, TestShell,
     };
 
-    /// Test that if a wrapper tx is not signed, it is rejected
+    /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
@@ -358,23 +357,22 @@ mod test_process_proposal {
             txs: vec![tx.clone()],
         };
 
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
-        assert_eq!(
-            response.result.info,
-            String::from("Wrapper transactions must be signed")
-        );
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidSig)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    String::from("Wrapper transactions must be signed")
+                );
+            }
+        }
     }
 
-    /// Test that a wrapper tx with invalid signature is rejected
+    /// Test that a block including a wrapper tx with invalid signature is rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _) = TestShell::new();
@@ -439,27 +437,28 @@ mod test_process_proposal {
         let request = ProcessProposal {
             txs: vec![new_tx.to_bytes()],
         };
-        let response = if let [response] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            response.clone()
-        } else {
-            panic!("Test failed")
-        };
-        let expected_error = "Signature verification failed: Invalid signature";
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
-        assert!(
-            response.result.info.contains(expected_error),
-            "Result info {} doesn't contain the expected error {}",
-            response.result.info,
-            expected_error
-        );
+
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                let expected_error =
+                    "Signature verification failed: Invalid signature";
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidSig)
+                );
+                assert!(
+                    response[0].result.info.contains(expected_error),
+                    "Result info {} doesn't contain the expected error {}",
+                    response[0].result.info,
+                    expected_error
+                );
+            }
+        }
     }
 
     /// Test that if the account submitting the tx is not known and the fee is
-    /// non-zero, [`process_proposal`] rejects that tx
+    /// non-zero, [`process_proposal`] rejects that block
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _) = TestShell::new();
@@ -486,26 +485,26 @@ mod test_process_proposal {
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
         };
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
-        assert_eq!(
-            response.result.info,
+
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidTx)
+                );
+                assert_eq!(
+            response[0].result.info,
             "The address given does not have sufficient balance to pay fee"
                 .to_string(),
         );
+            }
+        }
     }
 
     /// Test that if the account submitting the tx does
     /// not have sufficient balance to pay the fee,
-    /// [`process_proposal`] rejects that tx
+    /// [`process_proposal`] rejects the entire block
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _) = TestShell::new();
@@ -545,22 +544,21 @@ mod test_process_proposal {
             txs: vec![wrapper.to_bytes()],
         };
 
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
-        assert_eq!(
-            response.result.info,
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidTx)
+                );
+                assert_eq!(
+            response[0].result.info,
             String::from(
                 "The address given does not have sufficient balance to pay fee"
             )
         );
+            }
+        }
     }
 
     /// Test that if the expected order of decrypted txs is
@@ -676,7 +674,7 @@ mod test_process_proposal {
         } else {
             panic!("Test failed")
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::Undecryptable));
         assert_eq!(
             response.result.info,
             String::from(
@@ -833,7 +831,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Process Proposal should reject a RawTx, but not panic
+    /// Process Proposal should reject a block containing a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
         let (mut shell, _) = TestShell::new();
@@ -846,22 +844,122 @@ mod test_process_proposal {
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
-        assert_eq!(
-            response.result.info,
+
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failes"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidTx)
+                );
+                assert_eq!(
+            response[0].result.info,
             String::from(
                 "Transaction rejected: Non-encrypted transactions are not \
                  supported"
             ),
         );
+            }
+        }
+    }
+
+    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// block is rejected
+    #[test]
+    fn test_wrapper_tx_hash() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+        );
+        let signed = wrapper.sign(&keypair).expect("Test failed");
+
+        // Write wrapper hash to storage
+        let wrapper_unsigned_hash =
+            transaction::unsigned_hash_tx(&signed.to_bytes());
+        let hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_unsigned_hash);
+        shell.storage.write(&hash_key, vec![]).expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+            response[0].result.info,
+format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_unsigned_hash)
+                   );
+            }
+        }
+    }
+
+    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// block is rejected
+    #[test]
+    fn test_inner_tx_hash() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+        );
+        let inner_unsigned_hash = wrapper.tx_hash.clone();
+        let signed = wrapper.sign(&keypair).expect("Test failed");
+
+        // Write inner hash to storage
+        let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
+        shell.storage.write(&hash_key, vec![]).expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ReplayTx)
+                );
+                assert_eq!(
+            response[0].result.info,
+format!("Inner transaction hash {} already in storage, replay attempt", inner_unsigned_hash)
+                   );
+            }
+        }
     }
 }
