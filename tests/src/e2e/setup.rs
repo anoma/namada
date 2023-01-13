@@ -136,7 +136,7 @@ pub fn network(
 
     genesis.parameters.vp_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-    genesis.parameters.vp_whitelist =
+    genesis.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
 
     // Run the provided function on it
