@@ -311,7 +311,7 @@ mod test_vote_extensions {
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
-    use namada::proto::{Signed, SignedKeccakAbi};
+    use namada::proto::{Signed, SignedAbiBytes};
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     #[cfg(feature = "abcipp")]
@@ -381,7 +381,7 @@ mod test_vote_extensions {
                     Uint::from(0).encode().into_inner(),
                 ]
                 .concat();
-                let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )
@@ -460,7 +460,7 @@ mod test_vote_extensions {
                     Uint::from(0).encode().into_inner(),
                 ]
                 .concat();
-                let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )
@@ -621,7 +621,7 @@ mod test_vote_extensions {
                     Uint::from(0).encode().into_inner(),
                 ]
                 .concat();
-                let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )

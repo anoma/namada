@@ -34,8 +34,10 @@ use crate::types::token::Amount;
 pub struct Uint(pub [u64; 4]);
 
 impl Uint {
-    fn to_bytes(self) -> Vec<u8> {
-        let mut bytes = vec![];
+    /// Convert to a little endian byte representation of
+    /// a uint256.
+    pub fn to_bytes(self) -> [u8; 32] {
+        let mut bytes = [0; 32];
         ethUint::from(self).to_little_endian(&mut bytes);
         bytes
     }

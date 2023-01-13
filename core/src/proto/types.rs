@@ -8,12 +8,10 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tiny_keccak::{Hasher as KeccakHasher, Keccak};
 
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
-use crate::types::keccak::KeccakHash;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -81,7 +79,7 @@ pub struct SerializeWithBorsh;
 /// Tag type that indicates we should use ABI serialization
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignedKeccakAbi;
+pub struct SignedAbiBytes;
 
 impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
@@ -92,12 +90,10 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     }
 }
 
-impl<T: AsRef<[u8]>> Signable<T> for SignedKeccakAbi {
-    type Output = KeccakHash;
+impl<T: AsRef<[u8]>> Signable<T> for SignedAbiBytes {
+    type Output = Vec<u8>;
 
-    fn as_signable(data: &T) -> KeccakHash {
-        let mut output = [0; 32];
-
+    fn as_signable(data: &T) -> Vec<u8> {
         let eth_message = {
             let message = data.as_ref();
 
@@ -107,12 +103,7 @@ impl<T: AsRef<[u8]>> Signable<T> for SignedKeccakAbi {
             eth_message.extend_from_slice(message);
             eth_message
         };
-
-        let mut state = Keccak::v256();
-        state.update(&eth_message);
-        state.finalize(&mut output);
-
-        KeccakHash(output)
+        eth_message
     }
 }
 

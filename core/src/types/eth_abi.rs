@@ -2,13 +2,13 @@
 //! smart contracts.
 
 use std::marker::PhantomData;
-use std::ops::Deref;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 #[doc(inline)]
 pub use ethabi::token::Token;
+use tiny_keccak::{Hasher, Keccak};
 
-use crate::proto::{Signable, SignedKeccakAbi};
+use crate::proto::{Signable, SignedAbiBytes};
 use crate::types::keccak::{keccak_hash, KeccakHash};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
@@ -23,14 +23,6 @@ pub struct EncodeCell<T: ?Sized> {
     /// which is not the desired behavior, since we own an encoded value
     /// of `T`, not a value of `T` itself.
     _marker: PhantomData<*const T>,
-}
-
-impl<T: ?Sized> Deref for EncodeCell<T> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.encoded_data
-    }
 }
 
 impl<T> EncodeCell<T> {
@@ -74,10 +66,16 @@ pub trait Encode<const N: usize>: Sized {
 
     /// Encodes a slice of [`Token`] instances, and returns the
     /// keccak hash of the encoded string appended to an Ethereum
-    /// signature header.
-    fn signed_keccak256(&self) -> KeccakHash {
+    /// signature header. This can then be signed.
+    fn signable_keccak256(&self) -> KeccakHash {
+        let mut output = [0; 32];
         let message = self.encode().into_inner();
-        SignedKeccakAbi::as_signable(&message)
+        let signable_bytes = SignedAbiBytes::as_signable(&message);
+        let mut state = Keccak::v256();
+        state.update(&signable_bytes);
+        state.finalize(&mut output);
+
+        KeccakHash(output)
     }
 }
 

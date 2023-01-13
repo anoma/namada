@@ -4,17 +4,12 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-use borsh::BorshDeserialize;
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
-use namada::core::ledger::eth_bridge::storage::bridge_pool::get_nonce_key;
-use namada::core::types::eth_abi::Encode;
+#[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
-use namada::ledger::storage::StoreType;
-use namada::proto::{Signed, SignedKeccakAbi};
-use namada::types::ethereum_events::Uint;
-use namada::types::keccak::KeccakHash;
+use namada::proto::{Signed, SignedAbiBytes};
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
@@ -139,27 +134,14 @@ where
             .get_validator_address()
             .expect(VALIDATOR_EXPECT_MSG)
             .to_owned();
-        let bp_root: KeccakHash = self
-            .storage
-            .block
-            .tree
-            .sub_root(&StoreType::BridgePool)
-            .into();
-        let nonce = Uint::try_from_slice(
-            &self
-                .storage
-                .read(&get_nonce_key())
-                .expect("Reading Bridge pool nonce shouldn't fail.")
-                .0
-                .expect("Reading Bridge pool nonce shouldn't fail."),
-        )
-        .expect("Deserializing Bridge pool nonce shouldn't fail.");
-        let to_sign = [bp_root.encode().into_inner(), nonce].concat();
+        let bp_root = self.storage.get_bridge_pool_root().0;
+        let nonce = self.storage.get_bridge_pool_nonce().to_bytes();
+        let to_sign = [bp_root.as_slice(), nonce.as_slice()].concat();
         let eth_key = self
             .mode
             .get_eth_bridge_keypair()
             .expect(VALIDATOR_EXPECT_MSG);
-        let signed = Signed::<Vec<u8>, SignedKeccakAbi>::new(eth_key, to_sign);
+        let signed = Signed::<Vec<u8>, SignedAbiBytes>::new(eth_key, to_sign);
 
         let ext = bridge_pool_roots::Vext {
             block_height: self.storage.last_height,
