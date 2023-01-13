@@ -120,12 +120,12 @@ serde_json = "1.0.62"
 sha2 = "0.9.3"
 # We switch off "blake2b" because it cannot be compiled to wasm
 tempfile = {version = "3.2.0", optional = true}
-tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-rpc-abcipp = { package = "tendermint-rpc", git="https://github.com/memasdeligeorgakis/tendermint-rs.git", branch="feat/00_add_only_client_feature_flag", features = ["only-client"], optional = true }
-tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint = {version = "0.23.6", optional = true}
-tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
-tendermint-proto = {version = "0.23.6", optional = true}
+tendermint-abcipp = {package = "tendermint", git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", optional = true}
+tendermint-rpc-abcipp = { package = "tendermint-rpc", git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", features = ["trait-client"], default-features = false, optional = true }
+tendermint-proto-abcipp = {package = "tendermint-proto", git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", optional = true}
+tendermint = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", version = "0.23.6", optional = true}
+tendermint-rpc = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", version = "0.23.6", features = ["trait-client"], default-features = false, optional = true}
+tendermint-proto = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", version = "0.23.6", optional = true}
 thiserror = "1.0.30"
 tracing = "0.1.30"
 wasmer = {version = "=2.2.0", optional = true}
@@ -136,8 +136,8 @@ wasmer-engine-universal = {version = "=2.2.0", optional = true}
 wasmer-vm = {version = "2.2.0", optional = true}
 wasmparser = "0.83.0"
 #libmasp = { git = "https://github.com/anoma/masp", branch = "murisi/masp-incentive" }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d" }
 rand = {version = "0.8", default-features = false, optional = true}
 rand_core = {version = "0.6", default-features = false, optional = true}
 zeroize = "1.5.5"

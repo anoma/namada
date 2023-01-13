@@ -40,8 +40,8 @@ once_cell = {version = "1.8.0", optional = true}
 rust_decimal = {version = "1.26.1", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "117bff3b0d3e15aff993c25ff6222d411136559d", optional = true }
 
 [dev-dependencies]
 namada = {path = "../../shared"}
