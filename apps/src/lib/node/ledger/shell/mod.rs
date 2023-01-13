@@ -41,7 +41,7 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token::{self, Amount};
+use namada::types::token::{self};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, MIN_FEE,
@@ -597,7 +597,7 @@ where
                     #[cfg(feature = "mainnet")]
                     let has_valid_pow = false;
 
-                    if !has_valid_pow && Amount::from(MIN_FEE) > balance {
+                    if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
                         response.code = 1;
                         response.log = String::from(
                             "The address given does not have sufficient \
@@ -728,7 +728,7 @@ where
                 &self.storage,
             )
             .expect("Must be able to read wrapper tx fees parameter");
-        fees.unwrap_or_default()
+        fees.unwrap_or(token::Amount::whole(MIN_FEE))
     }
 
     #[cfg(not(feature = "mainnet"))]
