@@ -250,43 +250,45 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
-            alloc.try_alloc(&tx_bytes[..])
-                .map_or_else(
-                    |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
-                            // TODO: maybe we should find a way to include
-                            // validator set updates all the time. for instance,
-                            // we could have recursive bins -> bin space within
-                            // a bin is partitioned into yet more bins. so, we
-                            // could have, say, 2/3 of the bin space available
-                            // for eth events, and 1/3 available for valset
-                            // upds. to be determined, as we implement CheckTx
-                            // changes (issue #367)
-                            tracing::debug!(
-                                ?tx_bytes,
-                                bin_space_left,
-                                proposal_height =
-                                    ?self.storage.get_current_decision_height(),
-                                "Dropping protocol tx from the current proposal",
-                            );
-                            false
-                        }
-                        AllocFailure::OverflowsBin { bin_size } => {
-                            // TODO: handle tx whose size is greater
-                            // than bin size
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_size,
-                                proposal_height =
-                                    ?self.storage.get_current_decision_height(),
-                                "Dropping large protocol tx from the current proposal",
-                            );
-                            true
-                        }
-                    },
-                    |()| true,
-                )
+        let (current_epoch, _) = self.storage.get_current_epoch();
+        let txs = deserialize_vote_extensions(txs, protocol_tx_indices, current_epoch)
+            .take_while(|tx_bytes|
+                alloc.try_alloc(&tx_bytes[..])
+                    .map_or_else(
+                        |status| match status {
+                            AllocFailure::Rejected { bin_space_left } => {
+                                // TODO: maybe we should find a way to include
+                                // validator set updates all the time. for instance,
+                                // we could have recursive bins -> bin space within
+                                // a bin is partitioned into yet more bins. so, we
+                                // could have, say, 2/3 of the bin space available
+                                // for eth events, and 1/3 available for valset
+                                // upds. to be determined, as we implement CheckTx
+                                // changes (issue #367)
+                                tracing::debug!(
+                                    ?tx_bytes,
+                                    bin_space_left,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping protocol tx from the current proposal",
+                                );
+                                false
+                            }
+                            AllocFailure::OverflowsBin { bin_size } => {
+                                // TODO: handle tx whose size is greater
+                                // than bin size
+                                tracing::warn!(
+                                    ?tx_bytes,
+                                    bin_size,
+                                    proposal_height =
+                                        ?self.storage.get_current_decision_height(),
+                                    "Dropping large protocol tx from the current proposal",
+                                );
+                                true
+                            }
+                        },
+                        |()| true,
+                    )
         )
         .collect();
 
