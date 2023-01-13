@@ -1,4 +1,4 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::voting_power::FractionalVotingPower;
@@ -24,9 +24,8 @@ where
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn read<D, H, T>(
-    storage: &mut Storage<D, H>,
+    storage: &Storage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Tally>
 where
@@ -43,6 +42,32 @@ where
         seen_by,
         seen,
     })
+}
+
+#[inline]
+pub fn read_body<D, H, T>(
+    storage: &Storage<D, H>,
+    keys: &vote_tallies::Keys<T>,
+) -> Result<T>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshDeserialize,
+{
+    super::read::value(storage, &keys.body())
+}
+
+#[inline]
+pub fn maybe_read_seen<D, H, T>(
+    storage: &Storage<D, H>,
+    keys: &vote_tallies::Keys<T>,
+) -> Result<Option<bool>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshDeserialize,
+{
+    super::read::maybe_value(storage, &keys.seen())
 }
 
 #[cfg(test)]
@@ -121,7 +146,7 @@ mod tests {
             )
             .unwrap();
 
-        let result = read(&mut storage, &keys);
+        let result = read(&storage, &keys);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), tally);
