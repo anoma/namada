@@ -7,7 +7,9 @@ pub mod val_set_update;
 use borsh::BorshDeserialize;
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
-use namada::ledger::pos::{PosQueries, SendValsetUpd};
+use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+#[cfg(feature = "abcipp")]
+use namada::ledger::pos::PosQueries;
 use namada::proto::Signed;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
@@ -297,8 +299,7 @@ pub fn deserialize_vote_extensions(
 }
 
 /// Given a slice of [`TxBytes`], return an iterator over the
-/// ones we could deserialize to vote extension [`ProtocolTx`]
-/// instances.
+/// ones we could deserialize to vote extension protocol txs.
 #[cfg(not(feature = "abcipp"))]
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
