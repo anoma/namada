@@ -3,9 +3,9 @@
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::core::hints;
-use namada::ledger::pos::PosQueries;
 #[cfg(feature = "abcipp")]
-use namada::ledger::pos::SendValsetUpd;
+use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
@@ -26,6 +26,8 @@ use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+#[allow(unused_imports)]
+use crate::node::ledger::shell::block_space_alloc;
 #[cfg(not(feature = "abcipp"))]
 use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
@@ -487,7 +489,7 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
-    use namada::proto::SignedKeccakAbi;
+    use namada::proto::SignedAbiBytes;
     use namada::proto::{Signed, SignedTxData};
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
@@ -605,7 +607,7 @@ mod test_prepare_proposal {
                 Uint::from(0).encode().into_inner(),
             ]
             .concat();
-            let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+            let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -910,7 +912,7 @@ mod test_prepare_proposal {
                 Uint::from(0).encode().into_inner(),
             ]
             .concat();
-            let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+            let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -1095,7 +1097,7 @@ mod test_prepare_proposal {
                     Uint::from(0).encode().into_inner(),
                 ]
                 .concat();
-                let sig = Signed::<Vec<u8>, SignedKeccakAbi>::new(
+                let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )

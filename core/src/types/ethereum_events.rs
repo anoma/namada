@@ -33,6 +33,16 @@ use crate::types::token::Amount;
 )]
 pub struct Uint(pub [u64; 4]);
 
+impl Uint {
+    /// Convert to a little endian byte representation of
+    /// a uint256.
+    pub fn to_bytes(self) -> [u8; 32] {
+        let mut bytes = [0; 32];
+        ethUint::from(self).to_little_endian(&mut bytes);
+        bytes
+    }
+}
+
 impl Encode<1> for Uint {
     fn tokenize(&self) -> [Token; 1] {
         [Token::Uint(self.into())]

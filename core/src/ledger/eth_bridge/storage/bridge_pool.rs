@@ -229,7 +229,7 @@ impl BridgePoolTree {
     /// bridge pool.
     ///
     /// It should have one string segment which should
-    /// parse into a [Hash]
+    /// parse into a [`struct@Hash`].
     fn parse_key(key: &Key) -> Result<KeccakHash, Error> {
         if key.segments.len() == 1 {
             match &key.segments[0] {

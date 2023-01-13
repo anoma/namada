@@ -345,7 +345,7 @@ mod tag {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
                 .voting_powers
                 .get_bridge_and_gov_hashes(ext.block_height);
-            let KeccakHash(output) = AbiEncode::signed_keccak256(&[
+            let KeccakHash(output) = AbiEncode::signable_keccak256(&[
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
