@@ -39,10 +39,10 @@ where
         let tx_results = self.process_txs(&req.txs);
 
         ProcessProposal {
-            status: if tx_results.iter().any(|res| match res.code {
-                1 | 2 | 4 | 5 | 7 => true,
-                _ => false,
-            }) {
+            status: if tx_results
+                .iter()
+                .any(|res| matches!(res.code, 1 | 2 | 4 | 5 | 7))
+            {
                 ProposalStatus::Reject as i32
             } else {
                 ProposalStatus::Accept as i32
@@ -217,20 +217,20 @@ where
                                 ),
                             };
                         }
-                        if let (Some(m), _) =
-                            temp_wl_storage.write_log.read(&inner_hash_key)
+                        // Check in WAL for replay attack in the same block
+                        if let (
+                            Some(StorageModification::Write { value: _ }),
+                            _,
+                        ) = temp_wl_storage.write_log.read(&inner_hash_key)
                         {
-                            // Check in WAL for replay attack in the same block
-                            if let StorageModification::Write { value: _ } = m {
-                                return TxResult {
-                                    code: ErrorCodes::ReplayTx.into(),
-                                    info: format!(
-                                        "Inner transaction hash {} already in \
-                                         storage, replay attempt",
-                                        &tx.tx_hash
-                                    ),
-                                };
-                            }
+                            return TxResult {
+                                code: ErrorCodes::ReplayTx.into(),
+                                info: format!(
+                                    "Inner transaction hash {} already in \
+                                     storage, replay attempt",
+                                    &tx.tx_hash
+                                ),
+                            };
                         }
 
                         // Write inner hash to WAL
@@ -264,20 +264,20 @@ where
                                 ),
                             };
                         }
-                        if let (Some(m), _) =
-                            temp_wl_storage.write_log.read(&wrapper_hash_key)
+                        // Check in WAL for replay attack in the same block
+                        if let (
+                            Some(StorageModification::Write { value: _ }),
+                            _,
+                        ) = temp_wl_storage.write_log.read(&wrapper_hash_key)
                         {
-                            // Check in WAL for replay attack in the same block
-                            if let StorageModification::Write { value: _ } = m {
-                                return TxResult {
-                                    code: ErrorCodes::ReplayTx.into(),
-                                    info: format!(
-                                        "Wrapper transaction hash {} already \
-                                         in storage, replay attempt",
-                                        wrapper_hash
-                                    ),
-                                };
-                            }
+                            return TxResult {
+                                code: ErrorCodes::ReplayTx.into(),
+                                info: format!(
+                                    "Wrapper transaction hash {} already in \
+                                     storage, replay attempt",
+                                    wrapper_hash
+                                ),
+                            };
                         }
 
                         // Write wrapper hash to WAL

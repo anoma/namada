@@ -36,10 +36,10 @@ use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
-use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::internal::WrapperTxInQueue;
+use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
@@ -47,7 +47,7 @@ use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
-use namada::types::{key::*, transaction};
+use namada::types::{address, transaction};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -672,8 +672,8 @@ where
             if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
                 response.code = 1;
                 response.log = String::from(
-                    "The address given does not have sufficient \
-                         balance to pay fee",
+                    "The address given does not have sufficient balance to \
+                     pay fee",
                 );
                 return response;
             }
