@@ -176,6 +176,7 @@ where
             VoteExtensionError,
         >,
     > + '_ {
+        // TODO: filter vexts whose epoch is not the current one
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
