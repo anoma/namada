@@ -803,8 +803,6 @@ pub trait PosBase {
         self.write_validator_set(&validator_set);
         self.write_total_deltas(&total_deltas);
 
-        // TODO: write total_staked_tokens (Amount) to storage?
-
         // Credit the bonded tokens to the PoS account
         self.credit_tokens(
             &self.staking_token_address(),
