@@ -145,14 +145,24 @@ impl Parameters {
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
-        let vp_whitelist_value = encode(&vp_whitelist);
+        let vp_whitelist_value = encode(
+            &vp_whitelist
+                .iter()
+                .map(|id| id.to_lowercase())
+                .collect::<String>(),
+        );
         storage.write(&vp_whitelist_key, vp_whitelist_value).expect(
             "Vp whitelist parameter must be initialized in the genesis block",
         );
 
         // write tx whitelist parameter
         let tx_whitelist_key = storage::get_tx_whitelist_storage_key();
-        let tx_whitelist_value = encode(&tx_whitelist);
+        let tx_whitelist_value = encode(
+            &tx_whitelist
+                .iter()
+                .map(|id| id.to_lowercase())
+                .collect::<String>(),
+        );
         storage.write(&tx_whitelist_key, tx_whitelist_value).expect(
             "Tx whitelist parameter must be initialized in the genesis block",
         );
