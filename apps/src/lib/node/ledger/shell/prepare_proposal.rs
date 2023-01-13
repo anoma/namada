@@ -489,15 +489,11 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
-    use namada::proto::SignedAbiBytes;
+    use namada::proto::SignableEthBytes;
     use namada::proto::{Signed, SignedTxData};
-    #[cfg(feature = "abcipp")]
-    use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::ethereum_events::Uint;
-    #[cfg(feature = "abcipp")]
-    use namada::types::keccak::KeccakHash;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
@@ -602,12 +598,8 @@ mod test_prepare_proposal {
         };
 
         let bp_root = {
-            let to_sign = [
-                KeccakHash([0; 32]).encode().into_inner(),
-                Uint::from(0).encode().into_inner(),
-            ]
-            .concat();
-            let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -907,12 +899,8 @@ mod test_prepare_proposal {
             ext
         };
         let bp_root = {
-            let to_sign = [
-                KeccakHash([0; 32]).encode().into_inner(),
-                Uint::from(0).encode().into_inner(),
-            ]
-            .concat();
-            let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -1092,12 +1080,8 @@ mod test_prepare_proposal {
         #[cfg(feature = "abcipp")]
         {
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
-                let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+                let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+                let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )

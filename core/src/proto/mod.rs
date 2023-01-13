@@ -4,7 +4,7 @@ pub mod generated;
 mod types;
 
 pub use types::{
-    Dkg, Error, Signable, Signed, SignedAbiBytes, SignedTxData, Tx,
+    Dkg, Error, Signable, SignableEthBytes, Signed, SignedTxData, Tx,
 };
 
 #[cfg(test)]

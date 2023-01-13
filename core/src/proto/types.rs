@@ -79,7 +79,7 @@ pub struct SerializeWithBorsh;
 /// Tag type that indicates we should use ABI serialization
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignedAbiBytes;
+pub struct SignableEthBytes;
 
 impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
@@ -90,7 +90,7 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     }
 }
 
-impl<T: AsRef<[u8]>> Signable<T> for SignedAbiBytes {
+impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
     type Output = Vec<u8>;
 
     fn as_signable(data: &T) -> Vec<u8> {
