@@ -39,6 +39,7 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
+    use crate::ledger::inflation::mint_tokens;
     use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
     use crate::types::storage::{self, KeySeg};
     use crate::types::{address, token};
@@ -132,11 +133,8 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    let reward_key = token::balance_key(&address::nam(), &masp_addr);
-    let addr_bal: token::Amount =
-        wl_storage.read(&reward_key)?.unwrap_or_default();
-    let new_bal = addr_bal + total_reward;
-    wl_storage.write(&reward_key, new_bal)?;
+    mint_tokens(wl_storage, &masp_addr, &address::nam(), total_reward)?;
+
     // Try to distribute Merkle tree construction as evenly as possible
     // across multiple cores
     // Merkle trees must have exactly 2^n leaves to be mergeable
