@@ -149,7 +149,7 @@ impl Parameters {
             &vp_whitelist
                 .iter()
                 .map(|id| id.to_lowercase())
-                .collect::<String>(),
+                .collect::<Vec<String>>(),
         );
         storage.write(&vp_whitelist_key, vp_whitelist_value).expect(
             "Vp whitelist parameter must be initialized in the genesis block",
@@ -161,7 +161,7 @@ impl Parameters {
             &tx_whitelist
                 .iter()
                 .map(|id| id.to_lowercase())
-                .collect::<String>(),
+                .collect::<Vec<String>>(),
         );
         storage.write(&tx_whitelist_key, tx_whitelist_value).expect(
             "Tx whitelist parameter must be initialized in the genesis block",
@@ -273,7 +273,11 @@ where
     H: ledger_storage::StorageHasher,
 {
     let key = storage::get_vp_whitelist_storage_key();
-    update(storage, &value, key)
+    update(
+        storage,
+        &value.iter().map(|id| id.to_lowercase()).collect::<String>(),
+        key,
+    )
 }
 
 /// Update the tx whitelist parameter in storage. Returns the parameters and gas
@@ -287,7 +291,11 @@ where
     H: ledger_storage::StorageHasher,
 {
     let key = storage::get_tx_whitelist_storage_key();
-    update(storage, &value, key)
+    update(
+        storage,
+        &value.iter().map(|id| id.to_lowercase()).collect::<String>(),
+        key,
+    )
 }
 
 /// Update the epoch parameter in storage. Returns the parameters and gas
