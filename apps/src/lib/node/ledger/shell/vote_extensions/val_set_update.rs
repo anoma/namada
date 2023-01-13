@@ -12,10 +12,10 @@ use namada::types::token;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
-use crate::types::storage::Epoch;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
+use crate::types::storage::Epoch;
 
 impl<D, H> Shell<D, H>
 where
@@ -33,8 +33,8 @@ where
     ///  * The signing validator is active during `signing_epoch`.
     ///  * The validator correctly signed the extension, with its Ethereum hot
     ///    key.
-    ///  * The validator signed over the epoch inside of the extension,
-    ///    whose value should be identical to `signing_epoch`.
+    ///  * The validator signed over the epoch inside of the extension, whose
+    ///    value should be identical to `signing_epoch`.
     ///  * The voting powers in the vote extension correspond to the voting
     ///    powers of the validators of `signing_epoch + 1`.
     ///  * The voting powers signed over were Ethereum ABI encoded, normalized
@@ -63,8 +63,8 @@ where
     > {
         if self.last_height.0 == 0 {
             tracing::error!(
-                "Dropping validator set update vote extension issued \
-                 at genesis"
+                "Dropping validator set update vote extension issued at \
+                 genesis"
             );
             return Err(VoteExtensionError::IssuedAtGenesis);
         }
@@ -162,7 +162,9 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
-                self.storage.last_height,
+                self.storage.get_epoch(self.storage.last_height).expect(
+                    "The epoch of the last block height should always be known",
+                ),
             )
         })
     }

@@ -174,7 +174,7 @@ pub trait VotingPowersMapExt {
 
         let bridge_hash = compute_hash(
             signing_epoch,
-            BRIDGE_CONTRACT_VERSION
+            BRIDGE_CONTRACT_VERSION,
             BRIDGE_CONTRACT_NAMESPACE,
             hot_key_addrs,
             voting_powers.clone(),

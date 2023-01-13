@@ -745,7 +745,12 @@ where
                         if let Err(err) = self
                             .validate_valset_upd_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                // n.b. only accept validator set updates
+                                // issued at
+                                // the current epoch (signing off on the
+                                // validators
+                                // of the next epoch)
+                                self.storage.get_current_epoch().0,
                             )
                         {
                             response.code = 1;

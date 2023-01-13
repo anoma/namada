@@ -11,6 +11,8 @@ use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::proto::Signed;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::storage::Epoch;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
@@ -304,6 +306,7 @@ pub fn deserialize_vote_extensions(
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
     protocol_tx_indices: &'shell mut VecIndexSet<u128>,
+    current_epoch: Epoch,
 ) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
@@ -320,14 +323,32 @@ pub fn deserialize_vote_extensions<'shell>(
         };
         match process_tx(tx).ok()? {
             TxType::Protocol(ProtocolTx {
-                tx:
-                    ProtocolTxType::EthEventsVext(_)
-                    | ProtocolTxType::ValSetUpdateVext(_),
+                tx: ProtocolTxType::EthEventsVext(_),
                 ..
             }) => {
                 // mark tx for inclusion
                 protocol_tx_indices.insert(index);
                 Some(tx_bytes.clone())
+            }
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::ValSetUpdateVext(ext),
+                ..
+            }) => {
+                // mark tx, so it's skipped when
+                // building the batch of remaining txs
+                protocol_tx_indices.insert(index);
+
+                // only include non-stale validator set updates
+                // in block proposals. it might be sitting long
+                // enough in the mempool for it to no longer be
+                // relevant to propose (e.g. the new epoch was
+                // installed before this validator set update got
+                // a chance to be decided). unfortunately, we won't
+                // be able to remove it from the mempool this way,
+                // but it will eventually be evicted, getting replaced
+                // by newer txs.
+                (ext.data.signing_epoch == current_epoch)
+                    .then(|| tx_bytes.clone())
             }
             _ => None,
         }
