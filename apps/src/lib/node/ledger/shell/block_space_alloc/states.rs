@@ -28,6 +28,8 @@ mod protocol_txs;
 mod remaining_txs;
 
 use super::{AllocFailure, BlockSpaceAllocator};
+#[allow(unused_imports)]
+use crate::node::ledger::shell::block_space_alloc;
 
 /// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
 /// encrypted transactions.
@@ -44,21 +46,21 @@ pub enum EncryptedTxBatchAllocator {
 /// a new batch of DKG decrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub enum BuildingDecryptedTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of Namada protocol transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub enum BuildingProtocolTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG encrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
@@ -70,25 +72,25 @@ pub struct BuildingEncryptedTxBatch<Mode> {
 /// block, yet.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub enum FillingRemainingSpace {}
 
 /// Allow block proposals to include encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub enum WithEncryptedTxs {}
 
 /// Prohibit block proposals from including encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub enum WithoutEncryptedTxs {}
 
 /// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub trait TryAlloc {
     /// Try to allocate space for a new transaction.
     fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure>;
@@ -101,7 +103,7 @@ pub trait TryAlloc {
 /// [`NextStateWithoutEncryptedTxs`].
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub trait NextStateImpl<Transition = ()> {
     /// The next state in the [`BlockSpaceAllocator`] state machine.
     type Next;
@@ -115,7 +117,7 @@ pub trait NextStateImpl<Transition = ()> {
 /// state with encrypted txs in a block.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub trait NextStateWithEncryptedTxs: NextStateImpl<WithEncryptedTxs> {
     /// Transition to the next state in the [`BlockSpaceAllocator`] state,
     /// ensuring we include encrypted txs in a block.
@@ -134,7 +136,7 @@ impl<S> NextStateWithEncryptedTxs for S where S: NextStateImpl<WithEncryptedTxs>
 /// state without encrypted txs in a block.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub trait NextStateWithoutEncryptedTxs:
     NextStateImpl<WithoutEncryptedTxs>
 {
@@ -158,7 +160,7 @@ impl<S> NextStateWithoutEncryptedTxs for S where
 /// state with a null transition function.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
+/// [`block_space_alloc::states`].
 pub trait NextState: NextStateImpl {
     /// Transition to the next state in the [`BlockSpaceAllocator`] state,
     /// using a null transiiton function.
