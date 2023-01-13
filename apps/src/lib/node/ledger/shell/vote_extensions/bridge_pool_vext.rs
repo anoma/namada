@@ -116,7 +116,7 @@ where
 
         let bp_root = self.storage.get_bridge_pool_root().0;
         let nonce = self.storage.get_bridge_pool_nonce().to_bytes();
-        let signed = Signed::<Vec<u8>, SignedAbiBytes>::new_from(
+        let signed = Signed::<Vec<u8>, SignableEthBytes>::new_from(
             [bp_root, nonce].concat(),
             ext.data.sig.clone(),
         );
@@ -189,10 +189,8 @@ mod test_vote_extensions {
         PosQueries, ValidatorConsensusKeys, WeightedValidator,
     };
     use namada::proof_of_stake::types::ValidatorEthKey;
-    use namada::proto::{Signed, SignedAbiBytes};
-    use namada::types::eth_abi::Encode;
+    use namada::proto::{SignableEthBytes, Signed};
     use namada::types::ethereum_events::Uint;
-    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::vote_extensions::bridge_pool_roots;
@@ -270,7 +268,8 @@ mod test_vote_extensions {
 
         // Check that Bertha's vote extensions pass validation.
         let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(&hot_key, to_sign).sig;
+        let sig =
+            Signed::<Vec<u8>, SignableEthBytes>::new(&hot_key, to_sign).sig;
         let vote_ext = bridge_pool_roots::Vext {
             block_height: shell.storage.get_current_decision_height(),
             validator_addr: bertha_address(),
@@ -296,7 +295,7 @@ mod test_vote_extensions {
             .expect("Test failed")
             .clone();
         let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -326,7 +325,7 @@ mod test_vote_extensions {
             .clone();
         let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
         let sig =
-            Signed::<Vec<u8>, SignedAbiBytes>::new(&signing_key, to_sign).sig;
+            Signed::<Vec<u8>, SignableEthBytes>::new(&signing_key, to_sign).sig;
         let bp_root = bridge_pool_roots::Vext {
             block_height: shell.storage.get_current_decision_height(),
             validator_addr: address,
@@ -351,7 +350,7 @@ mod test_vote_extensions {
             .clone();
         add_validator(&mut shell);
         let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -374,12 +373,8 @@ mod test_vote_extensions {
     fn reject_incorrect_block_number() {
         let (shell, _, _) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [
-            KeccakHash([0; 32]).encode().into_inner(),
-            Uint::from(0).encode().into_inner(),
-        ]
-        .concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -402,12 +397,8 @@ mod test_vote_extensions {
     fn test_reject_genesis_vexts() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [
-            KeccakHash([0; 32]).encode().into_inner(),
-            Uint::from(0).encode().into_inner(),
-        ]
-        .concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -429,12 +420,8 @@ mod test_vote_extensions {
     fn test_incorrect_nonce() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [
-            KeccakHash([0; 32]).encode().into_inner(),
-            Uint::from(10).encode().into_inner(),
-        ]
-        .concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let to_sign = [[0; 32], Uint::from(10).to_bytes()].concat();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -456,12 +443,8 @@ mod test_vote_extensions {
     fn test_incorrect_root() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [
-            KeccakHash([1; 32]).encode().into_inner(),
-            Uint::from(0).encode().into_inner(),
-        ]
-        .concat();
-        let sig = Signed::<Vec<u8>, SignedAbiBytes>::new(
+        let to_sign = [[1; 32], Uint::from(0).to_bytes()].concat();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
