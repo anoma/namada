@@ -13,8 +13,6 @@ use crate::types::eth_abi::{AbiEncode, Encode, Token};
 use crate::types::ethereum_events::{EthAddress, Uint};
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
-#[allow(unused_imports)]
-use crate::types::storage::BlockHeight;
 use crate::types::storage::Epoch;
 use crate::types::token;
 
