@@ -1,5 +1,5 @@
 //! A basic fungible token
-
+pub mod parameters;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
@@ -10,6 +10,7 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use self::parameters::key_of_token;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -297,7 +298,12 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+/// Key for the total supply of tokens
 const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
+/// Last calculated inflation value handed out
+pub const LAST_INFLATION: &str = "last_inflation";
+/// The last locked ratio
+pub const LAST_LOCKED_RATIO: &str = "last_locked_ratio";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -310,9 +316,11 @@ pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
 
 /// Obtain a storage key prefix for all users' balances.
 pub fn balance_prefix(token_addr: &Address) -> Key {
-    Key::from(token_addr.to_db_key())
-        .push(&BALANCE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+    key_of_token(
+        token_addr,
+        BALANCE_STORAGE_KEY,
+        "cannot obtain a storage key",
+    )
 }
 
 /// Obtain a storage key prefix for multitoken balances.
@@ -373,9 +381,29 @@ pub fn is_masp_key(key: &Key) -> bool {
 
 /// Storage key for total supply of a token
 pub fn total_supply_key(token_address: &Address) -> Key {
-    Key::from(token_address.to_db_key())
-        .push(&TOTAL_SUPPLY_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+    key_of_token(
+        token_address,
+        TOTAL_SUPPLY_STORAGE_KEY,
+        "cannot obtain a storage key",
+    )
+}
+
+/// The last locked ratio of a token
+pub fn last_locked_ratio(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        LAST_LOCKED_RATIO,
+        "cannot obtain storage key for the last locked ratio",
+    )
+}
+
+/// The last inflation of a token
+pub fn last_inflation(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        LAST_INFLATION,
+        "cannot obtain storage key for the last inflation rate",
+    )
 }
 
 /// Is storage key for total supply of a specific token?
