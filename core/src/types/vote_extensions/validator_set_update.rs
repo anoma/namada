@@ -39,14 +39,6 @@ pub struct ValidatorSetUpdateVextDigest {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
-    /// The value of Namada's [`Epoch`] at the creation of each
-    /// compressed [`Vext`].
-    ///
-    /// This value serves the purpose of a nonce for replay attack
-    /// protection, and it allows any node to query the public keys
-    /// of the validators who signed the inner validator set update
-    /// vote extensions.
-    pub signing_epoch: Epoch,
 }
 
 impl VextDigest {
@@ -59,7 +51,6 @@ impl VextDigest {
                 ext.sig,
             )]),
             voting_powers: ext.data.voting_powers,
-            signing_epoch: ext.data.signing_epoch,
         }
     }
 
@@ -178,13 +169,13 @@ pub trait VotingPowersMapExt {
     /// to be signed by an Ethereum hot and cold key, respectively.
     fn get_bridge_and_gov_hashes(
         &self,
-        block_height: BlockHeight,
+        signing_epoch: Epoch,
     ) -> (KeccakHash, KeccakHash) {
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
             self.get_abi_encoded();
 
         let bridge_hash = compute_hash(
-            block_height,
+            signing_epoch,
             BRIDGE_CONTRACT_VERSION
             BRIDGE_CONTRACT_NAMESPACE,
             hot_key_addrs,
@@ -192,7 +183,7 @@ pub trait VotingPowersMapExt {
         );
 
         let governance_hash = compute_hash(
-            block_height,
+            signing_epoch,
             GOVERNANCE_CONTRACT_VERSION,
             GOVERNANCE_CONTRACT_NAMESPACE,
             cold_key_addrs,
@@ -264,10 +255,10 @@ impl VotingPowersMapExt for VotingPowersMap {
     }
 }
 
-/// Convert a [`BlockHeight`] to a [`Token`].
+/// Convert an [`Epoch`] to a [`Token`].
 #[inline]
-fn bheight_to_token(BlockHeight(h): BlockHeight) -> Token {
-    Token::Uint(h.into())
+fn epoch_to_token(Epoch(e): Epoch) -> Token {
+    Token::Uint(e.into())
 }
 
 /// Compute the keccak hash of a validator set update.
@@ -277,7 +268,7 @@ fn bheight_to_token(BlockHeight(h): BlockHeight) -> Token {
 //    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
 #[inline]
 fn compute_hash(
-    block_height: BlockHeight,
+    signing_epoch: Epoch,
     contract_version: u8,
     contract_namespace: &str,
     validators: Vec<Token>,
@@ -288,7 +279,7 @@ fn compute_hash(
         Token::String(contract_namespace.into()),
         Token::Array(validators),
         Token::Array(voting_powers),
-        bheight_to_token(block_height),
+        epoch_to_token(signing_epoch),
     ])
 }
 
@@ -329,7 +320,7 @@ impl Encode<1> for ValidatorSetArgs {
 mod tag {
     use serde::{Deserialize, Serialize};
 
-    use super::{bheight_to_token, Vext, VotingPowersMapExt};
+    use super::{epoch_to_token, Vext, VotingPowersMapExt};
     use crate::proto::SignedSerialize;
     use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
@@ -345,12 +336,13 @@ mod tag {
         fn serialize(ext: &Vext) -> Self::Output {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
                 .voting_powers
-                .get_bridge_and_gov_hashes(ext.block_height);
+                .get_bridge_and_gov_hashes(ext.signing_epoch);
             let KeccakHash(output) = AbiEncode::signed_keccak256(&[
+                Token::Uint(GOVERNANCE_CONTRACT_VERSION.into()),
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
-                bheight_to_token(ext.block_height),
+                epoch_to_token(ext.signing_epoch),
             ]);
             output
         }
