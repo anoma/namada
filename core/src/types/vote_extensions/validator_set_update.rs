@@ -13,13 +13,16 @@ use crate::types::eth_abi::{AbiEncode, Encode, Token};
 use crate::types::ethereum_events::{EthAddress, Uint};
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
-use crate::types::storage::BlockHeight;
 #[allow(unused_imports)]
+use crate::types::storage::BlockHeight;
 use crate::types::storage::Epoch;
 use crate::types::token;
 
-// the namespace strings plugged into validator set hashes
+// the contract versions and namespaces plugged into validator set hashes
+// TODO: ideally, these values should not be hardcoded
+const BRIDGE_CONTRACT_VERSION: u8 = 1;
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
+const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
 const GOVERNANCE_CONTRACT_NAMESPACE: &str = "governance";
 
 /// Type alias for a [`ValidatorSetUpdateVextDigest`].
@@ -31,14 +34,19 @@ pub type VextDigest = ValidatorSetUpdateVextDigest;
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct ValidatorSetUpdateVextDigest {
-    /// A mapping from a validator address to a [`Signature`].
-    ///
-    /// The key includes the block height at which a validator
-    /// set was signed by a given validator.
-    pub signatures: HashMap<(Address, BlockHeight), Signature>,
+    /// A mapping from an active validator address to a [`Signature`].
+    pub signatures: HashMap<Address, Signature>,
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
     pub voting_powers: VotingPowersMap,
+    /// The value of Namada's [`Epoch`] at the creation of each
+    /// compressed [`Vext`].
+    ///
+    /// This value serves the purpose of a nonce for replay attack
+    /// protection, and it allows any node to query the public keys
+    /// of the validators who signed the inner validator set update
+    /// vote extensions.
+    pub signing_epoch: Epoch,
 }
 
 impl VextDigest {
@@ -47,21 +55,16 @@ impl VextDigest {
     pub fn singleton(ext: SignedVext) -> VextDigest {
         VextDigest {
             signatures: HashMap::from([(
-                (ext.data.validator_addr.clone(), ext.data.block_height),
+                ext.data.validator_addr.clone(),
                 ext.sig,
             )]),
             voting_powers: ext.data.voting_powers,
+            signing_epoch: ext.data.signing_epoch,
         }
     }
 
     /// Decompresses a set of signed [`Vext`] instances.
-    pub fn decompress(self, block_height: BlockHeight) -> Vec<SignedVext> {
-        #[cfg(not(feature = "abcipp"))]
-        {
-            #[allow(clippy::drop_copy)]
-            drop(block_height);
-        }
-
+    pub fn decompress(self, signing_epoch: Epoch) -> Vec<SignedVext> {
         let VextDigest {
             signatures,
             voting_powers,
@@ -70,22 +73,15 @@ impl VextDigest {
         let mut extensions = vec![];
 
         for (validator_addr, signature) in signatures.into_iter() {
-            let (validator_addr, _block_height) = validator_addr;
             let voting_powers = voting_powers.clone();
             let data = Vext {
                 validator_addr,
                 voting_powers,
-                block_height,
+                signing_epoch,
             };
             extensions.push(SignedVext::new_from(data, signature));
         }
         extensions
-    }
-
-    /// Returns an Ethereum ABI encoded string with the
-    /// params to feed to the Ethereum bridge smart contracts.
-    pub fn abi_params(&self) -> String {
-        todo!()
     }
 }
 
@@ -113,20 +109,21 @@ pub struct ValidatorSetUpdateVext {
     /// until we're able to map a Tendermint address to a validator
     /// address (see <https://github.com/anoma/namada/issues/200>)
     pub validator_addr: Address,
-    /// The value of the Namada [`BlockHeight`] at the creation of this
+    /// The value of Namada's [`Epoch`] at the creation of this
     /// [`Vext`].
     ///
-    /// An important invariant is that this [`BlockHeight`] will always
-    /// correspond to an epoch before the new validator set is installed.
+    /// An important invariant is that this [`Epoch`] will always
+    /// correspond to an [`Epoch`] before the new validator set
+    /// is installed.
     ///
     /// Since this is a monotonically growing sequence number,
     /// it is signed together with the rest of the data to
     /// prevent replay attacks on validator set updates.
     ///
-    /// Additionally, we can use this [`BlockHeight`] value to query the
-    /// epoch with the appropriate validator set to verify signatures with
+    /// Additionally, we can use this [`Epoch`] value to query
+    /// the appropriate validator set to verify signatures with
     /// (i.e. the previous validator set).
-    pub block_height: BlockHeight,
+    pub signing_epoch: Epoch,
 }
 
 impl Vext {
@@ -188,6 +185,7 @@ pub trait VotingPowersMapExt {
 
         let bridge_hash = compute_hash(
             block_height,
+            BRIDGE_CONTRACT_VERSION
             BRIDGE_CONTRACT_NAMESPACE,
             hot_key_addrs,
             voting_powers.clone(),
@@ -195,6 +193,7 @@ pub trait VotingPowersMapExt {
 
         let governance_hash = compute_hash(
             block_height,
+            GOVERNANCE_CONTRACT_VERSION,
             GOVERNANCE_CONTRACT_NAMESPACE,
             cold_key_addrs,
             voting_powers,
@@ -279,12 +278,14 @@ fn bheight_to_token(BlockHeight(h): BlockHeight) -> Token {
 #[inline]
 fn compute_hash(
     block_height: BlockHeight,
-    namespace: &str,
+    contract_version: u8,
+    contract_namespace: &str,
     validators: Vec<Token>,
     voting_powers: Vec<Token>,
 ) -> KeccakHash {
     AbiEncode::keccak256(&[
-        Token::String(namespace.into()),
+        Token::Uint(contract_version.into()),
+        Token::String(contract_namespace.into()),
         Token::Array(validators),
         Token::Array(voting_powers),
         bheight_to_token(block_height),
@@ -375,8 +376,8 @@ mod tests {
         // const abiEncoder = new ethers.utils.AbiCoder();
         //
         // const output = abiEncoder.encode(
-        //     ['string', 'address[]', 'uint256[]', 'uint256'],
-        //     ['bridge', [], [], 1],
+        //     ['uint256', 'string', 'address[]', 'uint256[]', 'uint256'],
+        //     [1, 'bridge', [], [], 1],
         // );
         //
         // const hash = keccak256(output).toString('hex');
@@ -384,10 +385,11 @@ mod tests {
         // console.log(hash);
         // ```
         const EXPECTED: &str =
-            "694d9bc27d5da7444e5742b13394b2c8a7e73b43d6acd52b6e23b26b612f7c86";
+            "b8da710845ad3b9e8a9dec6639a0b1a60c90441037cc0845c4b45d5aed19ec59";
 
         let KeccakHash(got) = compute_hash(
             1u64.into(),
+            BRIDGE_CONTRACT_VERSION,
             BRIDGE_CONTRACT_NAMESPACE,
             vec![],
             vec![],
