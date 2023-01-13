@@ -277,7 +277,8 @@ fn bheight_to_token(BlockHeight(h): BlockHeight) -> Token {
 
 /// Compute the keccak hash of a validator set update.
 ///
-/// For more information, check the specs of the Ethereum bridge smart contracts.
+/// For more information, check the specs of the Ethereum bridge smart
+/// contracts.
 // TODO: add version field to hash computation
 #[inline]
 fn compute_hash(
