@@ -61,11 +61,10 @@ where
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 enum KeyType {
-    #[allow(clippy::upper_case_acronyms)]
     #[allow(non_camel_case_types)]
     TX_HASH,
-    #[allow(clippy::upper_case_acronyms)]
     UNKNOWN,
 }
 
