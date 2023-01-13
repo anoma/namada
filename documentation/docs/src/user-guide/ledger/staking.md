@@ -19,7 +19,7 @@ namada client bonds --owner my-new-acc
 
 The result of this query will inform the epoch from which your delegations will be active.
 
-Because the PoS system is just an account, you can query its balance, which is the sum of all staked tokens:
+Because the PoS system is just an account, you can query its balance, which is the sum of all staked tokens and unbonded tokens that have not yet been withdrawn:
 
 ```shell
 namada client balance --owner PoS
