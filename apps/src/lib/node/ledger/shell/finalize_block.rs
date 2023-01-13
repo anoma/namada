@@ -440,14 +440,16 @@ where
                 }
                 #[cfg(not(feature = "abcipp"))]
                 {
-                    let proposer = self
-                        .storage
-                        .read_current_block_proposer_address()
-                        .expect(
-                            "Current block proposer should always be set in \
-                             ProcessProposal",
-                        );
-                    self.storage.write_last_block_proposer_address(&proposer);
+                    let proposer =
+                        self.storage.read_current_block_proposer_address();
+                    // .expect(
+                    //     "Current block proposer should always be set in \
+                    //      ProcessProposal",
+                    // );
+                    if let Some(proposer) = proposer {
+                        self.storage
+                            .write_last_block_proposer_address(&proposer);
+                    }
                 }
             }
         }
