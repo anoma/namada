@@ -4,10 +4,12 @@
 Prebuilt binaries might not be available for a specific release or architecture, in this case you have to [build from source](#from-source).
 ```
 
-## Installing tendermint
-Namada binaries require a unique fork of tendermint from Heliax. Please follow [these instructions](./installing-tendermint.md).
+## Installing Tendermint
+
+Namada binaries require a unique fork of Tendermint from Heliax. Please follow [these instructions](./installing-tendermint.md).
 
 ## Installing GLIBC
+
 Finally, you should have GLIBC `v2.29` or higher.
 
 **MacOS**: the system-provided glibc should be recent enough.
