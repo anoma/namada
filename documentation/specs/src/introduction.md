@@ -1,11 +1,11 @@
 ## Namada
 
-Welcome to the Namada specifications!
+Welcome to the Namada specification!
 
 ## What is Namada? 
 
 Namada is a sovereign proof-of-stake blockchain, using Tendermint BFT consensus,
-that enables multi-asset private transfers for any native or non-native asset
+which enables multi-asset private transfers for any native or non-native asset
 using a [multi-asset shielded pool](https://research.metastate.dev/multi-asset_shielded_pool/) derived from the [Sapling circuit](https://z.cash/upgrade/sapling/).
 Namada features full IBC protocol support, a natively integrated Ethereum bridge, a modern proof-of-stake system with automatic reward compounding and cubic slashing,
 a stake-weighted governance signalling mechanism, and a dual proactive/retroactive public goods funding system.
@@ -52,6 +52,6 @@ The Namada specification documents are organised into four sub-sections:
 - [Interoperability](./interoperability.md)
 - [Economics](./economics.md)
 
-This book is written using [mdBook](https://rust-lang.github.io/mdBook/), the source can be found in the [Namada repository](https://github.com/anoma/namada/tree/main/documentation/specs).
+This book is written using [mdBook](https://rust-lang.github.io/mdBook/). The source can be found in the [Namada repository](https://github.com/anoma/namada/tree/main/documentation/specs).
 
 [Contributions](https://github.com/anoma/namada/blob/main/CONTRIBUTING.md) to the contents and the structure of this book should be made via pull requests.
