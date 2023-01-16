@@ -44,10 +44,6 @@ const ENV_VAR_TOKIO_THREADS: &str = "NAMADA_TOKIO_THREADS";
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 
-/// The maximum number of Ethereum events the channel between
-/// the oracle and the shell can hold.
-const ORACLE_CHANNEL_BUFFER_SIZE: usize = 1000;
-
 // Until ABCI++ is ready, the shim provides the service implementation.
 // We will add this part back in once the shim is no longer needed.
 //```
@@ -654,7 +650,8 @@ async fn maybe_start_ethereum_oracle(
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
-    let (eth_sender, eth_receiver) = mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+    let (eth_sender, eth_receiver) =
+        mpsc::channel(config.ethereum_bridge.channel_buffer_size);
 
     match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::Managed
