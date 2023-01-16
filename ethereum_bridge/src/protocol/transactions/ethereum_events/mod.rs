@@ -167,40 +167,6 @@ where
     Ok((changed, confirmed))
 }
 
-#[cfg(any(test, feature = "testing"))]
-pub mod testing {
-    use std::collections::{BTreeSet, HashSet};
-
-    use namada_core::ledger::storage::mockdb::MockDB;
-    use namada_core::ledger::storage::testing::TestStorage;
-    use namada_core::ledger::storage::{Sha256Hasher, Storage};
-    use namada_core::types::address::Address;
-    use namada_proof_of_stake::epoched::Epoched;
-    use namada_proof_of_stake::types::{ValidatorSet, WeightedValidator};
-    use namada_proof_of_stake::PosBase;
-
-    /// Set up a `TestStorage` initialized at genesis with validators of equal
-    /// power.
-    pub fn setup_storage(
-        active_validators: HashSet<Address>,
-    ) -> Storage<MockDB, Sha256Hasher> {
-        let mut storage = TestStorage::default();
-        let validator_set = ValidatorSet {
-            active: active_validators
-                .into_iter()
-                .map(|address| WeightedValidator {
-                    bonded_stake: 100_u64,
-                    address,
-                })
-                .collect(),
-            inactive: BTreeSet::default(),
-        };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 1);
-        storage.write_validator_set(&validator_sets);
-        storage
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
