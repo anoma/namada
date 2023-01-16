@@ -815,7 +815,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_multiple_bp_root_vexts_rejected() {
-        let (mut shell, _, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _) = setup_at_height(3u64);
         let vext = shell.extend_vote_with_bp_roots();
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
