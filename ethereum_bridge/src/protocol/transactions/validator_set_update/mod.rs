@@ -87,6 +87,13 @@ where
         // validator set proof for epoch 2 signed by validators of epoch 1.
         storage.get_current_epoch().0.next()
     };
+    let epoch_start_height = storage
+        .block
+        .pred_epochs
+        .first_block_heights()
+        .last()
+        .copied()
+        .expect("The block height of the current epoch should be known");
 
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
@@ -102,8 +109,8 @@ where
     };
 
     let mut seen_by = Votes::default();
-    for (address, block_height) in ext.signatures.keys().cloned() {
-        if let Some(present) = seen_by.insert(address, block_height) {
+    for address in ext.signatures.keys().cloned() {
+        if let Some(present) = seen_by.insert(address, epoch_start_height) {
             // TODO(namada#770): this shouldn't be happening in any case and we
             // should be refactoring to get rid of `BlockHeight`
             tracing::warn!(?present, "Duplicate vote in digest");
@@ -124,7 +131,11 @@ where
             return Ok(changed);
         }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
-        proof.attach_signature_batch(ext.signatures);
+        proof.attach_signature_batch(
+            ext.signatures
+                .into_iter()
+                .map(|(addr, sig)| ((addr, epoch_start_height), sig)),
+        );
         (tally, proof, changed, confirmed)
     } else {
         tracing::debug!(
@@ -134,7 +145,11 @@ where
         );
         let tally = votes::calculate_new(seen_by, &voting_powers)?;
         let mut proof = EthereumProof::new(ext.voting_powers);
-        proof.attach_signature_batch(ext.signatures);
+        proof.attach_signature_batch(
+            ext.signatures
+                .into_iter()
+                .map(|(addr, sig)| ((addr, epoch_start_height), sig)),
+        );
         let changed = valset_upd_keys.into_iter().collect();
         let confirmed = tally.seen;
         (tally, proof, changed, confirmed)
@@ -174,13 +189,17 @@ mod test_valset_upd_state_changes {
         let (mut storage, keys) = test_utils::setup_default_storage();
 
         let last_height = storage.last_height;
+        let signing_epoch = storage
+            .get_epoch(last_height)
+            .expect("The epoch of the last block height should be known");
+
         let tx_result = aggregate_votes(
             &mut storage,
             validator_set_update::VextDigest::singleton(
                 validator_set_update::Vext {
                     voting_powers: VotingPowersMap::new(),
                     validator_addr: address::testing::established_address_1(),
-                    block_height: last_height,
+                    signing_epoch,
                 }
                 .sign(
                     &keys
@@ -195,10 +214,7 @@ mod test_valset_upd_state_changes {
         // let's make sure we updated storage
         assert!(!tx_result.changed_keys.is_empty());
 
-        let epoch = storage
-            .get_epoch(last_height)
-            .expect("The epoch of the last block height should be known");
-        let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch);
 
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
@@ -230,9 +246,9 @@ mod test_valset_upd_state_changes {
         // since only one validator is configured, we should
         // have reached a complete proof
         let total_voting_power =
-            storage.get_total_voting_power(Some(epoch)).into();
+            storage.get_total_voting_power(Some(signing_epoch)).into();
         let validator_voting_power: u64 = storage
-            .get_validator_from_address(&addr, Some(epoch))
+            .get_validator_from_address(&addr, Some(signing_epoch))
             .expect("Test failed")
             .0
             .into();
@@ -257,13 +273,17 @@ mod test_valset_upd_state_changes {
             ]));
 
         let last_height = storage.last_height;
+        let signing_epoch = storage
+            .get_epoch(last_height)
+            .expect("The epoch of the last block height should be known");
+
         let tx_result = aggregate_votes(
             &mut storage,
             validator_set_update::VextDigest::singleton(
                 validator_set_update::Vext {
                     voting_powers: VotingPowersMap::new(),
                     validator_addr: address::testing::established_address_1(),
-                    block_height: last_height,
+                    signing_epoch,
                 }
                 .sign(
                     &keys
@@ -278,10 +298,7 @@ mod test_valset_upd_state_changes {
         // let's make sure we updated storage
         assert!(!tx_result.changed_keys.is_empty());
 
-        let epoch = storage
-            .get_epoch(last_height)
-            .expect("The epoch of the last block height should be known");
-        let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch);
 
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
@@ -312,9 +329,9 @@ mod test_valset_upd_state_changes {
 
         // make sure we do not have a complete proof yet
         let total_voting_power =
-            storage.get_total_voting_power(Some(epoch)).into();
+            storage.get_total_voting_power(Some(signing_epoch)).into();
         let validator_voting_power: u64 = storage
-            .get_validator_from_address(&addr, Some(epoch))
+            .get_validator_from_address(&addr, Some(signing_epoch))
             .expect("Test failed")
             .0
             .into();
