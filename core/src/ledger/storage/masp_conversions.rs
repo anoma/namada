@@ -8,8 +8,12 @@ use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
 
+use crate::ledger::inflation::{mint_tokens, RewardsController, ValsToUpdate};
+use crate::ledger::parameters;
+use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
+use crate::types::{address, token};
 
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
@@ -20,6 +24,108 @@ pub struct ConversionState {
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
     pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
+}
+
+fn calculate_masp_rewards<D, H>(
+    wl_storage: &mut super::WlStorage<D, H>,
+    addr: &Address,
+) -> crate::ledger::storage_api::Result<(u64, u64)>
+where
+    D: super::DB + for<'iter> super::DBIter<'iter>,
+    H: super::StorageHasher,
+{
+    use rust_decimal::Decimal;
+
+    let masp_addr = address::masp();
+    // Query the storage for information
+
+    //// information about the amount of tokens on the chain
+    let total_tokens: token::Amount =
+        wl_storage.read(&token::total_supply_key(addr))?.expect("");
+
+    // total staked amount in the Shielded pool
+    let total_token_in_masp: token::Amount = wl_storage
+        .read(&token::balance_key(addr, &masp_addr))?
+        .expect("");
+
+    let epochs_per_year: u64 = wl_storage
+        .read(&parameters::storage::get_epochs_per_year_key())?
+        .expect("");
+
+    //// Values from the last epoch
+    let last_inflation: u64 = wl_storage
+        .read(&token::last_inflation(addr))
+        .expect("failure to read last inflation")
+        .expect("");
+
+    let last_locked_ratio: Decimal = wl_storage
+        .read(&token::last_locked_ratio(addr))
+        .expect("failure to read last inflation")
+        .expect("");
+
+    //// Parameters for each token
+    let max_reward_rate: Decimal = wl_storage
+        .read(&token::parameters::max_reward_rate(addr))
+        .expect("max reward should properly decode")
+        .expect("");
+
+    let kp_gain_nom: Decimal = wl_storage
+        .read(&token::parameters::kp_sp_gain(addr))
+        .expect("kp_gain_nom reward should properly decode")
+        .expect("");
+
+    let kd_gain_nom: Decimal = wl_storage
+        .read(&token::parameters::kd_sp_gain(addr))
+        .expect("kd_gain_nom reward should properly decode")
+        .expect("");
+
+    let locked_target_ratio: Decimal = wl_storage
+        .read(&token::parameters::locked_token_ratio(addr))?
+        .expect("");
+
+    // Creating the PD controller for handing out tokens
+    let controller = RewardsController::new(
+        total_token_in_masp,
+        total_tokens,
+        locked_target_ratio,
+        last_locked_ratio,
+        max_reward_rate,
+        token::Amount::from(last_inflation),
+        kp_gain_nom,
+        kd_gain_nom,
+        epochs_per_year,
+    );
+
+    let ValsToUpdate {
+        locked_ratio,
+        inflation,
+    } = RewardsController::run(&controller);
+
+    // Is it fine to write the inflation rate, this is accurate,
+    // but we should make sure the return value's ratio matches
+    // this new inflation rate in 'update_allowed_conversions',
+    // otherwise we will have an inaccurate view of inflation
+    wl_storage
+        .write(&token::last_inflation(addr), inflation)
+        .expect("unable to encode new inflation rate (Decimal)");
+
+    wl_storage
+        .write(&token::last_locked_ratio(addr), locked_ratio)
+        .expect("unable to encode new locked ratio (Decimal)");
+
+    // to make it conform with the expected output, we need to
+    // move it to a ratio of x/100 to match the masp_rewards
+    // function This may be unneeded, as we could describe it as a
+    // ratio of x/1
+
+    // inflation-per-token = inflation / locked tokens = n/100
+    // ∴ n = (inflation * 100) / locked tokens
+    let total_in = total_token_in_masp.change() as u64;
+    if 0u64 == total_in {
+        Ok((0u64, 100))
+    } else {
+        Ok((inflation * 100 / total_token_in_masp.change() as u64, 100))
+    }
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -39,10 +145,7 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::ledger::inflation::mint_tokens;
-    use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
     use crate::types::storage::{self, KeySeg};
-    use crate::types::{address, token};
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = address::masp();
@@ -64,7 +167,9 @@ where
     // Conversions from the previous to current asset for each address
     let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
     // Reward all tokens according to above reward rates
-    for (addr, reward) in &masp_rewards {
+    for addr in masp_rewards.keys() {
+        let reward = calculate_masp_rewards(wl_storage, addr)
+            .expect("Calculating the masp rewards should not fail");
         // Dispence a transparent reward in parallel to the shielded rewards
         let addr_bal: token::Amount = wl_storage
             .read(&token::balance_key(addr, &masp_addr))?
@@ -73,7 +178,7 @@ where
         // reward.0 units of the reward token
         // Since floor(a) + floor(b) <= floor(a+b), there will always be
         // enough rewards to reimburse users
-        total_reward += (addr_bal * *reward).0;
+        total_reward += (addr_bal * reward).0;
         // Provide an allowed conversion from previous timestamp. The
         // negative sign allows each instance of the old asset to be
         // cancelled out/replaced with the new asset
