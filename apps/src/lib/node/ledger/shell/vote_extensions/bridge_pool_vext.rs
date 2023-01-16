@@ -237,7 +237,7 @@ where
 }
 
 #[cfg(test)]
-mod test_vote_extensions {
+mod test_bp_vote_extensions {
     #[cfg(feature = "abcipp")]
     use borsh::BorshDeserialize;
     use borsh::BorshSerialize;
