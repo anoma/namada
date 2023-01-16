@@ -42,4 +42,6 @@ for test_name in tasks:
         command = CARGO_TEST_COMMAND.format(test_name)
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
     except:
-        continue
+        print("TEST FAILED: {}".format(test_name))
+        print("run locally with: {}".format(command))
+        break

@@ -1,5 +1,67 @@
 # CHANGELOG
 
+## v0.13.0
+
+Namada 0.13.0 is a scheduled minor release.
+
+### BUG FIXES
+
+- Fix the commission rate change wasm test, which failed because an arbitrary
+  value for a new rate was allowed that could be equal to the previous rate.
+  ([#965](https://github.com/anoma/namada/pull/965))
+
+### BUGS
+
+- Removed 'rev_iter_prefix' from storage API as its implementation
+  depends on RocksDB and it doesn't work as expected.
+  ([#912](https://github.com/anoma/namada/pull/912))
+
+### FEATURES
+
+- Add a --time argument to the node to specify the time the node should start.
+  ([#973](https://github.com/anoma/namada/pull/973))
+- Reduce the block size for transactions to 5 MiB.
+  ([#974](https://github.com/anoma/namada/pull/974))
+
+### IMPROVEMENTS
+
+- Disable 'Send' on async traits that don't need 'Send'
+  futures. This allows to use them with 'wasm-bindgen'.
+  ([#900](https://github.com/anoma/namada/pull/900))
+- Binary search ledger storage keys to match faster.
+  ([#903](https://github.com/anoma/namada/pull/903))
+- Make queries data structures public for inclusion in rustdoc.
+  ([#909](https://github.com/anoma/namada/pull/909))
+- Add a macro to derive storage keys from a struct.
+  ([#926](https://github.com/anoma/namada/pull/926))
+- Added a basic fee implementation for testnet.
+  ([#962](https://github.com/anoma/namada/pull/962))
+- Hide the explicit lifetime from StorageRead trait.
+  ([#966](https://github.com/anoma/namada/pull/966))
+- Allow to set the tracing format with NAMADA_LOG_FMT env var to either full
+  (default), json or pretty. ([#968](https://github.com/anoma/namada/pull/968))
+- Added an optional PoW challenge to the wrapper transactions for testnets,
+  to allow to submit transactions without having enough balance to cover
+  the minimum transaction fee and to withdraw tokens from a faucet account.
+  ([#969](https://github.com/anoma/namada/pull/969))
+- Add genesis parameter to control wrapper transaction fees.
+  ([#972](https://github.com/anoma/namada/pull/972))
+- Add a max_proposal_bytes parameter to the ledger.
+  ([#975](https://github.com/anoma/namada/pull/975))
+
+### MISCELLANEOUS
+
+- Update tendermint to v0.1.4-abciplus.
+  ([#667](https://github.com/anoma/namada/pull/667))
+
+### TESTING
+
+- Run fewer cases on update_epoch_after_its_duration, for a faster test suite.
+  ([#876](https://github.com/anoma/namada/pull/876))
+- Use the correct options (--gas-amount, --gas-
+  token) in the ledger_txs_and_queries E2E test.
+  ([#911](https://github.com/anoma/namada/pull/911))
+
 ## v0.12.2
 
 Namada 0.12.2 is a hotfix release, limiting transactions included in a

@@ -22,6 +22,8 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+#[cfg(not(feature = "mainnet"))]
+use namada::core::ledger::testnet_pow;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -389,7 +391,11 @@ fn extract_payload(
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             extract_payload(
                 Tx::from(match wrapper_tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
+                    Ok(tx) => DecryptedTx::Decrypted {
+                        tx,
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    },
                     _ => DecryptedTx::Undecryptable(wrapper_tx.clone()),
                 }),
                 wrapper,
@@ -397,7 +403,11 @@ fn extract_payload(
             );
             *wrapper = Some(wrapper_tx);
         }
-        Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
+        Ok(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: _,
+        })) => {
             let empty_vec = vec![];
             let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
             let _ = SignedTxData::try_from_slice(tx_data).map(|signed| {
@@ -2003,6 +2013,38 @@ pub async fn known_address(
         }
         Address::Implicit(_) | Address::Internal(_) => true,
     }
+}
+
+#[cfg(not(feature = "mainnet"))]
+/// Check if the given address is a testnet faucet account address.
+pub async fn is_faucet_account(
+    address: &Address,
+    ledger_address: TendermintAddress,
+) -> bool {
+    let client = HttpClient::new(ledger_address).unwrap();
+    unwrap_client_response(RPC.vp().is_faucet(&client, address).await)
+}
+
+#[cfg(not(feature = "mainnet"))]
+/// Get faucet account address, if any is setup for the network.
+pub async fn get_faucet_address(
+    ledger_address: TendermintAddress,
+) -> Option<Address> {
+    let client = HttpClient::new(ledger_address).unwrap();
+    unwrap_client_response(RPC.vp().get_faucet_address(&client).await)
+}
+
+#[cfg(not(feature = "mainnet"))]
+/// Obtain a PoW challenge for a withdrawal from a testnet faucet account, if
+/// any is setup for the network.
+pub async fn get_testnet_pow_challenge(
+    source: Address,
+    ledger_address: TendermintAddress,
+) -> testnet_pow::Challenge {
+    let client = HttpClient::new(ledger_address).unwrap();
+    unwrap_client_response(
+        RPC.vp().testnet_pow_challenge(&client, source).await,
+    )
 }
 
 /// Accumulate slashes starting from `epoch_start` until (optionally)

@@ -72,11 +72,11 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}
+      - name: Start sccache server
+        run: sccache --start-server
       - name: Install cargo-about
         run: |
           cargo install --version 0.5.2 cargo-about
-      - name: Start sccache server
-        run: sccache --start-server
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package

@@ -10,7 +10,7 @@ use crate::types::storage;
 use crate::types::time::Rfc3339String;
 
 /// Transaction host functions
-pub trait TxEnv<'iter>: StorageRead<'iter> + StorageWrite {
+pub trait TxEnv: StorageRead + StorageWrite {
     /// Write a temporary value to be encoded with Borsh at the given key to
     /// storage.
     fn write_temp<T: BorshSerialize>(

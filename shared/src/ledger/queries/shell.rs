@@ -79,7 +79,11 @@ where
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    let tx = TxType::Decrypted(DecryptedTx::Decrypted(tx));
+    let tx = TxType::Decrypted(DecryptedTx::Decrypted {
+        tx,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow: true,
+    });
     let data = protocol::apply_tx(
         tx,
         request.data.len(),

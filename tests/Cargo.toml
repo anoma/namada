@@ -5,10 +5,13 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_tests"
 resolver = "2"
-version = "0.12.2"
+version = "0.13.0"
 
 [features]
 default = ["abciplus", "wasm-runtime"]
+mainnet = [
+  "namada/mainnet",
+]
 abciplus = [
   "namada/abciplus",
   "namada/ibc-mocks",
