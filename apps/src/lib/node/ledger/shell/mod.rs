@@ -900,7 +900,7 @@ mod test_utils {
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
-    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+    use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {
