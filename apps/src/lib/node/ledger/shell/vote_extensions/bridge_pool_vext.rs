@@ -229,9 +229,10 @@ where
                 "Tendermint has decided on a block including Ethereum events \
                  reflecting <= 2/3 of the total stake"
             );
-            return None;
+            None
+        } else {
+            Some(bp_root_sigs)
         }
-        Some(bp_root_sigs)
     }
 }
 
