@@ -1010,20 +1010,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        ethereum_bridge_params: Some(EthereumBridgeConfig {
-            min_confirmations: Default::default(),
-            contracts: Contracts {
-                native_erc20: wnam(),
-                bridge: UpgradeableContract {
-                    address: EthAddress([0; 20]),
-                    version: Default::default(),
-                },
-                governance: UpgradeableContract {
-                    address: EthAddress([1; 20]),
-                    version: Default::default(),
-                },
-            },
-        }),
+        ethereum_bridge_params: None,
         native_token: address::nam(),
     }
 }
