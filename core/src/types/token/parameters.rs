@@ -27,6 +27,11 @@ pub fn kd_sp_gain(token_addr: &Address) -> Key {
     key_of_token(token_addr, KD_SP_GAIN_KEY, "nominal proproitonal gains")
 }
 
+/// The max reward rate key for the given token
+pub fn max_reward_rate(token_addr: &Address) -> Key {
+    key_of_token(token_addr, MAX_REWARD_RATE, "max reward rate")
+}
+
 /// Obtain the locked target ratio key for the given token
 pub fn locked_token_ratio(token_addr: &Address) -> Key {
     key_of_token(
