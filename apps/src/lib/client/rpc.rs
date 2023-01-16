@@ -781,32 +781,22 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
-                match utils::compute_tally(votes, total_stake, &proposal_type) {
-                    Ok(partial_proposal_result) => {
-                        println!(
-                            "{:4}Yay votes: {}",
-                            "", partial_proposal_result.total_yay_power
-                        );
-                        println!(
-                            "{:4}Nay votes: {}",
-                            "", partial_proposal_result.total_nay_power
-                        );
-                        println!("{:4}Status: on-going", "");
-                    }
-                    Err(msg) => {
-                        eprintln!("Error in tally computation: {}", msg)
-                    }
-                }
+                let partial_proposal_result =
+                    utils::compute_tally(votes, total_stake, proposal_type);
+                println!(
+                    "{:4}Yay votes: {}",
+                    "", partial_proposal_result.total_yay_power
+                );
+                println!(
+                    "{:4}Nay votes: {}",
+                    "", partial_proposal_result.total_nay_power
+                );
+                println!("{:4}Status: on-going", "");
             } else {
-                match utils::compute_tally(votes, total_stake, &proposal_type) {
-                    Ok(proposal_result) => {
-                        println!("{:4}Status: done", "");
-                        println!("{:4}Result: {}", "", proposal_result);
-                    }
-                    Err(msg) => {
-                        eprintln!("Error in tally computation: {}", msg)
-                    }
-                }
+                let proposal_result =
+                    utils::compute_tally(votes, total_stake, proposal_type);
+                println!("{:4}Status: done", "");
+                println!("{:4}Result: {}", "", proposal_result);
             }
         } else {
             println!("Proposal: {}", id);
@@ -1192,18 +1182,12 @@ pub async fn query_proposal_result(
                                 .await
                                 .into();
                         println!("Proposal: {}", id);
-                        match utils::compute_tally(
+                        let proposal_result = utils::compute_tally(
                             votes,
                             total_stake,
-                            &proposal_type,
-                        ) {
-                            Ok(proposal_result) => {
-                                println!("{:4}Result: {}", "", proposal_result)
-                            }
-                            Err(msg) => {
-                                eprintln!("Error in tally computation: {}", msg)
-                            }
-                        }
+                            proposal_type,
+                        );
+                        println!("{:4}Result: {}", "", proposal_result)
                     } else {
                         eprintln!("Proposal is still in progress.");
                         cli::safe_exit(1)
@@ -1304,18 +1288,12 @@ pub async fn query_proposal_result(
                         )
                         .await
                         .into();
-                        match utils::compute_tally(
+                        let proposal_result = utils::compute_tally(
                             votes,
                             total_stake,
-                            &ProposalType::Default(None),
-                        ) {
-                            Ok(proposal_result) => {
-                                println!("{:4}Result: {}", "", proposal_result)
-                            }
-                            Err(msg) => {
-                                eprintln!("Error in tally computation: {}", msg)
-                            }
-                        }
+                            ProposalType::Default(None),
+                        );
+                        println!("{:4}Result: {}", "", proposal_result)
                     }
                     None => {
                         eprintln!(
@@ -2391,7 +2369,7 @@ pub async fn get_proposal_votes(
     let vote_iter =
         query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
+    let mut validators_votes: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
     let mut delegators: HashMap<
         Address,
@@ -2403,13 +2381,13 @@ pub async fn get_proposal_votes(
             let voter_address = gov_storage::get_voter_address(&key)
                 .expect("Vote key should contain the voting address.")
                 .clone();
-            if vote.is_yay() && validators.contains(&voter_address) {
+            if validators.contains(&voter_address) {
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
                         .unwrap_or_default()
                         .into();
-                yay_validators.insert(voter_address, (amount, vote));
+                validators_votes.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -2436,7 +2414,7 @@ pub async fn get_proposal_votes(
     }
 
     Votes {
-        yay_validators,
+        validators: validators_votes,
         delegators,
     }
 }
@@ -2619,7 +2597,7 @@ pub async fn get_proposal_offline_votes(
     }
 
     Votes {
-        yay_validators,
+        validators: yay_validators,
         delegators,
     }
 }

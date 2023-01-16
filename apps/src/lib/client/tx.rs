@@ -2132,26 +2132,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
         "yay" => {
-            if let Some(pgf) = args.proposal_pgf {
-                let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().into_iter().step_by(2);
-                let cap_iter = splits.into_iter().skip(1).step_by(2);
-                let mut set = HashSet::new();
-                for (address, cap) in
-                    address_iter.zip(cap_iter).map(|(addr, cap)| {
-                        (
-                            addr.parse()
-                                .expect("Failed to parse pgf council address"),
-                            cap.parse::<u64>()
-                                .expect("Failed to parse pgf spending cap"),
-                        )
-                    })
-                {
-                    set.insert((address, cap.into()));
-                }
-
-                ProposalVote::Yay(VoteType::PGFCouncil(set))
-            } else if let Some(eth) = args.proposal_eth {
+            if args.proposal_pgf {
+                ProposalVote::Yay(VoteType::PGFSteward)
+            } else if let Some(eth) = args.proposal_stewards_eth {
                 let mut splits = eth.trim().split_ascii_whitespace();
                 // Sign the message
                 let sigkey = splits
@@ -2184,6 +2167,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     };
 
     if args.offline {
+        if !proposal_vote.is_default_vote() {
+            eprintln!(
+                "Wrong vote type for offline proposal. Just vote yay or nay!"
+            );
+            safe_exit(1);
+        }
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
         let file = File::open(&proposal_file_path).expect("File must exist.");
@@ -2210,9 +2199,18 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
 
+        let vote = match args.vote.as_str() {
+            "yay" => ProposalVote::Yay(VoteType::Default),
+            "nay" => ProposalVote::Nay,
+            _ => {
+                eprintln!("Vote must be either yay or nay");
+                safe_exit(1);
+            }
+        };
+
         let offline_vote = OfflineVote::new(
             &proposal,
-            args.vote,
+            vote,
             voter_address.clone(),
             signing_keys,
             pks_map,
@@ -2272,34 +2270,6 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     proposal_type, args.vote
                 );
                 safe_exit(1);
-            } else if let VoteType::PGFCouncil(set) = vote_type {
-                // Check that addresses proposed as council are established and
-                // are present in storage
-                for (address, _) in set {
-                    match address {
-                        Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(address);
-                            if !rpc::query_has_storage_key(&client, &vp_key)
-                                .await
-                            {
-                                eprintln!(
-                                    "Proposed PGF council {} cannot be found \
-                                     in storage",
-                                    address
-                                );
-                                safe_exit(1);
-                            }
-                        }
-                        _ => {
-                            eprintln!(
-                                "PGF council vote contains a non-established \
-                                 address: {}",
-                                address
-                            );
-                            safe_exit(1);
-                        }
-                    }
-                }
             }
         }
 
@@ -2346,7 +2316,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote: args.vote,
+                    vote: proposal_vote,
                     voter: voter_address.clone(),
                     delegations: delegations.into_iter().collect(),
                 };

@@ -2,13 +2,13 @@
 
 pub mod utils;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::types::governance::{ProposalVote, VoteType};
-use namada_core::types::transaction::governance::ProposalType;
+use namada_core::types::transaction::governance::{AddRemove, ProposalType};
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
@@ -218,24 +218,7 @@ where
                         return Ok(false);
                     }
 
-                    // Vote type specific checks
-                    if let VoteType::PGFCouncil(set) = vote_type {
-                        // Check that all the addresses are established
-                        for (address, _) in set {
-                            match address {
-                                Address::Established(_) => {
-                                    // Check that established address exists in
-                                    // storage
-                                    let vp_key =
-                                        Key::validity_predicate(&address);
-                                    if !self.ctx.has_key_pre(&vp_key)? {
-                                        return Ok(false);
-                                    }
-                                }
-                                _ => return Ok(false),
-                            }
-                        }
-                    } else if let VoteType::ETHBridge(_sig) = vote_type {
+                    if let VoteType::ETHBridge(_sig) = vote_type {
                         // TODO: Check the validity of the signature with the
                         // governance ETH key in storage for the given validator
                         // <https://github.com/anoma/namada/issues/1166>
@@ -243,7 +226,9 @@ where
                 }
 
                 match proposal_type {
-                    ProposalType::Default(_) | ProposalType::PGFCouncil => {
+                    ProposalType::Default(_)
+                    | ProposalType::PGFSteward(_)
+                    | ProposalType::PGFPayment(_) => {
                         if self
                             .is_validator(
                                 pre_voting_start_epoch,
@@ -310,10 +295,56 @@ where
     /// Validate the proposal type
     pub fn is_valid_proposal_type(&self, proposal_id: u64) -> Result<bool> {
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
-        Ok(self
-            .ctx
-            .read_post::<ProposalType>(&proposal_type_key)?
-            .is_some())
+        let proposal_type =
+            match self.ctx.read_post::<ProposalType>(&proposal_type_key)? {
+                Some(proposal_type) => proposal_type,
+                None => return Ok(false),
+            };
+
+        match proposal_type {
+            ProposalType::Default(_) => Ok(true),
+            ProposalType::PGFSteward(ref changes) => {
+                self.validate_pgf_steward_proposal(changes)
+            }
+            ProposalType::PGFPayment(_) => Ok(true),
+            ProposalType::ETHBridge => Ok(true),
+        }
+    }
+
+    /// Check that a PGF steward proposal is valid:
+    ///
+    /// - All the addresses proposed are of type [`Address::Established`]
+    /// - The addresses to add are not already part of the PGF Steward set
+    /// - The addresses to remove are already part of the PGF Steward set
+    fn validate_pgf_steward_proposal(
+        &self,
+        changes: &HashSet<AddRemove<Address>>,
+    ) -> Result<bool> {
+        // Check that all the addresses are established
+        for address in changes.iter().map(|x| match x {
+            AddRemove::Add(v) => v,
+            AddRemove::Remove(v) => v,
+        }) {
+            match address {
+                Address::Established(_) => {
+                    // Check that established address exists in
+                    // storage
+                    let vp_key = Key::validity_predicate(&address);
+                    if !self.ctx.has_key_pre(&vp_key)? {
+                        return Ok(false);
+                    }
+                }
+                _ => return Ok(false),
+            }
+        }
+
+        // TODO:
+        // Check that the added addresses are not already part of the Stewards' set
+
+        // TODO:
+        // Check that the removed addresses are part of the Stewards' set
+
+        Ok(true)
     }
 
     /// Validate a proposal code

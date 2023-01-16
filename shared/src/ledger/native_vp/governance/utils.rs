@@ -15,17 +15,15 @@ use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos::BondId;
 use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::governance::{
-    ProposalVote, Tally, TallyResult, VotePower, VoteType,
-};
+use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::Epoch;
 use crate::types::token;
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
 pub struct Votes {
-    /// Map from validators who votes yay to their total stake amount
-    pub yay_validators: HashMap<Address, (VotePower, ProposalVote)>,
+    /// Map from validators who voted to their total stake amount
+    pub validators: HashMap<Address, (VotePower, ProposalVote)>,
     /// Map from delegation votes to their bond amount
     pub delegators:
         HashMap<Address, HashMap<Address, (VotePower, ProposalVote)>>,
@@ -81,291 +79,122 @@ impl ProposalEvent {
     }
 }
 
-/// Return a proposal result
+enum ExpectedVote {
+    /// The expected vote for the tally
+    Expected,
+    /// The opposite of the expected (e.g. Nay if expected is Yay)
+    Opposite,
+    /// Unexpected vote, i.e. a Yay vote carrying a wrong [`VoteType`]
+    Wrong,
+}
+
+impl ExpectedVote {
+    /// Get the inverse of an expected vote
+    fn reverse(&mut self) {
+        *self = match self {
+            Self::Expected => Self::Opposite,
+            Self::Opposite => Self::Expected,
+            // A wrong vote inverse is still a wrong vote
+            Self::Wrong => Self::Wrong,
+        }
+    }
+}
+
+/// Computes whether the proposal passed or not
 pub fn compute_tally(
     votes: Votes,
     total_stake: VotePower,
-    proposal_type: &ProposalType,
-) -> Result<ProposalResult, Error> {
+    proposal_type: ProposalType,
+) -> ProposalResult {
     let Votes {
-        yay_validators,
+        validators,
         delegators,
     } = votes;
 
-    match proposal_type {
-        ProposalType::Default(_) | ProposalType::ETHBridge => {
-            let mut total_yay_staked_tokens = VotePower::default();
+    let mut total_target_vote_staked_tokens = VotePower::default();
 
-            for (_, (amount, validator_vote)) in yay_validators.iter() {
-                if let ProposalVote::Yay(vote_type) = validator_vote {
-                    if proposal_type == vote_type {
-                        total_yay_staked_tokens += amount;
-                    } else {
+    for (_, (amount, validator_vote)) in validators.iter() {
+        match expected_vote(&proposal_type, validator_vote) {
+            ExpectedVote::Expected => total_target_vote_staked_tokens += amount,
+            ExpectedVote::Opposite => (),
+            ExpectedVote::Wrong => {
+                // Log the error and continue
+                tracing::error!(
+                    "Unexpected vote type. Expected: {}, Found: {}",
+                    proposal_type,
+                    validator_vote
+                );
+            }
+        }
+    }
+
+    if let ProposalType::ETHBridge = proposal_type {
+        for (_, vote_map) in delegators.iter() {
+            for (validator_address, (vote_power, delegator_vote)) in
+                vote_map.iter()
+            {
+                match expected_vote(&proposal_type, delegator_vote) {
+                    ExpectedVote::Expected => {
+                        if !validators.contains_key(validator_address) {
+                            // Add delegator amount whose validator
+                            // didn't vote / voted opposite
+                            total_target_vote_staked_tokens += vote_power;
+                        }
+                    }
+                    ExpectedVote::Opposite => {
+                        // Remove delegator amount whose validator
+                        // validator voted opposite
+                        if validators.contains_key(validator_address) {
+                            total_target_vote_staked_tokens -= vote_power;
+                        }
+                    }
+                    ExpectedVote::Wrong => {
                         // Log the error and continue
                         tracing::error!(
                             "Unexpected vote type. Expected: {}, Found: {}",
                             proposal_type,
-                            validator_vote
+                            delegator_vote
                         );
-                        continue;
                     }
-                } else {
-                    // Log the error and continue
-                    tracing::error!(
-                        "Unexpected vote type. Expected: {}, Found: {}",
-                        proposal_type,
-                        validator_vote
-                    );
-                    continue;
-                }
-            }
-
-            // This loop is taken only for Default proposals
-            for (_, vote_map) in delegators.iter() {
-                for (validator_address, (vote_power, delegator_vote)) in
-                    vote_map.iter()
-                {
-                    match delegator_vote {
-                        ProposalVote::Yay(VoteType::Default) => {
-                            if !yay_validators.contains_key(validator_address) {
-                                // YAY: Add delegator amount whose validator
-                                // didn't vote / voted nay
-                                total_yay_staked_tokens += vote_power;
-                            }
-                        }
-                        ProposalVote::Nay => {
-                            // NAY: Remove delegator amount whose validator
-                            // validator vote yay
-
-                            if yay_validators.contains_key(validator_address) {
-                                total_yay_staked_tokens -= vote_power;
-                            }
-                        }
-
-                        _ => {
-                            // Log the error and continue
-                            tracing::error!(
-                                "Unexpected vote type. Expected: {}, Found: {}",
-                                proposal_type,
-                                delegator_vote
-                            );
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            // Proposal passes if 2/3 of total voting power voted Yay
-            if total_yay_staked_tokens >= (total_stake / 3) * 2 {
-                let tally_result = match proposal_type {
-                    ProposalType::Default(_) => {
-                        TallyResult::Passed(Tally::Default)
-                    }
-                    ProposalType::ETHBridge => {
-                        TallyResult::Passed(Tally::ETHBridge)
-                    }
-                    _ => {
-                        return Err(Error::Tally(format!(
-                            "Unexpected proposal type: {}",
-                            proposal_type
-                        )));
-                    }
-                };
-
-                Ok(ProposalResult {
-                    result: tally_result,
-                    total_voting_power: total_stake,
-                    total_yay_power: total_yay_staked_tokens,
-                    total_nay_power: 0,
-                })
-            } else {
-                Ok(ProposalResult {
-                    result: TallyResult::Rejected,
-                    total_voting_power: total_stake,
-                    total_yay_power: total_yay_staked_tokens,
-                    total_nay_power: 0,
-                })
-            }
-        }
-        ProposalType::PGFCouncil => {
-            let mut total_yay_staked_tokens = HashMap::new();
-            for (_, (amount, validator_vote)) in yay_validators.iter() {
-                if let ProposalVote::Yay(VoteType::PGFCouncil(votes)) =
-                    validator_vote
-                {
-                    for v in votes {
-                        *total_yay_staked_tokens.entry(v).or_insert(0) +=
-                            amount;
-                    }
-                } else {
-                    // Log the error and continue
-                    tracing::error!(
-                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
-                        validator_vote
-                    );
-                    continue;
-                }
-            }
-
-            // YAY: Add delegator amount whose validator didn't vote / voted nay
-            // or adjust voting power if delegator voted yay with a
-            // different memo
-            for (_, vote_map) in delegators.iter() {
-                for (validator_address, (vote_power, delegator_vote)) in
-                    vote_map.iter()
-                {
-                    match delegator_vote {
-                        ProposalVote::Yay(VoteType::PGFCouncil(
-                            delegator_votes,
-                        )) => {
-                            match yay_validators.get(validator_address) {
-                                Some((_, validator_vote)) => {
-                                    if let ProposalVote::Yay(
-                                        VoteType::PGFCouncil(validator_votes),
-                                    ) = validator_vote
-                                    {
-                                        for vote in validator_votes
-                                            .symmetric_difference(
-                                                delegator_votes,
-                                            )
-                                        {
-                                            if validator_votes.contains(vote) {
-                                                // Delegator didn't vote for
-                                                // this, reduce voting power
-                                                if let Some(power) =
-                                                    total_yay_staked_tokens
-                                                        .get_mut(vote)
-                                                {
-                                                    *power -= vote_power;
-                                                } else {
-                                                    return Err(Error::Tally(
-                                                        format!(
-                                                            "Expected PGF \
-                                                             vote {:?} was \
-                                                             not in tally",
-                                                            vote
-                                                        ),
-                                                    ));
-                                                }
-                                            } else {
-                                                // Validator didn't vote for
-                                                // this, add voting power
-                                                *total_yay_staked_tokens
-                                                    .entry(vote)
-                                                    .or_insert(0) += vote_power;
-                                            }
-                                        }
-                                    } else {
-                                        // Log the error and continue
-                                        tracing::error!(
-                                            "Unexpected vote type. Expected: \
-                                             PGFCouncil, Found: {}",
-                                            validator_vote
-                                        );
-                                        continue;
-                                    }
-                                }
-                                None => {
-                                    // Validator didn't vote or voted nay, add
-                                    // delegator vote
-
-                                    for vote in delegator_votes {
-                                        *total_yay_staked_tokens
-                                            .entry(vote)
-                                            .or_insert(0) += vote_power;
-                                    }
-                                }
-                            }
-                        }
-                        ProposalVote::Nay => {
-                            for (
-                                validator_address,
-                                (vote_power, _delegator_vote),
-                            ) in vote_map.iter()
-                            {
-                                if let Some((_, validator_vote)) =
-                                    yay_validators.get(validator_address)
-                                {
-                                    if let ProposalVote::Yay(
-                                        VoteType::PGFCouncil(votes),
-                                    ) = validator_vote
-                                    {
-                                        for vote in votes {
-                                            if let Some(power) =
-                                                total_yay_staked_tokens
-                                                    .get_mut(vote)
-                                            {
-                                                *power -= vote_power;
-                                            } else {
-                                                return Err(Error::Tally(
-                                                    format!(
-                                                        "Expected PGF vote \
-                                                         {:?} was not in tally",
-                                                        vote
-                                                    ),
-                                                ));
-                                            }
-                                        }
-                                    } else {
-                                        // Log the error and continue
-                                        tracing::error!(
-                                            "Unexpected vote type. Expected: \
-                                             PGFCouncil, Found: {}",
-                                            validator_vote
-                                        );
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            // Log the error and continue
-                            tracing::error!(
-                                "Unexpected vote type. Expected: PGFCouncil, \
-                                 Found: {}",
-                                delegator_vote
-                            );
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            // At least 1/3 of the total voting power must vote Yay
-            let total_yay_voted_power = total_yay_staked_tokens
-                .iter()
-                .fold(0, |acc, (_, vote_power)| acc + vote_power);
-
-            match total_yay_voted_power.checked_mul(3) {
-                Some(v) if v < total_stake => Ok(ProposalResult {
-                    result: TallyResult::Rejected,
-                    total_voting_power: total_stake,
-                    total_yay_power: total_yay_voted_power,
-                    total_nay_power: 0,
-                }),
-                _ => {
-                    // Select the winner council based on approval voting
-                    // (majority)
-                    let council = total_yay_staked_tokens
-                        .into_iter()
-                        .max_by(|a, b| a.1.cmp(&b.1))
-                        .map(|(vote, _)| vote.to_owned())
-                        .ok_or_else(|| {
-                            Error::Tally(
-                                "Missing expected elected council".to_string(),
-                            )
-                        })?;
-
-                    Ok(ProposalResult {
-                        result: TallyResult::Passed(Tally::PGFCouncil(council)),
-                        total_voting_power: total_stake,
-                        total_yay_power: total_yay_voted_power,
-                        total_nay_power: 0,
-                    })
                 }
             }
         }
     }
+
+    // Proposal passes if threshold of total voting power voted the desired vote
+    if total_target_vote_staked_tokens >= (total_stake / 3) * 2 {
+        ProposalResult {
+            result: TallyResult::Passed(proposal_type.into()),
+            total_voting_power: total_stake,
+            total_yay_power: total_target_vote_staked_tokens,
+            total_nay_power: 0,
+        }
+    } else {
+        ProposalResult {
+            result: TallyResult::Rejected,
+            total_voting_power: total_stake,
+            total_yay_power: total_target_vote_staked_tokens,
+            total_nay_power: 0,
+        }
+    }
+}
+
+fn expected_vote(
+    proposal_type: &ProposalType,
+    vote: &ProposalVote,
+) -> ExpectedVote {
+    let mut result = match vote {
+        ProposalVote::Yay(t) if proposal_type == t => ExpectedVote::Expected,
+        ProposalVote::Yay(_) => ExpectedVote::Wrong,
+        ProposalVote::Nay => ExpectedVote::Opposite,
+    };
+
+    // For PGF payment tally the Nay votes
+    if let ProposalType::PGFPayment(_) = proposal_type {
+        result.reverse();
+    }
+
+    result
 }
 
 /// Prepare Votes structure to compute proposal tally
@@ -385,8 +214,8 @@ where
     let vote_iter =
         storage_api::iter_prefix::<ProposalVote>(storage, &vote_prefix_key)?;
 
-    let mut yay_validators = HashMap::new();
-    let mut delegators: HashMap<
+    let mut validators_votes = HashMap::new();
+    let mut delegators_votes: HashMap<
         Address,
         HashMap<Address, (VotePower, ProposalVote)>,
     > = HashMap::new();
@@ -396,7 +225,7 @@ where
         let voter_address = gov_storage::get_voter_address(&vote_key);
         match voter_address {
             Some(voter_address) => {
-                if vote.is_yay() && validators.contains(voter_address) {
+                if validators.contains(voter_address) {
                     let amount: VotePower = read_validator_stake(
                         storage,
                         &params,
@@ -406,7 +235,7 @@ where
                     .unwrap_or_default()
                     .into();
 
-                    yay_validators
+                    validators_votes
                         .insert(voter_address.clone(), (amount, vote));
                 } else if !validators.contains(voter_address) {
                     let validator_address =
@@ -422,7 +251,7 @@ where
                                     .1;
 
                             if amount != token::Amount::default() {
-                                let entry = delegators
+                                let entry = delegators_votes
                                     .entry(voter_address.to_owned())
                                     .or_default();
                                 entry.insert(
@@ -440,8 +269,8 @@ where
     }
 
     Ok(Votes {
-        yay_validators,
-        delegators,
+        validators: validators_votes,
+        delegators: delegators_votes,
     })
 }
 
