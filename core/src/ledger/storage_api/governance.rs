@@ -38,7 +38,7 @@ where
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
 
-    if let ProposalType::Default(Some(proposal_code)) = data.proposal_type {
+    if let ProposalType::Default(Some(proposal_code)) = data.r#type {
         let proposal_code_key = storage::get_proposal_code_key(proposal_id);
         storage.write_bytes(&proposal_code_key, proposal_code)?;
     }

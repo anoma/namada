@@ -153,14 +153,14 @@ pub struct Proposal {
     pub content: BTreeMap<String, String>,
     /// The proposal author address
     pub author: Address,
+    /// The proposal type
+    pub r#type: ProposalType,
     /// The epoch from which voting is allowed
     pub voting_start_epoch: Epoch,
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The proposal type
-    pub proposal_type: ProposalType,
 }
 
 impl Display for Proposal {
