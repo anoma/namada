@@ -1271,8 +1271,7 @@ fn check_balances(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args =
-        vec!["balance", "--token", NAM, "--node", &rpc_a];
+    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 900000, owned by albert".to_string();
@@ -1381,8 +1380,7 @@ fn check_balances_after_back(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args =
-        vec!["balance", "--token", NAM, "--node", &rpc_a];
+    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 950000, owned by albert".to_string();
