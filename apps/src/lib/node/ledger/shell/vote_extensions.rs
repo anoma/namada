@@ -350,7 +350,6 @@ pub fn deserialize_vote_extensions<'shell>(
         };
         match process_tx(tx).ok()? {
             TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::EthEventsVext(_),
                 tx:
                     ProtocolTxType::EthEventsVext(_)
                     | ProtocolTxType::BridgePoolVext(_),

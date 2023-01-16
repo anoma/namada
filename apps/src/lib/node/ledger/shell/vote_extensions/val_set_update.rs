@@ -7,7 +7,7 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::types::storage::BlockHeight;
+use namada::types::storage::{BlockHeight, Epoch};
 use namada::types::token;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]
@@ -15,7 +15,6 @@ use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
-use crate::types::storage::Epoch;
 
 impl<D, H> Shell<D, H>
 where
