@@ -58,14 +58,14 @@ pub struct InitProposalData {
     pub content: Vec<u8>,
     /// The proposal author address
     pub author: Address,
+    /// The proposal type
+    pub r#type: ProposalType,
     /// The epoch from which voting is allowed
     pub voting_start_epoch: Epoch,
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The proposal type
-    pub proposal_type: ProposalType,
 }
 
 /// A tx data type to hold vote proposal data
@@ -97,10 +97,10 @@ impl TryFrom<Proposal> for InitProposalData {
             id: proposal.id,
             content: proposal.content.try_to_vec().unwrap(),
             author: proposal.author,
+            r#type: proposal.r#type.try_into()?,
             voting_start_epoch: proposal.voting_start_epoch,
             voting_end_epoch: proposal.voting_end_epoch,
             grace_epoch: proposal.grace_epoch,
-            proposal_type: proposal.proposal_type.try_into()?,
         })
     }
 }
