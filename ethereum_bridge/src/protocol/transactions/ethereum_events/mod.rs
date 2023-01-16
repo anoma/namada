@@ -419,10 +419,12 @@ mod tests {
     pub fn test_apply_derived_tx_duplicates() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let mut storage = testing::setup_storage(HashSet::from_iter(vec![
-            validator_a.clone(),
-            validator_b,
-        ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
