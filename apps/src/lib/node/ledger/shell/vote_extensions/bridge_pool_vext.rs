@@ -24,6 +24,7 @@ where
     ///
     /// Checks that at epoch of the provided height:
     ///  * The inner Namada address corresponds to an active validator.
+    ///  * Check that the root and nonce are correct.
     ///  * The validator correctly signed the extension.
     ///  * The validator signed over the correct height inside of the extension.
     ///  * Check that the inner signature is valid.
@@ -169,7 +170,7 @@ where
     }
 
     /// Takes a list of signed Bridge pool root vote extensions,
-    /// and filters out invalid instances. This also de-dduplicates
+    /// and filters out invalid instances. This also de-duplicates
     /// the iterator to be unique per validator address.
     #[inline]
     pub fn filter_invalid_bp_roots_vexts<'iter>(
