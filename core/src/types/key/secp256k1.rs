@@ -550,7 +550,6 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-
             use tiny_keccak::{Hasher as KeccakHasher, Keccak};
             let bytes = &data
                 .try_to_vec()
@@ -587,8 +586,11 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            use sha2::{Digest, Sha256};
-            let hash = Sha256::digest(data);
+            use tiny_keccak::{Hasher as KeccakHasher, Keccak};
+            let mut hash = [0; 32];
+            let mut state = Keccak::v256();
+            state.update(data);
+            state.finalize(&mut hash);
             let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
                 .expect("Error parsing raw data");
             let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);

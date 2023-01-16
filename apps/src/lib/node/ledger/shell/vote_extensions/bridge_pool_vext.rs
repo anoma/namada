@@ -248,7 +248,6 @@ mod test_bp_vote_extensions {
     };
     use namada::proof_of_stake::types::ValidatorEthKey;
     use namada::proto::{SignableEthBytes, Signed};
-    use namada::types::ethereum_events::Uint;
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::vote_extensions::bridge_pool_roots;
@@ -331,7 +330,7 @@ mod test_bp_vote_extensions {
         assert_eq!(shell.storage.get_current_epoch().0.0, 1);
 
         // Check that Bertha's vote extensions pass validation.
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig =
             Signed::<Vec<u8>, SignableEthBytes>::new(&hot_key, to_sign).sig;
         let vote_ext = bridge_pool_roots::Vext {
@@ -358,7 +357,7 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
@@ -394,7 +393,7 @@ mod test_bp_vote_extensions {
                 &shell.extend_vote(Default::default()).vote_extension[..],
             )
             .expect("Test failed");
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
@@ -432,7 +431,7 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
@@ -465,7 +464,7 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig =
             Signed::<Vec<u8>, SignableEthBytes>::new(&signing_key, to_sign).sig;
         let bp_root = bridge_pool_roots::Vext {
@@ -491,7 +490,7 @@ mod test_bp_vote_extensions {
             .expect("Test failed")
             .clone();
         add_validator(&mut shell);
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
@@ -509,20 +508,16 @@ mod test_bp_vote_extensions {
         ))
     }
 
-    /// Test that an [`bridge_pool_roots::Vext`] that labels its included
-    /// block height as greater than the latest block height is rejected.
-    #[test]
-    fn reject_incorrect_block_number() {
-        let (shell, _, _) = setup_at_height(3u64);
+    fn reject_incorrect_block_number(height: BlockHeight, shell: &TestShell) {
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height + 1,
+            block_height: height,
             validator_addr: address,
             sig,
         }
@@ -533,27 +528,19 @@ mod test_bp_vote_extensions {
         )
     }
 
+    /// Test that an [`bridge_pool_roots::Vext`] that labels its included
+    /// block height as greater than the latest block height is rejected.
+    #[test]
+    fn test_block_height_too_high() {
+        let (shell, _, _) = setup_at_height(3u64);
+        reject_incorrect_block_number(shell.storage.last_height + 1, &shell);
+    }
     /// Test if we reject Bridge pool roots vote extensions
     /// issued at genesis.
     #[test]
     fn test_reject_genesis_vexts() {
         let (shell, _, _) = setup();
-        let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
-        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
-            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-            to_sign,
-        )
-        .sig;
-        let bp_root = bridge_pool_roots::Vext {
-            block_height: 0.into(),
-            validator_addr: address,
-            sig,
-        }
-        .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(
-            !shell.validate_bp_roots_vext(bp_root, shell.storage.last_height)
-        )
+        reject_incorrect_block_number(0.into(), &shell);
     }
 
     /// Test that a bridge pool root vext is rejected
@@ -562,7 +549,7 @@ mod test_bp_vote_extensions {
     fn test_incorrect_nonce() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [[0; 32], Uint::from(10).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
@@ -585,7 +572,7 @@ mod test_bp_vote_extensions {
     fn test_incorrect_root() {
         let (shell, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
-        let to_sign = [[1; 32], Uint::from(0).to_bytes()].concat();
+        let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
