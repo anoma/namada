@@ -14,7 +14,16 @@ use namada_proof_of_stake::types::WeightedValidator;
 pub(super) trait GetVoters {
     /// Extract all the voters and the block heights at which they voted from
     /// the given proof.
-    fn get_voters(&self) -> HashSet<(Address, BlockHeight)>;
+    // TODO(feature = "abcipp"): we do not neet to return block heights
+    // anymore. votes will always be from `storage.last_height`. for the
+    // same reason, it is likely we won't need a `storage` param anymore.
+    fn get_voters<D, H>(
+        &self,
+        storage: &Storage<D, H>,
+    ) -> HashSet<(Address, BlockHeight)>
+    where
+        D: DB + for<'iter> DBIter<'iter>,
+        H: StorageHasher;
 }
 
 /// Returns a map whose keys are addresses of validators and the block height at
@@ -29,7 +38,7 @@ where
     H: 'static + StorageHasher + Sync,
     P: GetVoters + ?Sized,
 {
-    let voters = proof.get_voters();
+    let voters = proof.get_voters(storage);
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let active_validators = get_active_validators(
