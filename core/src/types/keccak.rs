@@ -6,9 +6,11 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
+use ethabi::Token;
 use thiserror::Error;
 use tiny_keccak::{Hasher, Keccak};
 
+use crate::types::eth_abi::Encode;
 use crate::types::hash::{Hash, HASH_LENGTH};
 
 /// Errors for converting / parsing Keccak hashes
@@ -91,6 +93,12 @@ impl TryFrom<&str> for KeccakHash {
     }
 }
 
+impl AsRef<[u8]> for KeccakHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Hash bytes using Keccak
 pub fn keccak_hash(bytes: &[u8]) -> KeccakHash {
     let mut output = [0; 32];
@@ -100,4 +108,10 @@ pub fn keccak_hash(bytes: &[u8]) -> KeccakHash {
     hasher.finalize(&mut output);
 
     KeccakHash(output)
+}
+
+impl Encode<1> for KeccakHash {
+    fn tokenize(&self) -> [Token; 1] {
+        [Token::FixedBytes(self.0.to_vec())]
+    }
 }

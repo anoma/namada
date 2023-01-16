@@ -1,7 +1,10 @@
+use borsh::BorshDeserialize;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::get_nonce_key;
 use namada_core::ledger::storage;
-use namada_core::ledger::storage::Storage;
+use namada_core::ledger::storage::{Storage, StoreType};
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::ethereum_events::{EthAddress, Uint};
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
@@ -20,6 +23,14 @@ pub enum SendValsetUpd {
 }
 
 pub trait EthBridgeQueries {
+    /// Get the latest nonce for the Ethereum bridge
+    /// pool.
+    fn get_bridge_pool_nonce(&self) -> Uint;
+
+    /// Get the latest root of the Ethereum bridge
+    /// pool Merkle tree.
+    fn get_bridge_pool_root(&self) -> KeccakHash;
+
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
@@ -53,6 +64,21 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
+    fn get_bridge_pool_nonce(&self) -> Uint {
+        Uint::try_from_slice(
+            &self
+                .read(&get_nonce_key())
+                .expect("Reading Bridge pool nonce shouldn't fail.")
+                .0
+                .expect("Reading Bridge pool nonce shouldn't fail."),
+        )
+        .expect("Deserializing the nonce from storage should not fail.")
+    }
+
+    fn get_bridge_pool_root(&self) -> KeccakHash {
+        self.block.tree.sub_root(&StoreType::BridgePool).into()
+    }
+
     #[cfg(feature = "abcipp")]
     #[inline]
     fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {

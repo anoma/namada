@@ -11,7 +11,7 @@ use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
 
 use super::ics23_specs;
-use super::merkle_tree::{Amt, Error, Smt};
+use super::merkle_tree::{Amt, Error, MerkleRoot, Smt};
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolTree;
 use crate::ledger::storage::merkle_tree::StorageBytes;
 use crate::types::eth_bridge_pool::PendingTransfer;
@@ -23,6 +23,8 @@ use crate::types::storage::{
 /// Trait for reading from a merkle tree that is a sub-tree
 /// of the global merkle tree.
 pub trait SubTreeRead {
+    /// Get the root of a subtree in raw bytes.
+    fn root(&self) -> MerkleRoot;
     /// Check if a key is present in the sub-tree
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error>;
     /// Get a membership proof for various key-value pairs
@@ -47,6 +49,10 @@ pub trait SubTreeWrite {
 }
 
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
+    fn root(&self) -> MerkleRoot {
+        Smt::<H>::root(self).into()
+    }
+
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
         match self.get(&H::hash(key.to_string()).into()) {
             Ok(hash) => Ok(!hash.is_zero()),
@@ -103,6 +109,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
 }
 
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
+    fn root(&self) -> MerkleRoot {
+        Amt::<H>::root(self).into()
+    }
+
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         match self.get(&key) {
@@ -160,6 +170,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
 }
 
 impl<'a> SubTreeRead for &'a BridgePoolTree {
+    fn root(&self) -> MerkleRoot {
+        BridgePoolTree::root(self).into()
+    }
+
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error> {
         self.contains_key(key)
             .map_err(|err| Error::MerkleTree(err.to_string()))
