@@ -1621,7 +1621,6 @@ pub mod args {
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
-    use namada::types::governance::ProposalVote;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
@@ -1717,7 +1716,8 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
+    const PROPOSAL_VOTE: Arg<String> = arg("vote");
+    const PROPOSAL_VOTE_MEMO_OPT: ArgOpt<PathBuf> = arg_opt("memo");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
@@ -2439,7 +2439,9 @@ pub mod args {
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
-        pub vote: ProposalVote,
+        pub vote: String,
+        /// The optional vote memo path
+        pub memo: Option<PathBuf>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
@@ -2453,6 +2455,7 @@ pub mod args {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
+            let memo = PROPOSAL_VOTE_MEMO_OPT.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
             let address = ADDRESS.parse(matches);
@@ -2461,6 +2464,7 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
+                memo,
                 offline,
                 proposal_data,
                 address,
@@ -2482,6 +2486,15 @@ pub mod args {
                     PROPOSAL_VOTE
                         .def()
                         .about("The vote for the proposal. Either yay or nay."),
+                )
+                .arg(
+                    PROPOSAL_VOTE_MEMO_OPT
+                        .def()
+                        .about("The optional vote memo.")
+                        .conflicts_with_all(&[
+                            PROPOSAL_OFFLINE.name,
+                            DATA_PATH_OPT.name,
+                        ]),
                 )
                 .arg(
                     PROPOSAL_OFFLINE

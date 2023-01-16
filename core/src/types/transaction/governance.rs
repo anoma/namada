@@ -2,8 +2,44 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::governance::{Proposal, ProposalError, ProposalVote};
+use crate::types::governance::{self, Proposal, ProposalError, ProposalVote};
 use crate::types::storage::Epoch;
+
+/// The type of a [`InitProposal`]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum ProposalType {
+    /// Default governance proposal with the optional wasm code
+    Default(Option<Vec<u8>>),
+    /// PGF council proposal
+    PGFCouncil,
+}
+
+impl TryFrom<governance::ProposalType> for ProposalType {
+    type Error = ProposalError;
+    fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
+        match value {
+            governance::ProposalType::Default(path) => {
+                if let Some(p) = path {
+                    match std::fs::read(p) {
+                        Ok(code) => Ok(Self::Default(Some(code))),
+                        Err(_) => Err(Self::Error::InvalidProposalData),
+                    }
+                } else {
+                    Ok(Self::Default(None))
+                }
+            }
+            governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
+        }
+    }
+}
 
 /// A tx data type to hold proposal data
 #[derive(
@@ -28,8 +64,8 @@ pub struct InitProposalData {
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The code containing the storage changes
-    pub proposal_code: Option<Vec<u8>>,
+    /// The proposal type
+    pub proposal_type: ProposalType,
 }
 
 /// A tx data type to hold vote proposal data
@@ -57,15 +93,6 @@ impl TryFrom<Proposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
-        let proposal_code = if let Some(path) = proposal.proposal_code_path {
-            match std::fs::read(path) {
-                Ok(bytes) => Some(bytes),
-                Err(_) => return Err(Self::Error::InvalidProposalData),
-            }
-        } else {
-            None
-        };
-
         Ok(InitProposalData {
             id: proposal.id,
             content: proposal.content.try_to_vec().unwrap(),
@@ -73,7 +100,7 @@ impl TryFrom<Proposal> for InitProposalData {
             voting_start_epoch: proposal.voting_start_epoch,
             voting_end_epoch: proposal.voting_end_epoch,
             grace_epoch: proposal.grace_epoch,
-            proposal_code,
+            proposal_type: proposal.proposal_type.try_into()?,
         })
     }
 }
