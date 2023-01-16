@@ -1,10 +1,10 @@
 # Using IBC with Namada
 
-This document describes using the inter-blockchain communication (IBC) protocol with Namada. This documentation covers being able to create connections through IBC as well as setting up local fractal instances of Namada for testing purposes.
+This document describes using the inter-blockchain communication (IBC) protocol with Namada. This documentation covers being able to create connections through IBC as well as setting up local instances of Namada for testing purposes.
 
 > **Warning**
 >
-> This is quite an advanced feature at the moment and is currently in development
+> This is quite an advanced feature at the moment and development is still ongoing.
 
 This document will cover three essential steps for using IBC with Namada
 
@@ -12,14 +12,14 @@ This document will cover three essential steps for using IBC with Namada
 2. [Setup nodes for Namada instances](#setup-nodes-for-namada-instances)
 3. [Transferring assets over IBC](#transferring-assets-over-IBC)
 
-The below is intended for those that wish to conduct IBC message transfer between two Namada chains. There is of course the cabablitiy to do this between any two IBC compatible chains (such as a cosmos chain). In this case, it is necessary to have a node of both the destination and the source chain running in order to make any package transfers. Below, we discuss first how to enable this connection between two pre-existing chains by Hermes, and second setting up 2 Namada local instances or joining two pre-existing Namada instances for this purpose.
+The below is intended for those that wish to conduct IBC message transfer between two Namada chains. There is of course the capability to do this between any two IBC compatible chains (such as a Cosmos chain). In this case, it is necessary to have a node of both the destination and the source chain running in order to make any packet transfers. Below, we discuss first how to enable this connection between two pre-existing chains by Hermes, and second how to set up 2 Namada local instances or join two pre-existing Namada instances for this purpose.
 
 ## Setup Hermes
-Hermes is an IBC relayer to relay packets between chains(instances). We have our [Hermes supporting Namada instances](https://github.com/heliaxdev/ibc-rs/tree/yuji/v0.14.0_namada).
-Before packet relay, we need the following step to configure and start Hermes.
+Hermes is an IBC relayer that relays packets between chains (instances). We have a fork of Hermes which supports Namada instances [here](https://github.com/heliaxdev/ibc-rs/tree/yuji/v0.14.0_namada).
+Before packet relay, we need the following steps to configure and start Hermes:
 
 1. Make Hermes config file
-2. Create IBC client/connection/channel between instances
+2. Create IBC clients, connection, and channel between instances
 3. Run Hermes
 
 ### Make Hermes config file
@@ -29,7 +29,7 @@ Make a relayer config toml file (Hermes' config.toml). If you don't specify the 
 
 You can find an example of the config file [here](https://hackmd.io/l6HNSqJmQt6QfkjfTmSfbw). Basically, you change only the chain IDs, the RPC addresses, and the key names to the config file for Namada. If you don't have nodes, please set up nodes manually or [scripts](#setup-nodes-for-namada-instances).
 
-Once this has created, you can export the true path of the new file to a varaible, which will be useful for later.
+Once this has created, you can export the path of the new file to a varaible, which will be useful for later.
 ```bash
 export HERMES_CONFIG="<path-to-toml.toml>"
 ```
