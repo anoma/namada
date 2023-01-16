@@ -15,7 +15,7 @@ use thiserror::Error;
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_signed_root_key, BridgePoolTree,
+    get_nonce_key, get_signed_root_key, BridgePoolTree,
 };
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
@@ -191,7 +191,9 @@ impl StoreType {
                     InternalAddress::EthBridgePool => {
                         // the root of this sub-tree is kept in accounts
                         // storage along with a quorum of validator signatures
-                        if *key == get_signed_root_key() {
+                        if *key == get_signed_root_key()
+                            || *key == get_nonce_key()
+                        {
                             Ok((StoreType::Account, key.clone()))
                         } else {
                             Ok((StoreType::BridgePool, key.sub_key()?))
@@ -364,6 +366,11 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.base.root().into()
     }
 
+    /// Get the root of a sub-tree
+    pub fn sub_root(&self, store_type: &StoreType) -> MerkleRoot {
+        self.tree(store_type).root()
+    }
+
     /// Get the stores of the base and sub trees
     pub fn stores(&self) -> MerkleTreeStoresWrite {
         MerkleTreeStoresWrite {
@@ -474,18 +481,30 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
-pub struct MerkleRoot(pub Vec<u8>);
+pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
     fn from(root: H256) -> Self {
-        Self(root.as_slice().to_vec())
+        Self(root.into())
     }
 }
 
 impl From<&H256> for MerkleRoot {
     fn from(root: &H256) -> Self {
         let root = *root;
-        Self(root.as_slice().to_vec())
+        Self(root.into())
+    }
+}
+
+impl From<KeccakHash> for MerkleRoot {
+    fn from(root: KeccakHash) -> Self {
+        Self(root.0)
+    }
+}
+
+impl From<MerkleRoot> for KeccakHash {
+    fn from(root: MerkleRoot) -> Self {
+        Self(root.0)
     }
 }
 

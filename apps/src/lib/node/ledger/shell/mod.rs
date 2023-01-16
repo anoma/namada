@@ -494,7 +494,7 @@ where
                     root,
                     height
                 );
-                response.last_block_app_hash = root.0;
+                response.last_block_app_hash = root.0.to_vec();
                 response.last_block_height =
                     height.try_into().expect("Invalid block height");
             }
@@ -668,7 +668,7 @@ where
             root,
             self.storage.last_height,
         );
-        response.data = root.0;
+        response.data = root.0.to_vec();
 
         #[cfg(not(feature = "abcipp"))]
         {
@@ -731,6 +731,26 @@ where
                             response.code = 1;
                             response.log = format!(
                                 "{INVALID_MSG}: Invalid Ethereum events vote \
+                                 extension: {err}",
+                            );
+                        } else {
+                            response.log = String::from(VALID_MSG);
+                        }
+                    }
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::BridgePoolVext(ext),
+                        ..
+                    })) => {
+                        if let Err(err) = self
+                            .validate_bp_roots_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
+                            response.code = 1;
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid Brige pool roots vote \
                                  extension: {err}",
                             );
                         } else {
@@ -872,6 +892,7 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -880,7 +901,6 @@ mod test_utils {
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
-    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {

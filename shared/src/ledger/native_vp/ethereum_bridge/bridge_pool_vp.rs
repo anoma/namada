@@ -451,7 +451,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
                 amount: 0.into(),
-                nonce: 0u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -609,7 +608,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: TOKENS.into(),
-                nonce: 1u64.into(),
             },
             gas_fee: GasFee {
                 amount: GAS_FEE.into(),
@@ -870,9 +868,8 @@ mod test_bridge_pool_vp {
                     transfer: TransferToEthereum {
                         asset: EthAddress([0; 20]),
                         sender: bertha_address(),
-                        recipient: EthAddress([1; 20]),
+                        recipient: EthAddress([11; 20]),
                         amount: 100.into(),
-                        nonce: 10u64.into(),
                     },
                     gas_fee: GasFee {
                         amount: GAS_FEE.into(),
@@ -901,9 +898,8 @@ mod test_bridge_pool_vp {
                     transfer: TransferToEthereum {
                         asset: EthAddress([0; 20]),
                         sender: bertha_address(),
-                        recipient: EthAddress([1; 20]),
+                        recipient: EthAddress([11; 20]),
                         amount: 100.into(),
-                        nonce: 10u64.into(),
                     },
                     gas_fee: GasFee {
                         amount: GAS_FEE.into(),
@@ -1032,7 +1028,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: 0.into(),
-                nonce: 1u64.into(),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -1104,7 +1099,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: 100.into(),
-                nonce: 1u64.into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),
@@ -1196,7 +1190,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: 100.into(),
-                nonce: 1u64.into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),
@@ -1306,7 +1299,6 @@ mod test_bridge_pool_vp {
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
                 amount: 100.into(),
-                nonce: 1u64.into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),

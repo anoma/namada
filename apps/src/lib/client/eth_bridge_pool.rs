@@ -37,8 +37,6 @@ pub async fn add_to_eth_bridge_pool(
             recipient,
             sender: ctx.get(sender),
             amount,
-            // TODO: Add real nonce
-            nonce: Default::default(),
         },
         gas_fee: GasFee {
             amount: gas_amount,

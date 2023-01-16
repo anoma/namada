@@ -2819,6 +2819,7 @@ dependencies = [
  "itertools",
  "namada_core",
  "namada_proof_of_stake",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "tendermint",

@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize};
 /// Default [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/) endpoint used by the oracle
 pub const DEFAULT_ORACLE_RPC_ENDPOINT: &str = "http://127.0.0.1:8545";
 
+/// The default maximum number of Ethereum events the channel between
+/// the oracle and the shell can hold.
+pub const ORACLE_CHANNEL_BUFFER_SIZE: usize = 1000;
+
 /// The mode in which to run the Ethereum bridge.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
@@ -34,6 +38,10 @@ pub struct Config {
     /// The Ethereum JSON-RPC endpoint that the Ethereum event oracle will use
     /// to listen for events from the Ethereum bridge smart contracts
     pub oracle_rpc_endpoint: String,
+    /// The size of bounded channel between the Ethereum oracle and main
+    /// ledger subprocesses. This is the number of Ethereum events that
+    /// can be held in the channel. The default is 1000.
+    pub channel_buffer_size: usize,
 }
 
 impl Default for Config {
@@ -41,6 +49,7 @@ impl Default for Config {
         Self {
             mode: Mode::Managed,
             oracle_rpc_endpoint: DEFAULT_ORACLE_RPC_ENDPOINT.to_owned(),
+            channel_buffer_size: ORACLE_CHANNEL_BUFFER_SIZE,
         }
     }
 }

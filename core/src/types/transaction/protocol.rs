@@ -36,7 +36,7 @@ mod protocol_txs {
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::types::vote_extensions::{
-        ethereum_events, validator_set_update,
+        bridge_pool_roots, ethereum_events, validator_set_update,
     };
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
@@ -86,6 +86,8 @@ mod protocol_txs {
         ValidatorSetUpdate(validator_set_update::VextDigest),
         /// Ethereum events seen by some validator
         EthEventsVext(ethereum_events::SignedVext),
+        /// Signatures over the Ethereum bridge pool merkle root.
+        BridgePoolVext(bridge_pool_roots::SignedVext),
         /// Validator set update signed by some validator
         ValSetUpdateVext(validator_set_update::SignedVext),
     }
