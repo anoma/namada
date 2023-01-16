@@ -560,7 +560,7 @@ fn merge_vp_results(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::HashMap;
 
     use borsh::BorshDeserialize;
     use eyre::Result;
@@ -572,9 +572,9 @@ mod tests {
     use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
     use namada_core::types::{address, key};
-    use namada_ethereum_bridge::protocol::transactions::ethereum_events;
     use namada_ethereum_bridge::protocol::transactions::votes::Votes;
     use namada_ethereum_bridge::storage::vote_tallies;
+    use namada_ethereum_bridge::test_utils;
 
     use super::*;
 
@@ -585,11 +585,12 @@ mod tests {
     fn test_apply_protocol_tx_duplicate_eth_events_vext() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let mut storage =
-            ethereum_events::testing::setup_storage(HashSet::from_iter(vec![
-                validator_a.clone(),
-                validator_b,
-            ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
