@@ -4,7 +4,7 @@ use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 
 /// A proposal creation transaction.
@@ -38,7 +38,7 @@ where
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
 
-    if let Some(proposal_code) = data.proposal_code {
+    if let ProposalType::Default(Some(proposal_code)) = data.proposal_type {
         let proposal_code_key = storage::get_proposal_code_key(proposal_id);
         storage.write_bytes(&proposal_code_key, proposal_code)?;
     }

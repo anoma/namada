@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{self, Display};
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
@@ -19,6 +18,24 @@ use crate::types::token::SCALE;
 /// Type alias for vote power
 pub type VotePower = u128;
 
+/// The type of a governance vote with the optional associated Memo
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Eq,
+)]
+pub enum VoteType {
+    /// A default vote without Memo
+    Default,
+    /// A vote for the PGF council encoding for the proposed addresses and the budget cap
+    PGFCouncil(Vec<Address>, u64),
+}
+
 #[derive(
     Debug,
     Clone,
@@ -32,7 +49,7 @@ pub type VotePower = u128;
 /// The vote for a proposal
 pub enum ProposalVote {
     /// Yes
-    Yay,
+    Yay(VoteType),
     /// No
     Nay,
 }
@@ -41,7 +58,7 @@ impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
         match self {
-            ProposalVote::Yay => true,
+            ProposalVote::Yay(_) => true,
             ProposalVote::Nay => false,
         }
     }
@@ -50,7 +67,7 @@ impl ProposalVote {
 impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalVote::Yay => write!(f, "yay"),
+            ProposalVote::Yay(_) => write!(f, "yay"),
             ProposalVote::Nay => write!(f, "nay"),
         }
     }
@@ -61,20 +78,6 @@ impl Display for ProposalVote {
 pub enum ProposalVoteParseError {
     #[error("Invalid vote. Vote shall be yay or nay.")]
     InvalidVote,
-}
-
-impl FromStr for ProposalVote {
-    type Err = ProposalVoteParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq("yay") {
-            Ok(ProposalVote::Yay)
-        } else if s.eq("nay") {
-            Ok(ProposalVote::Nay)
-        } else {
-            Err(ProposalVoteParseError::InvalidVote)
-        }
-    }
 }
 
 /// The result of a proposal
@@ -128,6 +131,17 @@ impl Display for TallyResult {
     }
 }
 
+/// The type of a governance proposal
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub enum ProposalType {
+    /// A default proposal with the optional path to wasm code
+    Default(Option<String>),
+    /// A PGF council proposal
+    PGFCouncil,
+}
+
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
@@ -145,8 +159,8 @@ pub struct Proposal {
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The code containing the storage changes
-    pub proposal_code_path: Option<String>,
+    /// The proposal type
+    pub proposal_type: ProposalType,
 }
 
 impl Display for Proposal {
