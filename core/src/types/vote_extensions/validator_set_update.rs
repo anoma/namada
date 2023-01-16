@@ -318,8 +318,10 @@ impl Encode<1> for ValidatorSetArgs {
 mod tag {
     use serde::{Deserialize, Serialize};
 
-    use super::{epoch_to_token, Vext, VotingPowersMapExt};
-    use crate::proto::SignedSerialize;
+    use super::{
+        epoch_to_token, Vext, VotingPowersMapExt, GOVERNANCE_CONTRACT_VERSION,
+    };
+    use crate::proto::Signable;
     use crate::types::eth_abi::{AbiEncode, Encode, Token};
     use crate::types::keccak::KeccakHash;
 
@@ -328,21 +330,20 @@ mod tag {
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
     pub struct SerializeWithAbiEncode;
 
-    impl SignedSerialize<Vext> for SerializeWithAbiEncode {
-        type Output = [u8; 32];
+    impl Signable<Vext> for SerializeWithAbiEncode {
+        type Output = Vec<u8>;
 
-        fn serialize(ext: &Vext) -> Self::Output {
+        fn as_signable(ext: &Vext) -> Self::Output {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
                 .voting_powers
                 .get_bridge_and_gov_hashes(ext.signing_epoch);
-            let KeccakHash(output) = AbiEncode::signed_keccak256(&[
+            AbiEncode::signable_keccak256(&[
                 Token::Uint(GOVERNANCE_CONTRACT_VERSION.into()),
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
                 epoch_to_token(ext.signing_epoch),
-            ]);
-            output
+            ])
         }
     }
 }
