@@ -49,6 +49,7 @@ pub struct BridgePoolRootVext {
 pub type Vext = BridgePoolRootVext;
 
 /// A signed [`BridgePoolRootVext`].
+///
 /// Note that this is serialized with Ethereum's
 /// ABI encoding schema.
 pub type SignedVext = Signed<BridgePoolRootVext>;
