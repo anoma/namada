@@ -334,7 +334,7 @@ where
                         .expect("encode public key"),
                 )
                 .expect("Unable to set genesis user public key");
-            // Account balance (tokens no staked in PoS)
+            // Account balance (tokens not staked in PoS)
             self.storage
                 .write(
                     &token::balance_key(&self.storage.native_token, addr),

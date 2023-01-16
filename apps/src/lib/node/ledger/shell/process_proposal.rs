@@ -4,7 +4,8 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::Storage;
-use namada::ledger::pos::{PosQueries, SendValsetUpd};
+use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+use namada::ledger::pos::PosQueries;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
@@ -435,6 +436,24 @@ where
                         info: format!(
                             "Process proposal rejected this proposal because \
                              one of the included Ethereum events vote \
+                             extensions was invalid: {err}"
+                        ),
+                    }),
+                ProtocolTxType::BridgePoolVext(ext) => self
+                    .validate_bp_roots_vext_and_get_it_back(
+                        ext,
+                        self.storage.last_height,
+                    )
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|err| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: format!(
+                            "Process proposal rejected this proposal because \
+                             one of the included Bridge pool root's vote \
                              extensions was invalid: {err}"
                         ),
                     }),

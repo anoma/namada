@@ -221,6 +221,7 @@ mod tests {
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
     use crate::protocol::transactions::votes::Votes;
+    use crate::test_utils;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
@@ -310,9 +311,9 @@ mod tests {
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
         let sole_validator = address::testing::established_address_2();
-        let mut storage = testing::setup_storage(HashSet::from_iter(vec![
-            sole_validator.clone(),
-        ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![(sole_validator.clone(), 100_u64.into())]),
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -367,10 +368,12 @@ mod tests {
     fn test_apply_derived_tx_new_event_dont_mint() {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let mut storage = testing::setup_storage(HashSet::from_iter(vec![
-            validator_a.clone(),
-            validator_b,
-        ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
