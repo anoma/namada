@@ -1,13 +1,67 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
+use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
 use crate::types::governance::{
     self, Proposal, ProposalError, ProposalVote, VoteType,
 };
 use crate::types::storage::Epoch;
+
+/// An add or remove action for PGF
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum AddRemove<T> {
+    /// Add
+    Add(T),
+    /// Remove
+    Remove(T),
+}
+
+/// The target of a PGF payment
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct PGFTarget {
+    target: Address,
+    amount: Amount,
+}
+
+/// The actions that a PGF Steward can propose to execute
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum PGFAction {
+    /// A continuous payment
+    Continuous(AddRemove<PGFTarget>),
+    /// A retro payment
+    Retro(PGFTarget),
+}
 
 /// The type of a Proposal
 #[derive(
@@ -22,8 +76,10 @@ use crate::types::storage::Epoch;
 pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
     Default(Option<Vec<u8>>),
-    /// PGF council proposal
-    PGFCouncil,
+    /// PGF stewards proposal
+    PGFSteward(HashSet<AddRemove<Address>>),
+    /// PGF funding proposal
+    PGFPayment(Vec<PGFAction>),
     /// ETH proposal
     ETHBridge,
 }
@@ -32,7 +88,8 @@ impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ProposalType::Default(_) => write!(f, "Default"),
-            ProposalType::PGFCouncil => write!(f, "PGF Council"),
+            ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
+            ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
             ProposalType::ETHBridge => write!(f, "ETH Bridge"),
         }
     }
@@ -44,8 +101,11 @@ impl PartialEq<VoteType> for ProposalType {
             Self::Default(_) => {
                 matches!(other, VoteType::Default)
             }
-            Self::PGFCouncil => {
-                matches!(other, VoteType::PGFCouncil(..))
+            Self::PGFSteward(_) => {
+                matches!(other, VoteType::PGFSteward)
+            }
+            Self::PGFPayment(_) => {
+                matches!(other, VoteType::PGFPayment)
             }
             Self::ETHBridge => {
                 matches!(other, VoteType::ETHBridge(_))
@@ -69,7 +129,24 @@ impl TryFrom<governance::ProposalType> for ProposalType {
                     Ok(Self::Default(None))
                 }
             }
-            governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
+            governance::ProposalType::PGFSteward(p) => {
+                match serde_json::from_reader(
+                    std::fs::File::open(p)
+                        .map_err(|_| Self::Error::InvalidProposalData)?,
+                ) {
+                    Ok(actions) => Ok(Self::PGFSteward(actions)),
+                    Err(_) => Err(Self::Error::InvalidProposalData),
+                }
+            }
+            governance::ProposalType::PGFPayment(p) => {
+                match serde_json::from_reader(
+                    std::fs::File::open(p)
+                        .map_err(|_| Self::Error::InvalidProposalData)?,
+                ) {
+                    Ok(actions) => Ok(Self::PGFPayment(actions)),
+                    Err(_) => Err(Self::Error::InvalidProposalData),
+                }
+            }
             governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
         }
     }
