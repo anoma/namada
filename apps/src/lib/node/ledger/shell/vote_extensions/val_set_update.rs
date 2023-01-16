@@ -60,7 +60,7 @@ where
         (token::Amount, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
-        if self.last_height.0 == 0 {
+        if self.storage.last_height.0 == 0 {
             tracing::error!(
                 "Dropping validator set update vote extension issued at \
                  genesis"

@@ -337,7 +337,7 @@ pub fn deserialize_vote_extensions<'shell>(
 ) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().enumerate().filter_map(|(index, tx_bytes)| {
+    txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
         let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
