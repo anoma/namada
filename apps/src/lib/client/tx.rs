@@ -42,7 +42,7 @@ use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote,
+    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -1989,12 +1989,18 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             args.tx.ledger_address.clone(),
         )
         .await;
-        let offline_vote = OfflineVote::new(
-            &proposal,
-            args.vote,
-            signer.clone(),
-            &signing_key,
-        );
+
+        let vote = match args.vote.as_str() {
+            "yay" => ProposalVote::Yay(VoteType::Default),
+            "nay" => ProposalVote::Nay,
+            _ => {
+                eprintln!("Vote must be either yay or nay");
+                safe_exit(1);
+            }
+        };
+
+        let offline_vote =
+            OfflineVote::new(&proposal, vote, signer.clone(), &signing_key);
 
         let proposal_vote_filename = proposal_file_path
             .parent()
@@ -2047,6 +2053,23 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     rpc::get_delegators_delegation(&client, &voter_address)
                         .await;
 
+                let vote = match args.vote.as_str() {
+                    "yay" => match args.memo {
+                        Some(path) => {
+                            let memo_file = std::fs::File::open(path)
+                                .expect("Error while opening vote memo file");
+                            let vote = serde_json::from_reader(memo_file)
+                                .expect("Could not deserialize vote memo");
+                            ProposalVote::Yay(vote)
+                        }
+                        None => ProposalVote::Yay(VoteType::Default),
+                    },
+                    "nay" => ProposalVote::Nay,
+                    _ => {
+                        eprintln!("Vote must be either yay or nay");
+                        safe_exit(1);
+                    }
+                };
                 // Optimize by quering if a vote from a validator
                 // is equal to ours. If so, we can avoid voting, but ONLY if we
                 // are  voting in the last third of the voting
@@ -2066,14 +2089,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         &client,
                         delegations,
                         proposal_id,
-                        &args.vote,
+                        &vote,
                     )
                     .await;
                 }
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote: args.vote,
+                    vote: vote,
                     voter: voter_address,
                     delegations: delegations.into_iter().collect(),
                 };
