@@ -42,7 +42,7 @@ The path to the config file, which is is saved in the variable `$HERMES_CONFIG` 
 
  Each chain configuration is specified under the `[[chains]]` object.
 
- These are the pieces of this puzzle you want to keep your :eyes: on:
+ These are the pieces of this puzzle you want to keep your 👀 on:
  - `chains.id` is the name of the chain
  - `chains.rpc_address` specifies the port that the channel is communicating through, and will be the argument for the `ledger_address` of Namada when interacting with the ledger (will become clearer later)
      - Make sure to change the IP address to the IP address of your local machine that is running this node!
