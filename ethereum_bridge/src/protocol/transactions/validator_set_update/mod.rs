@@ -11,7 +11,6 @@ use namada_core::types::transaction::protocol::ProtocolTxType;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::validator_set_update;
 use namada_core::types::voting_power::FractionalVotingPower;
-use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -82,28 +81,14 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = {
-        // all votes we gathered are for the same epoch, so
-        // we can just fetch the block height from the first
-        // signature we iterate over, and calculate its cor-
-        // responding epoch
-        let height = ext
-            .signatures
-            .keys()
-            .map(|(_, height)| *height)
-            .by_ref()
-            .next()
-            .expect(
-                "We have at least one signature present in this validator set \
-                 update vote extension digest",
-            );
-
-        storage
-            .get_epoch(height)
-            .expect("The epoch of the given block height should be known")
+    let next_epoch = {
+        // proofs should be written to the sub-key space of the next epoch.
+        // this way, we do, for instance, an RPC call to `E=2` to query a
+        // validator set proof for epoch 2 signed by validators of epoch 1.
+        storage.get_current_epoch().0.next()
     };
 
-    let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+    let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
         let Some(seen) = votes::storage::maybe_read_seen(storage, &valset_upd_keys)? else {
             break 'check_storage None;
@@ -177,6 +162,7 @@ mod test_valset_upd_state_changes {
     use namada_core::types::address;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_proof_of_stake::pos_queries::PosQueries;
 
     use super::*;
     use crate::test_utils;
