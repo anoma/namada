@@ -146,13 +146,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 
     let query_balance_args = |ledger_rpc| {
         vec![
-            "balance",
-            "--owner",
-            ALBERT,
-            "--token",
-            NAM,
-            "--node",
-            ledger_rpc,
+            "balance", "--owner", ALBERT, "--token", NAM, "--node", ledger_rpc,
         ]
     };
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
@@ -2574,11 +2568,8 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // // 14. Query parameters
-    let query_protocol_parameters = vec![
-        "query-protocol-parameters",
-        "--node",
-        &validator_one_rpc,
-    ];
+    let query_protocol_parameters =
+        vec!["query-protocol-parameters", "--node", &validator_one_rpc];
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
