@@ -26,6 +26,10 @@ abciplus = [
     "namada_proof_of_stake/abciplus",
 ]
 
+testing = [
+    "rand"
+]
+
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ferveo-tpke"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
@@ -34,6 +38,7 @@ eyre = "0.6.8"
 itertools = "0.10.0"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_json = "1.0.62"
+rand = {version = "0.8", default-features = false, optional = true}
 tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", features = ["http-client"], optional = true}
 tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}

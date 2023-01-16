@@ -168,6 +168,7 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
+                    ProtocolTxType::BridgePoolVext(_) => continue,
                     ProtocolTxType::ValSetUpdateVext(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }

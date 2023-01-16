@@ -73,6 +73,7 @@ ibc-mocks-abcipp = [
 # for integration tests and test utilies
 testing = [
   "namada_core/testing",
+  "namada_ethereum_bridge/testing",
   "namada_proof_of_stake/testing",
   "async-client",
   "proptest",
