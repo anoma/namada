@@ -33,7 +33,7 @@ impl utils::GetVoters for HashSet<EthMsgUpdate> {
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
-/// which have been seen by enough voting power, extra state changes may take
+/// which have been seen by enough voting power ( > 2/3 ), extra state changes may take
 /// place, such as minting of wrapped ERC20s.
 ///
 /// This function is deterministic based on some existing blockchain state and

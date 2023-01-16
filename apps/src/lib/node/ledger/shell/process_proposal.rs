@@ -274,6 +274,9 @@ where
     /// If a vote extension is [`Some`], then it was validated properly,
     /// and the voting power of the validator who signed it is considered
     /// in the sum of the total voting power of all received vote extensions.
+    ///
+    /// At least 2/3 of validators by voting power must have included vote
+    /// extensions for this function to consider a proposal valid.
     fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
     where
         I: Iterator<Item = Option<namada::types::token::Amount>>,

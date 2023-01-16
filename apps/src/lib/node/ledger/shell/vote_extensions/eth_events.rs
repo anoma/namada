@@ -194,6 +194,10 @@ where
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid
     /// [`Signed<ethereum_events::Vext>`] instances in the process.
+    ///
+    /// When vote extensions are being used, this performs a check
+    /// that at least 2/3 of the validators by voting power have
+    /// included ethereum events in their vote extension.
     pub fn compress_ethereum_events(
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
