@@ -1588,7 +1588,7 @@ pub mod args {
             TendermintAddress::from_str(raw).unwrap()
         }));
 
-    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
+    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =

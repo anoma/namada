@@ -774,7 +774,7 @@ fn transfer_received_token(
         "0",
         "--gas-token",
         NAM,
-        "--node",
+        "--ledger-address",
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -1065,7 +1065,7 @@ fn submit_ibc_tx(
             "0",
             "--gas-token",
             NAM,
-            "--node",
+            "--ledger-address",
             &rpc
         ],
         Some(40)
@@ -1107,7 +1107,7 @@ fn transfer(
         &channel_id,
         "--port-id",
         &port_id,
-        "--node",
+        "--ledger-address",
         &rpc,
     ];
     let sp = sub_prefix.clone().unwrap_or_default();
@@ -1271,7 +1271,8 @@ fn check_balances(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
+    let query_args =
+        vec!["balance", "--token", NAM, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 900000, owned by albert".to_string();
@@ -1307,7 +1308,7 @@ fn check_balances(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--node",
+        "--ledger-address",
         &rpc_b,
     ];
     let expected = format!("NAM with {}: 100000", sub_prefix);
@@ -1341,7 +1342,7 @@ fn check_balances_after_non_ibc(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--node",
+        "--ledger-address",
         &rpc,
     ];
     let expected = format!("NAM with {}: 50000", sub_prefix);
@@ -1358,7 +1359,7 @@ fn check_balances_after_non_ibc(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--node",
+        "--ledger-address",
         &rpc,
     ];
     let expected = format!("NAM with {}: 50000", sub_prefix);
@@ -1380,7 +1381,8 @@ fn check_balances_after_back(
 
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
+    let query_args =
+        vec!["balance", "--token", NAM, "--ledger-address", &rpc_a];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the source balance
     let expected = ": 950000, owned by albert".to_string();
@@ -1416,7 +1418,7 @@ fn check_balances_after_back(
         NAM,
         "--sub-prefix",
         &sub_prefix,
-        "--node",
+        "--ledger-address",
         &rpc_b,
     ];
     let expected = format!("NAM with {}: 0", sub_prefix);

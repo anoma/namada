@@ -256,9 +256,9 @@ killall namadan
 ## Transferring assets over IBC
 This will make transfers across chains by Namada CLI. This assumes that a channel has been created and Hermes is running with the proper config.
 
-In order to do this by Namada's `ibc-transfer` command, we will need to know the `base-dir` and `node` of each instance (and other transfer parameters).
+In order to do this by Namada's `ibc-transfer` command, we will need to know the `base-dir` and `ledger-address` of each instance (and other transfer parameters).
 `base-dir` is the base directory of each node. If you have used the script, the direcotry is `${IBC_RS}/data/namada-*/.namada`.
-`node` is `rpc_addr` in the relevant hermes' config files.
+`ledger-address` is `rpc_addr` in the relevant hermes' config files.
 One can run `grep "rpc_addr" ${HERMES_CONFIG}`.
 
 
@@ -289,7 +289,7 @@ namadac --base-dir ${BASE_DIR_A}
         --receiver ${RECEIVER_RAW_ADDRESS} \
         --token ${TOKEN_ALIAS} \
         --channel-id ${CHANNEL_ID} \
-        --node ${LEDGER_ADDRESS_A}
+        --ledger-address ${LEDGER_ADDRESS_A}
 ```
 Where the above variables in `${VARIABLE}` must be substituted with appropriate values. The raw address of the receiver can be found by `namadaw --base-dir ${BASE_DIR_B} address find --alias ${RECEIVER}`.
 
@@ -303,5 +303,5 @@ namadac --base-dir ${BASE_DIR_A}
     --receiver atest1d9khqw36g56nqwpkgezrvvejg3p5xv2z8y6nydehxprygvp5g4znj3phxfpyv3pcgcunws2x0wwa76 \
     --token nam \
     --channel-id channel-0 \
-    --node 127.0.0.1:27657
+    --ledger-address 127.0.0.1:27657
 ```
