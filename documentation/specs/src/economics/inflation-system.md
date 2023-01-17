@@ -35,17 +35,17 @@ Second, we take as input the following state values:
 
 - $S_{NAM}$ is the current supply of NAM
 - $L_{PoS}$ is the current amount of NAM locked in proof-of-stake
-- $I_{PoS}$ is the current proof-of-stake inflation amount, in units of tokens per epoch
+- $I_{PoS-last}$ is the proof-of-stake inflation amount from the previous epoch, in units of tokens per epoch
 - $R_{PoS-last}$ is the proof-of-stake locked token ratio from the previous epoch
 - $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
-- $I_{SP_A}$ is the current shielded pool inflation amount for asset $A$, in units of tokens per epoch
+- $I_{SP_A-last}$ is the shielded pool inflation amount for asset $A$ from the preivous epoch, in units of tokens per epoch
 - $R_{SP_A-last}$ is the shielded pool locked token ratio for asset $A$ from the previous epoch (separate value for each asset $A$)
 
 Public goods funding inflation can be calculated and paid immediately (in terms of total tokens per epoch):
 
 - $I_{PGF} = \lambda_{PGF} * S_{NAM} / EpochsPerYear$
 
-These tokens are distributed to the public goods funding validity predicate.
+These tokens ($I_{PGF}$) are distributed to the public goods funding validity predicate.
 
 To run the PD-controllers for proof-of-stake and shielded pool rewards, we first calculate some intermediate values:
 
@@ -64,17 +64,17 @@ Then, for proof-of-stake first, run the PD-controller:
 - Calculate the error $E_{PoS} = R_{PoS-target} - R_{PoS}$
 - Calculate the error derivative $E'_{PoS} = E_{PoS} - E_{PoS-last} = R_{PoS-last} - R_{PoS}$
 - Calculate the control value $C_{PoS} = (KP_{PoS} * E_{PoS}) - (KD_{PoS} * E'_{PoS})$
-- Calculate the new $I'_{PoS} = max(0, min(I_{PoS} + C_{PoS}, Cap_{PoS-Epoch}))$
+- Calculate the new $I_{PoS} = max(0, min(I_{PoS-last} + C_{PoS}, Cap_{PoS-Epoch}))$
 
-These tokens are distributed to the proof-of-stake reward distribution validity predicate.
+These tokens ($I_{PoS}$) are distributed to the proof-of-stake reward distribution validity predicate.
 
 Similarly, for each asset $A$ for which shielded pool rewards are being paid:
 
 - Calculate the error $E_{SP_A} = R_{SP_A-target} - R_{SP_A}$
 - Calculate the error derivative $E'_{SP_A} = E_{SP_A} - E_{SP_A-last} = R_{SP_A-last} - R_{SP_A}$
 - Calculate the control value $C_{SP_A} = (KP_{SP_A} * E_{SP_A}) - (KD_{SP_A} * E'_{SP_A})$
-- Calculate the new $I'_{SP_A} = max(0, min(I_{SP_A} + C_{SP_A}, Cap_{SP_A-Epoch}))$
+- Calculate the new $I_{SP_A} = max(0, min(I_{SP_A-last} + C_{SP_A}, Cap_{SP_A-Epoch}))$
 
-These tokens are distributed to the shielded pool reward distribution validity predicate.
+These tokens ($I_{SP_A}$) are distributed to the shielded pool reward distribution validity predicate.
 
 Finally, we store the latest inflation and locked token ratio values for the next epoch's controller round.
