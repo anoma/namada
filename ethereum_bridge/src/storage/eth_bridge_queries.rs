@@ -35,6 +35,11 @@ pub trait EthBridgeQueries {
     /// pool Merkle tree.
     fn get_bridge_pool_root(&self) -> KeccakHash;
 
+    /// Get the root of the Ethereum bridge
+    /// pool Merkle tree at a given height.
+    fn get_bridge_pool_root_at_height(&self, height: BlockHeight)
+    -> KeccakHash;
+
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     fn must_send_valset_upd(&self, can_send: SendValsetUpd) -> bool;
@@ -99,6 +104,18 @@ where
 
     fn get_bridge_pool_root(&self) -> KeccakHash {
         self.block.tree.sub_root(&StoreType::BridgePool).into()
+    }
+
+    fn get_bridge_pool_root_at_height(
+        &self,
+        height: BlockHeight,
+    ) -> KeccakHash {
+        self.db
+            .read_merkle_tree_stores(height)
+            .expect("We should always be able to read the database")
+            .expect("Every root should correspond to an existing block height")
+            .get_root(StoreType::BridgePool)
+            .into()
     }
 
     #[cfg(feature = "abcipp")]

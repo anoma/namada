@@ -128,9 +128,7 @@ where
     }
 
     /// Extend PreCommit votes with [`bridge_pool_roots::Vext`] instances.
-    pub fn extend_vote_with_bp_roots(
-        &mut self,
-    ) -> Signed<bridge_pool_roots::Vext> {
+    pub fn extend_vote_with_bp_roots(&self) -> Signed<bridge_pool_roots::Vext> {
         let validator_addr = self
             .mode
             .get_validator_address()
@@ -232,11 +230,16 @@ where
 
         let validated_eth_events =
             self.verify_ethereum_events(&req, ext.ethereum_events);
+        let validated_bp_roots =
+            self.verify_bridge_pool_root(&req, ext.bridge_pool_root);
         let validated_valset_upd =
             self.verify_valset_update(&req, ext.validator_set_update);
 
         response::VerifyVoteExtension {
-            status: if validated_eth_events && validated_valset_upd {
+            status: if validated_eth_events
+                && validated_bp_roots
+                && validated_valset_upd
+            {
                 VerifyStatus::Accept.into()
             } else {
                 VerifyStatus::Reject.into()
@@ -262,6 +265,29 @@ where
                 ?req.hash,
                 req.height,
                 "Received Ethereum events vote extension that didn't validate"
+            );
+            false
+        })
+    }
+
+    /// Check if [`bridge_pool_roots::Vext`] instances are valid.
+    #[cfg(feature = "abcipp")]
+    pub fn verify_bridge_pool_root(
+        &self,
+        req: &request::VerifyVoteExtension,
+        ext: Signed<bridge_pool_roots::Vext>,
+    ) -> bool {
+        self.validate_bp_roots_vext(
+            ext,
+            self.storage.last_height,
+        )
+        .then_some(true)
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                ?req.validator_address,
+                ?req.hash,
+                req.height,
+                "Received Bridge pool root vote extension that didn't validate"
             );
             false
         })
@@ -440,9 +466,11 @@ pub fn split_vote_extensions(
     vote_extensions: Vec<ExtendedVoteInfo>,
 ) -> (
     Vec<Signed<ethereum_events::Vext>>,
+    Vec<Signed<bridge_pool_roots::Vext>>,
     Vec<validator_set_update::SignedVext>,
 ) {
     let mut eth_evs = vec![];
+    let mut bp_roots = vec![];
     let mut valset_upds = vec![];
 
     for ext in deserialize_vote_extensions(vote_extensions) {
@@ -450,7 +478,8 @@ pub fn split_vote_extensions(
             valset_upds.push(validator_set_update);
         }
         eth_evs.push(ext.ethereum_events);
+        bp_roots.push(ext.bridge_pool_root);
     }
 
-    (eth_evs, valset_upds)
+    (eth_evs, bp_roots, valset_upds)
 }

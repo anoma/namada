@@ -186,7 +186,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let (eth_events, valset_upds) = split_vote_extensions(
+        let (eth_events, bp_roots, valset_upds) = split_vote_extensions(
             local_last_commit
                 .expect(
                     "Honest Namada validators will always sign \
@@ -202,6 +202,10 @@ where
 
         let ethereum_events = self
             .compress_ethereum_events(eth_events)
+            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+
+        let bp_roots = self
+            .compress_bridge_pool_roots(bp_roots)
             .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
         let validator_set_update =
@@ -223,6 +227,7 @@ where
 
         let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
+            bridge_pool_roots: bp_roots,
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
@@ -237,7 +242,8 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update
+    /// events, signatures over the latest bridge pool root and nonce,
+    /// and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &mut self,
@@ -493,8 +499,6 @@ mod test_prepare_proposal {
     use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
-    use namada::types::ethereum_events::Uint;
-    #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
@@ -511,6 +515,8 @@ mod test_prepare_proposal {
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
@@ -598,7 +604,7 @@ mod test_prepare_proposal {
         };
 
         let bp_root = {
-            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let to_sign = get_bp_bytes_to_sign();
             let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
@@ -899,7 +905,7 @@ mod test_prepare_proposal {
             ext
         };
         let bp_root = {
-            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let to_sign = get_bp_bytes_to_sign();
             let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
@@ -1080,7 +1086,7 @@ mod test_prepare_proposal {
         #[cfg(feature = "abcipp")]
         {
             let bp_root = {
-                let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+                let to_sign = get_bp_bytes_to_sign();
                 let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,

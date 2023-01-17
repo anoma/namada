@@ -188,6 +188,8 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
+
+                    ProtocolTxType::BridgePool(_) => continue,
                     ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
