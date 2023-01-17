@@ -965,6 +965,7 @@ mod test_utils {
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
+    use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
@@ -1055,6 +1056,11 @@ mod test_utils {
                 common::Signature::Secp256k1((&bytes).try_into().unwrap())
             }
         }
+    }
+
+    /// Get the default bridge pool vext bytes to be signed.
+    pub fn get_bp_bytes_to_sign() -> Vec<u8> {
+        [[0; 32], Uint::from(0).to_bytes()].concat()
     }
 
     /// A wrapper around the shell that implements

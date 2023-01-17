@@ -381,7 +381,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[tokio::test]
     async fn test_eth_events_vote_extension() {
-        let (mut shell, _, oracle) = setup();
+        let (mut shell, _, oracle) = setup_at_height(1);
         let address = shell
             .mode
             .get_validator_address()
@@ -424,7 +424,7 @@ mod test_vote_extensions {
                 .expect("Test failed")
                 .as_bytes()
                 .to_vec(),
-            height: 0,
+            height: 1,
             vote_extension: vote_extension.try_to_vec().expect("Test failed"),
         };
         let res = shell.verify_vote_extension(req);
