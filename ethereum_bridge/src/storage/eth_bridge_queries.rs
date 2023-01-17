@@ -81,10 +81,15 @@ where
 
     #[cfg(feature = "abcipp")]
     #[inline]
-    fn can_send_validator_set_update(&self, _can_send: SendValsetUpd) -> bool {
-        // TODO: implement this method for ABCI++; should only be able to send
-        // a validator set update at the second block of an epoch
-        false
+    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+        if matches!(can_send, SendValsetUpd::Now) {
+            self.is_deciding_offset_within_epoch(1)
+        } else {
+            // TODO: implement this method for ABCI++; should only be able to
+            // send a validator set update at the second block of an
+            // epoch
+            false
+        }
     }
 
     #[cfg(not(feature = "abcipp"))]
