@@ -50,7 +50,8 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
     let key = parameters::storage::get_tx_whitelist_storage_key();
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
-    Ok(whitelist.is_empty() || whitelist.contains(&tx_hash.to_string()))
+    Ok(whitelist.is_empty()
+        || whitelist.contains(&tx_hash.to_string().to_lowercase()))
 }
 
 pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
@@ -58,7 +59,8 @@ pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
     let key = parameters::storage::get_vp_whitelist_storage_key();
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
-    Ok(whitelist.is_empty() || whitelist.contains(&vp_hash.to_string()))
+    Ok(whitelist.is_empty()
+        || whitelist.contains(&vp_hash.to_string().to_lowercase()))
 }
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
