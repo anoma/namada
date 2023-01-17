@@ -264,8 +264,7 @@ where
                     last_locked_ratio,
                 )
                 .unwrap();
-            // self.storage.write(&token::last_inflation(&address),
-            // last_inflation).unwrap();
+
             let vp_code =
                 vp_code_cache.get_or_insert_with(vp_code_path.clone(), || {
                     wasm_loader::read_wasm(&self.wasm_dir, &vp_code_path)
@@ -292,10 +291,19 @@ where
                 .write_bytes(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
 
+            let mut total_balance_for_token = token::Amount::default();
             for (owner, amount) in balances {
+                total_balance_for_token += amount;
                 credit_tokens(&mut self.wl_storage, &address, &owner, amount)
                     .unwrap();
             }
+            // Write the total amount of tokens for the ratio
+            self.wl_storage
+                .write(
+                    &token::total_supply_key(&address),
+                    total_balance_for_token,
+                )
+                .unwrap();
         }
 
         // Initialize genesis validator accounts
