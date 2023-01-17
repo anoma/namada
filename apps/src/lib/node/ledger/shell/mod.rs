@@ -893,6 +893,7 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -901,7 +902,6 @@ mod test_utils {
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
-    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {

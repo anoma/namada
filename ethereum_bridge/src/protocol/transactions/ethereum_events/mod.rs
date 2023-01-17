@@ -33,8 +33,8 @@ impl utils::GetVoters for HashSet<EthMsgUpdate> {
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
-/// which have been seen by enough voting power, extra state changes may take
-/// place, such as minting of wrapped ERC20s.
+/// which have been seen by enough voting power ( > 2/3 ), extra state changes
+/// may take place, such as minting of wrapped ERC20s.
 ///
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
@@ -173,9 +173,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada_core::ledger::storage::mockdb::MockDB;
     use namada_core::ledger::storage::testing::TestStorage;
-    use namada_core::ledger::storage::traits::Sha256Hasher;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -185,14 +183,11 @@ mod tests {
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::token::Amount;
-    use namada_proof_of_stake::epoched::Epoched;
-    use namada_proof_of_stake::storage::ValidatorSet;
-    use namada_proof_of_stake::types::WeightedValidator;
-    use namada_proof_of_stake::PosBase;
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
     use crate::protocol::transactions::votes::Votes;
+    use crate::test_utils;
 
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
@@ -276,36 +271,15 @@ mod tests {
         Ok(())
     }
 
-    /// Set up a `TestStorage` initialized at genesis with validators of equal
-    /// power
-    fn set_up_test_storage(
-        active_validators: HashSet<Address>,
-    ) -> Storage<MockDB, Sha256Hasher> {
-        let mut storage = TestStorage::default();
-        let validator_set = ValidatorSet {
-            active: active_validators
-                .into_iter()
-                .map(|address| WeightedValidator {
-                    bonded_stake: 100_u64,
-                    address,
-                })
-                .collect(),
-            inactive: BTreeSet::default(),
-        };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 1);
-        storage.write_validator_set(&validator_sets);
-        storage
-    }
-
     #[test]
     /// Test applying a single transfer via `apply_derived_tx`, where an event
     /// has enough voting power behind it for it to be applied at the same time
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
         let sole_validator = address::testing::established_address_2();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
-            sole_validator.clone(),
-        ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![(sole_validator.clone(), 100_u64.into())]),
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -360,10 +334,12 @@ mod tests {
     fn test_apply_derived_tx_new_event_dont_mint() {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let mut storage = set_up_test_storage(HashSet::from_iter(vec![
-            validator_a.clone(),
-            validator_b,
-        ]));
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -400,6 +376,70 @@ mod tests {
              should have happened yet as it has only been seen by 1/2 the \
              voting power so far"
         );
+    }
+
+    #[test]
+    /// Test that attempts made to apply duplicate
+    /// [`MultiSignedEthEvent`]s in a single [`apply_derived_tx`] call don't
+    /// result in duplicate votes in storage.
+    pub fn test_apply_derived_tx_duplicates() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: address::testing::established_address_1(),
+            }],
+        };
+        // two votes for the same event from validator A
+        let signers = BTreeSet::from([(validator_a.clone(), BlockHeight(100))]);
+        let multisigned = MultiSignedEthEvent {
+            event: event.clone(),
+            signers,
+        };
+
+        let multisigneds = vec![multisigned.clone(), multisigned];
+
+        let result = apply_derived_tx(&mut storage, multisigneds);
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter(vec![
+                eth_msg_keys.body(),
+                eth_msg_keys.seen(),
+                eth_msg_keys.seen_by(),
+                eth_msg_keys.voting_power(),
+            ]),
+            "One vote for the Ethereum event should have been recorded",
+        );
+
+        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = seen_by_bytes.unwrap();
+        assert_eq!(
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+
+        let (voting_power_bytes, _) =
+            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes = voting_power_bytes.unwrap();
+        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+
+        Ok(())
     }
 
     #[test]
