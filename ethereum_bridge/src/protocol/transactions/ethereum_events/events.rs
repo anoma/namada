@@ -48,6 +48,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let wrapped_native_erc20 = native_erc20_address(storage)?;
     let mut changed_keys = BTreeSet::default();
     for TransferToNamada {
         asset,
@@ -55,9 +56,15 @@ where
         amount,
     } in transfers
     {
-        let mut changed =
-            mint_wrapped_erc20s(storage, asset, receiver, amount)?;
-        changed_keys.append(&mut changed)
+        if asset != &wrapped_native_erc20 {
+            let mut changed =
+                mint_wrapped_erc20s(storage, asset, receiver, amount)?;
+            changed_keys.append(&mut changed)
+        } else {
+            unimplemented!(
+                "Releasing native tokens from escrow is not yet supported"
+            )
+        }
     }
     Ok(changed_keys)
 }
