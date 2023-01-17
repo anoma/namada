@@ -225,11 +225,24 @@ where
                     // We remove the corresponding wrapper tx from the queue
                     self.storage.tx_queue.pop();
                     let mut event = Event::new_tx_event(&tx_type, height.0);
-                    if let DecryptedTx::Undecryptable(_) = inner {
-                        event["log"] =
-                            "Transaction could not be decrypted.".into();
-                        event["code"] = ErrorCodes::Undecryptable.into();
+
+                    match inner {
+                        DecryptedTx::Decrypted {
+                            tx,
+                            has_valid_pow: _,
+                        } => {
+                            stats.increment_tx_type(
+                                namada::core::types::hash::Hash(tx.code_hash())
+                                    .to_string(),
+                            );
+                        }
+                        DecryptedTx::Undecryptable(_) => {
+                            event["log"] =
+                                "Transaction could not be decrypted.".into();
+                            event["code"] = ErrorCodes::Undecryptable.into();
+                        }
                     }
+
                     event
                 }
                 TxType::Raw(_) => {
@@ -341,6 +354,7 @@ where
         );
 
         tracing::info!("{}", stats);
+        tracing::info!("{}", stats.format_tx_executed());
 
         if new_epoch {
             self.update_epoch(&mut response);
