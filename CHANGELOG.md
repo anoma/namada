@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## v0.13.1
+
+Namada 0.13.1 is a maintenance release fixing an error in the tx and vp
+whitelists.
+
+### BUG FIXES
+
+- Handle the tx and vp hash whitelists case-insensitively.
+  ([#1018](https://github.com/anoma/namada/pull/1018))
+
+### IMPROVEMENTS
+
+- More information in transaction logging
+  ([#1035](https://github.com/anoma/namada/pull/1035))
+
 ## v0.13.0
 
 Namada 0.13.0 is a scheduled minor release.
