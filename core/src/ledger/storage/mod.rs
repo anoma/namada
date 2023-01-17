@@ -859,10 +859,16 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use borsh::BorshSerialize;
+    use rust_decimal::Decimal;
+    use rust_decimal_macros::dec;
+
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::ledger::storage_api::StorageWrite;
     use crate::types::address;
+    use crate::types::token::parameters;
 
     /// `WlStorage` with a mock DB for testing
     pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
@@ -907,13 +913,55 @@ pub mod testing {
             }
         }
     }
-
     #[allow(clippy::derivable_impls)]
     impl Default for TestWlStorage {
         fn default() -> Self {
             Self {
                 write_log: Default::default(),
                 storage: Default::default(),
+            }
+        }
+    }
+
+    impl TestWlStorage {
+        /// Initializes all tokens in the test storage
+        pub fn initalize_tokens(
+            &mut self,
+            total_supply: token::Amount,
+            total_supply_in_masp: token::Amount,
+        ) {
+            let masp_rewards = address::masp_rewards();
+            let masp_addr = address::masp();
+            for addr in masp_rewards.keys() {
+                parameters::Parameters::init_storage(
+                    &parameters::Parameters::default(),
+                    addr,
+                    self,
+                );
+                let initial_inflation: u64 = 1;
+                let initial_locked_ratio: Decimal = dec!(0.1);
+
+                self.write(&token::last_inflation(addr), initial_inflation)
+                    .expect("Should not fail to put a test inflation source");
+                self.write(
+                    &token::last_locked_ratio(addr),
+                    initial_locked_ratio,
+                )
+                .expect("Should not fail to put a test inflation source");
+
+                self.write(
+                    &token::total_supply_key(addr),
+                    total_supply.try_to_vec().unwrap(),
+                )
+                .expect("Should not fail to put a test total supply");
+                self.write(
+                    &token::balance_key(addr, &masp_addr),
+                    total_supply_in_masp.try_to_vec().unwrap(),
+                )
+                .expect(
+                    "Should not fail to put a test the total supply in the \
+                     MASP",
+                );
             }
         }
     }
@@ -988,13 +1036,18 @@ mod tests {
             min_blocks_delta, min_duration_delta, max_time_per_block_delta)
             in arb_and_epoch_duration_start_and_block())
         {
-            let mut storage = TestStorage {
+            let storage = TestStorage {
                 next_epoch_min_start_height:
                     start_height + epoch_duration.min_num_of_blocks,
                 next_epoch_min_start_time:
                     start_time + epoch_duration.min_duration,
                 ..Default::default()
             };
+            let mut wl_storage = TestWlStorage {
+                write_log: Default::default(),
+                storage,
+            };
+
             let mut parameters = Parameters {
                 max_proposal_bytes: Default::default(),
                 epoch_duration: epoch_duration.clone(),
@@ -1012,13 +1065,14 @@ mod tests {
                 #[cfg(not(feature = "mainnet"))]
                 wrapper_tx_fees: None,
             };
-            parameters.init_storage(&mut storage);
+            parameters.init_storage(&mut wl_storage.storage);
 
-            let epoch_before = storage.last_epoch;
-            assert_eq!(epoch_before, storage.block.epoch);
+            wl_storage.initalize_tokens(token::Amount::from(1000), token::Amount::from(500));
+            let epoch_before = wl_storage.storage.last_epoch;
+            assert_eq!(epoch_before, wl_storage.storage.block.epoch);
 
             // Try to apply the epoch update
-            storage.update_epoch(block_height, block_time).unwrap();
+            wl_storage.storage.update_epoch(block_height, block_time).unwrap();
 
             // Test for 1.
             if block_height.0 - start_height.0
@@ -1030,43 +1084,43 @@ mod tests {
                 )
             {
                 // Update will now be enqueued for 2 blocks in the future
-                assert_eq!(storage.block.epoch, epoch_before);
-                assert_eq!(storage.update_epoch_blocks_delay, Some(2));
+                assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+                assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(2));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                storage.update_epoch(block_height, block_time).unwrap();
-                assert_eq!(storage.block.epoch, epoch_before);
-                assert_eq!(storage.update_epoch_blocks_delay, Some(1));
+                wl_storage.storage.update_epoch(block_height, block_time).unwrap();
+                assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+                assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(1));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                storage.update_epoch(block_height, block_time).unwrap();
-                assert_eq!(storage.block.epoch, epoch_before.next());
-                assert!(storage.update_epoch_blocks_delay.is_none());
+                wl_storage.storage.update_epoch(block_height, block_time).unwrap();
+                assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
+                assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
 
-                assert_eq!(storage.next_epoch_min_start_height,
+                assert_eq!(wl_storage.storage.next_epoch_min_start_height,
                     block_height + epoch_duration.min_num_of_blocks);
-                assert_eq!(storage.next_epoch_min_start_time,
+                assert_eq!(wl_storage.storage.next_epoch_min_start_time,
                     block_time + epoch_duration.min_duration);
                 assert_eq!(
-                    storage.block.pred_epochs.get_epoch(BlockHeight(block_height.0 - 1)),
+                    wl_storage.storage.block.pred_epochs.get_epoch(BlockHeight(block_height.0 - 1)),
                     Some(epoch_before));
                 assert_eq!(
-                    storage.block.pred_epochs.get_epoch(block_height),
+                    wl_storage.storage.block.pred_epochs.get_epoch(block_height),
                     Some(epoch_before.next()));
             } else {
-                assert!(storage.update_epoch_blocks_delay.is_none());
-                assert_eq!(storage.block.epoch, epoch_before);
+                assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
+                assert_eq!(wl_storage.storage.block.epoch, epoch_before);
                 assert_eq!(
-                    storage.block.pred_epochs.get_epoch(BlockHeight(block_height.0 - 1)),
+                    wl_storage.storage.block.pred_epochs.get_epoch(BlockHeight(block_height.0 - 1)),
                     Some(epoch_before));
                 assert_eq!(
-                    storage.block.pred_epochs.get_epoch(block_height),
+                    wl_storage.storage.block.pred_epochs.get_epoch(block_height),
                     Some(epoch_before));
             }
             // Last epoch should only change when the block is committed
-            assert_eq!(storage.last_epoch, epoch_before);
+            assert_eq!(wl_storage.storage.last_epoch, epoch_before);
 
             // Update the epoch duration parameters
             parameters.epoch_duration.min_num_of_blocks =
@@ -1076,58 +1130,63 @@ mod tests {
                 Duration::seconds(min_duration + min_duration_delta).into();
             parameters.max_expected_time_per_block =
                 Duration::seconds(max_expected_time_per_block + max_time_per_block_delta).into();
-            parameters::update_max_expected_time_per_block_parameter(&mut storage, &parameters.max_expected_time_per_block).unwrap();
-            parameters::update_epoch_parameter(&mut storage, &parameters.epoch_duration).unwrap();
+            parameters::update_max_expected_time_per_block_parameter(
+                &mut wl_storage.storage,
+                &parameters.max_expected_time_per_block
+            ).unwrap();
+            parameters::update_epoch_parameter(
+                &mut wl_storage.storage,
+                &parameters.epoch_duration
+            ).unwrap();
 
             // Test for 2.
-            let epoch_before = storage.block.epoch;
-            let height_of_update = storage.next_epoch_min_start_height.0 ;
-            let time_of_update = storage.next_epoch_min_start_time;
+            let epoch_before = wl_storage.storage.block.epoch;
+            let height_of_update = wl_storage.storage.next_epoch_min_start_height.0 ;
+            let time_of_update = wl_storage.storage.next_epoch_min_start_time;
             let height_before_update = BlockHeight(height_of_update - 1);
             let height_of_update = BlockHeight(height_of_update);
             let time_before_update = time_of_update - Duration::seconds(1);
 
             // No update should happen before both epoch duration conditions are
             // satisfied
-            storage.update_epoch(height_before_update, time_before_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before);
-            assert!(storage.update_epoch_blocks_delay.is_none());
-            storage.update_epoch(height_of_update, time_before_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before);
-            assert!(storage.update_epoch_blocks_delay.is_none());
-            storage.update_epoch(height_before_update, time_of_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before);
-            assert!(storage.update_epoch_blocks_delay.is_none());
+            wl_storage.storage.update_epoch(height_before_update, time_before_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
+            wl_storage.storage.update_epoch(height_of_update, time_before_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
+            wl_storage.storage.update_epoch(height_before_update, time_of_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
 
             // Update should be enqueued for 2 blocks in the future starting at or after this height and time
-            storage.update_epoch(height_of_update, time_of_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.update_epoch_blocks_delay, Some(2));
+            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+            assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(2));
 
             // Increment the block height and time to simulate new blocks now
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            storage.update_epoch(height_of_update, time_of_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before);
-            assert_eq!(storage.update_epoch_blocks_delay, Some(1));
+            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before);
+            assert_eq!(wl_storage.storage.update_epoch_blocks_delay, Some(1));
 
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            storage.update_epoch(height_of_update, time_of_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before.next());
-            assert!(storage.update_epoch_blocks_delay.is_none());
+            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
+            assert!(wl_storage.storage.update_epoch_blocks_delay.is_none());
             // The next epoch's minimum duration should change
-            assert_eq!(storage.next_epoch_min_start_height,
+            assert_eq!(wl_storage.storage.next_epoch_min_start_height,
                 height_of_update + parameters.epoch_duration.min_num_of_blocks);
-            assert_eq!(storage.next_epoch_min_start_time,
+            assert_eq!(wl_storage.storage.next_epoch_min_start_time,
                 time_of_update + parameters.epoch_duration.min_duration);
 
             // Increment the block height and time once more to make sure things reset
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            storage.update_epoch(height_of_update, time_of_update).unwrap();
-            assert_eq!(storage.block.epoch, epoch_before.next());
-            assert!(storage.update_epoch_blocks_delay.is_none());
+            wl_storage.storage.update_epoch(height_of_update, time_of_update).unwrap();
+            assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
         }
     }
 }
