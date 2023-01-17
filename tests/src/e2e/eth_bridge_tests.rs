@@ -270,8 +270,7 @@ fn configure_oracle_from_storage() -> Result<()> {
 
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
-        |genesis| {
-            let mut genesis = genesis;
+        |mut genesis| {
             genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
             genesis
         },
