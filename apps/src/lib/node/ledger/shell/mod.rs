@@ -743,7 +743,7 @@ where
                     tracing::warn!(
                         "An Ethereum oracle task appears to be running, but \
                          there are no Ethereum bridge parameters configured \
-                         in block storage, so this oracle will do nothing"
+                         in block storage yet, so this oracle will do nothing"
                     );
                     return;
                 }
