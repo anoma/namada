@@ -11,6 +11,7 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
+use namada_ethereum_bridge::storage::vote_tallies;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -484,14 +485,34 @@ where
     }
 }
 
+/// Read a validator set update proof from storage.
+///
+/// This method may fail if a complete proof (i.e. with more than
+/// 2/3 of the total voting power behind it) is not available yet.
 fn read_valset_upd_proof<D, H>(
-    _ctx: RequestCtx<'_, D, H>,
-    _epoch: Epoch,
+    ctx: RequestCtx<'_, D, H>,
+    epoch: Epoch,
 ) -> storage_api::Result<EncodeCell<EthereumProof<VotingPowersMap>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let valset_upd_keys = vote_tallies::Keys::from(&epoch);
+
+    let seen = StorageRead::read(ctx.storage, &valset_upd_keys.seen())?
+        .unwrap_or(false);
+    if !seen {
+        return Err(storage_api::Error::Custom(CustomError(
+            format!(
+                "Validator set update proof is not yet available for the \
+                 queried epoch: {epoch:?}"
+            )
+            .into(),
+        )));
+    }
+
+    // return ABI encoded proof; need to implement `AbiEncode`
+    // for `EncodeCell<EthereumProof<VotingPowersMap>>`
     todo!()
 }
 
