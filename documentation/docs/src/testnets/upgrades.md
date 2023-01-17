@@ -96,3 +96,5 @@ In order to install this upgrade, a user or validator must
 5. As soon as possible, restart the ledger by running `NAMADA_TM_STDOUT=true namada node ledger run`
 
 The ledger will then update correctly at the correct height. In order to ensure a smooth fork, please do this as soon as possible.
+
+The ledger will then update correctly at the correct height. In order to ensure a smooth fork, please do this as soon as possible.
