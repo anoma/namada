@@ -122,8 +122,8 @@ pub enum ProposalType {
 
 - Doesn't carry any wasm code
 - Allows both validators and delegators to vote
-- Requires 1/3 of the total voting power to vote for the same council
-- Expect every vote to carry a memo in the form of a tuple `Set<(Set<Address>, BudgetCap)>`
+- Requires 1/3 of the total voting power to vote
+- Expect every vote to carry a memo in the form of a tuple `(Set<Address>, BudgetCap)`
 
 `ETHBridge` is aimed at regulating actions on the bridge like the update of the Ethereum smart contracts or the withdrawing of all the funds from the `Vault` :
 
