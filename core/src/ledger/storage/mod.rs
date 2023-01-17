@@ -927,10 +927,16 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use borsh::BorshSerialize;
+    use rust_decimal::Decimal;
+    use rust_decimal_macros::dec;
+
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
+    use crate::ledger::storage_api::StorageWrite;
     use crate::types::address;
+    use crate::types::token::parameters;
 
     /// `WlStorage` with a mock DB for testing
     pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
@@ -976,13 +982,55 @@ pub mod testing {
             }
         }
     }
-
     #[allow(clippy::derivable_impls)]
     impl Default for TestWlStorage {
         fn default() -> Self {
             Self {
                 write_log: Default::default(),
                 storage: Default::default(),
+            }
+        }
+    }
+
+    impl TestWlStorage {
+        /// Initializes all tokens in the test storage
+        pub fn initalize_tokens(
+            &mut self,
+            total_supply: token::Amount,
+            total_supply_in_masp: token::Amount,
+        ) {
+            let masp_rewards = address::masp_rewards();
+            let masp_addr = address::masp();
+            for addr in masp_rewards.keys() {
+                parameters::Parameters::init_storage(
+                    &parameters::Parameters::default(),
+                    addr,
+                    self,
+                );
+                let initial_inflation: u64 = 1;
+                let initial_locked_ratio: Decimal = dec!(0.1);
+
+                self.write(&token::last_inflation(addr), initial_inflation)
+                    .expect("Should not fail to put a test inflation source");
+                self.write(
+                    &token::last_locked_ratio(addr),
+                    initial_locked_ratio,
+                )
+                .expect("Should not fail to put a test inflation source");
+
+                self.write(
+                    &token::total_supply_key(addr),
+                    total_supply.try_to_vec().unwrap(),
+                )
+                .expect("Should not fail to put a test total supply");
+                self.write(
+                    &token::balance_key(addr, &masp_addr),
+                    total_supply_in_masp.try_to_vec().unwrap(),
+                )
+                .expect(
+                    "Should not fail to put a test the total supply in the \
+                     MASP",
+                );
             }
         }
     }
@@ -1057,8 +1105,7 @@ mod tests {
             min_blocks_delta, min_duration_delta, max_time_per_block_delta)
             in arb_and_epoch_duration_start_and_block())
         {
-            let mut wl_storage =
-            TestWlStorage {
+            let mut wl_storage = TestWlStorage {
                 storage: TestStorage {
                     next_epoch_min_start_height:
                         start_height + epoch_duration.min_num_of_blocks,
@@ -1068,6 +1115,7 @@ mod tests {
                 },
                 ..Default::default()
             };
+
             let mut parameters = Parameters {
                 max_proposal_bytes: Default::default(),
                 epoch_duration: epoch_duration.clone(),
@@ -1087,6 +1135,7 @@ mod tests {
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 
+            wl_storage.initalize_tokens(token::Amount::from(1000), token::Amount::from(500));
             let epoch_before = wl_storage.storage.last_epoch;
             assert_eq!(epoch_before, wl_storage.storage.block.epoch);
 
