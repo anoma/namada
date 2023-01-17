@@ -181,10 +181,7 @@ where
                 let ext = validator_set_update::Vext {
                     validator_addr,
                     voting_powers,
-                    #[cfg(feature = "abcipp")]
-                    block_height: self.storage.get_current_decision_height(),
-                    #[cfg(not(feature = "abcipp"))]
-                    block_height: self.storage.last_height,
+                    signing_epoch: self.storage.get_current_epoch().0,
                 };
 
                 let eth_key = self

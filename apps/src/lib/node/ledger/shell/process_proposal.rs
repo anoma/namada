@@ -510,7 +510,7 @@ where
                     }
 
                     let extensions =
-                        digest.decompress(self.storage.last_height);
+                        digest.decompress(self.storage.get_current_epoch().0);
                     let valid_extensions =
                         self.validate_valset_upd_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
