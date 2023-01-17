@@ -36,10 +36,15 @@ atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 # 2. An alias of any account
 bertha = 1000000
-# 3. A public key of a validator or an established account from which the 
+# 3. A public key of a validator or an established account from which the
 #    address of the implicit account is derived)
 "bertha.public_key" = 100
 "validator.public_key" = 100
+[token.NAM.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
@@ -49,6 +54,12 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+[token.BTC.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
+
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
@@ -58,6 +69,11 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+[token.ETH.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
@@ -67,6 +83,11 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+[token.Dot.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
@@ -76,6 +97,11 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+[token.Schnitzel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
@@ -85,6 +111,11 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+[token.Apfel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
@@ -95,7 +126,11 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-
+[token.Kartoffel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 # Some established accounts present at genesis.
 
 [established.albert]
