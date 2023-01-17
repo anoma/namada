@@ -557,6 +557,17 @@ impl MerkleTreeStoresRead {
             StoreType::BridgePool => StoreRef::BridgePool(&self.bridge_pool.1),
         }
     }
+
+    /// Read the merkle root of the requested type
+    pub fn get_root(&self, store_type: StoreType) -> Hash {
+        match store_type {
+            StoreType::Base => self.base.0.clone(),
+            StoreType::Account => self.account.0.clone(),
+            StoreType::Ibc => self.ibc.0.clone(),
+            StoreType::PoS => self.pos.0.clone(),
+            StoreType::BridgePool => self.bridge_pool.0.clone().into(),
+        }
+    }
 }
 
 /// The root and store pairs to be persistent

@@ -606,7 +606,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.get_current_decision_height(),
+                block_height: shell.storage.last_height,
                 validator_addr,
                 sig,
             }
@@ -907,7 +907,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.get_current_decision_height(),
+                block_height: shell.storage.last_height,
                 validator_addr,
                 sig,
             }

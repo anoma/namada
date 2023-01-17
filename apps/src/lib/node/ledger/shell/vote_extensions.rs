@@ -7,6 +7,7 @@ pub mod val_set_update;
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+#[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::proto::{SignableEthBytes, Signed};
 use namada::types::transaction::protocol::ProtocolTxType;
@@ -141,7 +142,7 @@ where
         let signed = Signed::<Vec<u8>, SignableEthBytes>::new(eth_key, to_sign);
 
         let ext = bridge_pool_roots::Vext {
-            block_height: self.storage.get_current_decision_height(),
+            block_height: self.storage.last_height,
             validator_addr,
             sig: signed.sig,
         };
@@ -279,7 +280,7 @@ where
     ) -> bool {
         self.validate_bp_roots_vext(
             ext,
-            self.storage.get_current_decision_height(),
+            self.storage.last_height,
         )
         .then_some(true)
         .unwrap_or_else(|| {
