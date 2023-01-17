@@ -274,34 +274,40 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<validator_set_update::SignedVext>,
     ) -> bool {
-        if let Some(ext) = ext {
-            self.storage
-                .can_send_validator_set_update(SendValsetUpd::Now)
-                .then(|| {
-                    // we have a valset update vext when we're expecting one,
-                    // cool, let's validate it
-                    self.validate_valset_upd_vext(
-                        ext,
-                        self.storage.get_current_decision_height(),
-                    )
-                })
-                .unwrap_or_else(|| {
-                    // either validation failed, or we were expecting a valset
-                    // update vext and got none
-                    tracing::warn!(
-                        ?req.validator_address,
-                        ?req.hash,
-                        req.height,
-                        "Missing or invalid validator set update vote extension"
-                    );
-                    false
-                })
-        } else {
-            // NOTE: if we're not supposed to send a validator set update
-            // vote extension at a particular block height, we will
-            // just return true as the validation result
-            true
-        }
+        let Some(ext) = ext else {
+            // if no validator set update was provided,
+            // we must check if we are not supposed to
+            // send one at the current block height.
+            // remember, we need to gather a quorum of
+            // votes, so this check is quite important!
+            //
+            // can send = true -> verify = false
+            // can send = false -> verify = true
+            //
+            // (we simply invert the can send logic)
+            return !self.storage
+                .can_send_validator_set_update(SendValsetUpd::Now);
+        };
+        self.storage
+            .can_send_validator_set_update(SendValsetUpd::Now)
+            .then(|| {
+                // we have a valset update vext when we're expecting one,
+                // cool, let's validate it
+                self.validate_valset_upd_vext(
+                    ext,
+                    self.storage.get_current_epoch().0,
+                )
+            })
+            .unwrap_or_else(|| {
+                // oh no, validation failed
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Invalid validator set update vote extension"
+                );
+                false
+            })
     }
 }
 

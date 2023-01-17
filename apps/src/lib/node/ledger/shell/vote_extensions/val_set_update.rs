@@ -7,7 +7,7 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::types::storage::{BlockHeight, Epoch};
+use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::vote_extensions::validator_set_update;
 #[cfg(feature = "abcipp")]
@@ -190,7 +190,7 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         #[cfg(not(feature = "abcipp"))]
-        if self.storage.last_height == BlockHeight(0) {
+        if self.storage.last_height.0 == 0 {
             return None;
         }
 
@@ -640,6 +640,17 @@ mod test_vote_extensions {
             validator_set_update.unwrap(),
             signing_epoch,
         ));
+    }
+
+    /// Test if we reject a vote extension that did not include a validator
+    /// set update at a required height.
+    #[test]
+    #[cfg(feature = "abcipp")]
+    fn test_reject_vext_if_no_valset_upd() {
+        // current decision height = 2 -> must send valset upd
+        let (shell, _recv, _) = test_utils::setup_at_height(1);
+        let req = request::VerifyVoteExtension::default();
+        assert!(!shell.verify_valset_update(&req, None));
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
