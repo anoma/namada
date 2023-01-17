@@ -218,7 +218,11 @@ where
                 .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::BridgePoolVext(ext) => {
-            transactions::bridge_pool_roots::apply_derived_tx(storage, ext.into())
+            transactions::bridge_pool_roots::apply_derived_tx(
+                storage,
+                ext.into(),
+            )
+            .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any

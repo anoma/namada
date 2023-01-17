@@ -1,6 +1,6 @@
 //! Types representing data intended for Namada via Ethereum events
 
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -40,6 +40,12 @@ impl Uint {
         let mut bytes = [0; 32];
         ethUint::from(self).to_little_endian(&mut bytes);
         bytes
+    }
+}
+
+impl Display for Uint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        ethUint::from(self).fmt(f)
     }
 }
 

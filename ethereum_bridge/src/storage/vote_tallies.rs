@@ -1,5 +1,8 @@
 //! Functionality for accessing keys to do with tallying votes
 
+use std::io::Write;
+
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
 use namada_core::types::keccak::KeccakHash;
@@ -112,11 +115,51 @@ impl From<&Hash> for Keys<EthereumEvent> {
     }
 }
 
-/// A marker struct for keys related to tracking
-/// signatures over bridge pool roots and nonces.
-struct BridgePool;
+/// A wrapper struct for managing keys related to
+/// tracking signatures over bridge pool roots.
+#[derive(Clone)]
+pub(in super::super) struct BridgePoolRoot(KeccakHash);
 
-pub type BridgePoolKeys = Keys<BridgePool>;
+impl From<KeccakHash> for BridgePoolRoot {
+    fn from(root: KeccakHash) -> Self {
+        Self(root)
+    }
+}
+
+impl BorshSerialize for BridgePoolRoot {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.0, writer)
+    }
+}
+
+impl BorshDeserialize for BridgePoolRoot {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        <KeccakHash as BorshDeserialize>::deserialize(buf).map(BridgePoolRoot)
+    }
+}
+
+/// A wrapper struct for managing keys related to
+/// tracking signatures over bridge pool nonces.
+#[derive(Clone)]
+pub(in super::super) struct BridgePoolNonce(Uint);
+
+impl From<Uint> for BridgePoolNonce {
+    fn from(nonce: Uint) -> Self {
+        Self(nonce)
+    }
+}
+
+impl BorshSerialize for BridgePoolNonce {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.0, writer)
+    }
+}
+
+impl BorshDeserialize for BridgePoolNonce {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        <Uint as BorshDeserialize>::deserialize(buf).map(BridgePoolNonce)
+    }
+}
 
 /// Get the key prefix corresponding to the storage location of
 /// bridge pool root and nonces whose "seen" state is being tracked.
@@ -126,10 +169,10 @@ pub fn bridge_pool_prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-impl From<KeccakHash> for BridgePoolKeys {
-    fn from(hash: &KeccakHash) -> Self {
-        let hash = hash.to_string();
-        let prefix = eth_msgs_prefix()
+impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
+    fn from(hash: BridgePoolRoot) -> Self {
+        let hash = hash.0.to_string();
+        let prefix = bridge_pool_prefix()
             .push(&hash)
             .expect("should always be able to construct this key");
         Keys {
@@ -139,10 +182,10 @@ impl From<KeccakHash> for BridgePoolKeys {
     }
 }
 
-impl From<Uint> for BridgePoolKeys {
-    fn from(nonce: &Uint) -> Self {
-        let nonce = nonce.to_string();
-        let prefix = eth_msgs_prefix()
+impl From<BridgePoolNonce> for Keys<BridgePoolNonce> {
+    fn from(nonce: BridgePoolNonce) -> Self {
+        let nonce = nonce.0.to_string();
+        let prefix = bridge_pool_prefix()
             .push(&nonce)
             .expect("should always be able to construct this key");
         Keys {

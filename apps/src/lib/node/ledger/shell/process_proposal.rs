@@ -659,14 +659,16 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        self.storage.last_height.0 == 0 || meta.digests.eth_ev_digest_num == 1
+        meta.digests.eth_ev_digest_num
+            == usize::from(self.storage.last_height.0 != 0)
     }
 
     /// Checks if we have found the correct number of Ethereum bridge pool
     /// root vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        self.storage.last_height.0 == 0 || meta.digests.bridge_pool_roots == 1
+        meta.digests.bridge_pool_roots
+            == usize::from(self.storage.last_height.0 != 0)
     }
 
     /// Checks if we have found the correct number of validator set update
@@ -677,8 +679,8 @@ where
             .storage
             .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
         {
-            self.storage.last_height.0 == 0
-                || meta.digests.valset_upd_digest_num == 1
+            meta.digests.valset_upd_digest_num
+                == usize::from(self.storage.last_height.0 != 0)
         } else {
             true
         }
