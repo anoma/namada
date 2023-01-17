@@ -167,7 +167,7 @@ where
             .to_owned();
 
         self.storage
-            .can_send_validator_set_update(SendValsetUpd::Now)
+            .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
                 let next_epoch = self.storage.get_current_epoch().0.next();
                 let voting_powers = self
@@ -286,7 +286,7 @@ where
             //
             // (we simply invert the can send logic)
             let verify_passes = !self.storage
-                .can_send_validator_set_update(SendValsetUpd::Now);
+                .must_send_valset_upd(SendValsetUpd::Now);
             if !verify_passes {
                 tracing::warn!(
                     ?req.validator_address,
@@ -298,7 +298,7 @@ where
             return verify_passes;
         };
         self.storage
-            .can_send_validator_set_update(SendValsetUpd::Now)
+            .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
                 // we have a valset update vext when we're expecting one,
                 // cool, let's validate it

@@ -207,7 +207,7 @@ where
         let validator_set_update =
             if self
                 .storage
-                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+                .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
             {
                 Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
                     || panic!("{}", not_enough_voting_power_msg()),

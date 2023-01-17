@@ -12,7 +12,7 @@ use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
 
 /// This enum is used as a parameter to
-/// [`PosQueries::can_send_validator_set_update`].
+/// [`EthBridgeQueries::must_send_valset_upd`].
 pub enum SendValsetUpd {
     /// Check if it is possible to send a validator set update
     /// vote extension at the current block height.
@@ -33,7 +33,7 @@ pub trait EthBridgeQueries {
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool;
+    fn must_send_valset_upd(&self, can_send: SendValsetUpd) -> bool;
 
     /// For a given Namada validator, return its corresponding Ethereum bridge
     /// address.
@@ -81,7 +81,7 @@ where
 
     #[cfg(feature = "abcipp")]
     #[inline]
-    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+    fn must_send_valset_upd(&self, can_send: SendValsetUpd) -> bool {
         if matches!(can_send, SendValsetUpd::Now) {
             self.is_deciding_offset_within_epoch(1)
         } else {
@@ -94,7 +94,7 @@ where
 
     #[cfg(not(feature = "abcipp"))]
     #[inline]
-    fn can_send_validator_set_update(&self, can_send: SendValsetUpd) -> bool {
+    fn must_send_valset_upd(&self, can_send: SendValsetUpd) -> bool {
         if matches!(can_send, SendValsetUpd::AtPrevHeight) {
             // when checking vote extensions in Prepare
             // and ProcessProposal, we simply return true
