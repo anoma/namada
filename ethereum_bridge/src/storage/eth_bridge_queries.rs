@@ -70,6 +70,14 @@ where
 {
     #[inline]
     fn get_epoch_start_height(&self) -> BlockHeight {
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        if self.last_epoch.0 == 0 {
+            return BlockHeight(1);
+        }
         self.block
             .pred_epochs
             .first_block_heights()
