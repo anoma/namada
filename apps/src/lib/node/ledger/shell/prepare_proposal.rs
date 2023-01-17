@@ -242,7 +242,7 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events, signatures over the lastest bridge pool root and nonce,
+    /// events, signatures over the latest bridge pool root and nonce,
     /// and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
