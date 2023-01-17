@@ -2,7 +2,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
-use crate::types::governance::{self, Proposal, ProposalError, ProposalVote};
+use crate::types::governance::{
+    self, Proposal, ProposalError, ProposalVote, VoteType,
+};
 use crate::types::storage::Epoch;
 
 /// The type of a [`InitProposal`]
@@ -20,6 +22,27 @@ pub enum ProposalType {
     Default(Option<Vec<u8>>),
     /// PGF council proposal
     PGFCouncil,
+}
+
+impl PartialEq<VoteType> for ProposalType {
+    fn eq(&self, other: &VoteType) -> bool {
+        match self {
+            Self::Default(_) => {
+                if let VoteType::Default = other {
+                    true
+                } else {
+                    false
+                }
+            }
+            Self::PGFCouncil => {
+                if let VoteType::PGFCouncil(..) = other {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
 }
 
 impl TryFrom<governance::ProposalType> for ProposalType {
