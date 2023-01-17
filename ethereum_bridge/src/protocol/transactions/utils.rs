@@ -10,20 +10,20 @@ use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::WeightedValidator;
 
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
+
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
     /// Extract all the voters and the block heights at which they voted from
     /// the given proof.
     // TODO(feature = "abcipp"): we do not neet to return block heights
     // anymore. votes will always be from `storage.last_height`. for the
-    // same reason, it is likely we won't need a `storage` param anymore.
-    fn get_voters<D, H>(
+    // same reason, it is likely we won't need a `BlockHeight`
+    // param anymore.
+    fn get_voters(
         &self,
-        storage: &Storage<D, H>,
-    ) -> HashSet<(Address, BlockHeight)>
-    where
-        D: DB + for<'iter> DBIter<'iter>,
-        H: StorageHasher;
+        epoch_start_height: BlockHeight,
+    ) -> HashSet<(Address, BlockHeight)>;
 }
 
 /// Returns a map whose keys are addresses of validators and the block height at
@@ -38,7 +38,7 @@ where
     H: 'static + StorageHasher + Sync,
     P: GetVoters + ?Sized,
 {
-    let voters = proof.get_voters(storage);
+    let voters = proof.get_voters(storage.get_epoch_start_height());
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let active_validators = get_active_validators(

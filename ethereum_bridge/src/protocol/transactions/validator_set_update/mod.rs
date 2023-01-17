@@ -21,26 +21,16 @@ use crate::storage::vote_tallies;
 
 impl utils::GetVoters for validator_set_update::VextDigest {
     #[inline]
-    fn get_voters<D, H>(
+    fn get_voters(
         &self,
-        storage: &Storage<D, H>,
-    ) -> HashSet<(Address, BlockHeight)>
-    where
-        D: DB + for<'iter> DBIter<'iter>,
-        H: StorageHasher,
-    {
+        epoch_start_height: BlockHeight,
+    ) -> HashSet<(Address, BlockHeight)> {
         // votes were cast the the 2nd block height of the current epoch
-        let epoch_start_height = storage
-            .block
-            .pred_epochs
-            .first_block_heights()
-            .last()
-            .copied()
-            .expect("The block height of the current epoch should be known");
+        let epoch_2nd_height = epoch_start_height + 1;
         self.signatures
             .keys()
             .cloned()
-            .zip(std::iter::repeat(epoch_start_height))
+            .zip(std::iter::repeat(epoch_2nd_height))
             .collect()
     }
 }
