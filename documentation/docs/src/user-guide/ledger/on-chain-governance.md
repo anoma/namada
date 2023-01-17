@@ -27,7 +27,7 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
     "voting_start_epoch": 3,
     "voting_end_epoch": 6,
     "grace_epoch": 12,
-    "proposal_code_path": "./wasm_for_tests/tx_no_op.wasm"
+    "type": "Default"
 }
 ```
 
@@ -67,10 +67,11 @@ Only validators and delegators can vote. Assuming you have a validator or a dele
 namada client vote-proposal \
     --proposal-id 0 \
     --vote yay \
+    --memo path \
     --signer validator
 ```
 
-where `--vote` can be either `yay` or `nay`.
+where `--vote` can be either `yay` or `nay`. The optional `memo` field represents the path to a json file econding the data to attach to the vote.
 
 ## Check the result
 
