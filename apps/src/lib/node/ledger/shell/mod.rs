@@ -688,7 +688,7 @@ where
                 e
             )
         });
-        // TODO: we check the Ethereum oracle is started (if necessary) on every
+        // TODO(namada#1041): we check the Ethereum oracle is started on every
         // block commit, but this is hardly necessary
         self.ensure_ethereum_oracle_started();
 
