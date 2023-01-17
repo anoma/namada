@@ -212,6 +212,9 @@ pub mod genesis_config {
         // Initial balances held by accounts defined elsewhere.
         // XXX: u64 doesn't work with toml-rs!
         pub balances: Option<HashMap<String, u64>>,
+        // Token parameters
+        // XXX: u64 doesn't work with toml-rs!
+        pub parameters: Option<token::parameters::Parameters>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -397,6 +400,9 @@ pub mod genesis_config {
         let token_vp_config = wasm.get(token_vp_name).unwrap();
 
         TokenAccount {
+            last_locked_ratio: Decimal::ZERO,
+            last_inflation: 0,
+            parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
@@ -804,6 +810,13 @@ pub struct TokenAccount {
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
+    // please put the last inflation amount here.
+    /// Token parameters
+    pub parameters: token::parameters::Parameters,
+    /// Token inflation from the last epoch (read + write for every epoch)
+    pub last_inflation: u64,
+    /// Token shielded ratio from the last epoch (read + write for every epoch)
+    pub last_locked_ratio: Decimal,
 }
 
 #[derive(
@@ -1026,6 +1039,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
             balances: balances.clone(),
+            parameters: token::parameters::Parameters::default(),
+            last_inflation: 0,
+            last_locked_ratio: Decimal::ZERO,
         })
         .collect();
     Genesis {

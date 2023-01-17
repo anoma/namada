@@ -49,7 +49,7 @@ pub const POS_SLASH_POOL: Address =
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
 #[rustfmt::skip]
 mod internal {
-    pub const POS: &str = 
+    pub const POS: &str =
         "ano::Proof of Stake                          ";
     pub const POS_SLASH_POOL: &str =
         "ano::Proof of Stake Slash Pool               ";

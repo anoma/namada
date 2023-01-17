@@ -19,7 +19,7 @@ commission_rate = 0.05
 # Maximum change per epoch in the commission rate
 max_commission_rate_change = 0.01
 # Public IP:port address.
-# We set the port to be the default+1000, so that if a local node was running at 
+# We set the port to be the default+1000, so that if a local node was running at
 # the same time as the E2E tests, it wouldn't affect them.
 net_address = "127.0.0.1:27656"
 
@@ -39,6 +39,11 @@ Daewon = 1000000
 faucet = 9223372036
 "faucet.public_key" = 100
 "validator-0.public_key" = 100
+[token.NAM.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
@@ -49,6 +54,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.BTC.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
@@ -59,6 +69,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.ETH.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
@@ -69,6 +84,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.Dot.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.Schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
@@ -79,6 +99,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.Schnitzel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.Apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
@@ -89,6 +114,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.Apfel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 [token.Kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
@@ -100,6 +130,11 @@ Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
+[token.Kartoffel.parameters]
+max_reward_rate = 0.1
+kd_gain_nom = 0.1
+kp_gain_nom = 0.1
+locked_ratio_target_key = 0.6667
 
 # Some established accounts present at genesis.
 [established.faucet]
