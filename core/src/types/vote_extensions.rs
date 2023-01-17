@@ -36,6 +36,9 @@ pub struct VoteExtension {
 pub struct VoteExtensionDigest {
     /// The digest of Ethereum events vote extension signatures.
     pub ethereum_events: ethereum_events::VextDigest,
+    /// A set of signatures for the current Ethereum bridge pool root and
+    /// nonce.
+    pub bridge_pool_roots: bridge_pool_roots::MultiSignedVext,
     /// The digest of validator set updates vote extension signatures.
     pub validator_set_update: Option<validator_set_update::VextDigest>,
 }
