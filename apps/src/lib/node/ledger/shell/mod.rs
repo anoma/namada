@@ -766,11 +766,14 @@ where
                             .validate_valset_upd_vext_and_get_it_back(
                                 ext,
                                 // n.b. only accept validator set updates
-                                // issued at
-                                // the current epoch (signing off on the
-                                // validators
-                                // of the next epoch)
-                                self.storage.get_current_epoch().0,
+                                // issued at the last committed epoch
+                                // (signing off on the validators of the
+                                // next epoch). at the second height
+                                // within an epoch, the new epoch is
+                                // committed to storage, so `last_epoch`
+                                // reflects the current value of the
+                                // epoch.
+                                self.storage.last_epoch,
                             )
                         {
                             response.code = 1;
