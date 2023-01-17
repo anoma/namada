@@ -9,6 +9,8 @@ use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
+use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
+use namada_ethereum_bridge::storage::proof::EthereumProof;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -77,8 +79,10 @@ router! {SHELL,
 
     // Request a proof of a validator set signed off for
     // the given epoch.
+    //
+    // The request may fail if a proof is not considered complete yet.
     ( "validator_set" / "proof" / [epoch: Epoch] )
-        -> EncodeCell<EthereumProof<VotingPowersMap>> = (),
+        -> EncodeCell<EthereumProof<VotingPowersMap>> = read_valset_upd_proof,
 }
 
 // Handlers:
@@ -478,6 +482,17 @@ where
             "Could not deserialize transfers",
         ))
     }
+}
+
+fn read_valset_upd_proof<D, H>(
+    _ctx: RequestCtx<'_, D, H>,
+    _epoch: Epoch,
+) -> storage_api::Result<EncodeCell<EthereumProof<VotingPowersMap>>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    todo!()
 }
 
 #[cfg(test)]
