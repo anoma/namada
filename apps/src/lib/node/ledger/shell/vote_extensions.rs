@@ -285,8 +285,17 @@ where
             // can send = false -> verify = true
             //
             // (we simply invert the can send logic)
-            return !self.storage
+            let verify_passes = !self.storage
                 .can_send_validator_set_update(SendValsetUpd::Now);
+            if !verify_passes {
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Expected validator set update, but got none"
+                );
+            }
+            return verify_passes;
         };
         self.storage
             .can_send_validator_set_update(SendValsetUpd::Now)
