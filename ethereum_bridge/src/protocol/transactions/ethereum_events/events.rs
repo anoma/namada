@@ -9,10 +9,12 @@ use namada_core::ledger::eth_bridge::storage::{
 };
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToNamada,
 };
 use namada_core::types::storage::Key;
+use namada_core::types::token;
 
 use crate::protocol::transactions::update;
 
@@ -47,21 +49,25 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    for transfer in transfers {
-        let mut changed = mint_wrapped_erc20s(storage, transfer)?;
+    for TransferToNamada {
+        asset,
+        receiver,
+        amount,
+    } in transfers
+    {
+        let mut changed =
+            mint_wrapped_erc20s(storage, asset, receiver, amount)?;
         changed_keys.append(&mut changed)
     }
     Ok(changed_keys)
 }
 
-/// Mints wrapped ERC20s based on `transfer`.
+/// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
 fn mint_wrapped_erc20s<D, H>(
     storage: &mut Storage<D, H>,
-    TransferToNamada {
-        ref asset,
-        ref receiver,
-        ref amount,
-    }: &TransferToNamada,
+    asset: &EthAddress,
+    receiver: &Address,
+    amount: &token::Amount,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
