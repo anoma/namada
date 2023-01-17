@@ -1,7 +1,10 @@
 use borsh::BorshSerialize;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+    get_nonce_key, BRIDGE_POOL_ADDRESS,
+};
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::address::nam;
+use namada_core::types::ethereum_events::Uint;
 use namada_core::types::token::{balance_key, Amount};
 
 /// Initialize the storage owned by the Bridge Pool VP.
@@ -25,4 +28,12 @@ where
             "Initializing the escrow balance of the Bridge pool VP shouldn't \
              fail.",
         );
+    storage
+        .write(
+            &get_nonce_key(),
+            Uint::from(0)
+                .try_to_vec()
+                .expect("Serializing a Uint should not fail."),
+        )
+        .expect("Initializing the Bridge pool nonce shouldn't fail.");
 }

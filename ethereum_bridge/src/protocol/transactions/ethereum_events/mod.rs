@@ -23,7 +23,10 @@ use crate::storage::vote_tallies;
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
-    fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
+    fn get_voters(
+        &self,
+        _epoch_start_height: BlockHeight,
+    ) -> HashSet<(Address, BlockHeight)> {
         self.iter().fold(HashSet::new(), |mut voters, update| {
             voters.extend(update.seen_by.clone().into_iter());
             voters
@@ -33,8 +36,8 @@ impl utils::GetVoters for HashSet<EthMsgUpdate> {
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
 /// were newly seen by some active validator(s) in the last epoch. For `events`
-/// which have been seen by enough voting power, extra state changes may take
-/// place, such as minting of wrapped ERC20s.
+/// which have been seen by enough voting power ( > 2/3 ), extra state changes
+/// may take place, such as minting of wrapped ERC20s.
 ///
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
@@ -379,11 +382,75 @@ mod tests {
     }
 
     #[test]
+    /// Test that attempts made to apply duplicate
+    /// [`MultiSignedEthEvent`]s in a single [`apply_derived_tx`] call don't
+    /// result in duplicate votes in storage.
+    pub fn test_apply_derived_tx_duplicates() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: address::testing::established_address_1(),
+            }],
+        };
+        // two votes for the same event from validator A
+        let signers = BTreeSet::from([(validator_a.clone(), BlockHeight(100))]);
+        let multisigned = MultiSignedEthEvent {
+            event: event.clone(),
+            signers,
+        };
+
+        let multisigneds = vec![multisigned.clone(), multisigned];
+
+        let result = apply_derived_tx(&mut storage, multisigneds);
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter(vec![
+                eth_msg_keys.body(),
+                eth_msg_keys.seen(),
+                eth_msg_keys.seen_by(),
+                eth_msg_keys.voting_power(),
+            ]),
+            "One vote for the Ethereum event should have been recorded",
+        );
+
+        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = seen_by_bytes.unwrap();
+        assert_eq!(
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+
+        let (voting_power_bytes, _) =
+            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes = voting_power_bytes.unwrap();
+        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+
+        Ok(())
+    }
+
+    #[test]
     /// Assert we don't return anything if we try to get the votes for an empty
     /// set of updates
     pub fn test_get_votes_for_updates_empty() {
         let updates = HashSet::new();
-        assert!(updates.get_voters().is_empty());
+        assert!(updates.get_voters(0.into()).is_empty());
     }
 
     #[test]
@@ -423,7 +490,7 @@ mod tests {
                 ]),
             },
         ]);
-        let voters = updates.get_voters();
+        let voters = updates.get_voters(0.into());
         assert_eq!(
             voters,
             HashSet::from([

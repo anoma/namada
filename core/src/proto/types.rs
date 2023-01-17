@@ -58,7 +58,7 @@ pub struct SignedTxData {
 
 /// A serialization method to provide to [`Signed`], such
 /// that we may sign serialized data.
-pub trait SignedSerialize<T> {
+pub trait Signable<T> {
     /// A byte vector containing the serialized data.
     type Output: AsRef<[u8]>;
 
@@ -68,7 +68,7 @@ pub trait SignedSerialize<T> {
     /// The returned output *must* be deterministic based on
     /// `data`, so that two callers signing the same `data` will be
     /// signing the same `Self::Output`.
-    fn serialize(data: &T) -> Self::Output;
+    fn as_signable(data: &T) -> Self::Output;
 }
 
 /// Tag type that indicates we should use [`BorshSerialize`]
@@ -76,12 +76,34 @@ pub trait SignedSerialize<T> {
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct SerializeWithBorsh;
 
-impl<T: BorshSerialize> SignedSerialize<T> for SerializeWithBorsh {
+/// Tag type that indicates we should use ABI serialization
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SignableEthBytes;
+
+impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
 
-    fn serialize(data: &T) -> Vec<u8> {
+    fn as_signable(data: &T) -> Vec<u8> {
         data.try_to_vec()
             .expect("Encoding data for signing shouldn't fail")
+    }
+}
+
+impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
+    type Output = Vec<u8>;
+
+    fn as_signable(data: &T) -> Vec<u8> {
+        let eth_message = {
+            let message = data.as_ref();
+
+            let mut eth_message =
+                format!("\x19Ethereum Signed Message:\n{}", message.len())
+                    .into_bytes();
+            eth_message.extend_from_slice(message);
+            eth_message
+        };
+        eth_message
     }
 }
 
@@ -153,10 +175,10 @@ impl<T, S> Signed<T, S> {
     }
 }
 
-impl<T, S: SignedSerialize<T>> Signed<T, S> {
+impl<T, S: Signable<T>> Signed<T, S> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
-        let to_sign = S::serialize(&data);
+        let to_sign = S::as_signable(&data);
         let sig = common::SigScheme::sign(keypair, to_sign.as_ref());
         Self::new_from(data, sig)
     }
@@ -167,7 +189,7 @@ impl<T, S: SignedSerialize<T>> Signed<T, S> {
         &self,
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
-        let bytes = S::serialize(&self.data);
+        let bytes = S::as_signable(&self.data);
         common::SigScheme::verify_signature_raw(pk, bytes.as_ref(), &self.sig)
     }
 }

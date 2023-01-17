@@ -186,7 +186,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let (eth_events, valset_upds) = split_vote_extensions(
+        let (eth_events, bp_roots, valset_upds) = split_vote_extensions(
             local_last_commit
                 .expect(
                     "Honest Namada validators will always sign \
@@ -204,10 +204,14 @@ where
             .compress_ethereum_events(eth_events)
             .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
 
+        let bp_roots = self
+            .compress_bridge_pool_roots(bp_roots)
+            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+
         let validator_set_update =
             if self
                 .storage
-                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+                .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
             {
                 Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
                     || panic!("{}", not_enough_voting_power_msg()),
@@ -223,6 +227,7 @@ where
 
         let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
+            bridge_pool_roots: bp_roots,
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
@@ -237,7 +242,8 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update
+    /// events, signatures over the latest bridge pool root and nonce,
+    /// and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &mut self,
@@ -250,7 +256,12 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
+        let deserialized_iter = deserialize_vote_extensions(
+            txs,
+            protocol_tx_indices,
+            self.storage.get_current_epoch().0,
+        );
+        let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
@@ -483,6 +494,8 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
+    #[cfg(feature = "abcipp")]
+    use namada::proto::SignableEthBytes;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
@@ -491,6 +504,8 @@ mod test_prepare_proposal {
     use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
+    #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
@@ -500,6 +515,8 @@ mod test_prepare_proposal {
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
@@ -566,29 +583,44 @@ mod test_prepare_proposal {
 
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
+        let validator_addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .to_owned();
         let evts = {
-            let validator_addr = shell
-                .mode
-                .get_validator_address()
-                .expect("Test failed")
-                .to_owned();
-
             let prev_height = shell.storage.last_height;
-
-            let ext = ethereum_events::Vext::empty(prev_height, validator_addr);
-
+            let ext = ethereum_events::Vext::empty(
+                prev_height,
+                validator_addr.clone(),
+            );
             let protocol_key = match &shell.mode {
                 ShellMode::Validator { data, .. } => {
                     &data.keys.protocol_keypair
                 }
                 _ => panic!("Test failed"),
             };
-
             ext.sign(protocol_key)
+        };
+
+        let bp_root = {
+            let to_sign = get_bp_bytes_to_sign();
+            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                to_sign,
+            )
+            .sig;
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr,
+                sig,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
         };
 
         let vote_extension = VoteExtension {
             ethereum_events: evts,
+            bridge_pool_root: bp_root,
             validator_set_update: None,
         }
         .try_to_vec()
@@ -864,7 +896,7 @@ mod test_prepare_proposal {
         };
         let ethereum_events = {
             let ext = ethereum_events::Vext {
-                validator_addr,
+                validator_addr: validator_addr.clone(),
                 block_height: LAST_HEIGHT,
                 ethereum_events: vec![ethereum_event],
             }
@@ -872,8 +904,23 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+        let bp_root = {
+            let to_sign = get_bp_bytes_to_sign();
+            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                to_sign,
+            )
+            .sig;
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr,
+                sig,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        };
         let vote_extension = VoteExtension {
             ethereum_events,
+            bridge_pool_root: bp_root,
             validator_set_update: None,
         };
         let vote = ExtendedVoteInfo {
@@ -1035,10 +1082,30 @@ mod test_prepare_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
+
         #[cfg(feature = "abcipp")]
         {
+            let bp_root = {
+                let to_sign = get_bp_bytes_to_sign();
+                let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                    to_sign,
+                )
+                .sig;
+                bridge_pool_roots::Vext {
+                    block_height: shell.storage.last_height,
+                    validator_addr: shell
+                        .mode
+                        .get_validator_address()
+                        .unwrap()
+                        .clone(),
+                    sig,
+                }
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            };
             let vote_extension = VoteExtension {
                 ethereum_events: signed_eth_ev_vote_extension,
+                bridge_pool_root: bp_root,
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {

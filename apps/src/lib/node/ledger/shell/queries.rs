@@ -129,12 +129,12 @@ mod test_queries {
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
-    macro_rules! test_can_send_validator_set_update {
+    macro_rules! test_must_send_valset_upd {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {
-            /// Test if [`QueriesExt::can_send_validator_set_update`] behaves as
+            /// Test if [`EthBridgeQueries::must_send_valset_upd`] behaves as
             /// expected.
             #[test]
-            fn test_can_send_validator_set_update() {
+            fn test_must_send_valset_upd() {
                 let (mut shell, _recv, _) = test_utils::setup_at_height(0u64);
 
                 let epoch_assertions = $epoch_assertions;
@@ -154,9 +154,7 @@ mod test_queries {
                         Some(Epoch(curr_epoch))
                     );
                     assert_eq!(
-                        shell
-                            .storage
-                            .can_send_validator_set_update(SendValsetUpd::Now),
+                        shell.storage.must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
                     // TODO(feature = "abcipp"): test
@@ -173,7 +171,7 @@ mod test_queries {
                     //         Some(Epoch(epoch))
                     //     );
                     //     assert_eq!(
-                    //         shell.storage.can_send_validator_set_update(
+                    //         shell.storage.must_send_valset_upd(
                     //             SendValsetUpd::AtPrevHeight
                     //         ),
                     //         can_send,
@@ -192,13 +190,13 @@ mod test_queries {
     }
 
     #[cfg(feature = "abcipp")]
-    test_can_send_validator_set_update! {
+    test_must_send_valset_upd! {
         // TODO(feature = "abcipp"): add some epoch assertions
         epoch_assertions: []
     }
 
     #[cfg(not(feature = "abcipp"))]
-    test_can_send_validator_set_update! {
+    test_must_send_valset_upd! {
         epoch_assertions: [
             // (current epoch, current block height, can send valset upd)
             (0, 1, false),

@@ -494,7 +494,7 @@ where
                     root,
                     height
                 );
-                response.last_block_app_hash = root.0;
+                response.last_block_app_hash = root.0.to_vec();
                 response.last_block_height =
                     height.try_into().expect("Invalid block height");
             }
@@ -668,7 +668,7 @@ where
             root,
             self.storage.last_height,
         );
-        response.data = root.0;
+        response.data = root.0.to_vec();
 
         #[cfg(not(feature = "abcipp"))]
         {
@@ -739,13 +739,41 @@ where
                     }
                     #[cfg(not(feature = "abcipp"))]
                     Ok(TxType::Protocol(ProtocolTx {
+                        tx: ProtocolTxType::BridgePoolVext(ext),
+                        ..
+                    })) => {
+                        if let Err(err) = self
+                            .validate_bp_roots_vext_and_get_it_back(
+                                ext,
+                                self.storage.last_height,
+                            )
+                        {
+                            response.code = 1;
+                            response.log = format!(
+                                "{INVALID_MSG}: Invalid Brige pool roots vote \
+                                 extension: {err}",
+                            );
+                        } else {
+                            response.log = String::from(VALID_MSG);
+                        }
+                    }
+                    #[cfg(not(feature = "abcipp"))]
+                    Ok(TxType::Protocol(ProtocolTx {
                         tx: ProtocolTxType::ValSetUpdateVext(ext),
                         ..
                     })) => {
                         if let Err(err) = self
                             .validate_valset_upd_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                // n.b. only accept validator set updates
+                                // issued at the last committed epoch
+                                // (signing off on the validators of the
+                                // next epoch). at the second height
+                                // within an epoch, the new epoch is
+                                // committed to storage, so `last_epoch`
+                                // reflects the current value of the
+                                // epoch.
+                                self.storage.last_epoch,
                             )
                         {
                             response.code = 1;
@@ -863,6 +891,7 @@ mod test_utils {
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
+    use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
@@ -872,6 +901,7 @@ mod test_utils {
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
+    use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -880,7 +910,6 @@ mod test_utils {
         FinalizeBlock, ProcessedTx,
     };
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
-    use crate::node::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -953,6 +982,11 @@ mod test_utils {
                 common::Signature::Secp256k1((&bytes).try_into().unwrap())
             }
         }
+    }
+
+    /// Get the default bridge pool vext bytes to be signed.
+    pub fn get_bp_bytes_to_sign() -> Vec<u8> {
+        [[0; 32], Uint::from(0).to_bytes()].concat()
     }
 
     /// A wrapper around the shell that implements
