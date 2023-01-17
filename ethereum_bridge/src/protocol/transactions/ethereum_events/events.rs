@@ -42,45 +42,59 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    for TransferToNamada {
-        amount,
-        asset,
-        receiver,
-    } in transfers
-    {
-        let keys: wrapped_erc20s::Keys = asset.into();
-        let balance_key = keys.balance(receiver);
-        update::amount(storage, &balance_key, |balance| {
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "Existing value found",
-            );
-            balance.receive(amount);
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "New value calculated",
-            );
-        })?;
-        _ = changed_keys.insert(balance_key);
-
-        let supply_key = keys.supply();
-        update::amount(storage, &supply_key, |supply| {
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "Existing value found",
-            );
-            supply.receive(amount);
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "New value calculated",
-            );
-        })?;
-        _ = changed_keys.insert(supply_key);
+    for transfer in transfers {
+        let mut changed = mint_wrapped_erc20s(storage, transfer)?;
+        changed_keys.append(&mut changed)
     }
+    Ok(changed_keys)
+}
+
+/// Mints wrapped ERC20s based on `transfer`.
+fn mint_wrapped_erc20s<D, H>(
+    storage: &mut Storage<D, H>,
+    TransferToNamada {
+        ref asset,
+        ref receiver,
+        ref amount,
+    }: &TransferToNamada,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::default();
+    let keys: wrapped_erc20s::Keys = asset.into();
+    let balance_key = keys.balance(receiver);
+    update::amount(storage, &balance_key, |balance| {
+        tracing::debug!(
+            %balance_key,
+            ?balance,
+            "Existing value found",
+        );
+        balance.receive(amount);
+        tracing::debug!(
+            %balance_key,
+            ?balance,
+            "New value calculated",
+        );
+    })?;
+    _ = changed_keys.insert(balance_key);
+
+    let supply_key = keys.supply();
+    update::amount(storage, &supply_key, |supply| {
+        tracing::debug!(
+            %supply_key,
+            ?supply,
+            "Existing value found",
+        );
+        supply.receive(amount);
+        tracing::debug!(
+            %supply_key,
+            ?supply,
+            "New value calculated",
+        );
+    })?;
+    _ = changed_keys.insert(supply_key);
     Ok(changed_keys)
 }
 
