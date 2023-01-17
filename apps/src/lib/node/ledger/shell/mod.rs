@@ -737,16 +737,11 @@ where
             if *ethereum_oracle_started {
                 return;
             }
-            let config = match EthereumBridgeConfig::read(&self.storage) {
-                Some(config) => config,
-                None => {
-                    tracing::warn!(
-                        "An Ethereum oracle task appears to be running, but \
-                         there are no Ethereum bridge parameters configured \
-                         in block storage yet, so this oracle will do nothing"
-                    );
-                    return;
-                }
+            let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
+                // if we don't have a bridge configuration yet, it could be that it will become available in a later 
+                // block (or possibly not, if the bridge hasn't been launched yet) - in any case, we don't need to
+                // start our Ethereum oracle just right now
+                return;
             };
             let config = oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
