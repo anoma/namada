@@ -78,7 +78,7 @@ where
         // validator set proof for epoch 2 signed by validators of epoch 1.
         storage.get_current_epoch().0.next()
     };
-    let epoch_start_height = storage.get_epoch_start_height();
+    let epoch_2nd_height = storage.get_epoch_start_height() + 1;
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
         let Some(seen) = votes::storage::maybe_read_seen(storage, &valset_upd_keys)? else {
@@ -94,7 +94,7 @@ where
 
     let mut seen_by = Votes::default();
     for address in ext.signatures.keys().cloned() {
-        if let Some(present) = seen_by.insert(address, epoch_start_height) {
+        if let Some(present) = seen_by.insert(address, epoch_2nd_height) {
             // TODO(namada#770): this shouldn't be happening in any case and we
             // should be refactoring to get rid of `BlockHeight`
             tracing::warn!(?present, "Duplicate vote in digest");
@@ -118,7 +118,7 @@ where
         proof.attach_signature_batch(
             ext.signatures
                 .into_iter()
-                .map(|(addr, sig)| ((addr, epoch_start_height), sig)),
+                .map(|(addr, sig)| ((addr, epoch_2nd_height), sig)),
         );
         (tally, proof, changed, confirmed)
     } else {
@@ -132,7 +132,7 @@ where
         proof.attach_signature_batch(
             ext.signatures
                 .into_iter()
-                .map(|(addr, sig)| ((addr, epoch_start_height), sig)),
+                .map(|(addr, sig)| ((addr, epoch_2nd_height), sig)),
         );
         let changed = valset_upd_keys.into_iter().collect();
         let confirmed = tally.seen;
@@ -224,8 +224,8 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_start_height = storage.get_epoch_start_height();
-        assert_eq!(height, epoch_start_height,);
+        let epoch_2nd_height = storage.get_epoch_start_height() + 1;
+        assert_eq!(height, epoch_2nd_height);
         assert_eq!(addr, address::testing::established_address_1());
 
         // since only one validator is configured, we should
@@ -309,8 +309,8 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_start_height = storage.get_epoch_start_height();
-        assert_eq!(height, epoch_start_height,);
+        let epoch_2nd_height = storage.get_epoch_start_height() + 1;
+        assert_eq!(height, epoch_2nd_height);
         assert_eq!(addr, address::testing::established_address_1());
 
         // make sure we do not have a complete proof yet
