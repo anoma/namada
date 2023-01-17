@@ -267,7 +267,6 @@ fn epoch_to_token(Epoch(e): Epoch) -> Token {
 ///
 /// For more information, check the specs of the Ethereum bridge smart
 /// contracts.
-// TODO: add version field to hash computation
 #[inline]
 fn compute_hash(
     signing_epoch: Epoch,
