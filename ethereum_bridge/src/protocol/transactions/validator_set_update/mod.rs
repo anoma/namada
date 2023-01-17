@@ -214,7 +214,7 @@ mod test_valset_upd_state_changes {
         // let's make sure we updated storage
         assert!(!tx_result.changed_keys.is_empty());
 
-        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch);
+        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch.next());
 
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
@@ -240,7 +240,14 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        assert_eq!(height, last_height);
+        let epoch_start_height = storage
+            .block
+            .pred_epochs
+            .first_block_heights()
+            .last()
+            .copied()
+            .expect("The block height of the current epoch should be known");
+        assert_eq!(height, epoch_start_height,);
         assert_eq!(addr, address::testing::established_address_1());
 
         // since only one validator is configured, we should
@@ -298,7 +305,7 @@ mod test_valset_upd_state_changes {
         // let's make sure we updated storage
         assert!(!tx_result.changed_keys.is_empty());
 
-        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch);
+        let valset_upd_keys = vote_tallies::Keys::from(&signing_epoch.next());
 
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.body()));
         assert!(tx_result.changed_keys.contains(&valset_upd_keys.seen()));
@@ -324,7 +331,14 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        assert_eq!(height, last_height);
+        let epoch_start_height = storage
+            .block
+            .pred_epochs
+            .first_block_heights()
+            .last()
+            .copied()
+            .expect("The block height of the current epoch should be known");
+        assert_eq!(height, epoch_start_height,);
         assert_eq!(addr, address::testing::established_address_1());
 
         // make sure we do not have a complete proof yet
