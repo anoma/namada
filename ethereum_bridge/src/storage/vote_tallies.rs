@@ -6,6 +6,8 @@ use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
+use crate::storage::proof::EthereumProof;
+
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.
 pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
@@ -158,7 +160,7 @@ pub fn valset_upds_prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-impl From<&Epoch> for Keys<VotingPowersMap> {
+impl From<&Epoch> for Keys<EthereumProof<VotingPowersMap>> {
     fn from(epoch: &Epoch) -> Self {
         let prefix = valset_upds_prefix()
             .push(epoch)

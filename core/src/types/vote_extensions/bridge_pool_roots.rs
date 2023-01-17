@@ -41,7 +41,7 @@ pub struct BridgePoolRootVext {
     /// the appropriate validator set to verify signatures
     pub block_height: BlockHeight,
     /// The actual signature being submitted.
-    /// This is a signature over KeccakHash(root || nonce).
+    /// This is a signature over KeccakHash(eth_header || root || nonce).
     pub sig: Signature,
 }
 
@@ -49,6 +49,7 @@ pub struct BridgePoolRootVext {
 pub type Vext = BridgePoolRootVext;
 
 /// A signed [`BridgePoolRootVext`].
+///
 /// Note that this is serialized with Ethereum's
 /// ABI encoding schema.
 pub type SignedVext = Signed<BridgePoolRootVext>;

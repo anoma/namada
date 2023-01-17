@@ -560,3 +560,74 @@ fn merge_vp_results(
         errors,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use borsh::BorshDeserialize;
+    use eyre::Result;
+    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::types::ethereum_events::{
+        EthereumEvent, TransferToNamada,
+    };
+    use namada_core::types::storage::BlockHeight;
+    use namada_core::types::token::Amount;
+    use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
+    use namada_core::types::{address, key};
+    use namada_ethereum_bridge::protocol::transactions::votes::Votes;
+    use namada_ethereum_bridge::storage::vote_tallies;
+    use namada_ethereum_bridge::test_utils;
+
+    use super::*;
+
+    #[test]
+    /// Tests that if the same [`ProtocolTxType::EthEventsVext`] is applied
+    /// twice within the same block, it doesn't result in voting power being
+    /// double counted.
+    fn test_apply_protocol_tx_duplicate_eth_events_vext() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: address::testing::established_address_4(),
+            }],
+        };
+        let vext = EthereumEventsVext {
+            block_height: BlockHeight(100),
+            validator_addr: address::testing::established_address_2(),
+            ethereum_events: vec![event.clone()],
+        };
+        let signing_key = key::testing::keypair_1();
+        let signed = vext.sign(&signing_key);
+        let tx = ProtocolTxType::EthEventsVext(signed);
+
+        apply_protocol_tx(tx.clone(), &mut storage)?;
+        apply_protocol_tx(tx, &mut storage)?;
+
+        let eth_msg_keys = vote_tallies::Keys::from(&event);
+        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = seen_by_bytes.unwrap();
+        assert_eq!(
+            Votes::try_from_slice(&seen_by_bytes)?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+
+        // the vote should have only be applied once
+        let (voting_power_bytes, _) =
+            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes = voting_power_bytes.unwrap();
+        assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+
+        Ok(())
+    }
+}

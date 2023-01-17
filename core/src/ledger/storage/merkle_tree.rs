@@ -565,7 +565,7 @@ impl MerkleTreeStoresRead {
             StoreType::Account => self.account.0.clone(),
             StoreType::Ibc => self.ibc.0.clone(),
             StoreType::PoS => self.pos.0.clone(),
-            StoreType::BridgePool => self.bridge_pool.0.clone(),
+            StoreType::BridgePool => self.bridge_pool.0.clone().into(),
         }
     }
 }

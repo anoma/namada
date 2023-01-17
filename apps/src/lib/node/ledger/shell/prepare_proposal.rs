@@ -242,7 +242,8 @@ where
     }
 
     /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update
+    /// events, signatures over the latest bridge pool root and nonce,
+    /// and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &mut self,
@@ -493,8 +494,6 @@ mod test_prepare_proposal {
     use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
-    use namada::types::ethereum_events::Uint;
-    #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
@@ -511,6 +510,8 @@ mod test_prepare_proposal {
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };
@@ -598,14 +599,14 @@ mod test_prepare_proposal {
         };
 
         let bp_root = {
-            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let to_sign = get_bp_bytes_to_sign();
             let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.get_current_decision_height(),
+                block_height: shell.storage.last_height,
                 validator_addr,
                 sig,
             }
@@ -899,14 +900,14 @@ mod test_prepare_proposal {
             ext
         };
         let bp_root = {
-            let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+            let to_sign = get_bp_bytes_to_sign();
             let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.get_current_decision_height(),
+                block_height: shell.storage.last_height,
                 validator_addr,
                 sig,
             }
@@ -1080,7 +1081,7 @@ mod test_prepare_proposal {
         #[cfg(feature = "abcipp")]
         {
             let bp_root = {
-                let to_sign = [[0; 32], Uint::from(0).to_bytes()].concat();
+                let to_sign = get_bp_bytes_to_sign();
                 let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,

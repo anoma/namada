@@ -10,7 +10,7 @@ mod read;
 mod update;
 mod utils;
 pub mod validator_set_update;
-mod votes;
+pub mod votes;
 
 use std::collections::BTreeSet;
 
