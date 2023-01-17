@@ -16,6 +16,7 @@ use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, Votes};
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::proof::EthereumProof;
 use crate::storage::vote_tallies;
 
@@ -77,14 +78,7 @@ where
         // validator set proof for epoch 2 signed by validators of epoch 1.
         storage.get_current_epoch().0.next()
     };
-    let epoch_start_height = storage
-        .block
-        .pred_epochs
-        .first_block_heights()
-        .last()
-        .copied()
-        .expect("The block height of the current epoch should be known");
-
+    let epoch_start_height = storage.get_epoch_start_height();
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
         let Some(seen) = votes::storage::maybe_read_seen(storage, &valset_upd_keys)? else {
@@ -230,13 +224,7 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_start_height = storage
-            .block
-            .pred_epochs
-            .first_block_heights()
-            .last()
-            .copied()
-            .expect("The block height of the current epoch should be known");
+        let epoch_start_height = storage.get_epoch_start_height();
         assert_eq!(height, epoch_start_height,);
         assert_eq!(addr, address::testing::established_address_1());
 
@@ -321,13 +309,7 @@ mod test_valset_upd_state_changes {
         assert_eq!(proof_sigs.len(), 1);
 
         let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_start_height = storage
-            .block
-            .pred_epochs
-            .first_block_heights()
-            .last()
-            .copied()
-            .expect("The block height of the current epoch should be known");
+        let epoch_start_height = storage.get_epoch_start_height();
         assert_eq!(height, epoch_start_height,);
         assert_eq!(addr, address::testing::established_address_1());
 
