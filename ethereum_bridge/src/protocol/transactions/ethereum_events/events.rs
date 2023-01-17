@@ -61,8 +61,8 @@ where
                 mint_wrapped_erc20s(storage, asset, receiver, amount)?;
             changed_keys.append(&mut changed)
         } else {
-            unimplemented!(
-                "Releasing native tokens from escrow is not yet supported"
+            tracing::warn!(
+                "Redemption of the wrapped native token is not yet supported"
             )
         }
     }

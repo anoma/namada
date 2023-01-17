@@ -1,5 +1,6 @@
 //! E2E test helpers
 
+use std::net::SocketAddr;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -54,6 +55,42 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     let config =
         Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
     config.ledger.tendermint.rpc_address.to_string()
+}
+
+/// Gets what the Ethereum events endpoint would be for a specific validator, or
+/// errors if this isn't possible (e.g. the validator doesn't exist). The logic
+/// in this function implicitly depends on the network address wrangling done
+/// in [`super::setup::set_validators`].
+pub fn get_validator_events_endpoint(
+    test: &Test,
+    validator: u64,
+) -> Result<String> {
+    match test
+        .genesis
+        .validator
+        .get(&format!("validator-{}", validator))
+    {
+        Some(config) => {
+            let net_addr = config.net_address.to_owned().unwrap_or_else(|| {
+                panic!(
+                    "Validators in e2e tests should always have an explicit \
+                     net_address: {:#?}",
+                    config,
+                )
+            });
+            let net_addr = SocketAddr::from_str(&net_addr).expect(
+                "Should always be able to parse a validator's net_address \
+                 into a SocketAddr",
+            );
+            // TODO: 3030 should be a const!
+            let net_addr = SocketAddr::new(net_addr.ip(), 3030);
+            Ok(format!("http://{}/eth_events", net_addr))
+        }
+        None => Err(eyre!(
+            "No validator-{} present in test validator config",
+            validator
+        )),
+    }
 }
 
 /// Get the public key of the validator

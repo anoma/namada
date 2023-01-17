@@ -19,6 +19,7 @@ wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing"]}
+namada_core = {path = "../core", default-features = false, features = ["testing"]}
 namada_vp_prelude = {path = "../vp_prelude", default-features = false}
 namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
@@ -54,6 +55,7 @@ expectrl = {version = "=0.5.2"}
 eyre = "0.6.5"
 file-serve = "0.2.0"
 fs_extra = "1.2.0"
+hyper = { version = "0.14.20", features = ["full"] }
 itertools = "0.10.0"
 pretty_assertions = "0.7.2"
 # A fork with state machine testing
