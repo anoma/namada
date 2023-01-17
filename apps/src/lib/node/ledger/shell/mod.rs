@@ -103,6 +103,9 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[cfg(not(feature = "mainnet"))]
+    #[error("Error upgrading ledger: {0}")]
+    UpgradeFailed(String),
 }
 
 impl From<Error> for TxResult {

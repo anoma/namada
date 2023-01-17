@@ -58,6 +58,8 @@ where
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
+        self.upgrade_storage(height, BlockHeight(37370))?;
+
         // Tracks the accepted transactions
         self.storage.block.results = BlockResults::default();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
@@ -426,6 +428,76 @@ where
             let update = ValidatorUpdate { pub_key, power };
             response.validator_updates.push(update);
         });
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    fn upgrade_storage(
+        &mut self,
+        current_height: BlockHeight,
+        activation_height: BlockHeight,
+    ) -> Result<()> {
+        use namada::ledger::parameters;
+        use namada::ledger::storage_api::StorageWrite;
+
+        use crate::node::ledger::shell;
+
+        if current_height != activation_height {
+            return Ok(());
+        }
+
+        let parameter_vp_whitelist_key =
+            parameters::storage::get_vp_whitelist_storage_key();
+        let parameter_tx_whitelist_key =
+            parameters::storage::get_tx_whitelist_storage_key();
+
+        let vp_whitelist: Option<Vec<String>> =
+            StorageRead::read(&self.storage, &parameter_vp_whitelist_key)
+                .expect("Should be able to read vp whitelist from storage.");
+        let tx_whitelist: Option<Vec<String>> =
+            StorageRead::read(&self.storage, &parameter_tx_whitelist_key)
+                .expect("Should be able to read tx whitelist from storage.");
+
+        match (tx_whitelist, vp_whitelist) {
+            (Some(tx_whitelist), Some(vp_whitelist)) => {
+                let vp_write_result = StorageWrite::write(
+                    &mut self.storage,
+                    &parameter_vp_whitelist_key,
+                    vp_whitelist
+                        .iter()
+                        .map(|id| id.to_uppercase())
+                        .collect::<Vec<String>>(),
+                );
+                let tx_write_result = StorageWrite::write(
+                    &mut self.storage,
+                    &parameter_tx_whitelist_key,
+                    tx_whitelist
+                        .iter()
+                        .map(|id| id.to_uppercase())
+                        .collect::<Vec<String>>(),
+                );
+                if vp_write_result.is_ok() && tx_write_result.is_ok() {
+                    tracing::info!("Storage updated successfully");
+                    Ok(())
+                } else {
+                    let error = format!(
+                        "vp whitelist is ok: {}, tx_whitelist is ok: {}",
+                        vp_write_result.is_ok(),
+                        tx_write_result.is_ok()
+                    );
+                    tracing::error!("Failed storage upgrade");
+                    Err(shell::Error::UpgradeFailed(error))
+                }
+            }
+            (tx_whitelist, vp_whitelist) => {
+                let error = format!(
+                    "vp whitelist is some: {}, tx_whitelist is some: {}",
+                    vp_whitelist.is_some(),
+                    tx_whitelist.is_some()
+                );
+                tracing::error!("Failed storage upgrade");
+                Err(shell::Error::UpgradeFailed(error))
+            }
+        }
     }
 }
 
