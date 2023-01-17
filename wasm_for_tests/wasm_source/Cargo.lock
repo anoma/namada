@@ -2507,7 +2507,11 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -2549,7 +2553,11 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2558,7 +2566,11 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "borsh",
  "data-encoding",
@@ -2584,7 +2596,11 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "chrono",
  "concat-idents",
@@ -2616,7 +2632,11 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -2631,7 +2651,11 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "borsh",
  "hex",
@@ -2642,7 +2666,11 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "borsh",
  "namada_core",
@@ -2655,7 +2683,11 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
+<<<<<<< HEAD
 version = "0.15.1"
+=======
+version = "0.13.1"
+>>>>>>> 9bab004ff (Namada 0.13.1)
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
