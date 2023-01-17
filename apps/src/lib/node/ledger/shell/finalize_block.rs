@@ -168,8 +168,12 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    ProtocolTxType::BridgePoolVext(_) => continue,
-                    ProtocolTxType::ValSetUpdateVext(_) => {
+                    ProtocolTxType::BridgePoolVext(_)
+                    | ProtocolTxType::BridgePool(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ProtocolTxType::ValSetUpdateVext(_)
+                    | ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
                     ProtocolTxType::EthereumEvents(ref digest) => {
@@ -186,11 +190,6 @@ where
                                 }
                             }
                         }
-                        Event::new_tx_event(&tx_type, height.0)
-                    }
-
-                    ProtocolTxType::BridgePool(_) => continue,
-                    ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
                     ref protocol_tx_type => {

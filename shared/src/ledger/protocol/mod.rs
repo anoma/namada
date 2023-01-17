@@ -217,6 +217,9 @@ where
             transactions::ethereum_events::apply_derived_tx(storage, events)
                 .map_err(Error::ProtocolTxError)
         }
+        ProtocolTxType::BridgePoolVext(ext) => {
+            transactions::bridge_pool_roots::apply_derived_tx(storage, ext.into())
+        }
         ProtocolTxType::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): we will not need to apply any
             // storage changes when we rollback to ABCI++; this is because

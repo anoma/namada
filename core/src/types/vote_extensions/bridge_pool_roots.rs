@@ -97,3 +97,9 @@ impl IntoIterator for MultiSignedVext {
         self.0.into_iter()
     }
 }
+
+impl From<SignedVext> for MultiSignedVext {
+    fn from(vext: SignedVext) -> Self {
+        Self(HashSet::from([vext]))
+    }
+}

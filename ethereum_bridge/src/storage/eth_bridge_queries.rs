@@ -5,7 +5,7 @@ use namada_core::ledger::storage::{Storage, StoreType};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthAddress, Uint};
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
 use namada_proof_of_stake::pos_queries::PosQueries;
@@ -30,6 +30,10 @@ pub trait EthBridgeQueries {
     /// Get the latest root of the Ethereum bridge
     /// pool Merkle tree.
     fn get_bridge_pool_root(&self) -> KeccakHash;
+
+    /// Get the root of the Ethereum bridge
+    /// pool Merkle tree at a given height.
+    fn get_bridge_pool_root_at_height(&self, height: BlockHeight) -> KeccakHash;
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
@@ -77,6 +81,18 @@ where
 
     fn get_bridge_pool_root(&self) -> KeccakHash {
         self.block.tree.sub_root(&StoreType::BridgePool).into()
+    }
+
+    fn get_bridge_pool_root_at_height(&self, height: BlockHeight) -> KeccakHash {
+        self
+            .db
+            .read_merkle_tree_stores(height)
+            .expect("We should always be able to read the database")
+            .expect(
+                "Every root should correspond to an existing block height",
+            )
+            .get_root(StoreType::BridgePool)
+            .into()
     }
 
     #[cfg(feature = "abcipp")]
