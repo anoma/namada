@@ -5,7 +5,7 @@ use namada_core::ledger::storage::{Storage, StoreType};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthAddress, Uint};
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
 use namada_proof_of_stake::pos_queries::PosQueries;
@@ -23,6 +23,10 @@ pub enum SendValsetUpd {
 }
 
 pub trait EthBridgeQueries {
+    /// Fetch the first [`BlockHeight`] of the last [`Epoch`]
+    /// committed to storage.
+    fn get_epoch_start_height(&self) -> BlockHeight;
+
     /// Get the latest nonce for the Ethereum bridge
     /// pool.
     fn get_bridge_pool_nonce(&self) -> Uint;
@@ -64,6 +68,16 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
+    #[inline]
+    fn get_epoch_start_height(&self) -> BlockHeight {
+        self.block
+            .pred_epochs
+            .first_block_heights()
+            .last()
+            .copied()
+            .expect("The block height of the current epoch should be known")
+    }
+
     fn get_bridge_pool_nonce(&self) -> Uint {
         Uint::try_from_slice(
             &self
