@@ -83,7 +83,7 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-[token.Dot.parameters]
+[token.DOT.parameters]
 max_reward_rate = 0.1
 kd_gain_nom = 0.1
 kp_gain_nom = 0.1
@@ -97,7 +97,7 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-[token.Schnitzel.parameters]
+[token.schnitzel.parameters]
 max_reward_rate = 0.1
 kd_gain_nom = 0.1
 kp_gain_nom = 0.1
@@ -111,7 +111,7 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-[token.Apfel.parameters]
+[token.apfel.parameters]
 max_reward_rate = 0.1
 kd_gain_nom = 0.1
 kp_gain_nom = 0.1
@@ -126,7 +126,7 @@ atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3
 atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
 atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
 a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-[token.Kartoffel.parameters]
+[token.kartoffel.parameters]
 max_reward_rate = 0.1
 kd_gain_nom = 0.1
 kp_gain_nom = 0.1
@@ -183,7 +183,12 @@ max_expected_time_per_block = 30
 epochs_per_year = 525_600
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
-
+implicit_vp = "vp_implicit"
+# Expected number of epochs per year (also sets the min duration of an epoch in seconds)
+# The P gain factor in the Proof of Stake rewards controller
+pos_gain_p = 0.1
+# The D gain factor in the Proof of Stake rewards controller
+pos_gain_d = 0.1
 # Proof of stake parameters.
 [pos_params]
 # Maximum number of consensus validators.
