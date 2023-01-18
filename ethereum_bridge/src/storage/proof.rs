@@ -54,9 +54,17 @@ impl<T> EthereumProof<T> {
     }
 }
 
-impl eth_abi::Encode<0> for EthereumProof<VotingPowersMap> {
-    fn tokenize(&self) -> [eth_abi::Token; 0] {
-        todo!()
+impl eth_abi::Encode<1> for EthereumProof<VotingPowersMap> {
+    // TODO: finish this
+    fn tokenize(&self) -> [eth_abi::Token; 1] {
+        let bridge_hash = eth_abi::Token::FixedBytes(vec![]);
+        let gov_hash = eth_abi::Token::FixedBytes(vec![]);
+        let signatures = eth_abi::Token::Array(vec![]);
+        [eth_abi::Token::Tuple(vec![
+            bridge_hash,
+            gov_hash,
+            signatures,
+        ])]
     }
 }
 
