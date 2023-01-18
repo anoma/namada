@@ -9,7 +9,9 @@ use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
-use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
+use namada_core::types::vote_extensions::validator_set_update::{
+    ValidatorSetArgs, VotingPowersMap,
+};
 use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_ethereum_bridge::storage::vote_tallies;
 
@@ -84,6 +86,12 @@ router! {SHELL,
     // The request may fail if a proof is not considered complete yet.
     ( "validator_set" / "proof" / [epoch: Epoch] )
         -> EncodeCell<EthereumProof<VotingPowersMap>> = read_valset_upd_proof,
+
+    // Request the active validator set at the given epoch.
+    //
+    // The request may fail if no validator set exists at that epoch.
+    ( "validator_set" / "active" / [epoch: Epoch] )
+        -> EncodeCell<ValidatorSetArgs> = read_active_valset,
 }
 
 // Handlers:
@@ -513,6 +521,21 @@ where
 
     // return ABI encoded proof; need to implement `AbiEncode`
     // for `EncodeCell<EthereumProof<VotingPowersMap>>`
+    todo!()
+}
+
+/// Read the active set of validators at the given [`Epoch`].
+///
+/// This method may fail if no set of validators exists yet,
+/// at that [`Epoch`].
+fn read_active_valset<D, H>(
+    _ctx: RequestCtx<'_, D, H>,
+    _epoch: Epoch,
+) -> storage_api::Result<EncodeCell<ValidatorSetArgs>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
     todo!()
 }
 
