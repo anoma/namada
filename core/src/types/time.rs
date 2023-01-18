@@ -96,6 +96,12 @@ impl From<std::time::Duration> for DurationNanos {
     }
 }
 
+impl From<DurationNanos> for std::time::Duration {
+    fn from(DurationNanos { secs, nanos }: DurationNanos) -> Self {
+        Self::new(secs, nanos)
+    }
+}
+
 /// An RFC 3339 timestamp (e.g., "1970-01-01T00:00:00Z").
 #[derive(
     Clone,
@@ -288,6 +294,13 @@ impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<crate::tendermint::Timeout> for DurationNanos {
     fn from(val: crate::tendermint::Timeout) -> Self {
+        Self::from(std::time::Duration::from(val))
+    }
+}
+
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<DurationNanos> for crate::tendermint::Timeout {
+    fn from(val: DurationNanos) -> Self {
         Self::from(std::time::Duration::from(val))
     }
 }

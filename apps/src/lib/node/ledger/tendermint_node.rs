@@ -8,6 +8,7 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 #[cfg(feature = "abciplus")]
 use tendermint::Moniker;
 #[cfg(feature = "abcipp")]
@@ -19,6 +20,7 @@ use tokio::process::Command;
 
 use crate::cli::namada_version;
 use crate::config;
+use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_config::{
@@ -284,6 +286,28 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
     });
     serde_json::to_writer_pretty(file, &state)
         .expect("Couldn't write private validator state file");
+}
+
+/// Length of a Tendermint Node ID in bytes
+const TENDERMINT_NODE_ID_LENGTH: usize = 20;
+
+/// Derive Tendermint node ID from public key
+pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
+    let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
+
+    match pk {
+        common::PublicKey::Ed25519(_) => {
+            let _pk: ed25519::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+        common::PublicKey::Secp256k1(_) => {
+            let _pk: secp256k1::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+    }
+    TendermintNodeId::new(bytes)
 }
 
 async fn update_tendermint_config(

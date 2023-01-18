@@ -23,7 +23,7 @@ impl Ctx {
         amount: token::Amount,
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
-        bond_tokens(self, source, validator, amount, current_epoch)
+        bond_tokens(self, source, validator, amount, current_epoch, None)
     }
 
     /// NEW: Unbond self-bonded tokens from a validator when `source` is `None`
@@ -94,6 +94,7 @@ impl Ctx {
             current_epoch,
             commission_rate,
             max_commission_rate_change,
+            None,
         )?;
 
         Ok(validator_address)

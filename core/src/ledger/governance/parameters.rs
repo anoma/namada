@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as gov_storage;
 use crate::ledger::storage::types::encode;
-use crate::ledger::storage::{self, Storage};
+use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::token::Amount;
 
 #[derive(
@@ -66,10 +66,9 @@ impl Default for GovParams {
 
 impl GovParams {
     /// Initialize governance parameters into storage
-    pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
+    pub fn init_storage<S>(&self, storage: &mut S)
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
+        S: StorageRead + StorageWrite,
     {
         let Self {
             min_proposal_fund,

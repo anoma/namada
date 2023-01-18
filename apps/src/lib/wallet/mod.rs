@@ -92,14 +92,15 @@ impl Wallet {
         }
     }
 
-    /// Add addresses from a genesis configuration.
-    pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
-        self.store.add_genesis_addresses(genesis)
-    }
-
     /// Save the wallet store to a file.
     pub fn save(&self) -> std::io::Result<()> {
         self.store.save(&self.store_dir)
+    }
+
+    /// Check if a wallet exists in the given store dir.
+    pub fn exists(store_dir: &Path) -> bool {
+        let file = wallet_file(store_dir);
+        file.exists()
     }
 
     /// Prompt for pssword and confirm it if parameter is false
@@ -496,6 +497,12 @@ impl Wallet {
         self.store
             .insert_payment_addr(alias.into(), payment_addr)
             .map(Into::into)
+    }
+
+    /// Extend this wallet from another wallet (typically pre-genesis).
+    /// Note that this method ignores `store.validator_data` if any.
+    pub fn extend(&mut self, wallet: Wallet) {
+        self.store.extend(wallet.store)
     }
 
     /// Extend this wallet from pre-genesis validator wallet.

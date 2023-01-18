@@ -33,24 +33,6 @@ pub fn into_tm_voting_power(
     i64::try_from(prod).expect("Invalid validator voting power (i64)")
 }
 
-/// Initialize storage in the genesis block.
-pub fn init_genesis_storage<S>(
-    storage: &mut S,
-    params: &PosParams,
-    validators: impl Iterator<Item = GenesisValidator> + Clone,
-    current_epoch: Epoch,
-) where
-    S: StorageRead + StorageWrite,
-{
-    namada_proof_of_stake::init_genesis(
-        storage,
-        params,
-        validators,
-        current_epoch,
-    )
-    .expect("Initialize PoS genesis storage");
-}
-
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type BondId = namada_proof_of_stake::types::BondId;
 

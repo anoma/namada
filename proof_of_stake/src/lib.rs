@@ -32,11 +32,10 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
 use namada_core::ledger::storage_api::collections::LazyCollection;
-use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
     self, OptionExt, StorageRead, StorageWrite,
 };
-use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::key::{common, tm_consensus_key_raw_hash};
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
@@ -56,8 +55,8 @@ use thiserror::Error;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, GenesisValidator, Position, Slash, SlashType,
-    Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ConsensusValidatorSets, Position, Slash, SlashType, Slashes, TotalDeltas,
+    Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
     ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
     ValidatorState, ValidatorStates,
 };
@@ -71,9 +70,11 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-/// Address of the staking token (NAM)
-pub fn staking_token_address() -> Address {
-    address::nam()
+/// Address of the staking token (i.e. the native token)
+pub fn staking_token_address(storage: &impl StorageRead) -> Address {
+    storage
+        .get_native_token()
+        .expect("Must be able to read native token address")
 }
 
 #[allow(missing_docs)]
@@ -284,7 +285,6 @@ pub fn validator_slashes_handle(validator: &Address) -> Slashes {
 pub fn init_genesis<S>(
     storage: &mut S,
     params: &PosParams,
-    validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
@@ -292,72 +292,23 @@ where
 {
     tracing::debug!("Initializing PoS genesis");
     write_pos_params(storage, params.clone())?;
-
-    let mut total_bonded = token::Amount::default();
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
+    tracing::debug!("Finished genesis");
+    Ok(())
+}
 
-    for GenesisValidator {
-        address,
-        tokens,
-        consensus_key,
-        commission_rate,
-        max_commission_rate_change,
-    } in validators
-    {
-        total_bonded += tokens;
-
-        // Insert the validator into a validator set and write its epoched
-        // validator data
-        // TODO: ValidatorState inside of here
-        insert_validator_into_validator_set(
-            storage,
-            params,
-            &address,
-            tokens,
-            current_epoch,
-            0,
-        )?;
-
-        // Write other validator data to storage
-        write_validator_address_raw_hash(storage, &address, &consensus_key)?;
-        write_validator_max_commission_rate_change(
-            storage,
-            &address,
-            max_commission_rate_change,
-        )?;
-        validator_consensus_key_handle(&address).init_at_genesis(
-            storage,
-            consensus_key,
-            current_epoch,
-        )?;
-        let delta = token::Change::from(tokens);
-        validator_deltas_handle(&address).init_at_genesis(
-            storage,
-            delta,
-            current_epoch,
-        )?;
-        bond_handle(&address, &address).init_at_genesis(
-            storage,
-            delta,
-            current_epoch,
-        )?;
-        validator_commission_rate_handle(&address).init_at_genesis(
-            storage,
-            commission_rate,
-            current_epoch,
-        )?;
-    }
-    // Write total deltas to storage
-    total_deltas_handle().init_at_genesis(
-        storage,
-        token::Change::from(total_bonded),
-        current_epoch,
-    )?;
-    // Credit bonded token amount to the PoS account
-    credit_tokens(storage, &staking_token_address(), &ADDRESS, total_bonded)?;
-    // Copy the genesis validator set into the pipeline epoch as well
+/// new init genesis
+pub fn copy_genesis_validator_sets<S>(
+    storage: &mut S,
+    params: &PosParams,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Copy the genesis validator sets up to the pipeline epoch
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
         copy_validator_sets_and_positions(
             storage,
@@ -367,9 +318,6 @@ where
             &below_capacity_validator_set_handle(),
         )?;
     }
-
-    println!("FINISHED GENESIS\n");
-
     Ok(())
 }
 
@@ -512,12 +460,13 @@ pub fn update_validator_deltas<S>(
     validator: &Address,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = validator_deltas_handle(validator);
-    let offset = OffsetPipelineLen::value(params);
+    let offset = offset_opt.unwrap_or_else(|| OffsetPipelineLen::value(params));
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -653,12 +602,13 @@ pub fn update_total_deltas<S>(
     params: &PosParams,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = total_deltas_handle();
-    let offset = OffsetPipelineLen::value(params);
+    let offset = offset_opt.unwrap_or_else(|| OffsetPipelineLen::value(params));
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -720,17 +670,19 @@ pub fn bond_tokens<S>(
     validator: &Address,
     amount: token::Amount,
     current_epoch: Epoch,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    println!("BONDING TOKEN AMOUNT {}\n", amount);
+    tracing::debug!("Bonding token amount {amount}");
     let params = read_pos_params(storage)?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = current_epoch + offset;
     if let Some(source) = source {
         if source != validator
-            && is_validator(storage, source, &params, pipeline_epoch)?
+            && is_validator(storage, source, &params, offset_epoch)?
         {
             return Err(
                 BondError::SourceMustNotBeAValidator(source.clone()).into()
@@ -741,7 +693,7 @@ where
     // Think if the 'get' here needs to be amended.
     let state = validator_state_handle(validator).get(
         storage,
-        pipeline_epoch,
+        offset_epoch,
         &params,
     )?;
     if state.is_none() {
@@ -754,7 +706,7 @@ where
 
     // Check that validator is not inactive at anywhere between the current
     // epoch and pipeline offset
-    for epoch in current_epoch.iter_range(params.pipeline_len) {
+    for epoch in current_epoch.iter_range(offset) {
         if let Some(ValidatorState::Inactive) =
             validator_state_handle.get(storage, epoch, &params)?
         {
@@ -762,12 +714,9 @@ where
         }
     }
 
-    // Initialize or update the bond at the pipeline offset
-    let offset = params.pipeline_len;
     // TODO: ensure that this method of checking if the bond exists works
 
     if !bond_handle.get_data_handler().is_empty(storage)? {
-        println!("BOND EXISTS TO BEGIN WITH\n");
         let cur_remain = bond_handle
             .get_delta_val(storage, current_epoch + offset, &params)?
             .unwrap_or_default();
@@ -778,15 +727,18 @@ where
         // );
         bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
     } else {
-        println!("BOND DOESNT EXIST YET\n");
         bond_handle.init(storage, amount, current_epoch, offset)?;
     }
 
-    println!("\nUPDATING VALIDATOR SET NOW\n");
-
     // Update the validator set
-    update_validator_set(storage, &params, validator, amount, current_epoch)?;
-    println!("UPDATING VALIDATOR DELTAS NOW\n");
+    update_validator_set(
+        storage,
+        &params,
+        validator,
+        amount,
+        current_epoch,
+        offset_opt,
+    )?;
 
     // Update the validator and total deltas
     update_validator_deltas(
@@ -795,19 +747,19 @@ where
         validator,
         amount,
         current_epoch,
+        offset_opt,
     )?;
 
-    update_total_deltas(storage, &params, amount, current_epoch)?;
+    update_total_deltas(storage, &params, amount, current_epoch, offset_opt)?;
 
     // Transfer the bonded tokens from the source to PoS
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token_address(storage),
         token::Amount::from_change(amount),
         source,
         &ADDRESS,
     )?;
-    println!("END BOND_TOKENS\n");
 
     Ok(())
 }
@@ -918,6 +870,7 @@ fn update_validator_set<S>(
     validator: &Address,
     token_change: token::Change,
     current_epoch: Epoch,
+    offset: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -925,7 +878,8 @@ where
     if token_change == 0_i128 {
         return Ok(());
     }
-    let epoch = current_epoch + params.pipeline_len;
+    let offset = offset.unwrap_or(params.pipeline_len);
+    let epoch = current_epoch + offset;
     println!(
         "Update epoch for validator set: {epoch}, validator: {validator}\n"
     );
@@ -1450,7 +1404,14 @@ where
 
     println!("Updating validator set for unbonding");
     // Update the validator set at the pipeline offset
-    update_validator_set(storage, &params, validator, -amount, current_epoch)?;
+    update_validator_set(
+        storage,
+        &params,
+        validator,
+        -amount,
+        current_epoch,
+        None,
+    )?;
 
     // Update the validator and total deltas at the pipeline offset
     update_validator_deltas(
@@ -1459,8 +1420,9 @@ where
         validator,
         -amount,
         current_epoch,
+        None,
     )?;
-    update_total_deltas(storage, &params, -amount, current_epoch)?;
+    update_total_deltas(storage, &params, -amount, current_epoch, None)?;
 
     Ok(())
 }
@@ -1498,10 +1460,12 @@ pub fn become_validator<S>(
     current_epoch: Epoch,
     commission_rate: Decimal,
     max_commission_rate_change: Decimal,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
     write_validator_max_commission_rate_change(
@@ -1515,19 +1479,19 @@ where
         storage,
         consensus_key.clone(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_commission_rate_handle(address).init(
         storage,
         commission_rate,
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_deltas_handle(address).init(
         storage,
         token::Change::default(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
 
     let stake = token::Amount::default();
@@ -1539,7 +1503,7 @@ where
         address,
         stake,
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     Ok(())
 }
@@ -1625,7 +1589,7 @@ where
     // Transfer the tokens from the PoS address back to the source
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token_address(storage),
         withdrawable_amount,
         &ADDRESS,
         source,
@@ -1719,6 +1683,7 @@ where
         validator,
         token_change,
         current_epoch,
+        None,
     )?;
     update_validator_deltas(
         storage,
@@ -1726,8 +1691,9 @@ where
         validator,
         token_change,
         current_epoch,
+        None,
     )?;
-    update_total_deltas(storage, params, token_change, current_epoch)?;
+    update_total_deltas(storage, params, token_change, current_epoch, None)?;
 
     // Write the validator slash to storage
     validator_slashes_handle(validator).push(storage, slash)?;
@@ -1735,7 +1701,7 @@ where
     // Transfer the slashed tokens from PoS account to Slash Fund address
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token_address(storage),
         token::Amount::from(slashed_amount),
         &ADDRESS,
         &SLASH_POOL_ADDRESS,
@@ -1786,7 +1752,9 @@ where
             .write(&dest_key, dest_balance)
             .expect("Unable to write token balance for PoS system");
     } else {
-        tracing::error!("PoS system transfer error, the source has no balance");
+        tracing::error!(
+            "PoS system transfer error, the source {src} has no balance"
+        );
     }
     Ok(())
 }

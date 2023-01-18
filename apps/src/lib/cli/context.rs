@@ -14,7 +14,7 @@ use namada::types::masp::*;
 use super::args;
 use crate::cli::utils;
 use crate::client::tx::ShieldedContext;
-use crate::config::genesis::genesis_config;
+use crate::config::genesis::{self, genesis_config};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::Wallet;
@@ -99,18 +99,28 @@ impl Context {
                 );
                 let chain_dir =
                     global_args.base_dir.join(default_chain_id.as_str());
-                let genesis_file_path = global_args
-                    .base_dir
-                    .join(format!("{}.toml", default_chain_id.as_str()));
+
+                // let genesis_file_path = global_args
+                //     .base_dir
+                //     .join(format!("{}.toml", default_chain_id.as_str()));
+                // let genesis =
+                //     genesis_config::read_genesis_config(&genesis_file_path);
+                // let native_token = genesis.native_token;
+                // let default_genesis =
+                //     genesis_config::open_genesis_config(genesis_file_path)?;
+                // let wallet = Wallet::load_or_new_from_genesis(
+                //     &chain_dir,
+                //     default_genesis,
+                // );
                 let genesis =
-                    genesis_config::read_genesis_config(&genesis_file_path);
-                let native_token = genesis.native_token;
-                let default_genesis =
-                    genesis_config::open_genesis_config(genesis_file_path)?;
-                let wallet = Wallet::load_or_new_from_genesis(
-                    &chain_dir,
-                    default_genesis,
-                );
+                    genesis::chain::Finalized::read_toml_files(&chain_dir)
+                        .expect("Missing genesis files");
+                let native_token = genesis.get_native_token().clone();
+                let wallet = if Wallet::exists(&chain_dir) {
+                    Wallet::load(&chain_dir).unwrap()
+                } else {
+                    genesis.derive_wallet(&chain_dir, None, None)
+                };
 
                 // If the WASM dir specified, put it in the config
                 match global_args.wasm_dir.as_ref() {

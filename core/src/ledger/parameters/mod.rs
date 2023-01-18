@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
+use super::storage_api::{StorageRead, StorageWrite};
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::chain::ProposalBytes;
@@ -103,10 +104,9 @@ pub enum WriteError {
 
 impl Parameters {
     /// Initialize parameters in storage in the genesis block.
-    pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
+    pub fn init_storage<S>(&self, storage: &mut S)
     where
-        DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-        H: ledger_storage::StorageHasher,
+        S: StorageRead + StorageWrite,
     {
         let Self {
             epoch_duration,

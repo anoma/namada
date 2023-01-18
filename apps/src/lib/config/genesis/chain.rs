@@ -1,16 +1,27 @@
 use std::collections::BTreeMap;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::ledger::parameters::EpochDuration;
 use namada::types::address::{Address, EstablishedAddressGen};
 use namada::types::chain::{ChainId, ChainIdPrefix};
-use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
+use namada::types::time::{
+    DateTimeUtc, DurationNanos, DurationSecs, Rfc3339String,
+};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::toml_utils::{read_toml, write_toml};
 use super::{templates, transactions};
-use crate::wallet::Alias;
+use crate::config::{Config, TendermintMode};
+use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::node::ledger::tendermint_node::id_from_pk;
+use crate::wallet::{pre_genesis, Alias, Wallet};
+use crate::wasm_loader;
 
 pub const METADATA_FILE_NAME: &str = "chain.toml";
 
@@ -64,6 +75,330 @@ impl Finalized {
             transactions,
             metadata,
         })
+    }
+
+    /// Find the address of the configured native token
+    pub fn get_native_token(&self) -> &Address {
+        let alias = &self.parameters.parameters.native_token;
+        &self
+            .tokens
+            .token
+            .get(alias)
+            .expect("The native token must exist")
+            .address
+    }
+
+    /// Derive Namada wallet from genesis
+    pub fn derive_wallet(
+        &self,
+        base_dir: &Path,
+        pre_genesis_wallet: Option<Wallet>,
+        validator: Option<(Alias, pre_genesis::ValidatorWallet)>,
+    ) -> Wallet {
+        let mut wallet = Wallet::load_or_new(base_dir);
+        dbg!(&wallet);
+        for (alias, config) in &self.tokens.token {
+            dbg!("add token", alias);
+            wallet.add_address(alias.normalize(), config.address.clone());
+        }
+        if let Some(txs) = &self.transactions.validator_account {
+            for tx in txs {
+                wallet.add_address(tx.tx.alias.normalize(), tx.address.clone());
+            }
+        }
+        if let Some(txs) = &self.transactions.established_account {
+            for tx in txs {
+                wallet.add_address(tx.tx.alias.normalize(), tx.address.clone());
+            }
+        }
+        if let Some(pre_genesis_wallet) = pre_genesis_wallet {
+            wallet.extend(pre_genesis_wallet);
+        }
+        if let Some((alias, validator_wallet)) = validator {
+            let address = self
+                .transactions
+                .find_validator(&alias)
+                .map(|tx| tx.address.clone())
+                .expect("Validator alias not found in genesis transactions.");
+            wallet.extend_from_pre_genesis_validator(
+                address,
+                alias,
+                validator_wallet,
+            )
+        }
+        wallet
+    }
+
+    /// Derive Namada configuration from genesis
+    pub fn derive_config(
+        &self,
+        base_dir: &Path,
+        node_mode: TendermintMode,
+        validator_alias: Option<Alias>,
+        allow_duplicate_ip: bool,
+    ) -> Config {
+        if node_mode != TendermintMode::Validator && validator_alias.is_some() {
+            println!(
+                "Warning: Validator alias used to derive config, but node \
+                 mode is not validator, it is {node_mode:?}!"
+            );
+        }
+        let mut config =
+            Config::new(base_dir, self.metadata.chain_id.clone(), node_mode);
+
+        // Derive persistent peers from genesis
+        let persistent_peers = self.derive_persistent_peers();
+        // If `validator_wallet` is given, find its net_address
+        let validator_net_and_tm_address =
+            if let Some(alias) = validator_alias.as_ref() {
+                self.transactions.find_validator(alias).map(|validator_tx| {
+                    (
+                        validator_tx.tx.net_address,
+                        validator_tx.derive_tendermint_address(),
+                    )
+                })
+            } else {
+                None
+            };
+        // Check if the validators are localhost to automatically turn off
+        // Tendermint P2P address book strict mode to allow it
+        let is_localhost = persistent_peers.iter().all(|peer| match peer {
+            TendermintAddress::Tcp {
+                peer_id: _,
+                host,
+                port: _,
+            } => match host.as_str() {
+                "127.0.0.1" => true,
+                "localhost" => true,
+                _ => false,
+            },
+            TendermintAddress::Unix { path: _ } => false,
+        });
+
+        // Configure the ledger
+        config.ledger.genesis_time = self.metadata.genesis_time.clone();
+
+        // Add a ledger P2P persistent peers
+        config.ledger.tendermint.p2p_persistent_peers = persistent_peers;
+        config.ledger.tendermint.consensus_timeout_commit =
+            self.metadata.consensus_timeout_commit.into();
+        config.ledger.tendermint.p2p_allow_duplicate_ip = allow_duplicate_ip;
+        config.ledger.tendermint.p2p_addr_book_strict = !is_localhost;
+
+        if let Some((net_address, tm_address)) = validator_net_and_tm_address {
+            // Take out address of self from the P2P persistent peers
+            config.ledger.tendermint.p2p_persistent_peers = config.ledger.tendermint.p2p_persistent_peers.iter()
+                        .filter_map(|peer|
+                            // we do not add the validator in its own persistent peer list
+                            if peer != &tm_address  {
+                                Some(peer.to_owned())
+                            } else {
+                                None
+                            })
+                        .collect();
+
+            let first_port = net_address.port();
+            if !is_localhost {
+                config
+                    .ledger
+                    .tendermint
+                    .p2p_address
+                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+            }
+            config.ledger.tendermint.p2p_address.set_port(first_port);
+            if !is_localhost {
+                config
+                    .ledger
+                    .tendermint
+                    .rpc_address
+                    .set_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+            }
+            config
+                .ledger
+                .tendermint
+                .rpc_address
+                .set_port(first_port + 1);
+            config.ledger.shell.ledger_address.set_port(first_port + 2);
+
+            // Validator node should turned off peer exchange reactor
+            config.ledger.tendermint.p2p_pex = false;
+        }
+
+        config
+    }
+
+    /// Derive persistent peers from genesis validators
+    fn derive_persistent_peers(&self) -> Vec<TendermintAddress> {
+        self.transactions
+            .validator_account
+            .as_ref()
+            .map(|txs| {
+                txs.iter()
+                    .map(FinalizedValidatorAccountTx::derive_tendermint_address)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get the chain parameters set in genesis
+    pub fn get_chain_parameters(
+        &self,
+        wasm_dir: impl AsRef<Path>,
+    ) -> namada::ledger::parameters::Parameters {
+        let templates::ChainParams {
+            native_token,
+            min_num_of_blocks,
+            max_expected_time_per_block,
+            max_proposal_bytes,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
+            #[cfg(not(feature = "mainnet"))]
+                faucet_pow_difficulty: _,
+            #[cfg(not(feature = "mainnet"))]
+                faucet_withdrawal_limit: _,
+        } = self.parameters.parameters.clone();
+
+        let implicit_vp_filename = &self
+            .vps
+            .wasm
+            .get(&implicit_vp)
+            .expect("Implicit VP must be present")
+            .filename;
+        let implicit_vp =
+            wasm_loader::read_wasm(&wasm_dir, &implicit_vp_filename)
+                .expect("Implicit VP WASM code couldn't get read");
+
+        let min_duration: i64 = 60 * 60 * 24 * 365 / (epochs_per_year as i64);
+        let epoch_duration = EpochDuration {
+            min_num_of_blocks: min_num_of_blocks,
+            min_duration: namada::types::time::Duration::seconds(min_duration)
+                .into(),
+        };
+        let max_expected_time_per_block =
+            namada::types::time::Duration::seconds(max_expected_time_per_block)
+                .into();
+        let vp_whitelist = vp_whitelist.unwrap_or_default();
+        let tx_whitelist = tx_whitelist.unwrap_or_default();
+        let staked_ratio = Decimal::ZERO;
+        let pos_inflation_amount = 0;
+
+        // Try to find a faucet account
+        #[cfg(not(feature = "mainnet"))]
+        let faucet_account = {
+            self.transactions
+                .established_account
+                .as_ref()
+                .and_then(|acc| {
+                    acc.iter().find_map(
+                        |FinalizedEstablishedAccountTx { address, tx }| {
+                            if tx.vp == "vp_testnet_faucet" {
+                                Some(address.clone())
+                            } else {
+                                None
+                            }
+                        },
+                    )
+                })
+        };
+
+        namada::ledger::parameters::Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
+            max_proposal_bytes,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
+        }
+    }
+
+    pub fn get_pos_params(
+        &self,
+    ) -> namada::proof_of_stake::parameters::PosParams {
+        let templates::PosParams {
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            tm_votes_per_token,
+            block_proposer_reward,
+            block_vote_reward,
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
+        } = self.parameters.pos_params.clone();
+
+        namada::proof_of_stake::parameters::PosParams {
+            max_validator_slots,
+            pipeline_len,
+            unbonding_len,
+            tm_votes_per_token,
+            block_proposer_reward,
+            block_vote_reward,
+            max_inflation_rate,
+            target_staked_ratio,
+            duplicate_vote_min_slash_rate,
+            light_client_attack_min_slash_rate,
+        }
+    }
+
+    pub fn get_gov_params(
+        &self,
+    ) -> namada::ledger::governance::parameters::GovParams {
+        let templates::GovernanceParams {
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+        } = self.parameters.gov_params.clone();
+        namada::ledger::governance::parameters::GovParams {
+            min_proposal_fund,
+            max_proposal_code_size,
+            min_proposal_period,
+            max_proposal_period,
+            max_proposal_content_size,
+            min_proposal_grace_epochs,
+        }
+    }
+
+    pub fn get_token_address(&self, alias: &Alias) -> Option<&Address> {
+        self.tokens.token.get(alias).map(|token| &token.address)
+    }
+
+    pub fn get_user_address(&self, alias: &Alias) -> Option<&Address> {
+        let established = self.transactions.established_account.as_ref()?;
+        let validators = self.transactions.validator_account.as_ref()?;
+        established
+            .iter()
+            .find_map(|tx| (&tx.tx.alias == alias).then_some(&tx.address))
+            .or_else(|| {
+                validators.iter().find_map(|tx| {
+                    (&tx.tx.alias == alias).then_some(&tx.address)
+                })
+            })
+    }
+
+    pub fn get_validator_address(&self, alias: &Alias) -> Option<&Address> {
+        let validators = self.transactions.validator_account.as_ref()?;
+        validators
+            .iter()
+            .find_map(|tx| (&tx.tx.alias == alias).then_some(&tx.address))
     }
 }
 
@@ -306,6 +641,15 @@ impl FinalizedTransactions {
             bond,
         }
     }
+
+    fn find_validator(
+        &self,
+        alias: &Alias,
+    ) -> Option<&FinalizedValidatorAccountTx> {
+        self.validator_account
+            .as_ref()
+            .and_then(|txs| txs.iter().find(|tx| &tx.tx.alias == alias))
+    }
 }
 
 #[derive(
@@ -338,6 +682,20 @@ pub struct FinalizedValidatorAccountTx {
     pub address: Address,
     #[serde(flatten)]
     pub tx: transactions::SignedValidatorAccountTx,
+}
+impl FinalizedValidatorAccountTx {
+    pub fn derive_tendermint_address(&self) -> TendermintAddress {
+        // Derive the node ID from the node key
+        let node_id: TendermintNodeId =
+            id_from_pk(&self.tx.tendermint_node_key.pk.raw);
+
+        // Build the list of persistent peers from the validators' node IDs
+        TendermintAddress::from_str(&format!(
+            "{}@{}",
+            node_id, self.tx.net_address,
+        ))
+        .expect("Validator address must be valid")
+    }
 }
 
 /// Chain metadata

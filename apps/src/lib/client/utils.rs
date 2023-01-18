@@ -15,17 +15,13 @@ use num_traits::ToPrimitive;
 use prost::bytes::Bytes;
 use rust_decimal::Decimal;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
-use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, Config, TendermintMode};
-use crate::facade::tendermint::node::Id as TendermintNodeId;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{self, pre_genesis, Wallet};
+use crate::wallet::{self, pre_genesis, Alias, Wallet};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -102,7 +98,7 @@ pub async fn join_network(
     let validator_alias_and_pre_genesis_wallet =
         validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
             (
-                validator_alias,
+                Alias::from(validator_alias),
                 pre_genesis::ValidatorWallet::load(&pre_genesis_dir)
                     .unwrap_or_else(|err| {
                         eprintln!(
@@ -184,16 +180,6 @@ pub async fn join_network(
         .await
         .unwrap();
 
-        // Move the genesis file
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(format!("{}.toml", chain_id.as_str())),
-            base_dir_full.join(format!("{}.toml", chain_id.as_str())),
-        )
-        .await
-        .unwrap();
-
         // Move the global config
         fs::rename(
             unpack_dir
@@ -208,6 +194,76 @@ pub async fn join_network(
         fs::remove_dir_all(unpack_dir.join(config::DEFAULT_BASE_DIR))
             .await
             .unwrap();
+    }
+
+    // Read the genesis files
+    let genesis = genesis::chain::Finalized::read_toml_files(&chain_dir)
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Failed to read genesis TOML files from {} with {err}.",
+                chain_dir.to_string_lossy()
+            );
+            cli::safe_exit(1)
+        });
+
+    // Try to find validator data when using a pre-genesis validator
+    let validator_alias = validator_alias_and_pre_genesis_wallet
+        .as_ref()
+        .map(|(alias, _wallet)| alias.clone());
+    let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
+        |(_alias, wallet)| {
+            let tendermint_node_key: common::SecretKey = wallet
+                .tendermint_node_key
+                .try_to_sk()
+                .unwrap_or_else(|_err| {
+                    eprintln!(
+                        "Tendermint node key must be common (need to change?)"
+                    );
+                    cli::safe_exit(1)
+                });
+            (tendermint_node_key, wallet.consensus_key.clone())
+        },
+    );
+    let node_mode = if validator_alias.is_some() {
+        TendermintMode::Validator
+    } else {
+        TendermintMode::Full
+    };
+
+    // Derive config from genesis
+    let config = genesis.derive_config(
+        &chain_dir,
+        node_mode,
+        validator_alias,
+        allow_duplicate_ip,
+    );
+
+    // Try to load pre-genesis wallet, if any
+    let pre_genesis_wallet_path = base_dir.join(PRE_GENESIS_DIR);
+    let pre_genesis_wallet = Wallet::load(&pre_genesis_wallet_path);
+    // Derive wallet from genesis
+    let wallet = genesis.derive_wallet(
+        &chain_dir,
+        pre_genesis_wallet,
+        validator_alias_and_pre_genesis_wallet,
+    );
+
+    // Save the config and the wallet
+    config.write(&base_dir, &chain_id, true).unwrap();
+    wallet.save().unwrap();
+
+    // Setup the node for a genesis validator, if used
+    if let Some((tendermint_node_key, consensus_key)) = validator_keys {
+        let tm_home_dir = chain_dir.join("tendermint");
+
+        // Write consensus key to tendermint home
+        tendermint_node::write_validator_key(&tm_home_dir, &consensus_key);
+
+        // Write tendermint node key
+        write_tendermint_node_key(&tm_home_dir, tendermint_node_key);
+
+        // Pre-initialize tendermint validator state
+        tendermint_node::write_validator_state(&tm_home_dir);
     }
 
     // Move wasm-dir and update config if it's non-default
@@ -240,97 +296,6 @@ pub async fn join_network(
         }
     }
 
-    // Setup the node for a genesis validator, if used
-    if let Some((validator_alias, pre_genesis_wallet)) =
-        validator_alias_and_pre_genesis_wallet
-    {
-        let tendermint_node_key: common::SecretKey = pre_genesis_wallet
-            .tendermint_node_key
-            .try_to_sk()
-            .unwrap_or_else(|_err| {
-                eprintln!(
-                    "Tendermint node key must be common (need to change?)"
-                );
-                cli::safe_exit(1)
-            });
-
-        let genesis_file_path =
-            base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let mut wallet = Wallet::load_or_new_from_genesis(
-            &chain_dir,
-            genesis_config::open_genesis_config(genesis_file_path).unwrap(),
-        );
-
-        let address = wallet
-            .find_address(&validator_alias)
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "Unable to find validator address for alias \
-                     {validator_alias}"
-                );
-                cli::safe_exit(1)
-            })
-            .clone();
-
-        let tm_home_dir = chain_dir.join("tendermint");
-
-        // Write consensus key to tendermint home
-        tendermint_node::write_validator_key(
-            &tm_home_dir,
-            &pre_genesis_wallet.consensus_key,
-        );
-
-        // Derive the node ID from the node key
-        let node_id = id_from_pk(&tendermint_node_key.ref_to());
-        // Write tendermint node key
-        write_tendermint_node_key(&tm_home_dir, tendermint_node_key);
-
-        // Pre-initialize tendermint validator state
-        tendermint_node::write_validator_state(&tm_home_dir);
-
-        // Extend the current wallet from the pre-genesis wallet.
-        // This takes the validator keys to be usable in future commands (e.g.
-        // to sign a tx from validator account using the account key).
-        wallet.extend_from_pre_genesis_validator(
-            address,
-            validator_alias.into(),
-            pre_genesis_wallet,
-        );
-
-        wallet.save().unwrap();
-
-        // Update the config from the default non-validator settings to
-        // validator settings
-        let base_dir = base_dir.clone();
-        let chain_id = chain_id.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut config = Config::load(&base_dir, &chain_id, None);
-
-            config.ledger.tendermint.tendermint_mode =
-                TendermintMode::Validator;
-            // Validator node should turned off peer exchange reactor
-            config.ledger.tendermint.p2p_pex = false;
-            // Remove self from persistent peers
-            config
-                .ledger
-                .tendermint
-                .p2p_persistent_peers
-                .retain(|peer| {
-                    if let TendermintAddress::Tcp {
-                        peer_id: Some(peer_id),
-                        ..
-                    } = peer
-                    {
-                        node_id != *peer_id
-                    } else {
-                        true
-                    }
-                });
-            config.write(&base_dir, &chain_id, true).unwrap();
-        })
-        .await
-        .unwrap();
-    }
     if !dont_prefetch_wasm {
         fetch_wasms_aux(&base_dir, &chain_id).await;
     }
@@ -354,28 +319,6 @@ pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
         path
     };
     wasm_loader::pre_fetch_wasm(&wasm_dir).await;
-}
-
-/// Length of a Tendermint Node ID in bytes
-const TENDERMINT_NODE_ID_LENGTH: usize = 20;
-
-/// Derive Tendermint node ID from public key
-pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
-    let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
-
-    match pk {
-        common::PublicKey::Ed25519(_) => {
-            let _pk: ed25519::PublicKey = pk.try_to_pk().unwrap();
-            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
-            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
-        }
-        common::PublicKey::Secp256k1(_) => {
-            let _pk: secp256k1::PublicKey = pk.try_to_pk().unwrap();
-            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
-            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
-        }
-    }
-    TendermintNodeId::new(bytes)
 }
 
 /// Initialize a new test network from the given configuration.
@@ -545,6 +488,21 @@ pub fn init_network(
             "Release archive created at {}",
             release_file.to_string_lossy()
         );
+    }
+
+    // After the archive is created, try to copy the built WASM, if they're
+    // present with the checksums. This is used for local network setup, so
+    // that we can use a local WASM build.
+    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full);
+    for (name, full_name) in checksums.0 {
+        // try to copy built file from the Namada WASM root dir
+        let file = std::env::current_dir()
+            .unwrap()
+            .join(crate::config::DEFAULT_WASM_DIR)
+            .join(&full_name);
+        if file.exists() {
+            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
+        }
     }
 }
 

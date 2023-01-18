@@ -4,9 +4,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::ledger::testnet_pow;
 use namada::core::types::key::common;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::core::types::token;
+use namada::types::chain::ProposalBytes;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +170,19 @@ pub struct ChainParams {
     /// Maximum duration per block (in seconds).
     // TODO: this is i64 because datetime wants it
     pub max_expected_time_per_block: i64,
+    /// Max payload size, in bytes, for a tx batch proposal.
+    ///
+    /// Block proposers may never return a `PrepareProposal`
+    /// response containing `txs` with a byte length greater
+    /// than whatever is configured through this parameter.
+    ///
+    /// Note that this parameter's value will always be strictly
+    /// smaller than a Tendermint block's `MaxBytes` consensus
+    /// parameter. Currently, we hard cap `max_proposal_bytes`
+    /// at 90 MiB in Namada, which leaves at least 10 MiB of
+    /// room for header data, evidence and protobuf
+    /// serialization overhead in Tendermint blocks.
+    pub max_proposal_bytes: ProposalBytes,
     /// Hashes of whitelisted vps array. `None` value or an empty array
     /// disables whitelisting.
     pub vp_whitelist: Option<Vec<String>>,
@@ -182,6 +197,15 @@ pub struct ChainParams {
     pub pos_gain_p: Decimal,
     /// PoS gain d
     pub pos_gain_d: Decimal,
+    #[cfg(not(feature = "mainnet"))]
+    /// Fix wrapper tx fees
+    pub wrapper_tx_fees: Option<token::Amount>,
+    #[cfg(not(feature = "mainnet"))]
+    /// Testnet faucet PoW difficulty - defaults to `0` when not set
+    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+    #[cfg(not(feature = "mainnet"))]
+    /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
+    pub faucet_withdrawal_limit: Option<token::Amount>,
 }
 
 #[derive(

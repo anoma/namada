@@ -443,7 +443,10 @@ fn start_abci_broadcaster_shell(
     // Construct our ABCI application.
     let tendermint_mode = config.tendermint.tendermint_mode.clone();
     let ledger_address = config.shell.ledger_address;
-    let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
+    let chain_dir = config.shell.base_dir.join(config.chain_id.as_str());
+    let genesis = genesis::chain::Finalized::read_toml_files(&chain_dir)
+        .expect("Missing genesis files");
+    let native_token = genesis.get_native_token().clone();
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,
@@ -451,7 +454,7 @@ fn start_abci_broadcaster_shell(
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
-        genesis.native_token,
+        native_token,
     );
 
     // Channel for signalling shut down to ABCI server

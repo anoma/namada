@@ -82,39 +82,6 @@ pub enum LoadStoreError {
 }
 
 impl Store {
-    #[cfg(not(test))]
-    fn new(genesis: GenesisConfig) -> Self {
-        let mut store = Self::default();
-        store.add_genesis_addresses(genesis);
-        store
-    }
-
-    #[cfg(test)]
-    fn new() -> Self {
-        let mut store = Self::default();
-        // Pre-load the default keys without encryption
-        let no_password = None;
-        for (alias, keypair) in super::defaults::keys() {
-            let pkh: PublicKeyHash = (&keypair.ref_to()).into();
-            store.keys.insert(
-                alias.clone(),
-                StoredKeypair::new(keypair, no_password.clone()).0,
-            );
-            store.pkhs.insert(pkh, alias);
-        }
-        store
-            .addresses
-            .extend(super::defaults::addresses().into_iter());
-        store
-    }
-
-    /// Add addresses from a genesis configuration.
-    pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
-        self.addresses.extend(
-            super::defaults::addresses_from_genesis(genesis).into_iter(),
-        );
-    }
-
     /// Save the wallet store to a file.
     pub fn save(&self, store_dir: &Path) -> std::io::Result<()> {
         let data = self.encode();
@@ -134,6 +101,7 @@ impl Store {
     pub fn load_or_new(store_dir: &Path) -> Result<Self, LoadStoreError> {
         Self::load(store_dir).or_else(|_| {
             let store = Self::default();
+            dbg!("new wallet", &store);
             store.save(store_dir).map_err(|err| {
                 LoadStoreError::StoreNewWallet(err.to_string())
             })?;
@@ -148,14 +116,8 @@ impl Store {
         genesis_cfg: GenesisConfig,
     ) -> Result<Self, LoadStoreError> {
         Self::load(store_dir).or_else(|_| {
-            #[cfg(not(test))]
-            let store = Self::new(genesis_cfg);
-            #[cfg(test)]
-            let store = {
-                // The function is unused in dev
-                let _ = genesis_cfg;
-                Self::new()
-            };
+            // TODO add genesis addresses (genesis `derive_wallet`?)
+            let store = Self::default();
             store.save(store_dir).map_err(|err| {
                 LoadStoreError::StoreNewWallet(err.to_string())
             })?;
@@ -179,7 +141,8 @@ impl Store {
                         err.to_string(),
                     )
                 })?;
-                Store::decode(store).map_err(LoadStoreError::Decode)
+                dbg!(store_dir);
+                dbg!(Store::decode(store).map_err(LoadStoreError::Decode))
             }
             Err(err) => Err(LoadStoreError::ReadWallet(
                 wallet_file.to_string_lossy().into_owned(),
@@ -618,6 +581,26 @@ impl Store {
         // with the pre-existing keypair
         self.restore_keypair(alias.clone(), counterpart_key, counterpart_pkh);
         Some(alias)
+    }
+
+    /// Extend this store from another store (typically pre-genesis).
+    /// Note that this method ignores `validator_data` if any.
+    pub fn extend(&mut self, store: Store) {
+        let Self {
+            view_keys,
+            spend_keys,
+            payment_addrs,
+            keys,
+            addresses,
+            pkhs,
+            validator_data: _,
+        } = self;
+        view_keys.extend(store.view_keys);
+        spend_keys.extend(store.spend_keys);
+        payment_addrs.extend(store.payment_addrs);
+        keys.extend(store.keys);
+        addresses.extend(store.addresses);
+        pkhs.extend(store.pkhs);
     }
 
     /// Extend this store from pre-genesis validator wallet.
