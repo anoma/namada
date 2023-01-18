@@ -16,8 +16,12 @@ use crate::storage::proof::EthereumProof;
 pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
 
 /// Storage sub-key space reserved to keeping track of the
-/// voting power assigned to Ethereum bridge pool roots + nonces.
-pub const BRIDGE_POOL_PREFIX_KEY_SEGMENT: &str = "bp_root_and_nonce";
+/// voting power assigned to Ethereum bridge pool roots.
+pub const BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT: &str = "bp_root";
+
+/// Storage sub-key space reserved to keeping track of the
+/// voting power assigned to Ethereum bridge pool nonces.
+pub const BRIDGE_POOL_NONCE_PREFIX_KEY_SEGMENT: &str = "bp_nonce";
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to validator set updates.
@@ -118,13 +122,7 @@ impl From<&Hash> for Keys<EthereumEvent> {
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool roots.
 #[derive(Clone)]
-pub(in super::super) struct BridgePoolRoot(KeccakHash);
-
-impl From<KeccakHash> for BridgePoolRoot {
-    fn from(root: KeccakHash) -> Self {
-        Self(root)
-    }
-}
+pub struct BridgePoolRoot(pub KeccakHash);
 
 impl BorshSerialize for BridgePoolRoot {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
@@ -141,13 +139,7 @@ impl BorshDeserialize for BridgePoolRoot {
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool nonces.
 #[derive(Clone)]
-pub(in super::super) struct BridgePoolNonce(Uint);
-
-impl From<Uint> for BridgePoolNonce {
-    fn from(nonce: Uint) -> Self {
-        Self(nonce)
-    }
-}
+pub struct BridgePoolNonce(pub Uint);
 
 impl BorshSerialize for BridgePoolNonce {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
@@ -161,18 +153,12 @@ impl BorshDeserialize for BridgePoolNonce {
     }
 }
 
-/// Get the key prefix corresponding to the storage location of
-/// bridge pool root and nonces whose "seen" state is being tracked.
-pub fn bridge_pool_prefix() -> Key {
-    super::prefix()
-        .push(&BRIDGE_POOL_PREFIX_KEY_SEGMENT.to_owned())
-        .expect("should always be able to construct this key")
-}
-
 impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
     fn from(hash: BridgePoolRoot) -> Self {
         let hash = hash.0.to_string();
-        let prefix = bridge_pool_prefix()
+        let prefix = super::prefix()
+            .push(&BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
             .push(&hash)
             .expect("should always be able to construct this key");
         Keys {
@@ -185,7 +171,9 @@ impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
 impl From<BridgePoolNonce> for Keys<BridgePoolNonce> {
     fn from(nonce: BridgePoolNonce) -> Self {
         let nonce = nonce.0.to_string();
-        let prefix = bridge_pool_prefix()
+        let prefix = super::prefix()
+            .push(&BRIDGE_POOL_NONCE_PREFIX_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
             .push(&nonce)
             .expect("should always be able to construct this key");
         Keys {

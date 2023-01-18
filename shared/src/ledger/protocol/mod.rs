@@ -571,17 +571,20 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
+    use namada_core::proto::{SignableEthBytes, Signed};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::token::Amount;
+    use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
     use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
     use namada_core::types::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::Votes;
+    use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada_ethereum_bridge::storage::vote_tallies;
-    use namada_ethereum_bridge::test_utils;
+    use namada_ethereum_bridge::{bridge_pool_vp, test_utils};
 
     use super::*;
 
@@ -631,6 +634,81 @@ mod tests {
             storage.read(&eth_msg_keys.voting_power())?;
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
+
+        Ok(())
+    }
+
+    #[test]
+    /// Tests that if the same [`ProtocolTxType::BridgePoolVext`] is applied
+    /// twice within the same block, it doesn't result in voting power being
+    /// double counted.
+    fn test_apply_protocol_tx_duplicate_bp_roots_vext() -> Result<()> {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut storage, keys) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+        bridge_pool_vp::init_storage(&mut storage);
+
+        let root = storage.get_bridge_pool_root();
+        let nonce = storage.get_bridge_pool_nonce();
+        test_utils::commit_bridge_pool_root_at_height(
+            &mut storage,
+            &root,
+            100.into(),
+        );
+        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let signing_key = key::testing::keypair_1();
+        let hot_key =
+            &keys[&address::testing::established_address_2()].eth_bridge;
+        let sig =
+            Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig;
+        let vext = BridgePoolRootVext {
+            block_height: BlockHeight(100),
+            validator_addr: address::testing::established_address_2(),
+            sig,
+        }
+        .sign(&signing_key);
+        let tx = ProtocolTxType::BridgePoolVext(vext);
+        apply_protocol_tx(tx.clone(), &mut storage)?;
+        apply_protocol_tx(tx, &mut storage)?;
+
+        let bp_root_keys =
+            vote_tallies::Keys::from(vote_tallies::BridgePoolRoot(root));
+        let bp_nonce_keys =
+            vote_tallies::Keys::from(vote_tallies::BridgePoolNonce(nonce));
+        let (root_seen_by_bytes, _) = storage.read(&bp_root_keys.seen_by())?;
+        let (nonce_seen_by_bytes, _) =
+            storage.read(&bp_nonce_keys.seen_by())?;
+        assert_eq!(
+            Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
+            Votes::from([(validator_a.clone(), BlockHeight(100))])
+        );
+        assert_eq!(
+            Votes::try_from_slice(nonce_seen_by_bytes.as_ref().unwrap())?,
+            Votes::from([(validator_a, BlockHeight(100))])
+        );
+
+        // the vote should have only be applied once
+        let (root_voting_power_bytes, _) =
+            storage.read(&bp_root_keys.voting_power())?;
+        let (nonce_voting_power_bytes, _) =
+            storage.read(&bp_nonce_keys.voting_power())?;
+        assert_eq!(
+            <(u64, u64)>::try_from_slice(
+                root_voting_power_bytes.as_ref().unwrap()
+            )?,
+            (1, 2)
+        );
+        assert_eq!(
+            <(u64, u64)>::try_from_slice(
+                nonce_voting_power_bytes.as_ref().unwrap()
+            )?,
+            (1, 2)
+        );
 
         Ok(())
     }
