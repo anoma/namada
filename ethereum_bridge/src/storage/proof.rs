@@ -4,8 +4,10 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::address::Address;
+use namada_core::types::eth_abi;
 use namada_core::types::key::{common, secp256k1};
 use namada_core::types::storage::BlockHeight;
+use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
 /// over some data to be signed.
@@ -50,6 +52,12 @@ impl<T> EthereumProof<T> {
         for ((address, block_height), signature) in batch {
             self.attach_signature(address, block_height, signature);
         }
+    }
+}
+
+impl eth_abi::Encode<X> for EthereumProof<VotingPowersMap> {
+    fn tokenize(&self) -> [eth_abi::Token; X] {
+        todo!()
     }
 }
 
