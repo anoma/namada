@@ -877,7 +877,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;

@@ -397,7 +397,7 @@ mod test_bp_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[test]
     fn test_bp_root_vext() {
-        let (mut shell, _, _) = setup_at_height(3u64);
+        let (mut shell, _, _, _) = setup_at_height(3u64);
         let address = shell
             .mode
             .get_validator_address()
@@ -563,7 +563,7 @@ mod test_bp_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[test]
     fn test_block_height_too_low() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(
             (shell.storage.last_height.0 - 1).into(),
             &shell,

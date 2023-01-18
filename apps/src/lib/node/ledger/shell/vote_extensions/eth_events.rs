@@ -381,7 +381,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[tokio::test]
     async fn test_eth_events_vote_extension() {
-        let (mut shell, _, oracle) = setup_at_height(1);
+        let (mut shell, _, oracle, _) = setup_at_height(1);
         let address = shell
             .mode
             .get_validator_address()

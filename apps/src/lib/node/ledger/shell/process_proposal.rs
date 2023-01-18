@@ -773,7 +773,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
         shell.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
@@ -817,7 +817,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     #[test]
     fn check_multiple_bp_root_vexts_rejected() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _) = setup_at_height(3u64);
         let vext = shell.extend_vote_with_bp_roots();
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
