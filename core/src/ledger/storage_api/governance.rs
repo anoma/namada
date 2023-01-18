@@ -30,7 +30,7 @@ where
 
     let proposal_type_key = storage::get_proposal_type_key(proposal_id);
     match data.r#type {
-        ProposalType::Default(Some(code)) => {
+        ProposalType::Default(Some(ref code)) => {
             // Remove wasm code and write it under a different subkey
             storage.write(&proposal_type_key, ProposalType::Default(None))?;
             let proposal_code_key = storage::get_proposal_code_key(proposal_id);

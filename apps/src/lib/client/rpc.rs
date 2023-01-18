@@ -24,6 +24,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::key;
+use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -38,7 +39,7 @@ use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
-    VotePower,
+    VotePower, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -757,6 +758,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
         let author_key = gov_storage::get_author_key(id);
         let start_epoch_key = gov_storage::get_voting_start_epoch_key(id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
+        let proposal_type_key = gov_storage::get_proposal_type_key(id);
 
         let author =
             query_storage_value::<Address>(client, &author_key).await?;
@@ -764,6 +766,9 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             query_storage_value::<Epoch>(client, &start_epoch_key).await?;
         let end_epoch =
             query_storage_value::<Epoch>(client, &end_epoch_key).await?;
+        let proposal_type =
+            query_storage_value::<ProposalType>(client, &proposal_type_key)
+                .await?;
 
         if details {
             let content_key = gov_storage::get_content_key(id);
@@ -777,6 +782,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 query_storage_value::<Epoch>(client, &grace_epoch_key).await?;
 
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type); //FIXME: need Offline type?
             println!("{:4}Author: {}", "", author);
             println!("{:4}Content:", "");
             for (key, value) in &content {
@@ -791,7 +797,8 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
                 let partial_proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
+                    compute_tally(client, start_epoch, votes, &proposal_type)
+                        .await;
                 println!(
                     "{:4}Yay votes: {}",
                     "", partial_proposal_result.total_yay_power
@@ -804,12 +811,14 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             } else {
                 let votes = get_proposal_votes(client, start_epoch, id).await;
                 let proposal_result =
-                    compute_tally(client, start_epoch, votes).await;
+                    compute_tally(client, start_epoch, votes, &proposal_type)
+                        .await;
                 println!("{:4}Status: done", "");
                 println!("{:4}Result: {}", "", proposal_result);
             }
         } else {
             println!("Proposal: {}", id);
+            println!("{:4}Type: {}", "", proposal_type);
             println!("{:4}Author: {}", "", author);
             println!("{:4}Start Epoch: {}", "", start_epoch);
             println!("{:4}End Epoch: {}", "", end_epoch);
@@ -1184,8 +1193,24 @@ pub async fn query_proposal_result(
                     if current_epoch > end_epoch {
                         let votes =
                             get_proposal_votes(&client, end_epoch, id).await;
-                        let proposal_result =
-                            compute_tally(&client, end_epoch, votes).await;
+                        let proposal_type_key =
+                            gov_storage::get_proposal_type_key(id);
+                        let proposal_type =
+                            query_storage_value::<ProposalType>(
+                                &client,
+                                &proposal_type_key,
+                            )
+                            .await
+                            .expect(
+                                "Could not read proposal type from storage",
+                            );
+                        let proposal_result = compute_tally(
+                            &client,
+                            end_epoch,
+                            votes,
+                            &proposal_type,
+                        )
+                        .await;
                         println!("Proposal: {}", id);
                         println!("{:4}Result: {}", "", proposal_result);
                     } else {
@@ -1282,9 +1307,13 @@ pub async fn query_proposal_result(
                             files,
                         )
                         .await;
-                        let proposal_result =
-                            compute_tally(&client, proposal.tally_epoch, votes)
-                                .await;
+                        let proposal_result = compute_tally(
+                            &client,
+                            proposal.tally_epoch,
+                            votes,
+                            &ProposalType::Default(None),
+                        )
+                        .await;
 
                         println!("{:4}Result: {}", "", proposal_result);
                     }
@@ -2330,11 +2359,16 @@ pub async fn get_proposal_votes(
     let vote_iter =
         query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut yay_delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
+    let mut nay_delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     if let Some(vote_iter) = vote_iter {
         for (key, vote) in vote_iter {
@@ -2347,7 +2381,7 @@ pub async fn get_proposal_votes(
                         .await
                         .unwrap_or_default()
                         .into();
-                yay_validators.insert(voter_address, amount);
+                yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -2366,13 +2400,17 @@ pub async fn get_proposal_votes(
                     if vote.is_yay() {
                         let entry =
                             yay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
+                        entry.insert(
+                            validator_address,
+                            (VotePower::from(amount), vote),
+                        );
                     } else {
                         let entry =
                             nay_delegators.entry(voter_address).or_default();
-                        entry
-                            .insert(validator_address, VotePower::from(amount));
+                        entry.insert(
+                            validator_address,
+                            (VotePower::from(amount), vote),
+                        );
                     }
                 }
             }
@@ -2395,11 +2433,16 @@ pub async fn get_proposal_offline_votes(
 
     let proposal_hash = proposal.compute_hash();
 
-    let mut yay_validators: HashMap<Address, VotePower> = HashMap::new();
-    let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
+    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
-        HashMap::new();
+    let mut yay_delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
+    let mut nay_delegators: HashMap<
+        Address,
+        HashMap<Address, (VotePower, ProposalVote)>,
+    > = HashMap::new();
 
     for path in files {
         let file = File::open(&path).expect("Proposal file must exist.");
@@ -2432,7 +2475,10 @@ pub async fn get_proposal_offline_votes(
             .await
             .unwrap_or_default()
             .into();
-            yay_validators.insert(proposal_vote.address, amount);
+            yay_validators.insert(
+                proposal_vote.address,
+                (amount, ProposalVote::Yay(VoteType::Default)),
+            );
         } else if is_delegator_at(
             client,
             &proposal_vote.address,
@@ -2476,12 +2522,21 @@ pub async fn get_proposal_offline_votes(
                     let entry = yay_delegators
                         .entry(proposal_vote.address.clone())
                         .or_default();
-                    entry.insert(validator, VotePower::from(delegated_amount));
+                    entry.insert(
+                        validator,
+                        (
+                            VotePower::from(delegated_amount),
+                            ProposalVote::Yay(VoteType::Default),
+                        ),
+                    );
                 } else {
                     let entry = nay_delegators
                         .entry(proposal_vote.address.clone())
                         .or_default();
-                    entry.insert(validator, VotePower::from(delegated_amount));
+                    entry.insert(
+                        validator,
+                        (VotePower::from(delegated_amount), ProposalVote::Nay),
+                    );
                 }
             }
 
@@ -2571,6 +2626,7 @@ pub async fn compute_tally(
     client: &HttpClient,
     epoch: Epoch,
     votes: Votes,
+    proposal_type: &ProposalType,
 ) -> ProposalResult {
     let total_staked_tokens: VotePower =
         get_total_staked_tokens(client, epoch).await.into();
@@ -2581,42 +2637,257 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    let mut total_yay_staked_tokens = VotePower::from(0_u64);
-    for (_, amount) in yay_validators.clone().into_iter() {
-        total_yay_staked_tokens += amount;
-    }
+    //FIXME: share some code with ledger
+    match proposal_type {
+        ProposalType::Default(_) => {
+            let mut total_yay_staked_tokens = VotePower::from(0u64);
+            for (_, (amount, validator_vote)) in yay_validators.iter() {
+                if let ProposalVote::Yay(VoteType::Default) = validator_vote {
+                    total_yay_staked_tokens += amount;
+                } else {
+                    tracing::error!(
+                        "Unexpected vote type while computing tally"
+                    );
+                    return ProposalResult {
+                        result: TallyResult::Failed,
+                        total_voting_power: total_staked_tokens,
+                        total_yay_power: 0,
+                        total_nay_power: 0,
+                    };
+                }
+            }
 
-    // YAY: Add delegator amount whose validator didn't vote / voted nay
-    for (_, vote_map) in yay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if !yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens += vote_power;
+            // YAY: Add delegator amount whose validator didn't vote / voted nay
+            for (_, vote_map) in yay_delegators.iter() {
+                for (validator_address, (vote_power, delegator_vote)) in
+                    vote_map.iter()
+                {
+                    if let ProposalVote::Yay(VoteType::Default) = delegator_vote
+                    {
+                        if !yay_validators.contains_key(validator_address) {
+                            total_yay_staked_tokens += vote_power;
+                        }
+                    } else {
+                        tracing::error!(
+                            "Unexpected vote type while computing tally"
+                        );
+                        return ProposalResult {
+                            result: TallyResult::Failed,
+                            total_voting_power: total_staked_tokens,
+                            total_yay_power: 0,
+                            total_nay_power: 0,
+                        };
+                    }
+                }
+            }
+
+            // NAY: Remove delegator amount whose validator validator vote yay
+            for (_, vote_map) in nay_delegators.iter() {
+                for (validator_address, (vote_power, delegator_vote)) in
+                    vote_map.iter()
+                {
+                    if let ProposalVote::Nay = delegator_vote {
+                        if yay_validators.contains_key(validator_address) {
+                            total_yay_staked_tokens -= vote_power;
+                        }
+                    } else {
+                        tracing::error!(
+                            "Unexpected vote type while computing tally"
+                        );
+                        return ProposalResult {
+                            result: TallyResult::Failed,
+                            total_voting_power: total_staked_tokens,
+                            total_yay_power: 0,
+                            total_nay_power: 0,
+                        };
+                    }
+                }
+            }
+
+            if total_yay_staked_tokens >= 2 / 3 * total_staked_tokens {
+                ProposalResult {
+                    result: TallyResult::Passed,
+                    total_voting_power: total_staked_tokens,
+                    total_yay_power: total_yay_staked_tokens,
+                    total_nay_power: 0, //FIXME: need this field?
+                }
+            } else {
+                ProposalResult {
+                    result: TallyResult::Rejected,
+                    total_voting_power: total_staked_tokens,
+                    total_yay_power: total_yay_staked_tokens,
+                    total_nay_power: 0,
+                }
             }
         }
-    }
-
-    // NAY: Remove delegator amount whose validator validator vote yay
-    for (_, vote_map) in nay_delegators.iter() {
-        for (validator_address, vote_power) in vote_map.iter() {
-            if yay_validators.contains_key(validator_address) {
-                total_yay_staked_tokens -= vote_power;
+        ProposalType::PGFCouncil => {
+            let mut total_yay_staked_tokens = HashMap::new();
+            for (_, (amount, vote)) in yay_validators.iter() {
+                if let ProposalVote::Yay(VoteType::PGFCouncil(votes)) = vote {
+                    for v in votes {
+                        *total_yay_staked_tokens.entry(v).or_insert(0) +=
+                            amount;
+                    }
+                } else {
+                    tracing::error!(
+                        "Unexpected vote type while computing tally"
+                    );
+                    return ProposalResult {
+                        result: TallyResult::Failed,
+                        total_voting_power: total_staked_tokens,
+                        total_yay_power: 0,
+                        total_nay_power: 0,
+                    };
+                }
             }
-        }
-    }
 
-    if total_yay_staked_tokens >= (total_staked_tokens / 3) * 2 {
-        ProposalResult {
-            result: TallyResult::Passed,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_staked_tokens,
-            total_yay_power: total_yay_staked_tokens,
-            total_nay_power: 0,
+            // YAY: Add delegator amount whose validator didn't vote / voted nay or adjust voting power
+            // if delegator voted yay with a different memo
+            for (_, vote_map) in yay_delegators.iter() {
+                for (validator_address, (vote_power, delegator_vote)) in
+                    vote_map.iter()
+                {
+                    if let ProposalVote::Yay(VoteType::PGFCouncil(
+                        delegator_votes,
+                    )) = delegator_vote
+                    {
+                        match yay_validators.get(validator_address) {
+                            Some((_, validator_vote)) => {
+                                if let ProposalVote::Yay(
+                                    VoteType::PGFCouncil(validator_votes),
+                                ) = validator_vote
+                                {
+                                    for vote in validator_votes
+                                        .symmetric_difference(delegator_votes)
+                                    {
+                                        if validator_votes.contains(vote) {
+                                            // Delegator didn't vote for this, reduce voting power
+                                            if let Some(power) =
+                                                total_yay_staked_tokens
+                                                    .get_mut(vote)
+                                            {
+                                                *power -= vote_power;
+                                            } else {
+                                                tracing::error!(
+"Expected PGF vote was not in tally"                                           );
+                                                return ProposalResult {
+                                                    result: TallyResult::Failed,
+                                                    total_voting_power:
+                                                        total_staked_tokens,
+                                                    total_yay_power: 0,
+                                                    total_nay_power: 0,
+                                                };
+                                            }
+                                        } else {
+                                            // Validator didn't vote for this, add voting power
+                                            *total_yay_staked_tokens
+                                                .entry(vote)
+                                                .or_insert(0) += vote_power;
+                                        }
+                                    }
+                                } else {
+                                    tracing::error!(
+                        "Unexpected vote type while computing tally"
+                    );
+                                    return ProposalResult {
+                                        result: TallyResult::Failed,
+                                        total_voting_power: total_staked_tokens,
+                                        total_yay_power: 0,
+                                        total_nay_power: 0,
+                                    };
+                                }
+                            }
+                            None => {
+                                // Validator didn't vote or voted nay, add delegator vote
+
+                                for vote in delegator_votes {
+                                    *total_yay_staked_tokens
+                                        .entry(vote)
+                                        .or_insert(0) += vote_power;
+                                }
+                            }
+                        }
+                    } else {
+                        tracing::error!(
+                            "Unexpected vote type while computing tally"
+                        );
+                        return ProposalResult {
+                            result: TallyResult::Failed,
+                            total_voting_power: total_staked_tokens,
+                            total_yay_power: 0,
+                            total_nay_power: 0,
+                        };
+                    }
+                }
+            }
+
+            // NAY: Remove delegator amount whose validator voted yay
+            for (_, vote_map) in nay_delegators.iter() {
+                for (validator_address, (vote_power, _delegator_vote)) in
+                    vote_map.iter()
+                {
+                    if yay_validators.contains_key(validator_address) {
+                        for (_, validator_vote) in
+                            yay_validators.get(validator_address)
+                        {
+                            if let ProposalVote::Yay(VoteType::PGFCouncil(
+                                votes,
+                            )) = validator_vote
+                            {
+                                for vote in votes {
+                                    if let Some(power) =
+                                        total_yay_staked_tokens.get_mut(vote)
+                                    {
+                                        *power -= vote_power;
+                                    } else {
+                                        tracing::error!(
+"Expected PGF vote was not in tally"                                           );
+                                        return ProposalResult {
+                                            result: TallyResult::Failed,
+                                            total_voting_power:
+                                                total_staked_tokens,
+                                            total_yay_power: 0,
+                                            total_nay_power: 0,
+                                        };
+                                    }
+                                }
+                            } else {
+                                tracing::error!(
+                            "Unexpected vote type while computing tally"
+                        );
+                                return ProposalResult {
+                                    result: TallyResult::Failed,
+                                    total_voting_power: total_staked_tokens,
+                                    total_yay_power: 0,
+                                    total_nay_power: 0,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
+            // At least 1/3 of the total voting power must vote Yay
+            let total_voted_power = total_yay_staked_tokens
+                .iter()
+                .fold(0, |acc, (_, vote_power)| acc + vote_power);
+
+            if total_voted_power >= 1 / 3 * total_staked_tokens {
+                //FIXME: add the winning council to the result
+                ProposalResult {
+                    result: TallyResult::Passed,
+                    total_voting_power: total_staked_tokens,
+                    total_yay_power: 0, //FIXME:
+                    total_nay_power: 0,
+                }
+            } else {
+                ProposalResult {
+                    result: TallyResult::Rejected,
+                    total_voting_power: total_staked_tokens,
+                    total_yay_power: 0, //FIXME:
+                    total_nay_power: 0,
+                }
+            }
         }
     }
 }

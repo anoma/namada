@@ -23,6 +23,7 @@ pub type VotePower = u128;
 #[derive(
     Debug,
     Clone,
+    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
@@ -33,13 +34,14 @@ pub type VotePower = u128;
 pub enum VoteType {
     /// A default vote without Memo
     Default,
-    /// A vote for the PGF council encoding for the proposed addresses and the budget cap
-    PGFCouncil(Vec<Address>, u64),
+    /// A vote for the PGF council encoding for the proposed multisig addresses and the budget cap
+    PGFCouncil(BTreeSet<(Address, u64)>),
 }
 
 #[derive(
     Debug,
     Clone,
+    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
@@ -83,6 +85,7 @@ pub enum ProposalVoteParseError {
 
 /// The result of a proposal
 pub enum TallyResult {
+    //FIXME: add payload to passed to specify the memo that passed
     /// Proposal was accepted
     Passed,
     /// Proposal was rejected
@@ -371,7 +374,11 @@ fn compute_total_valid_signatures(
                 hashed_data,
                 &signature_index.sig,
             );
-            if sig_check.is_ok() { acc + 1 } else { acc }
+            if sig_check.is_ok() {
+                acc + 1
+            } else {
+                acc
+            }
         } else {
             acc
         }

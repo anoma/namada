@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +24,15 @@ pub enum ProposalType {
     Default(Option<Vec<u8>>),
     /// PGF council proposal
     PGFCouncil,
+}
+
+impl Display for ProposalType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ProposalType::Default(_) => write!(f, "Default"),
+            ProposalType::PGFCouncil => write!(f, "PGF Council"),
+        }
+    }
 }
 
 impl PartialEq<VoteType> for ProposalType {
