@@ -730,11 +730,11 @@ where
     fn ensure_ethereum_oracle_started(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
-            eth_oracle_started: ethereum_oracle_started,
+            eth_oracle_started,
             ..
         } = &mut self.mode
         {
-            if *ethereum_oracle_started {
+            if *eth_oracle_started {
                 return;
             }
             let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
@@ -773,7 +773,7 @@ where
                     }
                 }
             }
-            *ethereum_oracle_started = true;
+            *eth_oracle_started = true;
         }
     }
 
