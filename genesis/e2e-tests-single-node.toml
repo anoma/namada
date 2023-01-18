@@ -78,13 +78,13 @@ locked_ratio_target_key = 0.6667
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
 vp = "vp_token"
-[token.Dot.balances]
+[token.DOT.balances]
 Albert = 1000000
 Bertha = 1000000
 Christel = 1000000
 Daewon = 1000000
 faucet = 9223372036854
-[token.Dot.parameters]
+[token.DOT.parameters]
 max_reward_rate = 0.1
 kd_gain_nom = 0.1
 kp_gain_nom = 0.1
