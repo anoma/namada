@@ -9,6 +9,20 @@ use eyre::{eyre, Result};
 use num_rational::Ratio;
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
+#[derive(
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Default,
+    Copy,
+    Clone,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Hash,
+    Debug,
+)]
 pub struct EthBridgeVotingPower(u64);
 
 impl From<&FractionalVotingPower> for EthBridgeVotingPower {
