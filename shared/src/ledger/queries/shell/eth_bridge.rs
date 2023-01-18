@@ -42,7 +42,7 @@ router! {ETH_BRIDGE,
     ( "validator_set" / "proof" / [epoch: Epoch] )
         -> EncodeCell<EthereumProof<VotingPowersMap>> = read_valset_upd_proof,
 
-    // Request the active validator set at the given epoch.
+    // Request the set of active validator at the given epoch.
     //
     // The request may fail if no validator set exists at that epoch.
     ( "validator_set" / "active" / [epoch: Epoch] )
