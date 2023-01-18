@@ -34,5 +34,6 @@
   - [Running a full node](./testnets/running-a-full-node.md)
   - [Becoming a validator post-genesis](./testnets/post-genesis-validator.md)
   - [Proof of Work on Namada](./testnets/pow.md)
+  - [Testnet Upgrades](./testnets/upgrades.md)
 - [Troubleshooting](./user-guide/troubleshooting.md)
 - [FAQ](./user-guide/FAQ.md)

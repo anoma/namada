@@ -21,6 +21,15 @@ If you find a bug, please submit an issue with the `bug` [issue template](https:
 
 ## Latest Testnet
 The Namada public testnet is permissionless, anyone can join without the authorisation of a centralised party. Expect frequent upgrades (every two weeks).
+
+- Most recent upgrade:
+  - From date: 17th of January 2023  
+  - Namada protocol version: `v0.13.1-hardfork` (hardfork)
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-2.0.2feaf2d718c`
+
+The above hardfork will take effect from Block Height `37370`
+
 - Most recent testnet:
   - From date: 12th of January 2023  
   - Namada protocol version: `v0.13.0` 
