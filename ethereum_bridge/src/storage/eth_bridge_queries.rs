@@ -60,6 +60,22 @@ pub trait EthBridgeQueries {
         epoch: Option<Epoch>,
     ) -> Option<EthAddress>;
 
+    /// For a given Namada validator, return its corresponding Ethereum
+    /// address book.
+    #[inline]
+    fn get_eth_addr_book(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddrBook> {
+        let bridge = self.get_ethbridge_from_namada_addr(validator, epoch)?;
+        let governance = self.get_ethgov_from_namada_addr(validator, epoch)?;
+        Some(EthAddrBook {
+            hot_key_addr: bridge,
+            cold_key_addr: governance,
+        })
+    }
+
     /// Extension of [`Self::get_active_validators`], which additionally returns
     /// all Ethereum addresses of some validator.
     fn get_active_eth_addresses<'db>(
