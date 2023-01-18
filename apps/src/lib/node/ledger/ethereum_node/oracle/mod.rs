@@ -351,6 +351,7 @@ fn process_queue(
 mod test_oracle {
     use std::num::NonZeroU64;
 
+    use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
@@ -621,14 +622,16 @@ mod test_oracle {
         .encode();
 
         // confirmed after 125 blocks
+        let gas_payer = gen_established_address();
         let second_event = RawTransfersToEthereum {
             transfers: vec![TransferToEthereum {
                 amount: Default::default(),
                 asset: EthAddress([0; 20]),
                 receiver: EthAddress([1; 20]),
+                gas_amount: Default::default(),
+                gas_payer: gas_payer.clone(),
             }],
             nonce: 1.into(),
-            confirmations: 125,
         }
         .encode();
 
@@ -695,6 +698,8 @@ mod test_oracle {
                     amount: Default::default(),
                     asset: EthAddress([0; 20]),
                     receiver: EthAddress([1; 20]),
+                    gas_amount: Default::default(),
+                    gas_payer,
                 }
             );
         } else {

@@ -297,6 +297,7 @@ mod test_vote_extensions {
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthBytes, Signed};
+    use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     #[cfg(feature = "abcipp")]
@@ -336,6 +337,8 @@ mod test_vote_extensions {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
@@ -344,6 +347,8 @@ mod test_vote_extensions {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_3 = EthereumEvent::NewContract {
@@ -390,6 +395,8 @@ mod test_vote_extensions {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::NewContract {
@@ -446,6 +453,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.get_current_decision_height(),
@@ -522,6 +531,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: signed_height,
@@ -585,6 +596,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,
@@ -658,6 +671,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,
