@@ -1098,13 +1098,20 @@ mod test_utils {
         ///      by the shell.
         ///    - A sender that can send Ethereum events into the ledger, mocking
         ///      the Ethereum fullnode process
+        ///    - A receiver for control commands sent by the shell to the
+        ///      Ethereum oracle
         pub fn new_at_height<H: Into<BlockHeight>>(
             height: H,
-        ) -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
+        ) -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            Sender<EthereumEvent>,
+            Receiver<oracle::control::Command>,
+        ) {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-            let (control_sender, _) = oracle::control::channel();
+            let (control_sender, control_receiver) = oracle::control::channel();
             let eth_oracle =
                 EthereumOracleChannels::new(eth_receiver, control_sender);
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
@@ -1125,15 +1132,19 @@ mod test_utils {
                 address::nam(),
             );
             shell.storage.last_height = height.into();
-            (Self { shell }, receiver, eth_sender)
+            (Self { shell }, receiver, eth_sender, control_receiver)
         }
 
         /// Same as [`TestShell::new_at_height`], but returns a shell at block
         /// height 0.
         #[inline]
         #[allow(dead_code)]
-        pub fn new() -> (Self, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>)
-        {
+        pub fn new() -> (
+            Self,
+            UnboundedReceiver<Vec<u8>>,
+            Sender<EthereumEvent>,
+            Receiver<oracle::control::Command>,
+        ) {
             Self::new_at_height(BlockHeight(1))
         }
 
@@ -1202,8 +1213,13 @@ mod test_utils {
     /// shell.
     pub(super) fn setup_at_height<H: Into<BlockHeight>>(
         height: H,
-    ) -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
-        let (mut test, receiver, eth_receiver) =
+    ) -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
+        let (mut test, receiver, eth_receiver, control_receiver) =
             TestShell::new_at_height(height);
         test.init_chain(RequestInitChain {
             time: Some(Timestamp {
@@ -1213,13 +1229,17 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
-        (test, receiver, eth_receiver)
+        (test, receiver, eth_receiver, control_receiver)
     }
 
     /// Same as [`setup`], but returns a shell at block height 0.
     #[inline]
-    pub(super) fn setup()
-    -> (TestShell, UnboundedReceiver<Vec<u8>>, Sender<EthereumEvent>) {
+    pub(super) fn setup() -> (
+        TestShell,
+        UnboundedReceiver<Vec<u8>>,
+        Sender<EthereumEvent>,
+        Receiver<oracle::control::Command>,
+    ) {
         setup_at_height(BlockHeight(0))
     }
 

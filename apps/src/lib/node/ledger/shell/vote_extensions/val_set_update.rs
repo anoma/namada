@@ -339,7 +339,7 @@ mod test_vote_extensions {
     /// block height it was included on in a vote extension is rejected
     #[test]
     fn test_reject_incorrect_block_height() {
-        let (shell, _recv, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 
@@ -422,7 +422,7 @@ mod test_vote_extensions {
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
-        let (shell, _recv, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let (eth_bridge_key, _protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -500,7 +500,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_valset_upd_vexts() {
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _oracle_control_recv) = test_utils::setup();
         let protocol_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let eth_bridge_key = shell
@@ -578,7 +578,7 @@ mod test_vote_extensions {
     /// is rejected
     #[test]
     fn test_reject_bad_signatures() {
-        let (shell, _recv, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
 

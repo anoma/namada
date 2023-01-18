@@ -332,7 +332,7 @@ mod test_vote_extensions {
     /// done
     #[test]
     fn test_get_eth_events() {
-        let (mut shell, _, oracle) = setup();
+        let (mut shell, _, oracle, _) = setup();
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
@@ -434,7 +434,7 @@ mod test_vote_extensions {
     /// Test that Ethereum events signed by a non-validator are rejected
     #[test]
     fn test_eth_events_must_be_signed_by_validator() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         let signing_key = gen_keypair();
         let address = shell
             .mode
@@ -509,7 +509,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_eth_events_vexts() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let signing_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell
@@ -578,7 +578,7 @@ mod test_vote_extensions {
     /// greater than latest block height.
     #[test]
     fn reject_incorrect_block_number() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         #[allow(clippy::redundant_clone)]
         let mut ethereum_events = ethereum_events::Vext {
@@ -651,7 +651,7 @@ mod test_vote_extensions {
     /// issued at genesis
     #[test]
     fn test_reject_genesis_vexts() {
-        let (shell, _, _) = setup();
+        let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         #[allow(clippy::redundant_clone)]
         let vote_ext = ethereum_events::Vext {

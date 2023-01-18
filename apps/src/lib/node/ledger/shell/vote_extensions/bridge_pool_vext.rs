@@ -365,7 +365,8 @@ mod test_bp_vote_extensions {
     /// payload passes validation.
     #[test]
     fn test_happy_flow() {
-        let (mut shell, _broadcaster, _) = setup_at_height(3u64);
+        let (mut shell, _broadcaster, _, _oracle_control_recv) =
+            setup_at_height(3u64);
         let address = shell
             .mode
             .get_validator_address()
@@ -440,7 +441,8 @@ mod test_bp_vote_extensions {
     /// in a block proposal by validator address.
     #[test]
     fn test_vexts_are_de_duped() {
-        let (mut shell, _broadcaster, _) = setup_at_height(3u64);
+        let (mut shell, _broadcaster, _, _oracle_control_recv) =
+            setup_at_height(3u64);
         let address = shell
             .mode
             .get_validator_address()
@@ -474,7 +476,8 @@ mod test_bp_vote_extensions {
     /// even if the vext is signed by a validator
     #[test]
     fn test_bp_roots_must_be_signed_by_validator() {
-        let (mut shell, _broadcaster, _) = setup_at_height(3u64);
+        let (mut shell, _broadcaster, _, _oracle_control_recv) =
+            setup_at_height(3u64);
         let signing_key = gen_keypair();
         let address = shell
             .mode
@@ -502,7 +505,8 @@ mod test_bp_vote_extensions {
     /// are from the same validator.
     #[test]
     fn test_bp_root_sigs_from_same_validator() {
-        let (mut shell, _broadcaster, _) = setup_at_height(3u64);
+        let (mut shell, _broadcaster, _, _oracle_control_recv) =
+            setup_at_height(3u64);
         let address = shell
             .mode
             .get_validator_address()
@@ -550,7 +554,7 @@ mod test_bp_vote_extensions {
     /// block height as greater than the latest block height is rejected.
     #[test]
     fn test_block_height_too_high() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(shell.storage.last_height + 1, &shell);
     }
 
@@ -570,7 +574,7 @@ mod test_bp_vote_extensions {
     /// issued at genesis.
     #[test]
     fn test_reject_genesis_vexts() {
-        let (shell, _, _) = setup();
+        let (shell, _, _, _) = setup();
         reject_incorrect_block_number(0.into(), &shell);
     }
 
@@ -578,7 +582,7 @@ mod test_bp_vote_extensions {
     /// if the nonce is incorrect.
     #[test]
     fn test_incorrect_nonce() {
-        let (shell, _, _) = setup();
+        let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
@@ -601,7 +605,7 @@ mod test_bp_vote_extensions {
     /// if the root is incorrect.
     #[test]
     fn test_incorrect_root() {
-        let (shell, _, _) = setup();
+        let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
@@ -625,7 +629,7 @@ mod test_bp_vote_extensions {
     #[cfg(not(feature = "abcipp"))]
     #[test]
     fn test_vext_for_old_height() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
@@ -693,7 +697,7 @@ mod test_bp_vote_extensions {
     #[cfg(not(feature = "abcipp"))]
     #[test]
     fn test_wrong_height_for_root() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
