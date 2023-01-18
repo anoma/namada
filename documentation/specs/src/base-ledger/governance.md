@@ -105,13 +105,13 @@ At the moment, Namada supports 3 types of governance proposals:
 ```rust
 pub enum ProposalType {
   /// Carries the optional proposal code path
-  Custom(Option<String>),
+  Default(Option<String>),
   PGFCouncil,
   ETHBridge,
 }
 ```
 
-`Custom` represents a generic proposal with the following properties:
+`Default` represents a generic proposal with the following properties:
 
 - Can carry a wasm code to be executed in case the proposal passes
 - Allows both validators and delegators to vote
@@ -122,7 +122,7 @@ pub enum ProposalType {
 
 - Doesn't carry any wasm code
 - Allows both validators and delegators to vote
-- Requires 1/3 of the total voting power to vote
+- Requires 1/3 of the total voting power to vote `Yay`
 - Expect every vote to carry a memo in the form of a tuple `(Set<Address>, BudgetCap)`
 
 `ETHBridge` is aimed at regulating actions on the bridge like the update of the Ethereum smart contracts or the withdrawing of all the funds from the `Vault` :
