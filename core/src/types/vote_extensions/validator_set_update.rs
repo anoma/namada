@@ -9,7 +9,7 @@ use ethabi::ethereum_types as ethereum;
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::eth_abi::{AbiEncode, Encode, Token};
-use crate::types::ethereum_events::{EthAddress, Uint};
+use crate::types::ethereum_events::EthAddress;
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::Epoch;
@@ -284,13 +284,16 @@ fn compute_hash(
 /// arguments with ABI for Ethereum smart
 /// contracts.
 #[derive(Debug, Clone, Default)]
+// TODO: find a new home for this type
 pub struct ValidatorSetArgs {
-    /// Ethereum address of validators
+    /// Ethereum addresses of the validators.
     pub validators: Vec<EthAddress>,
-    /// Voting powers of validators
-    pub powers: Vec<Uint>,
-    /// A nonce
-    pub nonce: Uint,
+    /// The voting powers of the validators.
+    pub voting_powers: Vec<EthBridgeVotingPower>,
+    /// The epoch when the validators were active.
+    ///
+    /// Serves as a nonce.
+    pub epoch: Epoch,
 }
 
 impl Encode<1> for ValidatorSetArgs {
@@ -302,12 +305,12 @@ impl Encode<1> for ValidatorSetArgs {
                 .collect(),
         );
         let powers = Token::Array(
-            self.powers
+            self.voting_powers
                 .iter()
-                .map(|power| Token::Uint(power.clone().into()))
+                .map(|&power| Token::Uint(power.into()))
                 .collect(),
         );
-        let nonce = Token::Uint(self.nonce.clone().into());
+        let nonce = Token::Uint(self.epoch.0.into());
         [Token::Tuple(vec![addrs, powers, nonce])]
     }
 }
