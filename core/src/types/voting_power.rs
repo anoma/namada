@@ -4,8 +4,46 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
 use num_rational::Ratio;
+
+/// Namada voting power, normalized to the range `0 - 2^32`.
+pub struct EthBridgeVotingPower(u64);
+
+impl From<&FractionalVotingPower> for EthBridgeVotingPower {
+    fn from(ratio: &FractionalVotingPower) -> Self {
+        // normalize the voting power
+        // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
+        const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
+
+        let voting_power = ratio.0 * NORMALIZED_VOTING_POWER;
+        let voting_power = voting_power.round().to_integer();
+
+        Self(voting_power)
+    }
+}
+
+impl From<FractionalVotingPower> for EthBridgeVotingPower {
+    #[inline]
+    fn from(ratio: FractionalVotingPower) -> Self {
+        (&ratio).into()
+    }
+}
+
+impl From<EthBridgeVotingPower> for ethereum::U256 {
+    #[inline]
+    fn from(EthBridgeVotingPower(voting_power): EthBridgeVotingPower) -> Self {
+        voting_power.into()
+    }
+}
+
+impl From<EthBridgeVotingPower> for u64 {
+    #[inline]
+    fn from(EthBridgeVotingPower(voting_power): EthBridgeVotingPower) -> u64 {
+        voting_power
+    }
+}
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.

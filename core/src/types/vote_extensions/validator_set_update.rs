@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
-use num_rational::Ratio;
 
 use crate::proto::Signed;
 use crate::types::address::Address;
@@ -15,6 +14,7 @@ use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::Epoch;
 use crate::types::token;
+use crate::types::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 
 // the contract versions and namespaces plugged into validator set hashes
 // TODO: ideally, these values should not be hardcoded
@@ -223,20 +223,16 @@ impl VotingPowersMapExt for VotingPowersMap {
         sorted.into_iter().fold(
             Default::default(),
             |accum, (addr_book, &voting_power)| {
-                let voting_power: u64 = voting_power.into();
-
-                // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-                const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
-
-                // TODO: check if this code is buggy. the total voting power
-                // that ends up in `voting_powers` might be greater than 2^32.
-                // we should write a proptest to check if it overflows 2^32 with
-                // some specific set of input values.
-                let voting_power = Ratio::new(voting_power, total_voting_power)
-                    * NORMALIZED_VOTING_POWER;
-                let voting_power = voting_power.round().to_integer();
-                let voting_power: ethereum::U256 = voting_power.into();
+                let voting_power: EthBridgeVotingPower =
+                    FractionalVotingPower::new(
+                        voting_power.into(),
+                        total_voting_power,
+                    )
+                    .expect(
+                        "Voting power in map can't be larger than the total \
+                         voting power",
+                    )
+                    .into();
 
                 let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
                     accum;
@@ -249,7 +245,7 @@ impl VotingPowersMapExt for VotingPowersMap {
                     .push(Token::Address(ethereum::H160(hot_key_addr)));
                 cold_key_addrs
                     .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power));
+                voting_powers.push(Token::Uint(voting_power.into()));
 
                 (hot_key_addrs, cold_key_addrs, voting_powers)
             },
