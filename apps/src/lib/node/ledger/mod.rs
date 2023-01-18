@@ -669,6 +669,7 @@ async fn maybe_start_ethereum_oracle(
                     move |aborter| async move {
                         ethereum_node::test_tools::events_endpoint::serve(
                             eth_sender,
+                            control_receiver,
                             oracle_abort_recv,
                         )
                         .await;
