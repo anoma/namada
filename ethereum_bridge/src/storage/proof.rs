@@ -55,8 +55,8 @@ impl<T> EthereumProof<T> {
     }
 }
 
-impl eth_abi::Encode<X> for EthereumProof<VotingPowersMap> {
-    fn tokenize(&self) -> [eth_abi::Token; X] {
+impl eth_abi::Encode<0> for EthereumProof<VotingPowersMap> {
+    fn tokenize(&self) -> [eth_abi::Token; 0] {
         todo!()
     }
 }
