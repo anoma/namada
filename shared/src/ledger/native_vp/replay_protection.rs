@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::{replay_protection, storage};
+use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use thiserror::Error;
@@ -44,36 +44,11 @@ where
     fn validate_tx(
         &self,
         _tx_data: &[u8],
-        keys_changed: &BTreeSet<Key>,
+        _keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         // VP should prevent any modification of the subspace.
         // Changes are only allowed from protocol
-        let result = keys_changed.iter().all(|key| {
-            let key_type: KeyType = key.into();
-            match key_type {
-                KeyType::TX_HASH => false,
-                KeyType::UNKNOWN => true,
-            }
-        });
-
-        Ok(result)
-    }
-}
-
-#[allow(clippy::upper_case_acronyms)]
-enum KeyType {
-    #[allow(non_camel_case_types)]
-    TX_HASH,
-    UNKNOWN,
-}
-
-impl From<&Key> for KeyType {
-    fn from(value: &Key) -> Self {
-        if replay_protection::is_tx_hash_key(value) {
-            KeyType::TX_HASH
-        } else {
-            KeyType::UNKNOWN
-        }
+        Ok(false)
     }
 }
