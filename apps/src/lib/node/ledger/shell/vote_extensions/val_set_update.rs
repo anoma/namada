@@ -157,13 +157,10 @@ where
             VoteExtensionError,
         >,
     > + '_ {
-        // TODO: filter vexts whose epoch is not the current one
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
-                self.storage.get_epoch(self.storage.last_height).expect(
-                    "The epoch of the last block height should always be known",
-                ),
+                self.storage.get_current_epoch().0,
             )
         })
     }
