@@ -639,7 +639,11 @@ mod tests {
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
         let vp_hash = sha256(&vp_code);
-        tx_env.init_parameters(None, Some(vec![vp_hash.to_string()]), None);
+        tx_env.init_parameters(
+            None,
+            Some(vec![vp_hash.to_string().to_lowercase()]),
+            None,
+        );
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -728,7 +732,7 @@ mod tests {
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
-        tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string()]));
+        tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string().to_lowercase()]));
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
