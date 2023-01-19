@@ -2,11 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use borsh::BorshDeserialize;
 use eyre::Result;
-use namada_core::ledger::eth_bridge::storage::{
-    native_erc20_key, wrapped_erc20s,
-};
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
 use namada_core::types::address::Address;
@@ -16,6 +13,7 @@ use namada_core::types::ethereum_events::{
 use namada_core::types::storage::Key;
 use namada_core::types::token;
 
+use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
@@ -48,7 +46,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let wrapped_native_erc20 = native_erc20_address(storage)?;
+    let wrapped_native_erc20 = read_native_erc20_address(storage)?;
     let mut changed_keys = BTreeSet::default();
     for TransferToNamada {
         asset,
@@ -116,24 +114,6 @@ where
     Ok(changed_keys)
 }
 
-/// This must get the Ethereum address of wrapped native asset from storage. If
-/// this isn't possible, the program panics.
-/// TODO: adapted from <https://github.com/anoma/namada/blob/fd46922fdbee5445a7f3878174408ca437d7a550/shared/src/ledger/native_vp/ethereum_bridge/bridge_pool_vp.rs#L126>, should consolidate
-fn native_erc20_address<D, H>(storage: &Storage<D, H>) -> Result<EthAddress>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    // TODO: assuming here that if `.read` errors, it's recoverable?
-    match storage.read(&native_erc20_key())? {
-        (Some(bytes), _) => Ok(EthAddress::try_from_slice(bytes.as_slice())
-            .expect("Cannot deserialize the native ERC20 address in storage!")),
-        (None, _) => panic!(
-            "Cannot apply an Ethereum event as Ethereum bridge configuration \
-             is not initialized!"
-        ),
-    }
-}
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

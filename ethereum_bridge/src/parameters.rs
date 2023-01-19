@@ -2,6 +2,7 @@
 use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use eyre::{eyre, Result};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::Storage;
@@ -215,6 +216,31 @@ impl EthereumBridgeConfig {
                 governance: governance_contract,
             },
         })
+    }
+}
+
+/// Get the Ethereum address for wNam from storage, if possible
+pub fn read_native_erc20_address<DB, H>(
+    storage: &Storage<DB, H>,
+) -> Result<EthAddress>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::traits::StorageHasher,
+{
+    let native_erc20 = bridge_storage::native_erc20_key();
+    match storage.read(&native_erc20) {
+        Ok((Some(bytes), _)) => {
+            Ok(EthAddress::try_from_slice(bytes.as_slice()).expect(
+                "Deserializing the Native ERC20 address from storage \
+                 shouldn't fail.",
+            ))
+        }
+        Ok(_) => Err(eyre!("The Ethereum bridge storage is not initialized")),
+        Err(e) => Err(eyre!(
+            "Failed to read storage when fetching the native ERC20 address \
+             with: {}",
+            e.to_string()
+        )),
     }
 }
 
