@@ -8,7 +8,9 @@ use namada_core::types::ethereum_events::EthereumEvent;
 
 /// Simple client for submitting fake Ethereum events to a Namada node.
 pub struct EventsEndpointClient {
+    // The client used to send HTTP requests to the Namada node.
     http: Client<HttpConnector, Body>,
+    // The URL to which Borsh-serialized Ethereum events should be HTTP POSTed. e.g. "http://0.0.0.0:3030/eth_events"
     events_endpoint: String,
 }
 
