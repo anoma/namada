@@ -248,9 +248,10 @@ fn test_add_to_bridge_pool() {
     namadar.exp_string(r#""bridge_pool_contents":"#).unwrap();
 }
 
-/// Tests redemption of wNAM ERC20s from Ethereum for native NAM on Namada.
+/// Tests transfers of wNAM ERC20s from Ethereum are treated differently to
+/// other ERC20 transfers.
 #[tokio::test]
-async fn redeem_wnam() -> Result<()> {
+async fn test_wnam_transfer() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
