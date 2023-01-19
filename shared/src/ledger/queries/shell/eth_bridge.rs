@@ -270,6 +270,9 @@ where
     .encode())
 }
 
+// TODO: write tests for
+// - read_active_valset
+// - read_valset_upd_proof
 #[cfg(test)]
 mod test_ethbridge_router {
     use std::collections::BTreeSet;
