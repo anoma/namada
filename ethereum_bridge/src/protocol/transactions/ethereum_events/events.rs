@@ -116,8 +116,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use namada_core::ledger::storage::testing::TestStorage;
@@ -129,12 +127,15 @@ mod tests {
     use namada_core::types::token::Amount;
 
     use super::*;
+    use crate::test_utils::{self, stored_keys_count};
 
     #[test]
     /// Test that we do not make any changes to storage when acting on most
     /// events
     fn test_act_on_does_nothing_for_other_events() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
         let events = vec![
             EthereumEvent::NewContract {
                 name: "bridge".to_string(),
@@ -161,10 +162,9 @@ mod tests {
 
         for event in events.iter() {
             act_on(&mut storage, event).unwrap();
-            let root = Key::from_str("").unwrap();
             assert_eq!(
-                storage.iter_prefix(&root).0.count(),
-                0,
+                stored_keys_count(&storage),
+                initial_stored_keys_count,
                 "storage changed unexpectedly while acting on event: {:#?}",
                 event
             );
@@ -176,6 +176,8 @@ mod tests {
     /// TransfersToNamada batch
     fn test_act_on_changes_storage_for_transfers_to_namada() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
@@ -190,14 +192,15 @@ mod tests {
 
         act_on(&mut storage, &event).unwrap();
 
-        let root = Key::from_str("").unwrap();
-        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
+        assert_eq!(stored_keys_count(&storage), initial_stored_keys_count + 2);
     }
 
     #[test]
     /// Test acting on a single transfer and minting the first ever wDAI
     fn test_act_on_transfers_to_namada_mints_wdai() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
 
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
@@ -213,8 +216,7 @@ mod tests {
         let receiver_balance_key = wdai.balance(&receiver);
         let wdai_supply_key = wdai.supply();
 
-        let root = Key::from_str("").unwrap();
-        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
+        assert_eq!(stored_keys_count(&storage), initial_stored_keys_count + 2);
 
         let expected_amount = amount.try_to_vec().unwrap();
         for key in vec![receiver_balance_key, wdai_supply_key] {

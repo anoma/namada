@@ -1,13 +1,17 @@
 //! Test utilies for the Ethereum bridge crate.
 
 use std::collections::{BTreeSet, HashMap};
+use std::num::NonZeroU64;
+use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use namada_core::ledger::storage::testing::TestStorage;
-use namada_core::types::address::{self, Address};
+use namada_core::types::address::{self, wnam, Address};
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::{
     self, protocol_pk_key, RefTo, SecretKey, SigScheme,
 };
+use namada_core::types::storage::Key;
 use namada_core::types::token;
 use namada_proof_of_stake::epoched::Epoched;
 use namada_proof_of_stake::parameters::PosParams;
@@ -17,6 +21,11 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::PosBase;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
+
+use crate::parameters::{
+    ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+    UpgradeableContract,
+};
 
 /// Validator keys used for testing purposes.
 pub struct TestValidatorKeys {
@@ -41,6 +50,40 @@ pub fn setup_default_storage()
         address::testing::established_address_1(),
         100_u64.into(),
     )]))
+}
+
+/// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestStorage`], and
+/// returns it.
+pub fn bootstrap_ethereum_bridge(
+    storage: &mut TestStorage,
+) -> EthereumBridgeConfig {
+    let config = EthereumBridgeConfig {
+        min_confirmations: MinimumConfirmations::from(unsafe {
+            // SAFETY: The only way the API contract of `NonZeroU64` can
+            // be violated is if we construct values
+            // of this type using 0 as argument.
+            NonZeroU64::new_unchecked(10)
+        }),
+        contracts: Contracts {
+            native_erc20: wnam(),
+            bridge: UpgradeableContract {
+                address: EthAddress([2; 20]),
+                version: ContractVersion::default(),
+            },
+            governance: UpgradeableContract {
+                address: EthAddress([3; 20]),
+                version: ContractVersion::default(),
+            },
+        },
+    };
+    config.init_storage(storage);
+    config
+}
+
+/// Returns the number of keys in `storage` which have values present.
+pub fn stored_keys_count(storage: &TestStorage) -> usize {
+    let root = Key::from_str("").unwrap();
+    storage.iter_prefix(&root).0.count()
 }
 
 /// Set up a [`TestStorage`] initialized at genesis with the given
