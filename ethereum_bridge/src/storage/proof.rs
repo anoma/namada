@@ -4,9 +4,10 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::eth_abi;
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
 use namada_core::types::vote_extensions::validator_set_update::{
-    EthAddrBook, VotingPowersMap,
+    valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
@@ -55,15 +56,42 @@ impl<T> EthereumProof<T> {
 }
 
 impl eth_abi::Encode<1> for EthereumProof<VotingPowersMap> {
-    // TODO: finish this
     fn tokenize(&self) -> [eth_abi::Token; 1] {
-        let bridge_hash = eth_abi::Token::FixedBytes(vec![]);
-        let gov_hash = eth_abi::Token::FixedBytes(vec![]);
-        let signatures = eth_abi::Token::Array(vec![]);
+        let (hot_key_addrs, cold_key_addrs, voting_powers) =
+            self.data.get_abi_encoded();
+        let signatures = (hot_key_addrs.iter().zip(cold_key_addrs.iter()))
+            .map(|addresses| {
+                let (bridge_addr, gov_addr) = match addresses {
+                    (
+                        &eth_abi::Token::Address(hot),
+                        &eth_abi::Token::Address(cold),
+                    ) => (hot, cold),
+                    _ => unreachable!(
+                        "Hot and cold key address tokens should have the \
+                         correct variant"
+                    ),
+                };
+                let addr_book = EthAddrBook {
+                    hot_key_addr: bridge_addr.into(),
+                    cold_key_addr: gov_addr.into(),
+                };
+                let sig = &self.signatures[&addr_book];
+                let [tokenized_sig] = sig.tokenize();
+                tokenized_sig
+            })
+            .collect();
+        let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
+            valset_upd_toks_to_hashes(
+                // TODO: add signing epoch here
+                0.into(),
+                hot_key_addrs,
+                cold_key_addrs,
+                voting_powers,
+            );
         [eth_abi::Token::Tuple(vec![
-            bridge_hash,
-            gov_hash,
-            signatures,
+            eth_abi::Token::FixedBytes(bridge_hash.to_vec()),
+            eth_abi::Token::FixedBytes(gov_hash.to_vec()),
+            eth_abi::Token::Array(signatures),
         ])]
     }
 }
