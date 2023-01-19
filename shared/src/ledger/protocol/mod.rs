@@ -252,6 +252,10 @@ where
             );
             Ok(TxResult::default())
         }
+        ProtocolTxType::BridgePool(vexts) => {
+            transactions::bridge_pool_roots::apply_derived_tx(storage, vexts)
+                .map_err(Error::ProtocolTxError)
+        }
         _ => {
             tracing::error!(
                 "Attempt made to apply an unsupported protocol transaction! - \

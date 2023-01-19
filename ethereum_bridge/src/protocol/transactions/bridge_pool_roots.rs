@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_root_key,
+    get_signed_nonce_key, get_signed_root_key,
 };
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::address::Address;
@@ -23,7 +23,9 @@ use crate::storage::vote_tallies;
 use crate::storage::vote_tallies::{BridgePoolNonce, BridgePoolRoot};
 
 /// Applies a tally of signatures on over the Ethereum
-/// bridge pool root and nonce.
+/// bridge pool root and nonce. Note that every signature
+/// passed into this function will be for the same
+/// root and nonce.
 ///
 /// For roots + nonces which have been seen by a quorum of
 /// validators, the signature is made available for bridge
@@ -87,14 +89,14 @@ where
     if confirmed {
         storage
             .write(
-                &get_nonce_key(),
+                &get_signed_nonce_key(),
                 bp_root
                     .nonce
                     .try_to_vec()
                     .expect("Serializing a Uint should not fail."),
             )
             .expect("Writing a signed bridge pool nonce should not fail");
-        changed.insert(get_nonce_key());
+        changed.insert(get_signed_nonce_key());
     }
     Ok(TxResult {
         changed_keys: changed,
@@ -190,6 +192,9 @@ where
 mod test_apply_bp_roots_to_storage {
     use std::collections::BTreeSet;
 
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+        get_key_from_hash, get_nonce_key,
+    };
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::proto::{SignableEthBytes, Signed};
     use namada_core::types::address;
@@ -226,12 +231,22 @@ mod test_apply_bp_roots_to_storage {
             ]),
         );
         bridge_pool_vp::init_storage(&mut storage);
-        let root = storage.get_bridge_pool_root();
         test_utils::commit_bridge_pool_root_at_height(
             &mut storage,
-            &root,
+            &KeccakHash([1; 32]),
             100.into(),
         );
+        storage
+            .block
+            .tree
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), [0])
+            .expect("Test failed");
+        storage
+            .write(
+                &get_nonce_key(),
+                Uint::from(42).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
         TestPackage {
             validators: [validator_a, validator_b, validator_c],
             keys,
@@ -358,7 +373,7 @@ mod test_apply_bp_roots_to_storage {
             }
         });
         expected.insert(get_signed_root_key());
-        expected.insert(get_nonce_key());
+        expected.insert(get_signed_nonce_key());
         assert_eq!(expected, changed_keys);
     }
 
@@ -422,7 +437,7 @@ mod test_apply_bp_roots_to_storage {
             }
         });
         expected.insert(get_signed_root_key());
-        expected.insert(get_nonce_key());
+        expected.insert(get_signed_nonce_key());
         assert_eq!(expected, changed_keys);
     }
 
@@ -505,5 +520,305 @@ mod test_apply_bp_roots_to_storage {
         )
         .expect("Test failed");
         assert_eq!(voting_power, (5, 6));
+    }
+
+    #[test]
+    /// Test that the seen storage key is updated correctly.
+    fn test_seen() {
+        let TestPackage {
+            validators,
+            keys,
+            mut storage,
+        } = setup();
+        let root = storage.get_bridge_pool_root();
+        let nonce = storage.get_bridge_pool_nonce();
+        let to_sign = [root.0, nonce.to_bytes()].concat();
+        let hot_key = &keys[&validators[0]].eth_bridge;
+
+        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
+            storage.get_bridge_pool_root(),
+        ));
+        let bp_nonce_key = vote_tallies::Keys::from(BridgePoolNonce(
+            storage.get_bridge_pool_nonce(),
+        ));
+
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[0].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
+                hot_key,
+                to_sign.clone(),
+            )
+            .sig,
+        }
+        .sign(&keys[&validators[0]].protocol);
+        _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
+
+        let seen: bool = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.seen())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert!(!seen);
+        let seen: bool = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_nonce_key.seen())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert!(!seen);
+
+        let hot_key = &keys[&validators[1]].eth_bridge;
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[1].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+        }
+        .sign(&keys[&validators[1]].protocol);
+        _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
+
+        let seen: bool = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.seen())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert!(seen);
+        let seen: bool = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_nonce_key.seen())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert!(seen);
+    }
+
+    #[test]
+    /// Test that the seen by keys is updated correctly.
+    fn test_seen_by() {
+        let TestPackage {
+            validators,
+            keys,
+            mut storage,
+        } = setup();
+        let root = storage.get_bridge_pool_root();
+        let nonce = storage.get_bridge_pool_nonce();
+        let to_sign = [root.0, nonce.to_bytes()].concat();
+        let hot_key = &keys[&validators[0]].eth_bridge;
+
+        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
+            storage.get_bridge_pool_root(),
+        ));
+        let bp_nonce_key = vote_tallies::Keys::from(BridgePoolNonce(
+            storage.get_bridge_pool_nonce(),
+        ));
+
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[0].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
+                hot_key,
+                to_sign.clone(),
+            )
+            .sig,
+        }
+        .sign(&keys[&validators[0]].protocol);
+        _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
+
+        let expected = Votes::from([(validators[0].clone(), 100.into())]);
+        let seen_by: Votes = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.seen_by())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(seen_by, expected);
+        let seen_by: Votes = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_nonce_key.seen_by())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(seen_by, expected);
+
+        let hot_key = &keys[&validators[1]].eth_bridge;
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[1].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+        }
+        .sign(&keys[&validators[1]].protocol);
+        _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
+
+        let expected = Votes::from([
+            (validators[0].clone(), 100.into()),
+            (validators[1].clone(), 100.into()),
+        ]);
+        let seen_by: Votes = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.seen_by())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(seen_by, expected);
+        let seen_by: Votes = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_nonce_key.seen_by())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(seen_by, expected);
+    }
+
+    #[test]
+    /// Test that the root and nonce are stored correctly.
+    fn test_body() {
+        let TestPackage {
+            validators,
+            keys,
+            mut storage,
+        } = setup();
+        let root = storage.get_bridge_pool_root();
+        let nonce = storage.get_bridge_pool_nonce();
+        let to_sign = [root.0, nonce.to_bytes()].concat();
+        let hot_key = &keys[&validators[0]].eth_bridge;
+
+        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
+            storage.get_bridge_pool_root(),
+        ));
+        let bp_nonce_key = vote_tallies::Keys::from(BridgePoolNonce(
+            storage.get_bridge_pool_nonce(),
+        ));
+
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[0].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+        }
+        .sign(&keys[&validators[0]].protocol);
+        _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
+
+        let root: KeccakHash = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.body())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(root, storage.get_bridge_pool_root());
+        let nonce: Uint = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_nonce_key.body())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(nonce, storage.get_bridge_pool_nonce());
+    }
+
+    #[test]
+    /// Test that we update the bridge pool storage once a quorum
+    /// backs the new nonce and root.
+    fn test_quorum() {
+        let TestPackage {
+            validators,
+            keys,
+            mut storage,
+        } = setup();
+        let root = storage.get_bridge_pool_root();
+        let nonce = storage.get_bridge_pool_nonce();
+        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+
+        assert!(
+            storage
+                .read(&get_signed_root_key())
+                .expect("Test failed")
+                .0
+                .is_none()
+        );
+
+        let current_nonce: Uint = BorshDeserialize::try_from_slice(
+            storage
+                .read(&get_signed_nonce_key())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(current_nonce, Uint::from(0));
+
+        let hot_key = &keys[&validators[0]].eth_bridge;
+        let mut vexts: MultiSignedVext = bridge_pool_roots::Vext {
+            validator_addr: validators[0].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
+                hot_key,
+                to_sign.clone(),
+            )
+            .sig,
+        }
+        .sign(&keys[&validators[0]].protocol)
+        .into();
+
+        let hot_key = &keys[&validators[1]].eth_bridge;
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validators[1].clone(),
+            block_height: 100.into(),
+            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+        }
+        .sign(&keys[&validators[1]].protocol);
+        vexts.insert(vext);
+        _ = apply_derived_tx(&mut storage, vexts).expect("Test failed");
+
+        let root: KeccakHash = BorshDeserialize::try_from_slice(
+            storage
+                .read(&get_signed_root_key())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(root, storage.get_bridge_pool_root());
+        let nonce_from_storage: Uint = BorshDeserialize::try_from_slice(
+            storage
+                .read(&get_nonce_key())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
+        assert_eq!(nonce_from_storage, nonce);
     }
 }

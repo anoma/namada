@@ -375,7 +375,12 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::ethereum_events::EthAddress;
+    use namada::eth_bridge::storage::bridge_pool::{
+        get_key_from_hash, get_nonce_key, get_signed_root_key,
+    };
+    use namada::ledger::eth_bridge::EthBridgeQueries;
+    use namada::types::ethereum_events::{EthAddress, Uint};
+    use namada::types::keccak::KeccakHash;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
@@ -859,5 +864,79 @@ mod test_finalize_block {
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Helper function for testing the relevant protocol tx
+    /// for signing bridge pool roots and nonces
+    fn test_bp_roots<F>(craft_tx: F)
+    where
+        F: FnOnce(&TestShell) -> Tx,
+    {
+        let (mut shell, _, _) = setup_at_height(3u64);
+        namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
+            &mut shell.storage,
+            &KeccakHash([1; 32]),
+            3.into(),
+        );
+        shell
+            .storage
+            .block
+            .tree
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), [])
+            .expect("Test failed");
+        shell
+            .storage
+            .write(
+                &get_nonce_key(),
+                Uint::from(1).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        let tx = craft_tx(&shell);
+        let processed_tx = ProcessedTx {
+            tx: tx.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        let req = FinalizeBlock {
+            txs: vec![processed_tx],
+            ..Default::default()
+        };
+        let root = shell
+            .storage
+            .read(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.")
+            .0;
+        assert!(root.is_none());
+        let nonce = shell.storage.get_signed_bridge_pool_nonce();
+        assert_eq!(nonce, Uint::from(0));
+        _ = shell.finalize_block(req).expect("Test failed");
+        let root = shell.storage.get_signed_bridge_pool_root();
+        let nonce = shell.storage.get_signed_bridge_pool_nonce();
+        assert_eq!(root, KeccakHash([1; 32]));
+        assert_eq!(nonce, Uint::from(1));
+    }
+
+    #[test]
+    /// Test that the generated protocol tx passes Finalize Block
+    /// and effects the expected storage changes.
+    fn test_bp_roots_protocol_tx() {
+        test_bp_roots(|shell: &TestShell| {
+            let vext = shell.extend_vote_with_bp_roots();
+            ProtocolTxType::BridgePoolVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        });
+    }
+
+    #[test]
+    /// Test that the generated vote extension passes Finalize Block
+    /// and effects the expected storage changes.
+    fn test_bp_roots_vext() {
+        test_bp_roots(|shell: &TestShell| {
+            let vext = shell.extend_vote_with_bp_roots();
+            ProtocolTxType::BridgePool(vext.into())
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        });
     }
 }

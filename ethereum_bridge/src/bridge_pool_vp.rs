@@ -1,6 +1,6 @@
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, BRIDGE_POOL_ADDRESS,
+    get_nonce_key, get_signed_nonce_key, BRIDGE_POOL_ADDRESS,
 };
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::address::nam;
@@ -31,6 +31,14 @@ where
     storage
         .write(
             &get_nonce_key(),
+            Uint::from(0)
+                .try_to_vec()
+                .expect("Serializing a Uint should not fail."),
+        )
+        .expect("Initializing the Bridge pool nonce shouldn't fail.");
+    storage
+        .write(
+            &get_signed_nonce_key(),
             Uint::from(0)
                 .try_to_vec()
                 .expect("Serializing a Uint should not fail."),

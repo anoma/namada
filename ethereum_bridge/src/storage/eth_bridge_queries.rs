@@ -1,5 +1,7 @@
 use borsh::BorshDeserialize;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::get_nonce_key;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+    get_nonce_key, get_signed_nonce_key, get_signed_root_key,
+};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{Storage, StoreType};
 use namada_core::types::address::Address;
@@ -27,9 +29,16 @@ pub trait EthBridgeQueries {
     /// pool.
     fn get_bridge_pool_nonce(&self) -> Uint;
 
+    /// Get the latest nonce with a quorum of signatures
+    fn get_signed_bridge_pool_nonce(&self) -> Uint;
+
     /// Get the latest root of the Ethereum bridge
     /// pool Merkle tree.
     fn get_bridge_pool_root(&self) -> KeccakHash;
+
+    /// Get the latest signed root of the Ethereum bridge
+    /// pool Merkle tree.
+    fn get_signed_bridge_pool_root(&self) -> KeccakHash;
 
     /// Get the root of the Ethereum bridge
     /// pool Merkle tree at a given height.
@@ -80,8 +89,33 @@ where
         .expect("Deserializing the nonce from storage should not fail.")
     }
 
+    fn get_signed_bridge_pool_nonce(&self) -> Uint {
+        Uint::try_from_slice(
+            &self
+                .read(&get_signed_nonce_key())
+                .expect("Reading signed Bridge pool nonce shouldn't fail.")
+                .0
+                .expect("Reading signed Bridge pool nonce shouldn't fail."),
+        )
+        .expect("Deserializing the signed nonce from storage should not fail.")
+    }
+
     fn get_bridge_pool_root(&self) -> KeccakHash {
         self.block.tree.sub_root(&StoreType::BridgePool).into()
+    }
+
+    fn get_signed_bridge_pool_root(&self) -> KeccakHash {
+        KeccakHash::try_from_slice(
+            &self
+                .read(&get_signed_root_key())
+                .expect("Reading signed Bridge pool root shouldn't fail.")
+                .0
+                .expect("Reading signed Bridge pool root shouldn't fail."),
+        )
+        .expect(
+            "Deserializing the signed bridge pool root from storage should \
+             not fail.",
+        )
     }
 
     fn get_bridge_pool_root_at_height(

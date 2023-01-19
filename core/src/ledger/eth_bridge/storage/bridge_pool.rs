@@ -20,6 +20,7 @@ pub const BRIDGE_POOL_ADDRESS: Address =
 /// Sub-segment for getting the latest signed
 const SIGNED_ROOT_SEG: &str = "signed_root";
 const NONCE: &str = "bridge_pool_nonce";
+const SIGNED_NONCE: &str = "signed_bridge_pool_nonce";
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -59,6 +60,20 @@ pub fn get_nonce_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
             DbKeySeg::StringSeg(NONCE.into()),
+        ],
+    }
+}
+
+/// Get the storage key for the latest batch nonce of
+/// the bridge pool with a quorum of signatures.
+///
+/// **INVARIANT**: the value of this key should be either
+/// the value of the nonce or one less.
+pub fn get_signed_nonce_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
+            DbKeySeg::StringSeg(SIGNED_NONCE.into()),
         ],
     }
 }
