@@ -49,9 +49,9 @@ where
     let wrapped_native_erc20 = read_native_erc20_address(storage)?;
     let mut changed_keys = BTreeSet::default();
     for TransferToNamada {
+        amount,
         asset,
         receiver,
-        amount,
     } in transfers
     {
         if asset != &wrapped_native_erc20 {
