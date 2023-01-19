@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::eth_abi;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
+use namada_core::types::storage::Epoch;
 use namada_core::types::vote_extensions::validator_set_update::{
     valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
@@ -33,6 +34,18 @@ impl<T> EthereumProof<T> {
         }
     }
 
+    /// Map a function over the inner data of this [`EthereumProof`].
+    #[inline]
+    pub fn map<F, O>(self, mut f: F) -> EthereumProof<O>
+    where
+        F: FnMut(T) -> O,
+    {
+        EthereumProof {
+            signatures: self.signatures,
+            data: f(self.data),
+        }
+    }
+
     /// Add a new signature to this [`EthereumProof`].
     pub fn attach_signature(
         &mut self,
@@ -55,10 +68,10 @@ impl<T> EthereumProof<T> {
     }
 }
 
-impl eth_abi::Encode<1> for EthereumProof<VotingPowersMap> {
+impl eth_abi::Encode<1> for EthereumProof<(Epoch, VotingPowersMap)> {
     fn tokenize(&self) -> [eth_abi::Token; 1] {
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
-            self.data.get_abi_encoded();
+            self.data.1.get_abi_encoded();
         let signatures = (hot_key_addrs.iter().zip(cold_key_addrs.iter()))
             .map(|addresses| {
                 let (bridge_addr, gov_addr) = match addresses {
@@ -82,8 +95,7 @@ impl eth_abi::Encode<1> for EthereumProof<VotingPowersMap> {
             .collect();
         let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
             valset_upd_toks_to_hashes(
-                // TODO: add signing epoch here
-                0.into(),
+                self.data.0,
                 hot_key_addrs,
                 cold_key_addrs,
                 voting_powers,
