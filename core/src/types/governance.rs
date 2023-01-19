@@ -13,10 +13,14 @@ use crate::types::hash::Hash;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
+use crate::types::token::Amount;
 use crate::types::token::SCALE;
 
 /// Type alias for vote power
 pub type VotePower = u128;
+
+/// A PGF cocuncil composed of the address and spending cap
+pub type Council = (Address, Amount);
 
 /// The type of a governance vote with the optional associated Memo
 #[derive(
@@ -34,8 +38,7 @@ pub enum VoteType {
     /// A default vote without Memo
     Default,
     /// A vote for the PGF council encoding for the proposed multisig addresses and the budget cap
-    PGFCouncil(BTreeSet<(Address, u64)>), //FIXME: use Amount instead of u64?
-                                          //FIXME: create a type for (Address, u64) ?
+    PGFCouncil(BTreeSet<Council>),
 }
 
 #[derive(
@@ -83,34 +86,22 @@ pub enum ProposalVoteParseError {
     InvalidVote,
 }
 
+/// The type of the tally
 pub enum Tally {
-    Default(bool),
-    PGFCouncil(Option<(Address, u64)>),
-}
-
-impl Display for Tally {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Tally::Default(_) => Ok(()),
-            Tally::PGFCouncil(v) => match v {
-                Some((address, cap)) => {
-                    write!(f, "PGF address: {}, Spending cap: {}", address, cap)
-                }
-                None => Ok(()),
-            },
-        }
-    }
+    /// Tally a default proposal
+    Default,
+    /// Tally a PGF proposal
+    PGFCouncil(Council),
 }
 
 /// The result of a proposal
 pub enum TallyResult {
-    //FIXME: use this type as return of compute_tally?
-    /// Proposal was accepted
-    Passed(Tally), //FIXME: use an optional String here?
+    /// Proposal was accepted with the associated value
+    Passed(Tally),
     /// Proposal was rejected
     Rejected,
-    /// A critical error in tally computation
-    Failed,
+    /// A critical error in tally computation with an error message
+    Failed(String),
 }
 
 /// The result with votes of a proposal
@@ -147,10 +138,16 @@ impl Display for ProposalResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TallyResult::Passed(vote) => write!(f, "passed {}", vote),
-
+            TallyResult::Passed(vote) => match vote {
+                Tally::Default => write!(f, "passed"),
+                Tally::PGFCouncil((council, cap)) => write!(
+                    f,
+                    "passed with PGF council address: {}, spending cap: {}",
+                    council, cap
+                ),
+            },
             TallyResult::Rejected => write!(f, "rejected"),
-            TallyResult::Failed => write!(f, "failed"),
+            TallyResult::Failed(msg) => write!(f, "failed with: {}", msg),
         }
     }
 }
