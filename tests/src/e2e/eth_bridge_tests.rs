@@ -17,7 +17,7 @@ use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
 
 use super::setup::set_ethereum_bridge_mode;
-use crate::e2e::helpers::{get_actor_rpc, get_validator_events_endpoint};
+use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
     wasm_abs_path, ALBERT, BERTHA, NAM, TX_WRITE_STORAGE_KEY_WASM,
@@ -304,12 +304,17 @@ async fn redeem_wnam() -> Result<()> {
         }],
     };
 
+    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
+    // address that would only work for e2e tests involving a single
+    // validator node - this should become an attribute of the validator under
+    // test once the linked issue is implemented
+    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
     let mut client =
-        EventsEndpointClient::new(get_validator_events_endpoint(&test, 0)?);
+        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
     client.send(&wnam_transfer).await?;
 
     let mut ledger = bg_ledger.foreground();
-    // TODO: once implemented, check NAM balance of receiver
+    // TODO(namada#989): once implemented, check NAM balance of receiver
     ledger.exp_string(
         "Redemption of the wrapped native token is not yet supported",
     )?;
