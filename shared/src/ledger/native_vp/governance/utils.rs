@@ -15,7 +15,7 @@ use crate::ledger::pos::BondId;
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::governance::{
-    ProposalVote, TallyResult, VotePower, VoteType,
+    ProposalVote, Tally, TallyResult, VotePower, VoteType,
 };
 use crate::types::storage::Epoch;
 use crate::types::token;
@@ -79,12 +79,6 @@ impl ProposalEvent {
             attributes,
         }
     }
-}
-
-pub enum Tally {
-    //FIXME: can join this with TallyResult?
-    Default(bool),
-    PGFCouncil(Option<(Address, u64)>),
 }
 
 /// Return a proposal result
@@ -269,11 +263,11 @@ where
             }
 
             // At least 1/3 of the total voting power must vote Yay
-            let total_voted_power = total_yay_staked_tokens
+            let total_yay_voted_power = total_yay_staked_tokens
                 .iter()
                 .fold(0, |acc, (_, vote_power)| acc + vote_power);
 
-            if total_voted_power >= 1 / 3 * total_stake {
+            if total_yay_voted_power >= 1 / 3 * total_stake {
                 // Select the winner council based on simple majority
                 Ok(Tally::PGFCouncil(
                     total_yay_staked_tokens

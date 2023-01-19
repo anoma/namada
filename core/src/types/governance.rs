@@ -35,7 +35,8 @@ pub enum VoteType {
     /// A default vote without Memo
     Default,
     /// A vote for the PGF council encoding for the proposed multisig addresses and the budget cap
-    PGFCouncil(BTreeSet<(Address, u64)>),
+    PGFCouncil(BTreeSet<(Address, u64)>), //FIXME: use Amount instead of u64?
+                                          //FIXME: create a type for (Address, u64) ?
 }
 
 #[derive(
@@ -83,11 +84,30 @@ pub enum ProposalVoteParseError {
     InvalidVote,
 }
 
+pub enum Tally {
+    Default(bool),
+    PGFCouncil(Option<(Address, u64)>),
+}
+
+impl Display for Tally {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Tally::Default(_) => Ok(()),
+            Tally::PGFCouncil(v) => match v {
+                Some((address, cap)) => {
+                    write!(f, "PGF address: {}, Spending cap: {}", address, cap)
+                }
+                None => Ok(()),
+            },
+        }
+    }
+}
+
 /// The result of a proposal
 pub enum TallyResult {
-    //FIXME: add payload to passed to specify the memo that passed
+    //FIXME: use this type as return of compute_tally?
     /// Proposal was accepted
-    Passed,
+    Passed(Tally), //FIXME: use an optional String here?
     /// Proposal was rejected
     Rejected,
     /// A critical error in tally computation
@@ -128,7 +148,8 @@ impl Display for ProposalResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TallyResult::Passed => write!(f, "passed"),
+            TallyResult::Passed(vote) => write!(f, "passed {}", vote),
+
             TallyResult::Rejected => write!(f, "rejected"),
             TallyResult::Failed => write!(f, "failed"),
         }

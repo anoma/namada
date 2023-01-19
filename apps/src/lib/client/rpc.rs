@@ -38,8 +38,8 @@ use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, TallyResult,
-    VotePower, VoteType,
+    OfflineProposal, OfflineVote, ProposalResult, ProposalVote, Tally,
+    TallyResult, VotePower, VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -2637,7 +2637,6 @@ pub async fn compute_tally(
         nay_delegators,
     } = votes;
 
-    //FIXME: share some code with ledger
     match proposal_type {
         ProposalType::Default(_) => {
             let mut total_yay_staked_tokens = VotePower::from(0u64);
@@ -2706,10 +2705,10 @@ pub async fn compute_tally(
 
             if total_yay_staked_tokens >= 2 / 3 * total_staked_tokens {
                 ProposalResult {
-                    result: TallyResult::Passed,
+                    result: TallyResult::Passed(Tally::Default(true)),
                     total_voting_power: total_staked_tokens,
                     total_yay_power: total_yay_staked_tokens,
-                    total_nay_power: 0, //FIXME: need this field?
+                    total_nay_power: 0,
                 }
             } else {
                 ProposalResult {
@@ -2868,23 +2867,29 @@ pub async fn compute_tally(
             }
 
             // At least 1/3 of the total voting power must vote Yay
-            let total_voted_power = total_yay_staked_tokens
+            let total_yay_voted_power = total_yay_staked_tokens
                 .iter()
                 .fold(0, |acc, (_, vote_power)| acc + vote_power);
 
-            if total_voted_power >= 1 / 3 * total_staked_tokens {
+            if total_yay_voted_power >= 1 / 3 * total_staked_tokens {
                 //FIXME: add the winning council to the result
+                let (vote, yay_power) = total_yay_staked_tokens
+                    .into_iter()
+                    .max_by(|a, b| a.1.cmp(&b.1))
+                    .map_or((None, 0), |(vote, power)| {
+                        (Some(vote.to_owned()), power)
+                    });
                 ProposalResult {
-                    result: TallyResult::Passed,
+                    result: TallyResult::Passed(Tally::PGFCouncil(vote)),
                     total_voting_power: total_staked_tokens,
-                    total_yay_power: 0, //FIXME:
+                    total_yay_power: yay_power,
                     total_nay_power: 0,
                 }
             } else {
                 ProposalResult {
                     result: TallyResult::Rejected,
                     total_voting_power: total_staked_tokens,
-                    total_yay_power: 0, //FIXME:
+                    total_yay_power: 0,
                     total_nay_power: 0,
                 }
             }
