@@ -159,12 +159,13 @@ where
             values.iter().map(|v| v.as_slice()).collect(),
         ) {
             Ok(BridgePool(proof)) => {
-                let data = EncodeCell::new(&RelayProof {
+                let data = RelayProof {
                     // TODO: use actual validators
                     validator_args: Default::default(),
                     root: signed_root,
                     proof,
-                })
+                }
+                .encode()
                 .try_to_vec()
                 .into_storage_result()?;
                 Ok(EncodedResponseQuery {
