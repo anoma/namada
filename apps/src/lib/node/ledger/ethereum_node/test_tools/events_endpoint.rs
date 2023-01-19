@@ -5,6 +5,8 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::reply::WithStatus;
 use warp::Filter;
 
+use crate::node::ledger::ethereum_node::oracle;
+
 /// The default IP address and port on which the events endpoint will listen.
 const DEFAULT_LISTEN_ADDR: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 
@@ -14,9 +16,11 @@ const EVENTS_POST_ENDPOINT: &str = "eth_events";
 
 /// Starts a [`warp::Server`] that listens for Borsh-serialized Ethereum events
 /// and then forwards them to `sender`. It shuts down if a signal is sent on the
-/// `abort_recv` channel.
+/// `abort_recv` channel. Accepts the receive-half of an oracle control channel
+/// (`control_recv`) that will be kept alive until shutdown.
 pub async fn serve(
     sender: BoundedSender<EthereumEvent>,
+    mut control_recv: oracle::control::Receiver,
     abort_recv: Receiver<Sender<()>>,
 ) {
     tracing::info!(?DEFAULT_LISTEN_ADDR, "Ethereum event endpoint is starting");
@@ -32,6 +36,16 @@ pub async fn serve(
                 ?DEFAULT_LISTEN_ADDR,
                 "Starting to listen for Borsh-serialized Ethereum events"
             );
+            let control_recv_discarder = tokio::spawn(async move {
+                while let Some(command) = control_recv.recv().await {
+                    tracing::debug!(
+                        ?command,
+                        "Events endpoint received an oracle command which \
+                         will be ignored since we are not running a real \
+                         oracle"
+                    )
+                }
+            });
             match abort_recv.await {
                 Ok(abort_resp_send) => {
                     if abort_resp_send.send(()).is_err() {
@@ -50,6 +64,7 @@ pub async fn serve(
                 ?DEFAULT_LISTEN_ADDR,
                 "Stopping listening for Borsh-serialized Ethereum events"
             );
+            control_recv_discarder.abort();
         },
     );
     future.await

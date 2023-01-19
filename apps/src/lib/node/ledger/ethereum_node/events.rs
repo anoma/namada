@@ -2,7 +2,7 @@ pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
     pub const TRANSFER_TO_ETHEREUM_SIG: &str =
-        "TransferToErc(uint256,address[],address[],uint256[],uint32)";
+        "TransferToErc(uint256,(address,address,uint256,string,uint256)[])";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
     pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
@@ -139,8 +139,7 @@ pub mod eth_events {
                 signatures::TRANSFER_TO_ETHEREUM_SIG => {
                     RawTransfersToEthereum::decode(data).map(|txs| {
                         PendingEvent {
-                            confirmations: min_confirmations
-                                .max(txs.confirmations.into()),
+                            confirmations: min_confirmations,
                             block_height,
                             event: EthereumEvent::TransfersToEthereum {
                                 nonce: txs.nonce,
@@ -226,9 +225,6 @@ pub mod eth_events {
         /// A monotonically increasing nonce
         #[allow(dead_code)]
         pub nonce: Uint,
-        /// The number of confirmations needed to consider this batch
-        /// finalized
-        pub confirmations: u32,
     }
 
     impl RawTransfersToNamada {
@@ -303,95 +299,62 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToEthereum`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, assets, receivers, amounts, confs]: [Token; 5] =
-                decode(
-                    &[
+            let [nonce, transfers]: [Token; 2] = decode(
+                &[
+                    ParamType::Uint(256),
+                    ParamType::Array(Box::new(ParamType::Tuple(vec![
+                        ParamType::Address,
+                        ParamType::Address,
                         ParamType::Uint(256),
-                        ParamType::Array(Box::new(ParamType::Address)),
-                        ParamType::Array(Box::new(ParamType::Address)),
-                        ParamType::Array(Box::new(ParamType::Uint(256))),
-                        ParamType::Uint(32),
-                    ],
-                    data,
+                        ParamType::String,
+                        ParamType::Uint(256),
+                    ]))),
+                ],
+                data,
+            )
+            .map_err(|err| Error::Decode(format!("{:?}", err)))?
+            .try_into()
+            .map_err(|_| {
+                Error::Decode(
+                    "TransferToERC signature should contain five types"
+                        .to_string(),
                 )
-                .map_err(|err| Error::Decode(format!("{:?}", err)))?
-                .try_into()
-                .map_err(|_| {
-                    Error::Decode(
-                        "TransferToERC signature should contain five types"
-                            .to_string(),
-                    )
-                })?;
+            })?;
 
-            let assets = assets.parse_eth_address_array()?;
-            let receivers = receivers.parse_eth_address_array()?;
-            let amounts = amounts.parse_amount_array()?;
-            if assets.len() != amounts.len() {
-                Err(Error::Decode(
-                    "Number of source addresses is different from number of \
-                     transfer amounts"
-                        .into(),
-                ))
-            } else if receivers.len() != assets.len() {
-                Err(Error::Decode(
-                    "Number of source addresses is different from number of \
-                     target addresses"
-                        .into(),
-                ))
-            } else {
-                Ok(Self {
-                    transfers: assets
-                        .into_iter()
-                        .zip(receivers.into_iter())
-                        .zip(amounts.into_iter())
-                        .map(|((asset, receiver), amount)| TransferToEthereum {
-                            amount,
-                            asset,
-                            receiver,
-                        })
-                        .collect(),
-                    nonce: nonce.parse_uint256()?,
-                    confirmations: confs.parse_u32()?,
-                })
-            }
+            let transfers = transfers.parse_transfer_to_eth_array()?;
+            Ok(Self {
+                transfers,
+                nonce: nonce.parse_uint256()?,
+            })
         }
 
         /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
         /// ABI serialization scheme.
         #[cfg(test)]
         pub fn encode(self) -> Vec<u8> {
-            let RawTransfersToEthereum {
-                transfers,
-                nonce,
-                confirmations,
-            } = self;
-            let amounts: Vec<Token> = transfers
-                .iter()
-                .map(|TransferToEthereum { amount, .. }| {
-                    Token::Uint(u64::from(*amount).into())
-                })
-                .collect();
-            let (assets, receivers): (Vec<Token>, Vec<Token>) = transfers
+            let RawTransfersToEthereum { transfers, nonce } = self;
+
+            let transfers = transfers
                 .into_iter()
                 .map(
                     |TransferToEthereum {
-                         asset, receiver, ..
+                         amount,
+                         asset,
+                         receiver,
+                         gas_amount,
+                         gas_payer,
                      }| {
-                        (
+                        Token::Tuple(vec![
                             Token::Address(asset.0.into()),
                             Token::Address(receiver.0.into()),
-                        )
+                            Token::Uint(u64::from(amount).into()),
+                            Token::String(gas_payer.to_string()),
+                            Token::Uint(u64::from(gas_amount).into()),
+                        ])
                     },
                 )
-                .unzip();
-
-            encode(&[
-                Token::Uint(nonce.into()),
-                Token::Array(assets),
-                Token::Array(receivers),
-                Token::Array(amounts),
-                Token::Uint(confirmations.into()),
-            ])
+                .collect();
+            encode(&[Token::Uint(nonce.into()), Token::Array(transfers)])
         }
     }
 
@@ -557,6 +520,9 @@ pub mod eth_events {
             self,
         ) -> Result<Vec<TransferToNamada>>;
         fn parse_transfer_to_namada(self) -> Result<TransferToNamada>;
+        fn parse_transfer_to_eth_array(self)
+        -> Result<Vec<TransferToEthereum>>;
+        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum>;
     }
 
     impl Parse for Token {
@@ -723,6 +689,47 @@ pub mod eth_events {
             }
         }
 
+        fn parse_transfer_to_eth_array(
+            self,
+        ) -> Result<Vec<TransferToEthereum>> {
+            let array = if let Token::Array(array) = self {
+                array
+            } else {
+                return Err(Error::Decode(format!(
+                    "Expected type `Array`, got {:?}",
+                    self
+                )));
+            };
+            let mut transfers = vec![];
+            for token in array.into_iter() {
+                let transfer = token.parse_transfer_to_eth()?;
+                transfers.push(transfer);
+            }
+            Ok(transfers)
+        }
+
+        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
+            if let Token::Tuple(mut items) = self {
+                let asset = items.remove(0).parse_eth_address()?;
+                let receiver = items.remove(0).parse_eth_address()?;
+                let amount = items.remove(0).parse_amount()?;
+                let gas_payer = items.remove(0).parse_address()?;
+                let gas_amount = items.remove(0).parse_amount()?;
+                Ok(TransferToEthereum {
+                    asset,
+                    amount,
+                    receiver,
+                    gas_amount,
+                    gas_payer,
+                })
+            } else {
+                Err(Error::Decode(format!(
+                    "Expected type `Tuple`, got {:?}",
+                    self
+                )))
+            }
+        }
+
         fn parse_address_array(self) -> Result<Vec<Address>> {
             let array = if let Token::Array(array) = self {
                 array
@@ -825,24 +832,6 @@ pub mod eth_events {
             let data = event.encode();
             let pending_event = PendingEvent::decode(
                 sig,
-                arbitrary_block_height.clone(),
-                &data,
-                min_confirmations.clone(),
-            )?;
-
-            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
-
-            let (sig, event) = (
-                signatures::TRANSFER_TO_ETHEREUM_SIG,
-                RawTransfersToEthereum {
-                    transfers: vec![],
-                    nonce: 0.into(),
-                    confirmations: lower_than_min_confirmations,
-                },
-            );
-            let data = event.encode();
-            let pending_event = PendingEvent::decode(
-                sig,
                 arbitrary_block_height,
                 &data,
                 min_confirmations.clone(),
@@ -865,25 +854,6 @@ pub mod eth_events {
             let (sig, event) = (
                 signatures::TRANSFER_TO_NAMADA_SIG,
                 RawTransfersToNamada {
-                    transfers: vec![],
-                    nonce: 0.into(),
-                    confirmations: higher_than_min_confirmations,
-                },
-            );
-            let data = event.encode();
-            let pending_event = PendingEvent::decode(
-                sig,
-                arbitrary_block_height.clone(),
-                &data,
-                min_confirmations.clone(),
-            )
-            .unwrap();
-
-            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
-
-            let (sig, event) = (
-                signatures::TRANSFER_TO_ETHEREUM_SIG,
-                RawTransfersToEthereum {
                     transfers: vec![],
                     nonce: 0.into(),
                     confirmations: higher_than_min_confirmations,
@@ -999,7 +969,7 @@ pub mod eth_events {
                     TransferToNamada {
                         amount: Default::default(),
                         asset: EthAddress([0; 20]),
-                        receiver: address,
+                        receiver: address.clone(),
                     };
                     2
                 ],
@@ -1011,12 +981,13 @@ pub mod eth_events {
                     TransferToEthereum {
                         amount: Default::default(),
                         asset: EthAddress([1; 20]),
-                        receiver: EthAddress([2; 20])
+                        receiver: EthAddress([2; 20]),
+                        gas_amount: Default::default(),
+                        gas_payer: address,
                     };
                     2
                 ],
                 nonce: Uint::from(1),
-                confirmations: 0,
             };
             let update = ValidatorSetUpdate {
                 nonce: Uint::from(1),
