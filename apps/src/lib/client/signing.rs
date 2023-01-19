@@ -5,6 +5,7 @@ use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -151,8 +152,15 @@ pub async fn sign_tx(
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
+    if args.dump_tx {
+        dump_tx_helper(&ctx, &tx, "unsigned", None);
+    }
+
     let keypair = tx_signer(&mut ctx, args, default).await;
     let tx = tx.sign(&keypair);
+    if args.dump_tx {
+        dump_tx_helper(&ctx, &tx, "signed", None);
+    }
 
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
@@ -172,7 +180,48 @@ pub async fn sign_tx(
         )
         .await
     };
+
+    if args.dump_tx && !args.dry_run {
+        let (wrapper_tx, wrapper_hash) = match broadcast_data {
+            TxBroadcastData::DryRun(_) => panic!(
+                "somehow created a dry run transaction without --dry-run"
+            ),
+            TxBroadcastData::Wrapper {
+                ref tx,
+                ref wrapper_hash,
+                decrypted_hash: _,
+            } => (tx, wrapper_hash),
+        };
+
+        dump_tx_helper(&ctx, wrapper_tx, "wrapper", Some(wrapper_hash));
+    }
+
     (ctx, broadcast_data)
+}
+
+pub fn dump_tx_helper(
+    ctx: &Context,
+    tx: &Tx,
+    extension: &str,
+    precomputed_hash: Option<&String>,
+) {
+    let chain_dir = ctx.config.ledger.chain_dir();
+    let hash = match precomputed_hash {
+        Some(hash) => hash.to_owned(),
+        None => {
+            let hash: Hash = tx
+                .hash()
+                .as_ref()
+                .try_into()
+                .expect("expected hash of dumped tx to be a hash");
+            format!("{}", hash)
+        }
+    };
+    let filename = chain_dir.join(hash).with_extension(extension);
+    let tx_bytes = tx.to_bytes();
+
+    std::fs::write(filename, tx_bytes)
+        .expect("expected to be able to write tx dump file");
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
