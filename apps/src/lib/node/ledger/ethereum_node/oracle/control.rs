@@ -18,6 +18,9 @@ pub fn channel() -> (Sender, Receiver) {
 /// Commands used to configure and control an `Oracle`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Command {
-    /// Sends a configuration to the oracle for it to use.
-    SendConfig { config: Config },
+    /// Sends an initial configuration to the oracle for it to use. The oracle
+    /// will not do anything until this command has been sent.
+    /// [`Command::Start`] should be the first command sent, and at most
+    /// once.
+    Start { initial: Config },
 }
