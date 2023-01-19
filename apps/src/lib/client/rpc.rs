@@ -2237,11 +2237,7 @@ pub async fn get_proposal_votes(
 
     let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut yay_delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-    let mut nay_delegators: HashMap<
+    let mut delegators: HashMap<
         Address,
         HashMap<Address, (VotePower, ProposalVote)>,
     > = HashMap::new();
@@ -2273,21 +2269,11 @@ pub async fn get_proposal_votes(
                 )
                 .await;
                 if let Some(amount) = delegator_token_amount {
-                    if vote.is_yay() {
-                        let entry =
-                            yay_delegators.entry(voter_address).or_default();
-                        entry.insert(
-                            validator_address,
-                            (VotePower::from(amount), vote),
-                        );
-                    } else {
-                        let entry =
-                            nay_delegators.entry(voter_address).or_default();
-                        entry.insert(
-                            validator_address,
-                            (VotePower::from(amount), vote),
-                        );
-                    }
+                    let entry = delegators.entry(voter_address).or_default();
+                    entry.insert(
+                        validator_address,
+                        (VotePower::from(amount), vote),
+                    );
                 }
             }
         }
@@ -2295,8 +2281,7 @@ pub async fn get_proposal_votes(
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
     }
 }
 
@@ -2311,11 +2296,7 @@ pub async fn get_proposal_offline_votes(
 
     let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
-    let mut yay_delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-    let mut nay_delegators: HashMap<
+    let mut delegators: HashMap<
         Address,
         HashMap<Address, (VotePower, ProposalVote)>,
     > = HashMap::new();
@@ -2393,26 +2374,17 @@ pub async fn get_proposal_offline_votes(
                             - delta.slashed_amount.unwrap_or_default();
                     }
                 }
-                if proposal_vote.vote.is_yay() {
-                    let entry = yay_delegators
-                        .entry(proposal_vote.address.clone())
-                        .or_default();
-                    entry.insert(
-                        validator,
-                        (
-                            VotePower::from(delegated_amount),
-                            ProposalVote::Yay(VoteType::Default),
-                        ),
-                    );
-                } else {
-                    let entry = nay_delegators
-                        .entry(proposal_vote.address.clone())
-                        .or_default();
-                    entry.insert(
-                        validator,
-                        (VotePower::from(delegated_amount), ProposalVote::Nay),
-                    );
-                }
+
+                let entry = delegators
+                    .entry(proposal_vote.address.clone())
+                    .or_default();
+                entry.insert(
+                    validator,
+                    (
+                        VotePower::from(delegated_amount),
+                        proposal_vote.vote.clone(),
+                    ),
+                );
             }
 
             // let key = pos::bonds_for_source_prefix(&proposal_vote.address);
@@ -2491,8 +2463,7 @@ pub async fn get_proposal_offline_votes(
 
     Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
     }
 }
 
