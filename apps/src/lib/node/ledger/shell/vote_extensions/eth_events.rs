@@ -145,11 +145,14 @@ where
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
         match &mut self.mode {
             ShellMode::Validator {
-                ref mut ethereum_recv,
+                eth_oracle:
+                    Some(EthereumOracleChannels {
+                        ethereum_receiver, ..
+                    }),
                 ..
             } => {
-                ethereum_recv.fill_queue();
-                ethereum_recv.get_events()
+                ethereum_receiver.fill_queue();
+                ethereum_receiver.get_events()
             }
             _ => vec![],
         }
@@ -297,6 +300,7 @@ mod test_vote_extensions {
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthBytes, Signed};
+    use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     #[cfg(feature = "abcipp")]
@@ -329,13 +333,15 @@ mod test_vote_extensions {
     /// done
     #[test]
     fn test_get_eth_events() {
-        let (mut shell, _, oracle) = setup();
+        let (mut shell, _, oracle, _) = setup();
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
@@ -344,6 +350,8 @@ mod test_vote_extensions {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_3 = EthereumEvent::NewContract {
@@ -378,7 +386,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[tokio::test]
     async fn test_eth_events_vote_extension() {
-        let (mut shell, _, oracle) = setup_at_height(1);
+        let (mut shell, _, oracle, _) = setup_at_height(1);
         let address = shell
             .mode
             .get_validator_address()
@@ -390,6 +398,8 @@ mod test_vote_extensions {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 receiver: EthAddress([2; 20]),
+                gas_amount: 10.into(),
+                gas_payer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::NewContract {
@@ -431,7 +441,7 @@ mod test_vote_extensions {
     /// Test that Ethereum events signed by a non-validator are rejected
     #[test]
     fn test_eth_events_must_be_signed_by_validator() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         let signing_key = gen_keypair();
         let address = shell
             .mode
@@ -446,6 +456,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.get_current_decision_height(),
@@ -506,7 +518,7 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_eth_events_vexts() {
-        let (mut shell, _recv, _) = setup_at_height(3u64);
+        let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let signing_key =
             shell.mode.get_protocol_key().expect("Test failed").clone();
         let address = shell
@@ -522,6 +534,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: signed_height,
@@ -575,7 +589,7 @@ mod test_vote_extensions {
     /// greater than latest block height.
     #[test]
     fn reject_incorrect_block_number() {
-        let (shell, _, _) = setup_at_height(3u64);
+        let (shell, _, _, _) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         #[allow(clippy::redundant_clone)]
         let mut ethereum_events = ethereum_events::Vext {
@@ -585,6 +599,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,
@@ -648,7 +664,7 @@ mod test_vote_extensions {
     /// issued at genesis
     #[test]
     fn test_reject_genesis_vexts() {
-        let (shell, _, _) = setup();
+        let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         #[allow(clippy::redundant_clone)]
         let vote_ext = ethereum_events::Vext {
@@ -658,6 +674,8 @@ mod test_vote_extensions {
                     amount: 100.into(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
+                    gas_amount: 10.into(),
+                    gas_payer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,

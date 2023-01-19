@@ -211,7 +211,7 @@ where
         let validator_set_update =
             if self
                 .storage
-                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+                .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
             {
                 Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
                     || panic!("{}", not_enough_voting_power_msg()),
@@ -256,7 +256,12 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
+        let deserialized_iter = deserialize_vote_extensions(
+            txs,
+            protocol_tx_indices,
+            self.storage.get_current_epoch().0,
+        );
+        let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
@@ -646,7 +651,7 @@ mod test_prepare_proposal {
     // may get lost in the process
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let non_wrapper_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
@@ -680,7 +685,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_signatures() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -713,7 +718,7 @@ mod test_prepare_proposal {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -758,7 +763,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_out_bad_vext_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -789,7 +794,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_filter_duped_ethereum_events() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -877,7 +882,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -967,7 +972,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
         shell.storage.last_height = LAST_HEIGHT;
@@ -1018,7 +1023,7 @@ mod test_prepare_proposal {
         const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _oracle_control_recv) = test_utils::setup();
 
         // artificially change the voting power of the default validator to
         // zero, change the block height, and commit a dummy block,
@@ -1156,7 +1161,7 @@ mod test_prepare_proposal {
     // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
     #[test]
     fn test_error_in_processing_tx() {
-        let (mut shell, _recv, _) = test_utils::setup_at_height(3u64);
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1200,7 +1205,7 @@ mod test_prepare_proposal {
     /// corresponding wrappers
     #[test]
     fn test_decrypted_txs_in_correct_order() {
-        let (mut shell, _recv, _) = test_utils::setup();
+        let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
         let mut expected_wrapper = vec![];
         let mut expected_decrypted = vec![];

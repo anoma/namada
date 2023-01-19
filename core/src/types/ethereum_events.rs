@@ -293,6 +293,10 @@ pub struct TransferToEthereum {
     pub asset: EthAddress,
     /// The address receiving assets on Ethereum
     pub receiver: EthAddress,
+    /// The amount of fees (in NAM)
+    pub gas_amount: Amount,
+    /// The account of fee payer.
+    pub gas_payer: Address,
 }
 
 /// struct for whitelisting a token from Ethereum.
