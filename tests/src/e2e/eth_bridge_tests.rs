@@ -1,10 +1,8 @@
+mod helpers;
+
 use std::num::NonZeroU64;
 
-use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
-use eyre::{eyre, Context};
-use hyper::client::HttpConnector;
-use hyper::{Body, Method, Request, StatusCode};
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -17,6 +15,7 @@ use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
 
 use super::setup::set_ethereum_bridge_mode;
+use crate::e2e::eth_bridge_tests::helpers::EventsEndpointClient;
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
@@ -321,42 +320,4 @@ async fn test_wnam_transfer() -> Result<()> {
     )?;
 
     Ok(())
-}
-
-/// Simple client for submitting fake Ethereum events to a Namada node.
-struct EventsEndpointClient {
-    http: hyper::Client<HttpConnector, Body>,
-    events_endpoint: String,
-}
-
-impl EventsEndpointClient {
-    fn new(events_endpoint: String) -> Self {
-        Self {
-            http: hyper::Client::new(),
-            events_endpoint,
-        }
-    }
-
-    /// Sends an Ethereum event to the Namada node. Returns `Ok` iff the event
-    /// was successfully sent.
-    async fn send(&mut self, event: &EthereumEvent) -> Result<()> {
-        let event = event.try_to_vec()?;
-
-        let req = Request::builder()
-            .method(Method::POST)
-            .uri(&self.events_endpoint)
-            .header("content-type", "application/octet-stream")
-            .body(Body::from(event))?;
-
-        let resp = self
-            .http
-            .request(req)
-            .await
-            .wrap_err_with(|| "sending event")?;
-
-        if resp.status() != StatusCode::OK {
-            return Err(eyre!("unexpected response status: {}", resp.status()));
-        }
-        Ok(())
-    }
 }
