@@ -154,6 +154,10 @@ pub type VotingPowersMap = HashMap<EthAddrBook, token::Amount>;
 /// This trait contains additional methods for a [`VotingPowersMap`], related
 /// with validator set update vote extensions logic.
 pub trait VotingPowersMapExt {
+    /// Returns a [`Vec`] of pairs of validator addresses and voting powers,
+    /// sorted in descending order by voting power.
+    fn get_sorted(&self) -> Vec<(&EthAddrBook, &token::Amount)>;
+
     /// Returns the list of Ethereum validator hot and cold addresses and their
     /// respective voting powers (in this order), with an Ethereum ABI
     /// compatible encoding. Implementations of this method must be
@@ -161,7 +165,46 @@ pub trait VotingPowersMapExt {
     /// sorted in descending order by voting power, as this is more efficient to
     /// deal with on the Ethereum side when working out if there is enough
     /// voting power for a given validator set update.
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>);
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
+        let sorted = self.get_sorted();
+
+        let total_voting_power: u64 = sorted
+            .iter()
+            .map(|&(_, &voting_power)| u64::from(voting_power))
+            .sum();
+
+        // split the vec into three portions
+        sorted.into_iter().fold(
+            Default::default(),
+            |accum, (addr_book, &voting_power)| {
+                let voting_power: EthBridgeVotingPower =
+                    FractionalVotingPower::new(
+                        voting_power.into(),
+                        total_voting_power,
+                    )
+                    .expect(
+                        "Voting power in map can't be larger than the total \
+                         voting power",
+                    )
+                    .into();
+
+                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
+                    accum;
+                let &EthAddrBook {
+                    hot_key_addr: EthAddress(hot_key_addr),
+                    cold_key_addr: EthAddress(cold_key_addr),
+                } = addr_book;
+
+                hot_key_addrs
+                    .push(Token::Address(ethereum::H160(hot_key_addr)));
+                cold_key_addrs
+                    .push(Token::Address(ethereum::H160(cold_key_addr)));
+                voting_powers.push(Token::Uint(voting_power.into()));
+
+                (hot_key_addrs, cold_key_addrs, voting_powers)
+            },
+        )
+    }
 
     /// Returns the bridge and governance keccak hashes of
     /// this [`VotingPowersMap`].
@@ -222,49 +265,10 @@ fn compare_voting_powers_map_items(
 }
 
 impl VotingPowersMapExt for VotingPowersMap {
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
-        // get addresses and voting powers all into one vec so that they can be
-        // sorted appropriately
-        let mut unsorted: Vec<_> = self.iter().collect();
-        unsorted.sort_by(compare_voting_powers_map_items);
-        let sorted = unsorted;
-
-        let total_voting_power: u64 = sorted
-            .iter()
-            .map(|&(_, &voting_power)| u64::from(voting_power))
-            .sum();
-
-        // split the vec into three portions
-        sorted.into_iter().fold(
-            Default::default(),
-            |accum, (addr_book, &voting_power)| {
-                let voting_power: EthBridgeVotingPower =
-                    FractionalVotingPower::new(
-                        voting_power.into(),
-                        total_voting_power,
-                    )
-                    .expect(
-                        "Voting power in map can't be larger than the total \
-                         voting power",
-                    )
-                    .into();
-
-                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
-                    accum;
-                let &EthAddrBook {
-                    hot_key_addr: EthAddress(hot_key_addr),
-                    cold_key_addr: EthAddress(cold_key_addr),
-                } = addr_book;
-
-                hot_key_addrs
-                    .push(Token::Address(ethereum::H160(hot_key_addr)));
-                cold_key_addrs
-                    .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power.into()));
-
-                (hot_key_addrs, cold_key_addrs, voting_powers)
-            },
-        )
+    fn get_sorted(&self) -> Vec<(&EthAddrBook, &token::Amount)> {
+        let mut pairs: Vec<_> = self.iter().collect();
+        pairs.sort_by(compare_voting_powers_map_items);
+        pairs
     }
 }
 
