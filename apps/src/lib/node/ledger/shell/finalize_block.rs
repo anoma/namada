@@ -58,7 +58,7 @@ where
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
-        self.upgrade_storage(height, BlockHeight(37370))?;
+        self.upgrade_storage(height, BlockHeight(550))?;
 
         // Tracks the accepted transactions
         self.storage.block.results = BlockResults::default();
