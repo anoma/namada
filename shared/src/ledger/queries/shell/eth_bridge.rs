@@ -17,7 +17,7 @@ use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_ethereum_bridge::storage::vote_tallies;
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
-use crate::types::eth_abi::EncodeCell;
+use crate::types::eth_abi::{Encode, EncodeCell};
 use crate::types::eth_bridge_pool::{
     MultiSignedMerkleRoot, PendingTransfer, RelayProof,
 };
@@ -40,7 +40,8 @@ router! {ETH_BRIDGE,
     //
     // The request may fail if a proof is not considered complete yet.
     ( "validator_set" / "proof" / [epoch: Epoch] )
-        -> EncodeCell<EthereumProof<VotingPowersMap>> = read_valset_upd_proof,
+        -> EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>
+        = read_valset_upd_proof,
 
     // Request the set of active validator at the given epoch.
     //
@@ -188,11 +189,19 @@ where
 fn read_valset_upd_proof<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Epoch,
-) -> storage_api::Result<EncodeCell<EthereumProof<VotingPowersMap>>>
+) -> storage_api::Result<EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    if epoch.0 == 0 {
+        return Err(storage_api::Error::Custom(CustomError(
+            "Validator set update proofs should only be requested from
+             epoch 1 onwards"
+                .into(),
+        )));
+    }
+
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
 
     let seen = StorageRead::read(ctx.storage, &valset_upd_keys.seen())?
@@ -207,9 +216,13 @@ where
         )));
     }
 
-    // return ABI encoded proof; need to implement `AbiEncode`
-    // for `EncodeCell<EthereumProof<VotingPowersMap>>`
-    todo!()
+    let proof: EthereumProof<VotingPowersMap> =
+        StorageRead::read(ctx.storage, &valset_upd_keys.body())?.expect(
+            "EthereumProof is seen in storage, therefore it must exist",
+        );
+
+    // NOTE: `epoch - 1` is the epoch where we signed the proof
+    Ok(proof.map(|set| (epoch - 1, set)).encode())
 }
 
 /// Read the active set of validators at the given [`Epoch`].
