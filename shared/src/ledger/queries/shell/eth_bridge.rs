@@ -10,11 +10,16 @@ use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
 use namada_core::types::vote_extensions::validator_set_update::{
-    ValidatorSetArgs, VotingPowersMap,
+    EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
+};
+use namada_core::types::voting_power::{
+    EthBridgeVotingPower, FractionalVotingPower,
 };
 use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
+use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_ethereum_bridge::storage::vote_tallies;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
@@ -231,14 +236,38 @@ where
 /// This method may fail if no set of validators exists yet,
 /// at that [`Epoch`].
 fn read_active_valset<D, H>(
-    _ctx: RequestCtx<'_, D, H>,
-    _epoch: Epoch,
+    ctx: RequestCtx<'_, D, H>,
+    epoch: Epoch,
 ) -> storage_api::Result<EncodeCell<ValidatorSetArgs>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    todo!()
+    let total_power = ctx.storage.get_total_voting_power(Some(epoch)).into();
+
+    let voting_powers_map: VotingPowersMap = ctx
+        .storage
+        .get_active_eth_addresses(Some(epoch))
+        .map(|(addr_book, _, power)| (addr_book, power))
+        .collect();
+    let (validators, voting_powers) = voting_powers_map
+        .get_sorted()
+        .into_iter()
+        .map(|(&EthAddrBook { hot_key_addr, .. }, &power)| {
+            let voting_power: EthBridgeVotingPower =
+                FractionalVotingPower::new(power.into(), total_power)
+                    .expect("Fractional voting power should be >1")
+                    .into();
+            (hot_key_addr, voting_power)
+        })
+        .unzip();
+
+    Ok(ValidatorSetArgs {
+        epoch,
+        validators,
+        voting_powers,
+    }
+    .encode())
 }
 
 #[cfg(test)]
