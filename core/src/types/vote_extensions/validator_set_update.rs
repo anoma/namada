@@ -163,33 +163,48 @@ pub trait VotingPowersMapExt {
     /// voting power for a given validator set update.
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>);
 
-    /// Returns the keccak hashes of this [`VotingPowersMap`],
-    /// to be signed by an Ethereum hot and cold key, respectively.
+    /// Returns the bridge and governance keccak hashes of
+    /// this [`VotingPowersMap`].
+    #[inline]
     fn get_bridge_and_gov_hashes(
         &self,
         signing_epoch: Epoch,
     ) -> (KeccakHash, KeccakHash) {
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
             self.get_abi_encoded();
-
-        let bridge_hash = compute_hash(
+        valset_upd_toks_to_hashes(
             signing_epoch,
-            BRIDGE_CONTRACT_VERSION,
-            BRIDGE_CONTRACT_NAMESPACE,
             hot_key_addrs,
-            voting_powers.clone(),
-        );
-
-        let governance_hash = compute_hash(
-            signing_epoch,
-            GOVERNANCE_CONTRACT_VERSION,
-            GOVERNANCE_CONTRACT_NAMESPACE,
             cold_key_addrs,
             voting_powers,
-        );
-
-        (bridge_hash, governance_hash)
+        )
     }
+}
+
+/// Returns the bridge and governance keccak hashes calculated from
+/// the given hot and cold key addresses, and their respective validator's
+/// voting powers, normalized to `2^32`.
+pub fn valset_upd_toks_to_hashes(
+    signing_epoch: Epoch,
+    hot_key_addrs: Vec<Token>,
+    cold_key_addrs: Vec<Token>,
+    voting_powers: Vec<Token>,
+) -> (KeccakHash, KeccakHash) {
+    let bridge_hash = compute_hash(
+        signing_epoch,
+        BRIDGE_CONTRACT_VERSION,
+        BRIDGE_CONTRACT_NAMESPACE,
+        hot_key_addrs,
+        voting_powers.clone(),
+    );
+    let governance_hash = compute_hash(
+        signing_epoch,
+        GOVERNANCE_CONTRACT_VERSION,
+        GOVERNANCE_CONTRACT_NAMESPACE,
+        cold_key_addrs,
+        voting_powers,
+    );
+    (bridge_hash, governance_hash)
 }
 
 /// Compare two items of [`VotingPowersMap`]. This comparison operation must
