@@ -10,6 +10,8 @@ use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::proto::{SignableEthBytes, Signed};
+#[cfg(not(feature = "abcipp"))]
+use namada::types::storage::Epoch;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
@@ -163,7 +165,7 @@ where
             .to_owned();
 
         self.storage
-            .can_send_validator_set_update(SendValsetUpd::Now)
+            .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
                 let next_epoch = self.storage.get_current_epoch().0.next();
                 let voting_powers = self
@@ -177,10 +179,7 @@ where
                 let ext = validator_set_update::Vext {
                     validator_addr,
                     voting_powers,
-                    #[cfg(feature = "abcipp")]
-                    block_height: self.storage.get_current_decision_height(),
-                    #[cfg(not(feature = "abcipp"))]
-                    block_height: self.storage.last_height,
+                    signing_epoch: self.storage.get_current_epoch().0,
                 };
 
                 let eth_key = self
@@ -301,34 +300,49 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<validator_set_update::SignedVext>,
     ) -> bool {
-        if let Some(ext) = ext {
-            self.storage
-                .can_send_validator_set_update(SendValsetUpd::Now)
-                .then(|| {
-                    // we have a valset update vext when we're expecting one,
-                    // cool, let's validate it
-                    self.validate_valset_upd_vext(
-                        ext,
-                        self.storage.get_current_decision_height(),
-                    )
-                })
-                .unwrap_or_else(|| {
-                    // either validation failed, or we were expecting a valset
-                    // update vext and got none
-                    tracing::warn!(
-                        ?req.validator_address,
-                        ?req.hash,
-                        req.height,
-                        "Missing or invalid validator set update vote extension"
-                    );
-                    false
-                })
-        } else {
-            // NOTE: if we're not supposed to send a validator set update
-            // vote extension at a particular block height, we will
-            // just return true as the validation result
-            true
-        }
+        let Some(ext) = ext else {
+            // if no validator set update was provided,
+            // we must check if we are not supposed to
+            // send one at the current block height.
+            // remember, we need to gather a quorum of
+            // votes, so this check is quite important!
+            //
+            // can send = true -> verify = false
+            // can send = false -> verify = true
+            //
+            // (we simply invert the can send logic)
+            let verify_passes = !self.storage
+                .must_send_valset_upd(SendValsetUpd::Now);
+            if !verify_passes {
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Expected validator set update, but got none"
+                );
+            }
+            return verify_passes;
+        };
+        self.storage
+            .must_send_valset_upd(SendValsetUpd::Now)
+            .then(|| {
+                // we have a valset update vext when we're expecting one,
+                // cool, let's validate it
+                self.validate_valset_upd_vext(
+                    ext,
+                    self.storage.get_current_epoch().0,
+                )
+            })
+            .unwrap_or_else(|| {
+                // oh no, validation failed
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Invalid validator set update vote extension"
+                );
+                false
+            })
     }
 }
 
@@ -357,10 +371,11 @@ pub fn deserialize_vote_extensions(
 pub fn deserialize_vote_extensions<'shell>(
     txs: &'shell [TxBytes],
     protocol_tx_indices: &'shell mut VecIndexSet<u128>,
+    current_epoch: Epoch,
 ) -> impl Iterator<Item = TxBytes> + 'shell {
     use namada::types::transaction::protocol::ProtocolTx;
 
-    txs.iter().enumerate().filter_map(|(index, tx_bytes)| {
+    txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
         let tx = match Tx::try_from(tx_bytes.as_slice()) {
             Ok(tx) => tx,
             Err(err) => {
@@ -375,13 +390,32 @@ pub fn deserialize_vote_extensions<'shell>(
             TxType::Protocol(ProtocolTx {
                 tx:
                     ProtocolTxType::EthEventsVext(_)
-                    | ProtocolTxType::BridgePoolVext(_)
-                    | ProtocolTxType::ValSetUpdateVext(_),
+                    | ProtocolTxType::BridgePoolVext(_),
                 ..
             }) => {
                 // mark tx for inclusion
                 protocol_tx_indices.insert(index);
                 Some(tx_bytes.clone())
+            }
+            TxType::Protocol(ProtocolTx {
+                tx: ProtocolTxType::ValSetUpdateVext(ext),
+                ..
+            }) => {
+                // mark tx, so it's skipped when
+                // building the batch of remaining txs
+                protocol_tx_indices.insert(index);
+
+                // only include non-stale validator set updates
+                // in block proposals. it might be sitting long
+                // enough in the mempool for it to no longer be
+                // relevant to propose (e.g. the new epoch was
+                // installed before this validator set update got
+                // a chance to be decided). unfortunately, we won't
+                // be able to remove it from the mempool this way,
+                // but it will eventually be evicted, getting replaced
+                // by newer txs.
+                (ext.data.signing_epoch == current_epoch)
+                    .then(|| tx_bytes.clone())
             }
             _ => None,
         }

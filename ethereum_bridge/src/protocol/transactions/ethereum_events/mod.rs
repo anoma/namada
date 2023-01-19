@@ -23,7 +23,10 @@ use crate::storage::vote_tallies;
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
-    fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
+    fn get_voters(
+        &self,
+        _epoch_start_height: BlockHeight,
+    ) -> HashSet<(Address, BlockHeight)> {
         self.iter().fold(HashSet::new(), |mut voters, update| {
             voters.extend(update.seen_by.clone().into_iter());
             voters
@@ -447,7 +450,7 @@ mod tests {
     /// set of updates
     pub fn test_get_votes_for_updates_empty() {
         let updates = HashSet::new();
-        assert!(updates.get_voters().is_empty());
+        assert!(updates.get_voters(0.into()).is_empty());
     }
 
     #[test]
@@ -487,7 +490,7 @@ mod tests {
                 ]),
             },
         ]);
-        let voters = updates.get_voters();
+        let voters = updates.get_voters(0.into());
         assert_eq!(
             voters,
             HashSet::from([

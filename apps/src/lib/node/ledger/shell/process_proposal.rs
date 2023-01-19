@@ -478,7 +478,10 @@ where
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
-                        self.storage.last_height,
+                        // n.b. only accept validator set updates issued at
+                        // the current epoch (signing off on the validators
+                        // of the next epoch)
+                        self.storage.get_current_epoch().0,
                     )
                     .map(|_| TxResult {
                         code: ErrorCodes::Ok.into(),
@@ -519,9 +522,10 @@ where
                     self.validate_vexts_in_proposal(valid_extensions)
                 }
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
-                    if !self.storage.can_send_validator_set_update(
-                        SendValsetUpd::AtPrevHeight,
-                    ) {
+                    if !self
+                        .storage
+                        .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
+                    {
                         return TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected a validator set \
@@ -536,7 +540,7 @@ where
                     }
 
                     let extensions =
-                        digest.decompress(self.storage.last_height);
+                        digest.decompress(self.storage.get_current_epoch().0);
                     let valid_extensions =
                         self.validate_valset_upd_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
@@ -677,7 +681,7 @@ where
     fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
         if self
             .storage
-            .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+            .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
         {
             meta.digests.valset_upd_digest_num
                 == usize::from(self.storage.last_height.0 != 0)

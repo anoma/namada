@@ -211,7 +211,7 @@ where
         let validator_set_update =
             if self
                 .storage
-                .can_send_validator_set_update(SendValsetUpd::AtPrevHeight)
+                .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
             {
                 Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
                     || panic!("{}", not_enough_voting_power_msg()),
@@ -256,7 +256,12 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let txs = deserialize_vote_extensions(txs, protocol_tx_indices).take_while(|tx_bytes|
+        let deserialized_iter = deserialize_vote_extensions(
+            txs,
+            protocol_tx_indices,
+            self.storage.get_current_epoch().0,
+        );
+        let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
