@@ -218,6 +218,7 @@ mod tests {
             FractionalVotingPower::new(1, 1).unwrap(),
         )]);
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
 
         let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
 
@@ -283,6 +284,7 @@ mod tests {
         let (mut storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![(sole_validator.clone(), 100_u64.into())]),
         );
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -343,6 +345,7 @@ mod tests {
                 (validator_b, 100_u64.into()),
             ]),
         );
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
