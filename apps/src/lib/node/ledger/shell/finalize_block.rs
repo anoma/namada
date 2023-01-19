@@ -339,12 +339,10 @@ where
                         msg
                     );
                     stats.increment_errored_txs();
-                    self.wl_storage.drop_tx();
-                    // FIXME: unit test
 
                     // If transaction type is Decrypted and failed because of
                     // out of gas, remove its hash from storage to allow
-                    // repwrapping it
+                    // rewrapping it
                     if let Some(hash) = tx_unsigned_hash {
                         if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
                             msg
