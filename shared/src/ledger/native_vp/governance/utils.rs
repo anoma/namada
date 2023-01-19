@@ -26,14 +26,10 @@ use crate::types::token;
 pub struct Votes {
     /// Map from validators who votes yay to their total stake amount
     pub yay_validators: HashMap<Address, (VotePower, ProposalVote)>,
-    /// Map from delegation who votes yay to their bond amount
-    pub yay_delegators:
-        HashMap<Address, HashMap<Address, (VotePower, ProposalVote)>>,
-    /// Map from delegation who votes nay to their bond amount
-    pub nay_delegators:
+    /// Map from delegation votes to their bond amount
+    pub delegators:
         HashMap<Address, HashMap<Address, (VotePower, ProposalVote)>>,
 }
-//FIXME: since I attach the vote, can I use only two field, one for the validators and one for the delegators?
 
 /// Proposal errors
 #[derive(Error, Debug)]
@@ -90,8 +86,8 @@ pub fn compute_tally(
 ) -> ProposalResult {
     let Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
+        
     } = votes;
 
     match proposal_type {
@@ -113,44 +109,38 @@ pub fn compute_tally(
                 }
             }
 
-            // YAY: Add delegator amount whose validator didn't vote / voted nay
-            for (_, vote_map) in yay_delegators.iter() {
+            for (_, vote_map) in delegators.iter() {
                 for (validator_address, (vote_power, delegator_vote)) in
                     vote_map.iter()
                 {
-                    if let ProposalVote::Yay(VoteType::Default) = delegator_vote
-                    {
-                        if !yay_validators.contains_key(validator_address) {
+                    match delegator_vote {
+                        
+                        ProposalVote::Yay(VoteType::Default)   => {
+                            
+ if !yay_validators.contains_key(validator_address) {
+            // YAY: Add delegator amount whose validator didn't vote / voted nay
                             total_yay_staked_tokens += vote_power;
                         }
-                    } else {
-                         return ProposalResult {
-                            result: TallyResult::Failed(format!("Unexpected vote type. Expected: Default, Found: {}", delegator_vote)),
-                            total_voting_power: total_stake,
-                            total_yay_power: 0,
-                            total_nay_power: 0}
-                    }
-                }
-            }
-
-            // NAY: Remove delegator amount whose validator validator vote yay
-            for (_, vote_map) in nay_delegators.iter() {
-                for (validator_address, (vote_power, delegator_vote)) in
-                    vote_map.iter()
-                {
-                    if let ProposalVote::Nay = delegator_vote {
+                        }        
+                        ProposalVote::Nay => {
+                            
+ // NAY: Remove delegator amount whose validator validator vote yay
+                        
                         if yay_validators.contains_key(validator_address) {
                             total_yay_staked_tokens -= vote_power;
                         }
-                    } else {
-                        return ProposalResult {
+                        }
+                                 
+                    _ => 
+ return ProposalResult {
                             result: TallyResult::Failed(format!("Unexpected vote type. Expected: Default, Found: {}", delegator_vote)),
                             total_voting_power: total_stake,
                             total_yay_power: 0,
-                            total_nay_power: 0}
-                    }
-                }
+                            total_nay_power: 0}}
+
+                                }
             }
+
 
             // Proposal passes if 2/3 of total voting power voted Yay
             if total_yay_staked_tokens >= 2 / 3 * total_stake {
@@ -192,15 +182,14 @@ pub fn compute_tally(
 
             // YAY: Add delegator amount whose validator didn't vote / voted nay or adjust voting power
             // if delegator voted yay with a different memo
-            for (_, vote_map) in yay_delegators.iter() {
+            for (_, vote_map) in delegators.iter() {
                 for (validator_address, (vote_power, delegator_vote)) in
                     vote_map.iter()
                 {
-                    if let ProposalVote::Yay(VoteType::PGFCouncil(
-                        delegator_votes,
-                    )) = delegator_vote
-                    {
-                        match yay_validators.get(validator_address) {
+                    match delegator_vote {
+                        ProposalVote::Yay(VoteType::PGFCouncil(delegator_votes)) => {
+                            
+ match yay_validators.get(validator_address) {
                             Some((_, validator_vote)) => {
                                 if let ProposalVote::Yay(
                                     VoteType::PGFCouncil(validator_votes),
@@ -250,19 +239,13 @@ pub fn compute_tally(
                                 }
                             }
                         }
-                    } else {
-                        return ProposalResult{
-                                result:  TallyResult::Failed(format!("Unexpected vote type. Expected: PGFCouncil, Found: {}", delegator_vote)),
-                                total_voting_power: total_stake,
-                                total_yay_power: 0,
-                                total_nay_power: 0}
-                    }
-                }
-            }
+                        },
+                        ProposalVote::Nay => {
+                            
 
-            // NAY: Remove delegator amount whose validator voted yay
-            for (_, vote_map) in nay_delegators.iter() {
-                for (validator_address, (vote_power, _delegator_vote)) in
+
+                            
+for (validator_address, (vote_power, _delegator_vote)) in
                     vote_map.iter()
                 {
                     if yay_validators.contains_key(validator_address) {
@@ -296,8 +279,21 @@ pub fn compute_tally(
                         }
                     }
                 }
-            }
+                        },
+                        _ => 
+return ProposalResult {
+                                        
+                                        result: TallyResult::Failed(format!("Unexpected vote type. Expected: PGFCouncil, Found: {}", delegator_vote)),
+                                            total_voting_power: total_stake,
+                                            total_yay_power: 0,
+                                            total_nay_power: 0}
+                                }
+                    }}
 
+
+
+                    
+                       
             // At least 1/3 of the total voting power must vote Yay
             let total_yay_voted_power = total_yay_staked_tokens
                 .iter()
@@ -346,11 +342,7 @@ where
         storage_api::iter_prefix::<ProposalVote>(storage, &vote_prefix_key)?;
 
     let mut yay_validators = HashMap::new();
-    let mut yay_delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-    let mut nay_delegators: HashMap<
+    let mut delegators: HashMap<
         Address,
         HashMap<Address, (VotePower, ProposalVote)>,
     > = HashMap::new();
@@ -386,23 +378,8 @@ where
                                     .1;
 
                             if amount != token::Amount::default() {
-                                if vote.is_yay() {
-                                    let entry = yay_delegators
-                                        .entry(voter_address.to_owned())
-                                        .or_default();
-                                    entry.insert(
-                                        validator.to_owned(),
-                                        (VotePower::from(amount), vote),
-                                    );
-                                } else {
-                                    let entry = nay_delegators
-                                        .entry(voter_address.to_owned())
-                                        .or_default();
-                                    entry.insert(
-                                        validator.to_owned(),
-                                        (VotePower::from(amount), vote),
-                                    );
-                                }
+                                let entry = delegators.entry(voter_address.to_owned()).or_default();
+                                entry.insert(validator.to_owned(), (VotePower::from(amount), vote));
                             }
                         }
                         None => continue,
@@ -415,8 +392,7 @@ where
 
     Ok(Votes {
         yay_validators,
-        yay_delegators,
-        nay_delegators,
+        delegators,
     })
 }
 
