@@ -211,8 +211,8 @@ where
     if epoch > current_epoch.next() {
         return Err(storage_api::Error::Custom(CustomError(
             format!(
-                "Requesting validator set update proof for {epoch:?},
-                but the last installed epoch is still {current_epoch:?}"
+                "Requesting validator set update proof for {epoch:?}, but the \
+                 last installed epoch is still {current_epoch:?}"
             )
             .into(),
         )));
@@ -257,8 +257,8 @@ where
     if epoch > current_epoch.next() {
         return Err(storage_api::Error::Custom(CustomError(
             format!(
-                "Requesting active validator set at {epoch:?},
-                but the last installed epoch is still {current_epoch:?}"
+                "Requesting active validator set at {epoch:?}, but the last \
+                 installed epoch is still {current_epoch:?}"
             )
             .into(),
         )));
