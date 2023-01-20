@@ -1,6 +1,7 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use namada::ledger::queries::MutClient;
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
@@ -11,12 +12,11 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 
 use crate::cli::args;
-use crate::facade::tendermint_rpc::Client;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
 pub async fn find_keypair<
-    C: Client + namada::ledger::queries::Client + Sync,
+    C: MutClient + namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -31,7 +31,7 @@ pub async fn find_keypair<
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
 pub async fn tx_signer<
-    C: Client + namada::ledger::queries::Client + Sync,
+    C: MutClient + namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -52,7 +52,7 @@ pub async fn tx_signer<
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<
-    C: Client + namada::ledger::queries::Client + Sync,
+    C: MutClient + namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
