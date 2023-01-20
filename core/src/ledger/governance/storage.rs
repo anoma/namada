@@ -31,10 +31,16 @@ pub fn is_governance_key(key: &Key) -> bool {
 /// Check if a key is a vote key
 pub fn is_vote_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(vote), DbKeySeg::AddressSeg(_validator_address), DbKeySeg::AddressSeg(_address)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && vote == PROPOSAL_VOTE =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(vote),
+            DbKeySeg::AddressSeg(_validator_address),
+            DbKeySeg::AddressSeg(_address),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && vote == PROPOSAL_VOTE =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -45,10 +51,14 @@ pub fn is_vote_key(key: &Key) -> bool {
 /// Check if key is author key
 pub fn is_author_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(author)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && author == PROPOSAL_AUTHOR =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(author),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && author == PROPOSAL_AUTHOR =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -59,10 +69,14 @@ pub fn is_author_key(key: &Key) -> bool {
 /// Check if key is proposal code key
 pub fn is_proposal_code_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(proposal_code)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && proposal_code == PROPOSAL_CODE =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(proposal_code),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && proposal_code == PROPOSAL_CODE =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -73,10 +87,14 @@ pub fn is_proposal_code_key(key: &Key) -> bool {
 /// Check if key is grace epoch key
 pub fn is_grace_epoch_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(grace_epoch)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && grace_epoch == PROPOSAL_GRACE_EPOCH =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(grace_epoch),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && grace_epoch == PROPOSAL_GRACE_EPOCH =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -87,10 +105,14 @@ pub fn is_grace_epoch_key(key: &Key) -> bool {
 /// Check if key is content key
 pub fn is_content_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(content)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && content == PROPOSAL_CONTENT =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(content),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && content == PROPOSAL_CONTENT =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -101,10 +123,14 @@ pub fn is_content_key(key: &Key) -> bool {
 /// Check if key is balance key
 pub fn is_balance_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(funds)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && funds == PROPOSAL_FUNDS =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(funds),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && funds == PROPOSAL_FUNDS =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -115,10 +141,14 @@ pub fn is_balance_key(key: &Key) -> bool {
 /// Check if key is start epoch key
 pub fn is_start_epoch_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(start_epoch)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && start_epoch == PROPOSAL_START_EPOCH =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(start_epoch),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && start_epoch == PROPOSAL_START_EPOCH =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -129,10 +159,14 @@ pub fn is_start_epoch_key(key: &Key) -> bool {
 /// Check if key is epoch key
 pub fn is_end_epoch_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(end_epoch)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && end_epoch == PROPOSAL_END_EPOCH =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(end_epoch),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && end_epoch == PROPOSAL_END_EPOCH =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -143,10 +177,14 @@ pub fn is_end_epoch_key(key: &Key) -> bool {
 /// Check if key is proposal type key
 pub fn is_proposal_type_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(id), DbKeySeg::StringSeg(proposal_type)]
-            if addr == &ADDRESS
-                && prefix == PROPOSAL_PREFIX
-                && proposal_type == PROPOSAL_TYPE =>
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(id),
+            DbKeySeg::StringSeg(proposal_type),
+        ] if addr == &ADDRESS
+            && prefix == PROPOSAL_PREFIX
+            && proposal_type == PROPOSAL_TYPE =>
         {
             id.parse::<u64>().is_ok()
         }
