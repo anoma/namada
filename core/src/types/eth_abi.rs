@@ -12,7 +12,18 @@ use crate::proto::{Signable, SignableEthBytes};
 use crate::types::keccak::{keccak_hash, KeccakHash};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
 #[repr(transparent)]
 pub struct EncodeCell<T: ?Sized> {
     /// ABI-encoded value of type `T`.

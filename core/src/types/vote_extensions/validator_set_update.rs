@@ -302,7 +302,7 @@ fn compute_hash(
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 // TODO: find a new home for this type
 pub struct ValidatorSetArgs {
     /// Ethereum addresses of the validators.
