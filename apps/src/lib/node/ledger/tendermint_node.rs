@@ -8,11 +8,13 @@ use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
+use tendermint::Moniker;
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
+use crate::cli::namada_version;
 use crate::config;
 use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -304,6 +306,13 @@ async fn update_tendermint_config(
     let path = home_dir.join("config").join("config.toml");
     let mut config =
         TendermintConfig::load_toml_file(&path).map_err(Error::LoadConfig)?;
+
+    config.moniker = Moniker::from_str(&format!(
+        "{}-{}",
+        config.moniker.to_string(),
+        namada_version()
+    ))
+    .expect("Invalid moniker");
 
     config.p2p.laddr =
         TendermintAddress::from_str(&tendermint_config.p2p_address.to_string())
