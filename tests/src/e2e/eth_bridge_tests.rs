@@ -247,7 +247,7 @@ fn test_add_to_bridge_pool() {
 /// be read from the logs, which is too small for us to grep for the Debug
 /// representation of the oracle's config appears in the logs
 #[test]
-fn configure_oracle_from_storage() -> Result<()> {
+fn test_configure_oracle_from_storage() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
