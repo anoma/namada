@@ -12,7 +12,7 @@ pub mod ledger;
 pub mod proto;
 pub mod types;
 
-#[cfg(feature = "abciplus")]
+#[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
 pub use {
