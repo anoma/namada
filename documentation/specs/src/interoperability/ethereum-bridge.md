@@ -2,37 +2,35 @@
 
 The Namada - Ethereum bridge exists to mint ERC20 tokens on Namada 
 which naturally can be redeemed on Ethereum at a later time. Furthermore, it 
-allows the minting of wrapped tokens on Ethereum backed by escrowed assets on 
-Namada.
+allows the minting of wrapped NAM (wNAM) tokens on Ethereum.
 
 The Namada Ethereum bridge system consists of:
+
 * An Ethereum full node run by each Namada validator, for including relevant 
   Ethereum events into Namada.
 * A set of validity predicates on Namada which roughly implements 
   [ICS20](https://docs.cosmos.network/v0.42/modules/ibc/) fungible token 
   transfers.
 * A set of Ethereum smart contracts.
-* A relayer for submitting transactions to Ethereum
+* An automated process to send validator set updates to the Ethereum smart 
+  contracts.
+* A relayer binary to aid in submitting transactions to Ethereum
 
 This basic bridge architecture should provide for almost-Namada consensus
 security for the bridge and free Ethereum state reads on Namada, plus
 bidirectional message passing with reasonably low gas costs on the
 Ethereum side.
 
-## Security
-On Namada, the validators are full nodes of Ethereum and their stake is also
-accounting for security of the bridge. If they carry out a forking attack
-on Namada to steal locked tokens of Ethereum their stake will be slashed on Namada.
-On the Ethereum side, we will add a limit to the amount of assets that can be
-locked to limit the damage a forking attack on Namada can do. To make an attack
-more cumbersome we will also add a limit on how fast wrapped Ethereum assets can
-be redeemed from Namada. This will not add more security, but rather make the 
-attack more inconvenient.
+## Topics
+ - [Bootstrapping](./ethereum-bridge/bootstrapping.md)
+ - [Security](./ethereum-bridge/security.md)
+ - [Ethereum Events Attestation](./ethereum-bridge/ethereum_events_attestation.md)
+ - [Transfers from Ethereum to Namada](./ethereum-bridge/transfers_to_namada.md)
+ - [Transfers from Namada to Ethereum](./ethereum-bridge/transfers_to_ethereum.md)
+ - [Proofs and validator set updates](./ethereum-bridge/proofs.md)
+ - [Smart Contracts](./ethereum-bridge/ethereum_smart_contracts.md)
 
-## Ethereum Events Attestation
-We want to store events from the smart contracts of our bridge onto Namada. We
-will include events that have been seen by at least one validator, but will not
-act on them until they have been seen by at least 2/3 of voting power.
+## Resources which may be helpful
 
 There will be multiple types of events emitted. Validators should
 ignore improperly formatted events. Raw events from Ethereum are converted to a 
@@ -392,4 +390,3 @@ Namada.
 - [ICS20](https://github.com/cosmos/ibc/tree/master/spec/app/ics-020-fungible-token-transfer)
 - [Rainbow Bridge contracts](https://github.com/aurora-is-near/rainbow-bridge/tree/master/contracts)
 - [IBC in Solidity](https://github.com/hyperledger-labs/yui-ibc-solidity)
-
