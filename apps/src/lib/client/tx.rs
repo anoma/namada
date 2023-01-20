@@ -2096,7 +2096,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote: vote,
+                    vote,
                     voter: voter_address,
                     delegations: delegations.into_iter().collect(),
                 };
