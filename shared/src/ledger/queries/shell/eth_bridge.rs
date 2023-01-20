@@ -207,6 +207,16 @@ where
                 .into(),
         )));
     }
+    let current_epoch = ctx.storage.last_epoch;
+    if epoch > current_epoch.next() {
+        return Err(storage_api::Error::Custom(CustomError(
+            format!(
+                "Requesting validator set update proof for {epoch:?},
+                but the last installed epoch is still {current_epoch:?}"
+            )
+            .into(),
+        )));
+    }
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
 
@@ -243,6 +253,17 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let current_epoch = ctx.storage.last_epoch;
+    if epoch > current_epoch.next() {
+        return Err(storage_api::Error::Custom(CustomError(
+            format!(
+                "Requesting active validator set at {epoch:?},
+                but the last installed epoch is still {current_epoch:?}"
+            )
+            .into(),
+        )));
+    }
+
     let total_power = ctx.storage.get_total_voting_power(Some(epoch)).into();
 
     let voting_powers_map: VotingPowersMap = ctx
