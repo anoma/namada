@@ -107,17 +107,14 @@ submitting a semantically valid transaction for the state of the application
 
 Since a signer might submit more than one transaction per block, the
 `process_proposal` function needs to cache the updated unshielded balance to
-correctly manage fees. As an optimization, instead of using an additional cache,
-`process_proposal` uses the already available write-ahead log. Therefore, fee
-payment is effectively carried out at block validation time and the new balances
-are updated in the WAL itself. To guarantee that the results coming from this
-process are correct, Namada imposes that **all the wrapper transactions in a
-block are listed before the inner transactions**. This is already the expected
-behavior of the block proposers (as stated before) but we need to enforce it in
-protocol: if this wasn't the case, an inner transaction placed in between
-wrappers could modify a balance involved in fee payment, leading to a
-miscalculation of the balance itself which would cause a late rejection of the
-block in `finalize_block`.
+correctly manage fees. To guarantee that the results coming from this process
+are correct, Namada imposes that **all the wrapper transactions in a block are
+listed before the inner transactions**. This is already the expected behavior of
+the block proposers (as stated before) but we need to enforce it in protocol: if
+this wasn't the case, an inner transaction placed in between wrappers could
+modify a balance involved in fee payment, leading to a miscalculation of the
+balance itself which would cause a late rejection of the block in
+`finalize_block`.
 
 If enough funds are available, these are deducted from the unshielded storage
 balances of the fee payers and directed to the balance of the block proposer. If
@@ -242,11 +239,9 @@ the transaction is valid or not: if this succeeds the transaction can be
 included in the block, otherwise it should be discarded.
 
 These same checks are done by the validators in `process_proposal`: if any of
-them fail, the entire block is rejected. Given that fees are paid at this time,
-the storage changes applied by the unshieldings must be stored in the
-write-ahead log too and the balance key must be searched in the WAL before the
-storage: in case of a block rejection the WAL is discarded without committing
-the changes to storage.
+them fail, the entire block is rejected. The balance key must be searched in the
+local cache before the storage to ensure a correct computation in case of
+transactions involving the same addresses.
 
 ### Governance proposals
 
