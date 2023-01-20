@@ -605,7 +605,7 @@ where
         };
 
         // Tx signature check
-        let tx_type = match process_tx(tx.clone()) {
+        let tx_type = match process_tx(tx) {
             Ok(ty) => ty,
             Err(msg) => {
                 response.code = ErrorCodes::InvalidSig.into();
@@ -635,6 +635,8 @@ where
                 return response;
             }
 
+            let tx =
+                Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
             let wrapper_hash = hash::Hash(tx.unsigned_hash());
             let wrapper_hash_key =
                 replay_protection::get_tx_hash_key(&wrapper_hash);

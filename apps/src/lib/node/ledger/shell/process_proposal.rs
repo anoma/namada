@@ -114,7 +114,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(tx.clone()) {
+        match process_tx(tx) {
             // This occurs if the wrapper / protocol tx signature is invalid
             Err(err) => TxResult {
                 code: ErrorCodes::InvalidSig.into(),
@@ -238,6 +238,8 @@ where
                         // Write inner hash to WAL
                         temp_wl_storage.write_log.write(&inner_hash_key, vec![]).expect("Couldn't write inner transaction hash to write log");
 
+                        let tx = Tx::try_from(tx_bytes)
+                            .expect("Deserialization shouldn't fail");
                         let wrapper_hash = Hash(tx.unsigned_hash());
                         let wrapper_hash_key =
                             replay_protection::get_tx_hash_key(&wrapper_hash);
