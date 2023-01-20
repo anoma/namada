@@ -44,6 +44,7 @@ rust_decimal_macros = "1.26.1"
 
 [dev-dependencies]
 namada_apps = {path = "../apps", default-features = false, features = ["abciplus", "testing"]}
+namada_ethereum_bridge = {path = "../ethereum_bridge", features = ["testing"]}
 assert_cmd = "1.0.7"
 borsh = "0.9.1"
 color-eyre = "0.5.11"

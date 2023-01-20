@@ -243,9 +243,6 @@ fn test_add_to_bridge_pool() {
 
 /// Tests that the ledger configures its Ethereum oracle with values from
 /// storage, if the Ethereum bridge has been bootstrapped for the Namada chain.
-/// TODO: this test is ignored as it seems only 248 bytes at a time appears to
-/// be read from the logs, which is too small for us to grep for the Debug
-/// representation of the oracle's config appears in the logs
 #[test]
 fn test_configure_oracle_from_storage() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
@@ -280,8 +277,8 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     // start the ledger with the real oracle and wait for a block to be
     // committed
 
-    // TODO: need to start up a fake Ethereum node here for the oracle to
-    // connect to, to avoid errors in the ledger logs
+    // TODO(namada#1061): need to start up a fake Ethereum node here for the
+    // oracle to connect to, to avoid errors in the ledger logs
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -295,9 +292,17 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     ledger.exp_string("This node is a validator")?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     // check that the oracle has been configured with the values from storage
+    let initial_config = namada_ethereum_bridge::oracle::config::Config {
+        min_confirmations: ethereum_bridge_params.min_confirmations.into(),
+        bridge_contract: ethereum_bridge_params.contracts.bridge.address,
+        governance_contract: ethereum_bridge_params
+            .contracts
+            .governance
+            .address,
+    };
     ledger.exp_string(&format!(
-        "Oracle received initial configuration config={:?}",
-        &ethereum_bridge_params
+        "Oracle received initial configuration - {:?}",
+        &initial_config
     ))?;
     Ok(())
 }
