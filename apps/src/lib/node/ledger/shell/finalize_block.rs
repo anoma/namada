@@ -872,7 +872,7 @@ mod test_finalize_block {
     where
         F: FnOnce(&TestShell) -> Tx,
     {
-        let (mut shell, _, _) = setup_at_height(3u64);
+        let (mut shell, _, _, _) = setup_at_height(3u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
             &mut shell.storage,
             &KeccakHash([1; 32]),

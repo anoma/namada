@@ -117,7 +117,7 @@ struct PendingQuorum {
 }
 
 impl GetVoters for PendingQuorum {
-    fn get_voters(&self) -> HashSet<(Address, BlockHeight)> {
+    fn get_voters(&self, _: BlockHeight) -> HashSet<(Address, BlockHeight)> {
         self.seen_by.iter().map(|(k, v)| (k.clone(), *v)).collect()
     }
 }
