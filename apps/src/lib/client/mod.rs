@@ -5,12 +5,10 @@ pub mod utils;
 
 pub mod tm {
     use namada::{
-        ledger::queries::{Client, EncodedResponseQuery, MutClient},
+        ledger::queries::{Client, EncodedResponseQuery},
         types::storage::BlockHeight,
     };
-    use tendermint::block::Height;
     use tendermint_rpc::error::Error as RpcError;
-    use tendermint_rpc::{query::Query, Order};
     use thiserror::Error;
 
     #[allow(missing_docs)]
@@ -57,7 +55,6 @@ pub mod tm {
                 })
                 .transpose()?;
             let response = self
-                .inner
                 .abci_query(
                     // TODO open the private Path constructor in tendermint-rpc
                     Some(std::str::FromStr::from_str(&path).unwrap()),
@@ -76,62 +73,12 @@ pub mod tm {
                 Code::Err(code) => Err(Error::Query(response.info, code)),
             }
         }
-    }
 
-    #[async_trait::async_trait(?Send)]
-    impl<C: tendermint_rpc::Client + std::marker::Sync> MutClient
-        for RpcHttpClient<C>
-    {
-        async fn broadcast_tx_sync(
-            &self,
-            tx: tendermint::abci::Transaction,
-        ) -> Result<
-            tendermint_rpc::endpoint::broadcast::tx_sync::Response,
-            RpcError,
-        > {
-            self.inner.broadcast_tx_sync(tx).await
-        }
-
-        async fn latest_block(
-            &self,
-        ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>
-        {
-            self.inner.latest_block().await
-        }
-
-        async fn block_search(
-            &self,
-            query: Query,
-            page: u32,
-            per_page: u8,
-            order: Order,
-        ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
-        {
-            self.inner.block_search(query, page, per_page, order).await
-        }
-
-        async fn block_results<H>(
-            &self,
-            height: H,
-        ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
+        async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
         where
-            H: Into<Height> + Send,
+            R: tendermint_rpc::SimpleRequest,
         {
-            self.inner.block_results(height).await
-        }
-
-        async fn tx_search(
-            &self,
-            query: Query,
-            prove: bool,
-            page: u32,
-            per_page: u8,
-            order: Order,
-        ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError>
-        {
-            self.inner
-                .tx_search(query, prove, page, per_page, order)
-                .await
+            self.inner.perform(request).await
         }
     }
 }
