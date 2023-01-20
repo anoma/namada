@@ -228,14 +228,11 @@ where
     H: storage::traits::StorageHasher,
 {
     let native_erc20 = bridge_storage::native_erc20_key();
-    match storage.read(&native_erc20) {
-        Ok((Some(bytes), _)) => {
-            Ok(EthAddress::try_from_slice(bytes.as_slice()).expect(
-                "Deserializing the Native ERC20 address from storage \
-                 shouldn't fail.",
-            ))
+    match StorageRead::read(storage, &native_erc20) {
+        Ok(Some(eth_address)) => Ok(eth_address),
+        Ok(None) => {
+            Err(eyre!("The Ethereum bridge storage is not initialized"))
         }
-        Ok(_) => Err(eyre!("The Ethereum bridge storage is not initialized")),
         Err(e) => Err(eyre!(
             "Failed to read storage when fetching the native ERC20 address \
              with: {}",
