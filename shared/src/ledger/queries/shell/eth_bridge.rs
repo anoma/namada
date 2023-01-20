@@ -302,6 +302,9 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::types::address::testing::established_address_1;
+    use namada_core::types::vote_extensions::validator_set_update;
+    use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
 
     use super::test_utils::bertha_address;
     use super::*;
@@ -394,6 +397,60 @@ mod test_ethbridge_router {
                 .split_once("but the last installed epoch is still")
                 .is_some()
         );
+    }
+
+    /// Test that reading a validator set proof works.
+    #[tokio::test]
+    async fn test_read_valset_upd_proof() {
+        let mut client = TestClient::new(RPC);
+        assert_eq!(client.storage.last_epoch.0, 0);
+
+        // write validator to storage
+        let keys = test_utils::setup_default_storage(&mut client.storage);
+
+        // write proof to storage
+        let vext = validator_set_update::Vext {
+            voting_powers: VotingPowersMap::new(),
+            validator_addr: established_address_1(),
+            signing_epoch: 0.into(),
+        }
+        .sign(
+            &keys
+                .get(&established_address_1())
+                .expect("Test failed")
+                .eth_bridge,
+        );
+        let tx_result = aggregate_votes(
+            &mut client.storage,
+            validator_set_update::VextDigest::singleton(vext.clone()),
+        )
+        .expect("Test failed");
+        assert!(!tx_result.changed_keys.is_empty());
+
+        // commit the changes
+        client.storage.commit().expect("Test failed");
+
+        // check the response
+        let proof = RPC
+            .shell()
+            .eth_bridge()
+            .read_valset_upd_proof(&client, &Epoch(1))
+            .await
+            .unwrap();
+        let expected = {
+            let mut proof =
+                EthereumProof::new((0.into(), vext.data.voting_powers));
+            proof.attach_signature(
+                client
+                    .storage
+                    .get_eth_addr_book(&established_address_1(), Some(0.into()))
+                    .expect("Test failed"),
+                vext.sig,
+            );
+            proof.encode()
+        };
+
+        assert_eq!(proof, expected);
     }
 
     /// Test that reading the bridge pool works
