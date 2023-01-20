@@ -51,7 +51,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 #[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
 
-use crate::ledger::queries::MutClient;
+use crate::ledger::queries::Client;
 use crate::ledger::rpc;
 use crate::proto::{SignedTxData, Tx};
 use crate::tendermint_rpc::query::Query;
@@ -259,7 +259,7 @@ pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {
     /// The type of the Tendermint client to make queries with
-    type C: crate::ledger::queries::Client + MutClient + std::marker::Sync;
+    type C: crate::ledger::queries::Client + std::marker::Sync;
 
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;

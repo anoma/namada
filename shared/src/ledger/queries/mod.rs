@@ -5,13 +5,13 @@ use shell::{Shell, SHELL};
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
-    EncodedResponseQuery, MutClient, RequestCtx, RequestQuery, ResponseQuery,
-    Router,
+    EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
 use vp::{Vp, VP};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;
+use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]
@@ -92,6 +92,7 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
     use tempfile::TempDir;
+    use tendermint_rpc::Response;
 
     use super::*;
     use crate::ledger::events::log::EventLog;
@@ -180,6 +181,13 @@ mod testing {
             };
             let response = self.rpc.handle(ctx, &request).unwrap();
             Ok(response)
+        }
+
+        async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
+        where
+            R: tendermint_rpc::SimpleRequest,
+        {
+            Response::from_string("TODO")
         }
     }
 }

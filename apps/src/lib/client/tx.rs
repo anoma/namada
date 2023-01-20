@@ -11,7 +11,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
-use namada::ledger::queries::MutClient;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -30,7 +29,6 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::InitValidator;
 use namada::vm;
 use rust_decimal::Decimal;
-use tendermint_rpc::HttpClient;
 
 use super::rpc;
 use super::tm::RpcHttpClient;
@@ -42,7 +40,7 @@ use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, CliWalletUtils};
 
 pub async fn submit_custom<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -53,7 +51,7 @@ pub async fn submit_custom<
 }
 
 pub async fn submit_update_vp<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -64,7 +62,7 @@ pub async fn submit_update_vp<
 }
 
 pub async fn submit_init_account<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -75,7 +73,7 @@ pub async fn submit_init_account<
 }
 
 pub async fn submit_init_validator<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     mut ctx: Context,
@@ -387,7 +385,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
 }
 
 pub async fn submit_transfer<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     V: WalletUtils,
     U: ShieldedUtils<C = C>,
 >(
@@ -400,7 +398,7 @@ pub async fn submit_transfer<
 }
 
 pub async fn submit_ibc_transfer<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -410,9 +408,7 @@ pub async fn submit_ibc_transfer<
     tx::submit_ibc_transfer::<C, U>(client, wallet, args).await
 }
 
-pub async fn submit_init_proposal<
-    C: MutClient + namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
@@ -558,7 +554,7 @@ pub async fn submit_init_proposal<
 }
 
 pub async fn submit_vote_proposal<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -702,7 +698,7 @@ pub async fn submit_vote_proposal<
 }
 
 pub async fn submit_reveal_pk<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -713,7 +709,7 @@ pub async fn submit_reveal_pk<
 }
 
 pub async fn reveal_pk_if_needed<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -724,9 +720,7 @@ pub async fn reveal_pk_if_needed<
     tx::reveal_pk_if_needed::<C, U>(client, wallet, public_key, args).await
 }
 
-pub async fn has_revealed_pk<
-    C: MutClient + namada::ledger::queries::Client + Sync,
->(
+pub async fn has_revealed_pk<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     addr: &Address,
 ) -> bool {
@@ -734,7 +728,7 @@ pub async fn has_revealed_pk<
 }
 
 pub async fn submit_reveal_pk_aux<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -748,9 +742,7 @@ pub async fn submit_reveal_pk_aux<
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window<
-    C: MutClient + namada::ledger::queries::Client + Sync,
->(
+async fn is_safe_voting_window<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
@@ -760,9 +752,7 @@ async fn is_safe_voting_window<
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations<
-    C: MutClient + namada::ledger::queries::Client + Sync,
->(
+async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
@@ -800,7 +790,7 @@ async fn filter_delegations<
 }
 
 pub async fn submit_bond<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -811,7 +801,7 @@ pub async fn submit_bond<
 }
 
 pub async fn submit_unbond<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -822,7 +812,7 @@ pub async fn submit_unbond<
 }
 
 pub async fn submit_withdraw<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -833,7 +823,7 @@ pub async fn submit_withdraw<
 }
 
 pub async fn submit_validator_commission_change<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -846,7 +836,7 @@ pub async fn submit_validator_commission_change<
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 async fn process_tx<
-    C: MutClient + namada::ledger::queries::Client + Sync,
+    C: namada::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -871,7 +861,7 @@ async fn save_initialized_accounts<U: WalletUtils>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: MutClient + Sync>(
+pub async fn broadcast_tx<C: namada::ledger::queries::Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, tx::Error> {
@@ -886,9 +876,7 @@ pub async fn broadcast_tx<C: MutClient + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<
-    C: MutClient + namada::ledger::queries::Client + Sync,
->(
+pub async fn submit_tx<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, tx::Error> {

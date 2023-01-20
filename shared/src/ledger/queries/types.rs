@@ -1,4 +1,5 @@
 use tendermint::block::Height;
+use tendermint_rpc::endpoint::block;
 use tendermint_rpc::query::Query;
 use tendermint_rpc::Order;
 
@@ -99,18 +100,21 @@ pub trait Client {
         height: Option<BlockHeight>,
         prove: bool,
     ) -> Result<EncodedResponseQuery, Self::Error>;
-}
 
-#[async_trait::async_trait(?Send)]
-pub trait MutClient {
     async fn broadcast_tx_sync(
         &self,
         tx: tendermint::abci::Transaction,
-    ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>;
+    ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
+    {
+        self.perform(
+            tendermint_rpc::endpoint::broadcast::tx_sync::Request::new(tx),
+        )
+        .await
+    }
 
-    async fn latest_block(
-        &self,
-    ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>;
+    async fn latest_block(&self) -> Result<block::Response, RpcError> {
+        self.perform(block::Request::default()).await
+    }
 
     async fn block_search(
         &self,
@@ -118,14 +122,26 @@ pub trait MutClient {
         page: u32,
         per_page: u8,
         order: Order,
-    ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>;
+    ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
+    {
+        self.perform(tendermint_rpc::endpoint::block_search::Request::new(
+            query, page, per_page, order,
+        ))
+        .await
+    }
 
     async fn block_results<H>(
         &self,
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: Into<Height> + Send;
+        H: Into<Height> + Send,
+    {
+        self.perform(tendermint_rpc::endpoint::block_results::Request::new(
+            height.into(),
+        ))
+        .await
+    }
 
     async fn tx_search(
         &self,
@@ -134,7 +150,34 @@ pub trait MutClient {
         page: u32,
         per_page: u8,
         order: Order,
-    ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError>;
+    ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError> {
+        self.perform(tendermint_rpc::endpoint::tx_search::Request::new(
+            query, prove, page, per_page, order,
+        ))
+        .await
+    }
+
+    async fn abci_query<V>(
+        &self,
+        path: Option<tendermint::abci::Path>,
+        data: V,
+        height: Option<Height>,
+        prove: bool,
+    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError>
+    where
+        V: Into<Vec<u8>> + Send,
+    {
+        Ok(self
+            .perform(tendermint_rpc::endpoint::abci_query::Request::new(
+                path, data, height, prove,
+            ))
+            .await?
+            .response)
+    }
+
+    async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
+    where
+        R: tendermint_rpc::SimpleRequest;
 }
 
 /// Temporary domain-type for `tendermint_proto::abci::RequestQuery`, copied
