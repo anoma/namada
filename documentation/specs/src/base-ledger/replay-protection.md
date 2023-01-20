@@ -176,11 +176,10 @@ Both in `mempool_validation` and `process_proposal` we will perform a check
 (together with others, see the [relative](#wrapper-checks) section) on both the
 digests against the storage to check that neither of the transactions has
 already been executed: if this doesn't hold, the `WrapperTx` will not be
-included into the mempool/block respectively. If both checks pass then both of
-the hashes are added to the write ahead log in `process_proposal` to be then
-committed to storage: using the WAL allows us to prevent a replay of a
-transaction in the same block. The transaction is then included in the block and
-executed.
+included into the mempool/block respectively. In `process_proposal` we'll use a
+temporary cache to prevent a replay of a transaction in the same block. If both
+checks pass then the transaction is included in the block. The hashes are
+committed to storage in `finalize_block` and the transaction is executed.
 
 In the next block we deserialize the inner transaction, check the validity of
 the decrypted txs and their correct order: if the order is off a new round of
