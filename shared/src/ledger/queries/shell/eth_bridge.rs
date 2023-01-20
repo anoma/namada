@@ -282,9 +282,10 @@ mod test_ethbridge_router {
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
 
+    use super::test_utils::bertha_address;
+    use super::*;
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
-    use crate::types::address::Address;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
         GasFee, MultiSignedMerkleRoot, PendingTransfer, RelayProof,
@@ -292,10 +293,55 @@ mod test_ethbridge_router {
     };
     use crate::types::ethereum_events::EthAddress;
 
-    /// An established user address for testing & development
-    fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
-            .expect("The token address decoding shouldn't fail")
+    /// Test that reading the active validator set works.
+    #[tokio::test]
+    async fn test_read_active_valset() {
+        let mut client = TestClient::new(RPC);
+        let epoch = Epoch(0);
+
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+
+        // commit the changes
+        client.storage.commit().expect("Test failed");
+
+        // check the response
+        let validator_set = RPC
+            .shell()
+            .eth_bridge()
+            .read_active_valset(&client, &epoch)
+            .await
+            .unwrap();
+        let expected = {
+            let total_power =
+                client.storage.get_total_voting_power(Some(epoch)).into();
+
+            let voting_powers_map: VotingPowersMap = client
+                .storage
+                .get_active_eth_addresses(Some(epoch))
+                .map(|(addr_book, _, power)| (addr_book, power))
+                .collect();
+            let (validators, voting_powers) = voting_powers_map
+                .get_sorted()
+                .into_iter()
+                .map(|(&EthAddrBook { hot_key_addr, .. }, &power)| {
+                    let voting_power: EthBridgeVotingPower =
+                        FractionalVotingPower::new(power.into(), total_power)
+                            .expect("Fractional voting power should be >1")
+                            .into();
+                    (hot_key_addr, voting_power)
+                })
+                .unzip();
+
+            ValidatorSetArgs {
+                epoch,
+                validators,
+                voting_powers,
+            }
+            .encode()
+        };
+
+        assert_eq!(validator_set, expected);
     }
 
     /// Test that reading the bridge pool works
@@ -571,5 +617,154 @@ mod test_ethbridge_router {
             .await;
         // thus proof generation should fail
         assert!(resp.is_err());
+    }
+}
+
+// temporary home for test utils lol.
+// this code is borrowed from the `ethereum_bridge` crate.
+#[cfg(any(feature = "testing", test))]
+#[allow(dead_code)]
+mod test_utils {
+    use std::collections::{BTreeSet, HashMap};
+
+    use borsh::BorshSerialize;
+    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::types::address::{self, Address};
+    use namada_core::types::key::{
+        self, protocol_pk_key, RefTo, SecretKey, SigScheme,
+    };
+    use namada_core::types::token;
+    use namada_proof_of_stake::epoched::Epoched;
+    use namada_proof_of_stake::types::{
+        ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
+        WeightedValidator,
+    };
+    use namada_proof_of_stake::PosBase;
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+
+    /// Validator keys used for testing purposes.
+    pub struct TestValidatorKeys {
+        /// Consensus keypair.
+        pub consensus: key::common::SecretKey,
+        /// Protocol keypair.
+        pub protocol: key::common::SecretKey,
+        /// Ethereum hot keypair.
+        pub eth_bridge: key::common::SecretKey,
+        /// Ethereum cold keypair.
+        pub eth_gov: key::common::SecretKey,
+    }
+
+    /// Set up a [`TestStorage`] initialized at genesis with a single
+    /// validator.
+    ///
+    /// The validator's address is [`address::testing::established_address_1`].
+    #[inline]
+    pub fn setup_default_storage(
+        storage: &mut TestStorage,
+    ) -> HashMap<Address, TestValidatorKeys> {
+        setup_storage_with_validators(
+            storage,
+            HashMap::from_iter([(
+                address::testing::established_address_1(),
+                100_u64.into(),
+            )]),
+        )
+    }
+
+    /// Set up a [`TestStorage`] initialized at genesis with the given
+    /// validators.
+    pub fn setup_storage_with_validators(
+        storage: &mut TestStorage,
+        active_validators: HashMap<Address, token::Amount>,
+    ) -> HashMap<Address, TestValidatorKeys> {
+        // write validator set
+        let validator_set = ValidatorSet {
+            active: active_validators
+                .iter()
+                .map(|(address, bonded_stake)| WeightedValidator {
+                    bonded_stake: u64::from(*bonded_stake),
+                    address: address.clone(),
+                })
+                .collect(),
+            inactive: BTreeSet::default(),
+        };
+        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
+        storage.write_validator_set(&validator_sets);
+
+        // write validator keys
+        let mut all_keys = HashMap::new();
+        for validator in active_validators.into_keys() {
+            let keys = setup_storage_validator(storage, &validator);
+            all_keys.insert(validator, keys);
+        }
+
+        all_keys
+    }
+
+    /// Set up a single validator in [`TestStorage`] with some
+    /// arbitrary keys.
+    fn setup_storage_validator(
+        storage: &mut TestStorage,
+        validator: &Address,
+    ) -> TestValidatorKeys {
+        // register protocol key
+        let protocol_key = gen_ed25519_keypair();
+        storage
+            .write(
+                &protocol_pk_key(validator),
+                protocol_key.ref_to().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // register consensus key
+        let consensus_key = gen_ed25519_keypair();
+        storage.write_validator_consensus_key(
+            validator,
+            &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
+        );
+
+        // register ethereum keys
+        let hot_key = gen_secp256k1_keypair();
+        let cold_key = gen_secp256k1_keypair();
+        storage.write_validator_eth_hot_key(
+            validator,
+            &ValidatorEthKey::init_at_genesis(hot_key.ref_to(), 0),
+        );
+        storage.write_validator_eth_cold_key(
+            validator,
+            &ValidatorEthKey::init_at_genesis(cold_key.ref_to(), 0),
+        );
+
+        TestValidatorKeys {
+            consensus: consensus_key,
+            protocol: protocol_key,
+            eth_bridge: hot_key,
+            eth_gov: cold_key,
+        }
+    }
+
+    /// Generate a random [`key::secp256k1`] keypair.
+    pub fn gen_secp256k1_keypair() -> key::common::SecretKey {
+        let mut rng: ThreadRng = thread_rng();
+        key::secp256k1::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// Generate a random [`key::ed25519`] keypair.
+    pub fn gen_ed25519_keypair() -> key::common::SecretKey {
+        let mut rng: ThreadRng = thread_rng();
+        key::ed25519::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// An established user address for testing & development
+    pub fn bertha_address() -> Address {
+        Address::decode(
+            "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw",
+        )
+        .expect("The token address decoding shouldn't fail")
     }
 }
