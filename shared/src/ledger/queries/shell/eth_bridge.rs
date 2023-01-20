@@ -369,7 +369,7 @@ mod test_ethbridge_router {
         assert_eq!(validator_set, expected);
     }
 
-    /// Test that when reading an active validator too far ahead,
+    /// Test that when reading an active validator set too far ahead,
     /// RPC clients are met with an error.
     #[tokio::test]
     async fn test_read_active_valset_too_far_ahead() {
@@ -451,6 +451,36 @@ mod test_ethbridge_router {
         };
 
         assert_eq!(proof, expected);
+    }
+
+    /// Test that when reading a validator set proof too far ahead,
+    /// RPC clients are met with an error.
+    #[tokio::test]
+    async fn test_read_valset_upd_proof_too_far_ahead() {
+        let mut client = TestClient::new(RPC);
+        assert_eq!(client.storage.last_epoch.0, 0);
+
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+
+        // commit the changes
+        client.storage.commit().expect("Test failed");
+
+        // check the response
+        let result = RPC
+            .shell()
+            .eth_bridge()
+            .read_valset_upd_proof(&client, &Epoch(999_999))
+            .await;
+        let Err(err) = result else {
+            panic!("Test failed");
+        };
+
+        assert!(
+            err.to_string()
+                .split_once("but the last installed epoch is still")
+                .is_some()
+        );
     }
 
     /// Test that reading the bridge pool works
