@@ -10,16 +10,12 @@ use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
 use namada_core::types::vote_extensions::validator_set_update::{
-    EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
-};
-use namada_core::types::voting_power::{
-    EthBridgeVotingPower, FractionalVotingPower,
+    ValidatorSetArgs, VotingPowersMap,
 };
 use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_ethereum_bridge::storage::vote_tallies;
-use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
@@ -165,8 +161,7 @@ where
         ) {
             Ok(BridgePool(proof)) => {
                 let data = RelayProof {
-                    // TODO: use actual validators
-                    validator_args: Default::default(),
+                    validator_args: ctx.storage.get_validator_set_args(None),
                     root: signed_root,
                     proof,
                 }
@@ -255,40 +250,16 @@ where
 {
     let current_epoch = ctx.storage.last_epoch;
     if epoch > current_epoch.next() {
-        return Err(storage_api::Error::Custom(CustomError(
+        Err(storage_api::Error::Custom(CustomError(
             format!(
                 "Requesting active validator set at {epoch:?}, but the last \
                  installed epoch is still {current_epoch:?}"
             )
             .into(),
-        )));
+        )))
+    } else {
+        Ok(ctx.storage.get_validator_set_args(Some(epoch)).encode())
     }
-
-    let total_power = ctx.storage.get_total_voting_power(Some(epoch)).into();
-
-    let voting_powers_map: VotingPowersMap = ctx
-        .storage
-        .get_active_eth_addresses(Some(epoch))
-        .map(|(addr_book, _, power)| (addr_book, power))
-        .collect();
-    let (validators, voting_powers) = voting_powers_map
-        .get_sorted()
-        .into_iter()
-        .map(|(&EthAddrBook { hot_key_addr, .. }, &power)| {
-            let voting_power: EthBridgeVotingPower =
-                FractionalVotingPower::new(power.into(), total_power)
-                    .expect("Fractional voting power should be >1")
-                    .into();
-            (hot_key_addr, voting_power)
-        })
-        .unzip();
-
-    Ok(ValidatorSetArgs {
-        epoch,
-        validators,
-        voting_powers,
-    }
-    .encode())
 }
 
 #[cfg(test)]
@@ -301,7 +272,14 @@ mod test_ethbridge_router {
     };
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::vote_extensions::validator_set_update;
+    use namada_core::types::vote_extensions::validator_set_update::{
+        EthAddrBook, VotingPowersMapExt,
+    };
+    use namada_core::types::voting_power::{
+        EthBridgeVotingPower, FractionalVotingPower,
+    };
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
+    use namada_proof_of_stake::pos_queries::PosQueries;
 
     use super::test_utils::bertha_address;
     use super::*;
@@ -599,6 +577,9 @@ mod test_ethbridge_router {
             },
         };
 
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+
         // write a transfer into the bridge pool
         client
             .storage
@@ -666,7 +647,7 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         let proof = RelayProof {
-            validator_args: Default::default(),
+            validator_args: client.storage.get_validator_set_args(None),
             root: signed_root,
             proof,
         }
