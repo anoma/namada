@@ -295,13 +295,14 @@ async fn test_wnam_transfer() -> Result<()> {
 
     let bg_ledger = ledger.background();
 
-    let wnam_transfer = EthereumEvent::TransfersToNamada {
+    let wnam_transfer = TransferToNamada {
+        amount: token::Amount::from(100),
+        asset: ethereum_bridge_params.contracts.native_erc20,
+        receiver: address::testing::established_address_1(),
+    };
+    let transfers = EthereumEvent::TransfersToNamada {
         nonce: 100.into(),
-        transfers: vec![TransferToNamada {
-            amount: token::Amount::from(100),
-            asset: ethereum_bridge_params.contracts.native_erc20,
-            receiver: address::testing::established_address_1(),
-        }],
+        transfers: vec![wnam_transfer.clone()],
     };
 
     // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
@@ -311,13 +312,17 @@ async fn test_wnam_transfer() -> Result<()> {
     const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
     let mut client =
         EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
-    client.send(&wnam_transfer).await?;
+    client.send(&transfers).await?;
 
     let mut ledger = bg_ledger.foreground();
+    let TransferToNamada {
+        receiver, amount, ..
+    } = wnam_transfer;
     // TODO(namada#989): once implemented, check NAM balance of receiver
-    ledger.exp_string(
-        "Redemption of the wrapped native token is not yet supported",
-    )?;
+    ledger.exp_string(&format!(
+        "Redemption of the wrapped native token is not yet supported - \
+         (receiver - {receiver}, amount - {amount})"
+    ))?;
 
     Ok(())
 }

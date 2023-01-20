@@ -60,7 +60,8 @@ where
             changed_keys.append(&mut changed)
         } else {
             tracing::warn!(
-                "Redemption of the wrapped native token is not yet supported"
+                "Redemption of the wrapped native token is not yet supported \
+                 - (receiver - {receiver}, amount - {amount})"
             )
         }
     }
