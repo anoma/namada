@@ -12,18 +12,7 @@ use crate::proto::{Signable, SignableEthBytes};
 use crate::types::keccak::{keccak_hash, KeccakHash};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
-#[derive(
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 #[repr(transparent)]
 pub struct EncodeCell<T: ?Sized> {
     /// ABI-encoded value of type `T`.
@@ -34,6 +23,26 @@ pub struct EncodeCell<T: ?Sized> {
     /// which is not the desired behavior, since we own an encoded value
     /// of `T`, not a value of `T` itself.
     _marker: PhantomData<*const T>,
+}
+
+impl<T> ::std::cmp::Eq for EncodeCell<T> {}
+
+impl<T> ::std::cmp::PartialEq for EncodeCell<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.encoded_data == other.encoded_data
+    }
+}
+
+impl<T> ::std::cmp::PartialOrd for EncodeCell<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
+        self.encoded_data.partial_cmp(&other.encoded_data)
+    }
+}
+
+impl<T> ::std::cmp::Ord for EncodeCell<T> {
+    fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
+        self.encoded_data.cmp(&other.encoded_data)
+    }
 }
 
 impl<T> EncodeCell<T> {
