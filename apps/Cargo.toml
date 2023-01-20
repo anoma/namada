@@ -74,6 +74,7 @@ abciplus = [
 
 [dependencies]
 namada = {path = "../shared", default-features = false, features = ["wasm-runtime", "ferveo-tpke"]}
+namada_ethereum_bridge = {path = "../ethereum_bridge"}
 ark-serialize = "0.3.0"
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
