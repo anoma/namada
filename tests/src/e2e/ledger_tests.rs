@@ -126,7 +126,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -1704,7 +1704,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("some VPs rejected transaction")?;
+    ledger.exp_string("rejected txs: 1")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -2182,7 +2182,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10.1",
+        "1.01",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2195,7 +2195,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // 2. Spawn threads each submitting token transfer tx
     // We collect to run the threads in parallel.
     #[allow(clippy::needless_collect)]
-    let tasks: Vec<std::thread::JoinHandle<_>> = (0..3)
+    let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
         .into_iter()
         .map(|_| {
             let test = Arc::clone(&test);
@@ -3083,7 +3083,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
 
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;

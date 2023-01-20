@@ -204,9 +204,10 @@ where
                                         Amount::from(0).try_to_vec().unwrap(),
                                     )
                                     .unwrap();
-                                tx_event["log"] =
+                                tx_event["info"] =
                                     "Insufficient balance for fee".into();
                                 tx_event["code"] = ErrorCodes::InvalidTx.into();
+                                tx_event["gas_used"] = "0".to_string();
 
                                 response.events.push(tx_event);
                                 continue;
