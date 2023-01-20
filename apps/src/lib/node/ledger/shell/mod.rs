@@ -37,8 +37,10 @@ use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
+use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
+use namada::types::hash;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
@@ -48,7 +50,6 @@ use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
-use namada::types::{address, transaction};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -628,7 +629,7 @@ where
         };
 
         // Tx signature check
-        let tx_type = match process_tx(tx) {
+        let tx_type = match process_tx(tx.clone()) {
             Ok(ty) => ty,
             Err(msg) => {
                 response.code = ErrorCodes::InvalidSig.into();
@@ -658,7 +659,7 @@ where
                 return response;
             }
 
-            let wrapper_hash = transaction::unsigned_hash_tx(tx_bytes);
+            let wrapper_hash = hash::Hash(tx.unsigned_hash());
             let wrapper_hash_key =
                 replay_protection::get_tx_hash_key(&wrapper_hash);
             if self
@@ -1356,8 +1357,7 @@ mod test_mempool_validate {
         };
 
         // Write wrapper hash to storage
-        let wrapper_hash =
-            super::transaction::unsigned_hash_tx(&wrapper.to_bytes());
+        let wrapper_hash = hash::Hash(wrapper.unsigned_hash());
         let wrapper_hash_key =
             replay_protection::get_tx_hash_key(&wrapper_hash);
         shell
