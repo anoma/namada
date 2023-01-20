@@ -7,13 +7,19 @@ use std::path::Path;
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
+#[cfg(feature = "dev")]
+use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
+#[cfg(feature = "dev")]
+use namada::types::address::wnam;
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
 use namada::types::chain::ProposalBytes;
+#[cfg(feature = "dev")]
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -1004,7 +1010,20 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
-        ethereum_bridge_params: None,
+        ethereum_bridge_params: Some(EthereumBridgeConfig {
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([0; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([1; 20]),
+                    version: Default::default(),
+                },
+            },
+        }),
         native_token: address::nam(),
     }
 }
