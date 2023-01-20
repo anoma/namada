@@ -489,9 +489,7 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
-    #[cfg(feature = "abcipp")]
-    use namada::proto::SignableEthBytes;
-    use namada::proto::{Signed, SignedTxData};
+    use namada::proto::{SignableEthBytes, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -500,20 +498,17 @@ mod test_prepare_proposal {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::bridge_pool_roots;
-    use namada::types::vote_extensions::ethereum_events;
-    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
-    #[cfg(feature = "abcipp")]
-    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell,
+        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
+        setup_at_height, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -831,6 +826,72 @@ mod test_prepare_proposal {
 
             assert_matches!(maybe_digest, Some(d) if d.signatures.is_empty());
         }
+    }
+
+    /// Test that we do not include vote extensions voting on ethereum
+    /// events or signing bridge pool roots + nonces if the bridge
+    /// is inactive.
+    #[test]
+    #[cfg(feature = "abcipp")]
+    fn test_filter_vexts_bridge_inactive() {
+        let (mut shell, _, _, _) = setup_at_height(3);
+        deactivate_bridge(&mut shell);
+        let vext = get_local_last_commit(&shell);
+        let rsp = shell.prepare_proposal(RequestPrepareProposal {
+            local_last_commit: vext,
+            ..Default::default()
+        });
+        assert!(rsp.txs.is_empty());
+    }
+
+    /// Test that we do not include protocol txs voting on ethereum
+    /// events or signing bridge pool roots + nonces if the bridge
+    /// is inactive.
+    #[test]
+    #[cfg(not(feature = "abcipp"))]
+    fn test_filter_protocol_txs_bridge_inactive() {
+        let (mut shell, _, _, _) = setup_at_height(3);
+        deactivate_bridge(&mut shell);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let eth_vext = ProtocolTxType::EthEventsVext(
+            ethereum_events::Vext {
+                validator_addr: address.clone(),
+                block_height: shell.storage.last_height,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+
+        let to_sign = get_bp_bytes_to_sign();
+        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
+        let sig =
+            Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig;
+        let bp_vext = ProtocolTxType::BridgePoolVext(
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr: address,
+                sig,
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+        let rsp = shell.prepare_proposal(RequestPrepareProposal {
+            txs: vec![eth_vext, bp_vext],
+            ..Default::default()
+        });
+        assert!(rsp.txs.is_empty());
     }
 
     /// Creates an Ethereum events digest manually.

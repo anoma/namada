@@ -439,42 +439,68 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthEventsVext(ext) => self
-                    .validate_eth_events_vext_and_get_it_back(
-                        ext,
-                        self.storage.last_height,
-                    )
-                    .map(|_| TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    })
-                    .unwrap_or_else(|err| TxResult {
-                        code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: format!(
-                            "Process proposal rejected this proposal because \
-                             one of the included Ethereum events vote \
-                             extensions was invalid: {err}"
-                        ),
-                    }),
-                ProtocolTxType::BridgePoolVext(ext) => self
-                    .validate_bp_roots_vext_and_get_it_back(
-                        ext,
-                        self.storage.last_height,
-                    )
-                    .map(|_| TxResult {
-                        code: ErrorCodes::Ok.into(),
-                        info: "Process Proposal accepted this transaction"
-                            .into(),
-                    })
-                    .unwrap_or_else(|err| TxResult {
-                        code: ErrorCodes::InvalidVoteExtension.into(),
-                        info: format!(
-                            "Process proposal rejected this proposal because \
-                             one of the included Bridge pool root's vote \
-                             extensions was invalid: {err}"
-                        ),
-                    }),
+                ProtocolTxType::EthEventsVext(ext) => {
+                    if !self.storage.is_bridge_active() {
+                        TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: "Process proposal rejected this proposal \
+                                   because an Ethereum events vote extensions \
+                                   was included but the bridge is not active."
+                                .into(),
+                        }
+                    } else {
+                        self.validate_eth_events_vext_and_get_it_back(
+                            ext,
+                            self.storage.last_height,
+                        )
+                        .map(|_| TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        })
+                        .unwrap_or_else(|err| {
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: format!(
+                                    "Process proposal rejected this proposal \
+                                     because one of the included Ethereum \
+                                     events vote extensions was invalid: {err}"
+                                ),
+                            }
+                        })
+                    }
+                }
+                ProtocolTxType::BridgePoolVext(ext) => {
+                    if !self.storage.is_bridge_active() {
+                        TxResult {
+                            code: ErrorCodes::InvalidVoteExtension.into(),
+                            info: "Process proposal rejected this proposal \
+                                   because an Brige pool root vote extensions \
+                                   was included but the bridge is not active."
+                                .into(),
+                        }
+                    } else {
+                        self.validate_bp_roots_vext_and_get_it_back(
+                            ext,
+                            self.storage.last_height,
+                        )
+                        .map(|_| TxResult {
+                            code: ErrorCodes::Ok.into(),
+                            info: "Process Proposal accepted this transaction"
+                                .into(),
+                        })
+                        .unwrap_or_else(|err| {
+                            TxResult {
+                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                info: format!(
+                                    "Process proposal rejected this proposal \
+                                     because one of the included Bridge pool \
+                                     root's vote extensions was invalid: {err}"
+                                ),
+                            }
+                        })
+                    }
+                }
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
@@ -717,7 +743,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use namada::proto::SignedTxData;
+    use namada::proto::{SignableEthBytes, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -727,16 +753,16 @@ mod test_process_proposal {
     use namada::types::transaction::{EncryptionKey, Fee};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
-    use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
-    #[cfg(feature = "abcipp")]
-    use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, ProcessProposal, TestError, TestShell,
+        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
+        setup_at_height, ProcessProposal, TestError, TestShell,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
@@ -869,6 +895,191 @@ mod test_process_proposal {
             response.result.code,
             u32::from(ErrorCodes::InvalidVoteExtension)
         );
+    }
+
+    /// Check that we reject an eth events protocol tx
+    /// if the bridge is not active.
+    #[test]
+    fn check_rejected_eth_events_bridge_inactive() {
+        let (mut shell, _, _, _) = setup_at_height(3);
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let addr = shell.mode.get_validator_address().expect("Test failed");
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = ethereum_events::Vext {
+            validator_addr: addr.clone(),
+            block_height: shell.storage.last_height,
+            ethereum_events: vec![event],
+        }
+        .sign(protocol_key);
+        let tx = ProtocolTxType::EthEventsVext(ext)
+            .sign(protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
+            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
+        }
+        deactivate_bridge(&mut shell);
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExtension)
+        );
+    }
+
+    /// Check that we reject an bp roots protocol tx
+    /// if the bridge is not active.
+    #[test]
+    fn check_rejected_bp_roots_bridge_inactive() {
+        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        shell.storage.block.height = shell.storage.last_height;
+        shell.commit();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let addr = shell.mode.get_validator_address().expect("Test failed");
+        let to_sign = get_bp_bytes_to_sign();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+            to_sign,
+        )
+        .sig;
+        let vote_ext = bridge_pool_roots::Vext {
+            block_height: shell.storage.last_height,
+            validator_addr: addr.clone(),
+            sig,
+        }
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        let tx = ProtocolTxType::BridgePoolVext(vote_ext)
+            .sign(protocol_key)
+            .to_bytes();
+        let request = ProcessProposal { txs: vec![tx] };
+
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
+
+            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
+        }
+        deactivate_bridge(&mut shell);
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ErrorCodes::InvalidVoteExtension)
+        );
+    }
+
+    /// Check that we reject an bp roots vext
+    /// if the bridge is not active.
+    #[cfg(feature = "abcipp")]
+    #[test]
+    fn check_rejected_vext_bridge_inactive() {
+        let (mut shell, _a, _b, _c) = setup_at_height(3);
+        shell.storage.block.height = shell.storage.last_height;
+        shell.commit();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let addr = shell.mode.get_validator_address().expect("Test failed");
+        let to_sign = get_bp_bytes_to_sign();
+        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+            to_sign,
+        )
+        .sig;
+        let vote_ext = bridge_pool_roots::Vext {
+            block_height: shell.storage.last_height,
+            validator_addr: addr.clone(),
+            sig,
+        }
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+        let mut txs = vec![
+            ProtocolTxType::BridgePool(vote_ext.into())
+                .sign(protocol_key)
+                .to_bytes(),
+        ];
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = ethereum_events::Vext {
+            validator_addr: addr.clone(),
+            block_height: shell.storage.last_height,
+            ethereum_events: vec![event.clone()],
+        }
+        .sign(protocol_key);
+        let vote_extension_digest = ethereum_events::VextDigest {
+            signatures: {
+                let mut s = HashMap::new();
+                s.insert((addr.clone(), shell.storage.last_height), ext.sig);
+                s
+            },
+            events: vec![MultiSignedEthEvent {
+                event,
+                signers: {
+                    let mut s = BTreeSet::new();
+                    s.insert((addr.clone(), shell.storage.last_height));
+                    s
+                },
+            }],
+        };
+        txs.push(
+            ProtocolTxType::EthereumEvents(vote_extension_digest)
+                .sign(protocol_key)
+                .to_bytes(),
+        );
+        let request = ProcessProposal { txs };
+        let resps: [ProcessedTx; 2] = shell
+            .process_proposal(request.clone())
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        for resp in resps {
+            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
+        }
+        deactivate_bridge(&mut shell);
+        if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp1, resp2] = resp.as_slice() {
+                assert_eq!(resp1.result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(resp2.result.code, u32::from(ErrorCodes::Ok));
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
     }
 
     #[cfg(not(feature = "abcipp"))]

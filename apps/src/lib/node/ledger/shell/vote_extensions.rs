@@ -57,6 +57,13 @@ pub enum VoteExtensionError {
     DivergesFromStorage,
     #[error("The signature of the Bridge pool root is invalid")]
     InvalidBPRootSig,
+    #[error(
+        "Received a vote extension for the Ethereum bridge which is currently \
+         not active"
+    )]
+    EthereumBridgeInactive,
+    #[error("A vote extension for the Ethereum bridge is missing.")]
+    MissingBridgeVext,
 }
 
 impl<D, H> Shell<D, H>
@@ -395,13 +402,10 @@ where
                         | ProtocolTxType::BridgePoolVext(_),
                     ..
                 }) => {
-                    if self.storage.is_bridge_active() {
-                        // mark tx for inclusion
-                        protocol_tx_indices.insert(index);
-                        Some(tx_bytes.clone())
-                    } else {
-                        None
-                    }
+                    // mark tx for inclusion or it is skipped
+                    // if the bridge is inactive
+                    protocol_tx_indices.insert(index);
+                    self.storage.is_bridge_active().then_some(tx_bytes.clone())
                 }
                 TxType::Protocol(ProtocolTx {
                     tx: ProtocolTxType::ValSetUpdateVext(ext),
