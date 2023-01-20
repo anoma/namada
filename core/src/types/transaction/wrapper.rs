@@ -17,9 +17,7 @@ pub mod wrapper_tx {
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{
-        self, EncryptionKey, Hash, TxError, TxType,
-    };
+    use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -206,7 +204,7 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 inner_tx,
-                tx_hash: transaction::unsigned_hash_tx(&tx.to_bytes()),
+                tx_hash: Hash(tx.unsigned_hash()),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -240,7 +238,7 @@ pub mod wrapper_tx {
                 .map_err(|_| WrapperTxErr::InvalidTx)?;
 
             // check that the hash equals commitment
-            if transaction::unsigned_hash_tx(&decrypted) != self.tx_hash {
+            if decrypted_tx.unsigned_hash() != self.tx_hash.0 {
                 return Err(WrapperTxErr::DecryptedHash);
             }
 
@@ -349,7 +347,6 @@ pub mod wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
         use crate::types::address::nam;
-        use crate::types::transaction::hash_tx;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -418,7 +415,7 @@ pub mod wrapper_tx {
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
-        /// We check that even if the encrypted payload and has of its
+        /// We check that even if the encrypted payload and hash of its
         /// contents are correctly changed, we detect fraudulent activity
         /// via the signature.
         #[test]
@@ -472,7 +469,7 @@ pub mod wrapper_tx {
             );
 
             // We change the commitment appropriately
-            wrapper.tx_hash = hash_tx(&malicious.to_bytes());
+            wrapper.tx_hash = Hash(malicious.unsigned_hash());
 
             // we check ciphertext validity still passes
             assert!(wrapper.validate_ciphertext());

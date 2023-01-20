@@ -27,7 +27,6 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::ledger::gas::VpsGas;
-use crate::proto::SignedTxData;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -38,18 +37,6 @@ use crate::types::storage;
 pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(tx_bytes);
     Hash(*digest.as_ref())
-}
-
-/// Get the hash of the unsigned transaction (if signed), otherwise the hash of
-/// entire tx.
-pub fn unsigned_hash_tx(tx_bytes: &[u8]) -> Hash {
-    match SignedTxData::try_from_slice(tx_bytes) {
-        Ok(signed) => {
-            // Exclude the signature from the digest computation
-            hash_tx(signed.data.unwrap_or_default().as_ref())
-        }
-        Err(_) => hash_tx(tx_bytes),
-    }
 }
 
 /// Transaction application result

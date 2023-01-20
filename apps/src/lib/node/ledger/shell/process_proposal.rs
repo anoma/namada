@@ -1,6 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use namada::core::types::hash::Hash;
 use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::internal::WrapperTxInQueue;
@@ -113,7 +114,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(tx) {
+        match process_tx(tx.clone()) {
             // This occurs if the wrapper / protocol tx signature is invalid
             Err(err) => TxResult {
                 code: ErrorCodes::InvalidSig.into(),
@@ -179,9 +180,9 @@ where
                         },
                     }
                 }
-                TxType::Wrapper(tx) => {
+                TxType::Wrapper(wrapper) => {
                     // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
+                    if !wrapper.validate_ciphertext() {
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: format!(
@@ -197,8 +198,9 @@ where
                         // are listed with the Wrapper txs before the decrypted
                         // ones, so there's no need to check the WAL before the
                         // storage
-                        let inner_hash_key =
-                            replay_protection::get_tx_hash_key(&tx.tx_hash);
+                        let inner_hash_key = replay_protection::get_tx_hash_key(
+                            &wrapper.tx_hash,
+                        );
                         if temp_wl_storage
                             .storage
                             .has_key(&inner_hash_key)
@@ -213,7 +215,7 @@ where
                                 info: format!(
                                     "Inner transaction hash {} already in \
                                      storage, replay attempt",
-                                    &tx.tx_hash
+                                    &wrapper.tx_hash
                                 ),
                             };
                         }
@@ -228,7 +230,7 @@ where
                                 info: format!(
                                     "Inner transaction hash {} already in \
                                      storage, replay attempt",
-                                    &tx.tx_hash
+                                    &wrapper.tx_hash
                                 ),
                             };
                         }
@@ -236,8 +238,7 @@ where
                         // Write inner hash to WAL
                         temp_wl_storage.write_log.write(&inner_hash_key, vec![]).expect("Couldn't write inner transaction hash to write log");
 
-                        let wrapper_hash =
-                            transaction::unsigned_hash_tx(tx_bytes);
+                        let wrapper_hash = Hash(tx.unsigned_hash());
                         let wrapper_hash_key =
                             replay_protection::get_tx_hash_key(&wrapper_hash);
                         if temp_wl_storage.storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage").0 {
@@ -292,19 +293,21 @@ where
                         // transaction key, then the fee payer is effectively
                         // the MASP, otherwise derive
                         // they payer from public key.
-                        let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                            tx.fee_payer()
+                        let fee_payer = if wrapper.pk != masp_tx_key().ref_to()
+                        {
+                            wrapper.fee_payer()
                         } else {
                             masp()
                         };
                         // check that the fee payer has sufficient balance
                         let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
+                            self.get_balance(&wrapper.fee.token, &fee_payer);
 
                         // In testnets, tx is allowed to skip fees if it
                         // includes a valid PoW
                         #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow = self.has_valid_pow_solution(&tx);
+                        let has_valid_pow =
+                            self.has_valid_pow_solution(&wrapper);
                         #[cfg(feature = "mainnet")]
                         let has_valid_pow = false;
 
@@ -929,8 +932,7 @@ mod test_process_proposal {
         let signed = wrapper.sign(&keypair).expect("Test failed");
 
         // Write wrapper hash to storage
-        let wrapper_unsigned_hash =
-            transaction::unsigned_hash_tx(&signed.to_bytes());
+        let wrapper_unsigned_hash = Hash(signed.unsigned_hash());
         let hash_key =
             replay_protection::get_tx_hash_key(&wrapper_unsigned_hash);
         shell
