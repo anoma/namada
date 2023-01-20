@@ -88,67 +88,6 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
     Ok(())
 }
 
-#[cfg(any(feature = "tendermint-rpc", feature = "tendermint-rpc-abcipp",))]
-/// Provides [`Client`] implementation for Tendermint RPC client
-pub mod tm {
-    use thiserror::Error;
-
-    use super::*;
-    use crate::types::storage::BlockHeight;
-
-    #[allow(missing_docs)]
-    #[derive(Error, Debug)]
-    pub enum Error {
-        #[error("{0}")]
-        Tendermint(#[from] crate::tendermint_rpc::Error),
-        #[error("Decoding error: {0}")]
-        Decoding(#[from] std::io::Error),
-        #[error("Info log: {0}, error code: {1}")]
-        Query(String, u32),
-        #[error("Invalid block height: {0} (overflown i64)")]
-        InvalidHeight(BlockHeight),
-    }
-
-    #[async_trait::async_trait]
-    impl<C: crate::tendermint_rpc::Client + std::marker::Sync> Client for C {
-        type Error = Error;
-
-        async fn request(
-            &self,
-            path: String,
-            data: Option<Vec<u8>>,
-            height: Option<BlockHeight>,
-            prove: bool,
-        ) -> Result<EncodedResponseQuery, Self::Error> {
-            let data = data.unwrap_or_default();
-            let height = height
-                .map(|height| {
-                    crate::tendermint::block::Height::try_from(height.0)
-                        .map_err(|_err| Error::InvalidHeight(height))
-                })
-                .transpose()?;
-            let response = crate::tendermint_rpc::Client::abci_query(
-                self,
-                // TODO open the private Path constructor in tendermint-rpc
-                Some(std::str::FromStr::from_str(&path).unwrap()),
-                data,
-                height,
-                prove,
-            )
-            .await?;
-            use crate::tendermint::abci::Code;
-            match response.code {
-                Code::Ok => Ok(EncodedResponseQuery {
-                    data: response.value,
-                    info: response.info,
-                    proof: response.proof,
-                }),
-                Code::Err(code) => Err(Error::Query(response.info, code)),
-            }
-        }
-    }
-}
-
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
 mod testing {
@@ -208,7 +147,7 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,
