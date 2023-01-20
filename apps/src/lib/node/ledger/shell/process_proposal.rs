@@ -663,16 +663,24 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        meta.digests.eth_ev_digest_num
-            == usize::from(self.storage.last_height.0 != 0)
+        if self.storage.is_bridge_active() {
+            meta.digests.eth_ev_digest_num
+                == usize::from(self.storage.last_height.0 != 0)
+        } else {
+            meta.digests.eth_ev_digest_num == 0
+        }
     }
 
     /// Checks if we have found the correct number of Ethereum bridge pool
     /// root vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        meta.digests.bridge_pool_roots
-            == usize::from(self.storage.last_height.0 != 0)
+        if self.storage.is_bridge_active() {
+            meta.digests.bridge_pool_roots
+                == usize::from(self.storage.last_height.0 != 0)
+        } else {
+            meta.digests.bridge_pool_roots == 0
+        }
     }
 
     /// Checks if we have found the correct number of validator set update
@@ -762,7 +770,7 @@ mod test_process_proposal {
     /// all the Bridge pool root vote extensions.
     #[cfg(feature = "abcipp")]
     fn get_bp_roots_vext(shell: &TestShell) -> Vec<u8> {
-        let bp_root = shell.extend_vote_with_bp_roots();
+        let bp_root = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx = shell
             .compress_bridge_pool_roots(vec![bp_root])
             .expect("Test failed");
@@ -822,7 +830,7 @@ mod test_process_proposal {
     #[test]
     fn check_multiple_bp_root_vexts_rejected() {
         let (mut shell, _recv, _, _) = setup_at_height(3u64);
-        let vext = shell.extend_vote_with_bp_roots();
+        let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
         let tx =
             ProtocolTxType::BridgePool(MultiSignedVext(HashSet::from([vext])))
                 .sign(shell.mode.get_protocol_key().expect("Test failed."))

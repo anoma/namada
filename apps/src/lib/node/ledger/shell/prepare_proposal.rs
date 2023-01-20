@@ -28,12 +28,8 @@ use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[allow(unused_imports)]
 use crate::node::ledger::shell::block_space_alloc;
-#[cfg(not(feature = "abcipp"))]
-use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
-#[cfg(feature = "abcipp")]
-use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
@@ -186,7 +182,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let (eth_events, bp_roots, valset_upds) = split_vote_extensions(
+        let (eth_events, bp_roots, valset_upds) = self.split_vote_extensions(
             local_last_commit
                 .expect(
                     "Honest Namada validators will always sign \
@@ -200,13 +196,15 @@ where
                 .votes,
         );
 
-        let ethereum_events = self
-            .compress_ethereum_events(eth_events)
-            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+        let ethereum_events = eth_events.map(|events| {
+            self.compress_ethereum_events(events)
+                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()))
+        });
 
-        let bp_roots = self
-            .compress_bridge_pool_roots(bp_roots)
-            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+        let bp_roots = bp_roots.map(|bp_roots| {
+            self.compress_bridge_pool_roots(bp_roots)
+                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()))
+        });
 
         let validator_set_update =
             if self
@@ -256,11 +254,8 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let deserialized_iter = deserialize_vote_extensions(
-            txs,
-            protocol_tx_indices,
-            self.storage.get_current_epoch().0,
-        );
+        let deserialized_iter =
+            self.deserialize_vote_extensions(txs, protocol_tx_indices);
         let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
@@ -619,8 +614,8 @@ mod test_prepare_proposal {
         };
 
         let vote_extension = VoteExtension {
-            ethereum_events: evts,
-            bridge_pool_root: bp_root,
+            ethereum_events: Some(evts),
+            bridge_pool_root: Some(bp_root),
             validator_set_update: None,
         }
         .try_to_vec()
@@ -663,7 +658,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -919,8 +914,8 @@ mod test_prepare_proposal {
             .sign(shell.mode.get_protocol_key().expect("Test failed"))
         };
         let vote_extension = VoteExtension {
-            ethereum_events,
-            bridge_pool_root: bp_root,
+            ethereum_events: Some(ethereum_events),
+            bridge_pool_root: Some(bp_root),
             validator_set_update: None,
         };
         let vote = ExtendedVoteInfo {
@@ -936,7 +931,7 @@ mod test_prepare_proposal {
             ..Default::default()
         });
         let rsp_digest = {
-            assert_eq!(rsp.txs.len(), 1);
+            assert_eq!(rsp.txs.len(), 2);
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(tx_bytes.as_slice()).expect("Test failed");
             let got_signed_tx =
@@ -958,7 +953,7 @@ mod test_prepare_proposal {
 
         let digest = manually_assemble_digest(
             &protocol_key,
-            vote_extension.ethereum_events,
+            vote_extension.ethereum_events.expect("Test failed"),
             LAST_HEIGHT,
         );
 
@@ -1104,8 +1099,8 @@ mod test_prepare_proposal {
                 .sign(shell.mode.get_protocol_key().expect("Test failed"))
             };
             let vote_extension = VoteExtension {
-                ethereum_events: signed_eth_ev_vote_extension,
-                bridge_pool_root: bp_root,
+                ethereum_events: Some(signed_eth_ev_vote_extension),
+                bridge_pool_root: Some(bp_root),
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
@@ -1195,7 +1190,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }

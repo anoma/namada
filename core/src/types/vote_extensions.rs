@@ -15,9 +15,9 @@ use crate::proto::Signed;
 )]
 pub struct VoteExtension {
     /// Vote extension data related with Ethereum events.
-    pub ethereum_events: Signed<ethereum_events::Vext>,
+    pub ethereum_events: Option<Signed<ethereum_events::Vext>>,
     /// A signature of the Ethereum bridge pool root and nonce.
-    pub bridge_pool_root: bridge_pool_roots::SignedVext,
+    pub bridge_pool_root: Option<bridge_pool_roots::SignedVext>,
     /// Vote extension data related with validator set updates.
     pub validator_set_update: Option<validator_set_update::SignedVext>,
 }
@@ -35,10 +35,10 @@ pub struct VoteExtension {
 #[cfg(feature = "abcipp")]
 pub struct VoteExtensionDigest {
     /// The digest of Ethereum events vote extension signatures.
-    pub ethereum_events: ethereum_events::VextDigest,
+    pub ethereum_events: Option<ethereum_events::VextDigest>,
     /// A set of signatures for the current Ethereum bridge pool root and
     /// nonce.
-    pub bridge_pool_roots: bridge_pool_roots::MultiSignedVext,
+    pub bridge_pool_roots: Option<bridge_pool_roots::MultiSignedVext>,
     /// The digest of validator set updates vote extension signatures.
     pub validator_set_update: Option<validator_set_update::VextDigest>,
 }
