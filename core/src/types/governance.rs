@@ -13,8 +13,7 @@ use crate::types::hash::Hash;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
-use crate::types::token::Amount;
-use crate::types::token::SCALE;
+use crate::types::token::{Amount, SCALE};
 
 /// Type alias for vote power
 pub type VotePower = u128;
@@ -37,7 +36,8 @@ pub type Council = (Address, Amount);
 pub enum VoteType {
     /// A default vote without Memo
     Default,
-    /// A vote for the PGF council encoding for the proposed multisig addresses and the budget cap
+    /// A vote for the PGF council encoding for the proposed multisig addresses
+    /// and the budget cap
     PGFCouncil(BTreeSet<Council>),
 }
 

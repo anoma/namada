@@ -9,7 +9,7 @@ use crate::types::governance::{
 };
 use crate::types::storage::Epoch;
 
-/// The type of a [`InitProposal`]
+/// The type of a Proposal
 #[derive(
     Debug,
     Clone,
@@ -39,18 +39,10 @@ impl PartialEq<VoteType> for ProposalType {
     fn eq(&self, other: &VoteType) -> bool {
         match self {
             Self::Default(_) => {
-                if let VoteType::Default = other {
-                    true
-                } else {
-                    false
-                }
+                matches!(other, VoteType::Default)
             }
             Self::PGFCouncil => {
-                if let VoteType::PGFCouncil(..) = other {
-                    true
-                } else {
-                    false
-                }
+                matches!(other, VoteType::PGFCouncil(..))
             }
         }
     }
@@ -58,6 +50,7 @@ impl PartialEq<VoteType> for ProposalType {
 
 impl TryFrom<governance::ProposalType> for ProposalType {
     type Error = ProposalError;
+
     fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
         match value {
             governance::ProposalType::Default(path) => {

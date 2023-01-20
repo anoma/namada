@@ -7,7 +7,7 @@ use namada_core::types::governance::ProposalResult;
 use namada_core::types::transaction::governance::ProposalType;
 use namada_proof_of_stake::{
     bond_amount, read_all_validator_addresses, read_pos_params,
-     read_validator_stake,
+    read_validator_stake,
 };
 use thiserror::Error;
 
@@ -87,7 +87,6 @@ pub fn compute_tally(
     let Votes {
         yay_validators,
         delegators,
-        
     } = votes;
 
     match proposal_type {
@@ -99,9 +98,10 @@ pub fn compute_tally(
                 } else {
                     return ProposalResult {
                         result: TallyResult::Failed(format!(
-                        "Unexpected vote type. Expected: Default, Found: {}",
-                        validator_vote
-                    )),
+                            "Unexpected vote type. Expected: Default, Found: \
+                             {}",
+                            validator_vote
+                        )),
                         total_voting_power: total_stake,
                         total_yay_power: 0,
                         total_nay_power: 0,
@@ -114,48 +114,53 @@ pub fn compute_tally(
                     vote_map.iter()
                 {
                     match delegator_vote {
-                        
-                        ProposalVote::Yay(VoteType::Default)   => {
-                            
- if !yay_validators.contains_key(validator_address) {
-            // YAY: Add delegator amount whose validator didn't vote / voted nay
-                            total_yay_staked_tokens += vote_power;
+                        ProposalVote::Yay(VoteType::Default) => {
+                            if !yay_validators.contains_key(validator_address) {
+                                // YAY: Add delegator amount whose validator
+                                // didn't vote / voted nay
+                                total_yay_staked_tokens += vote_power;
+                            }
                         }
-                        }        
                         ProposalVote::Nay => {
-                            
- // NAY: Remove delegator amount whose validator validator vote yay
-                        
-                        if yay_validators.contains_key(validator_address) {
-                            total_yay_staked_tokens -= vote_power;
-                        }
-                        }
-                                 
-                    _ => 
- return ProposalResult {
-                            result: TallyResult::Failed(format!("Unexpected vote type. Expected: Default, Found: {}", delegator_vote)),
-                            total_voting_power: total_stake,
-                            total_yay_power: 0,
-                            total_nay_power: 0}}
+                            // NAY: Remove delegator amount whose validator
+                            // validator vote yay
 
-                                }
+                            if yay_validators.contains_key(validator_address) {
+                                total_yay_staked_tokens -= vote_power;
+                            }
+                        }
+
+                        _ => {
+                            return ProposalResult {
+                                result: TallyResult::Failed(format!(
+                                    "Unexpected vote type. Expected: Default, \
+                                     Found: {}",
+                                    delegator_vote
+                                )),
+                                total_voting_power: total_stake,
+                                total_yay_power: 0,
+                                total_nay_power: 0,
+                            };
+                        }
+                    }
+                }
             }
 
-
             // Proposal passes if 2/3 of total voting power voted Yay
-            if total_yay_staked_tokens >= 2 / 3 * total_stake {
-               ProposalResult {
-                        result:  TallyResult::Passed(Tally::Default),
-                        total_voting_power: total_stake,
-                        total_yay_power: total_yay_staked_tokens,
-                        total_nay_power: 0}
+            if total_yay_staked_tokens >= (total_stake / 3) * 2 {
+                ProposalResult {
+                    result: TallyResult::Passed(Tally::Default),
+                    total_voting_power: total_stake,
+                    total_yay_power: total_yay_staked_tokens,
+                    total_nay_power: 0,
+                }
             } else {
-               ProposalResult{
-                            result:  TallyResult::Rejected,
-                            total_voting_power: total_stake,
-                            total_yay_power: total_yay_staked_tokens,
-                            total_nay_power: 0
-                            }
+                ProposalResult {
+                    result: TallyResult::Rejected,
+                    total_voting_power: total_stake,
+                    total_yay_power: total_yay_staked_tokens,
+                    total_nay_power: 0,
+                }
             }
         }
         ProposalType::PGFCouncil => {
@@ -170,36 +175,105 @@ pub fn compute_tally(
                     }
                 } else {
                     return ProposalResult {
-                            result: TallyResult::Failed(format!(
-                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
-                        validator_vote
-                    )),
-                            total_voting_power: total_stake,
-                            total_yay_power: 0,
-                            total_nay_power: 0}
+                        result: TallyResult::Failed(format!(
+                            "Unexpected vote type. Expected: PGFCouncil, \
+                             Found: {}",
+                            validator_vote
+                        )),
+                        total_voting_power: total_stake,
+                        total_yay_power: 0,
+                        total_nay_power: 0,
+                    };
                 }
             }
 
-            // YAY: Add delegator amount whose validator didn't vote / voted nay or adjust voting power
-            // if delegator voted yay with a different memo
+            // YAY: Add delegator amount whose validator didn't vote / voted nay
+            // or adjust voting power if delegator voted yay with a
+            // different memo
             for (_, vote_map) in delegators.iter() {
                 for (validator_address, (vote_power, delegator_vote)) in
                     vote_map.iter()
                 {
                     match delegator_vote {
-                        ProposalVote::Yay(VoteType::PGFCouncil(delegator_votes)) => {
-                            
- match yay_validators.get(validator_address) {
-                            Some((_, validator_vote)) => {
-                                if let ProposalVote::Yay(
-                                    VoteType::PGFCouncil(validator_votes),
-                                ) = validator_vote
-                                {
-                                    for vote in validator_votes
-                                        .symmetric_difference(delegator_votes)
+                        ProposalVote::Yay(VoteType::PGFCouncil(
+                            delegator_votes,
+                        )) => {
+                            match yay_validators.get(validator_address) {
+                                Some((_, validator_vote)) => {
+                                    if let ProposalVote::Yay(
+                                        VoteType::PGFCouncil(validator_votes),
+                                    ) = validator_vote
                                     {
-                                        if validator_votes.contains(vote) {
-                                            // Delegator didn't vote for this, reduce voting power
+                                        for vote in validator_votes
+                                            .symmetric_difference(
+                                                delegator_votes,
+                                            )
+                                        {
+                                            if validator_votes.contains(vote) {
+                                                // Delegator didn't vote for
+                                                // this, reduce voting power
+                                                if let Some(power) =
+                                                    total_yay_staked_tokens
+                                                        .get_mut(vote)
+                                                {
+                                                    *power -= vote_power;
+                                                } else {
+                                                    return ProposalResult {
+                                                    result: TallyResult::Failed(format!("Expected PGF vote {:?} was not in tally", vote)),
+                                                    total_voting_power: total_stake,
+                                                    total_yay_power: 0,
+                                                    total_nay_power: 0};
+                                                }
+                                            } else {
+                                                // Validator didn't vote for
+                                                // this, add voting power
+                                                *total_yay_staked_tokens
+                                                    .entry(vote)
+                                                    .or_insert(0) += vote_power;
+                                            }
+                                        }
+                                    } else {
+                                        return ProposalResult {
+                                            result: TallyResult::Failed(
+                                                format!(
+                                                    "Unexpected vote type. \
+                                                     Expected: PGFCouncil, \
+                                                     Found: {}",
+                                                    validator_vote
+                                                ),
+                                            ),
+                                            total_voting_power: total_stake,
+                                            total_yay_power: 0,
+                                            total_nay_power: 0,
+                                        };
+                                    }
+                                }
+                                None => {
+                                    // Validator didn't vote or voted nay, add
+                                    // delegator vote
+
+                                    for vote in delegator_votes {
+                                        *total_yay_staked_tokens
+                                            .entry(vote)
+                                            .or_insert(0) += vote_power;
+                                    }
+                                }
+                            }
+                        }
+                        ProposalVote::Nay => {
+                            for (
+                                validator_address,
+                                (vote_power, _delegator_vote),
+                            ) in vote_map.iter()
+                            {
+                                if let Some((_, validator_vote)) =
+                                    yay_validators.get(validator_address)
+                                {
+                                    if let ProposalVote::Yay(
+                                        VoteType::PGFCouncil(votes),
+                                    ) = validator_vote
+                                    {
+                                        for vote in votes {
                                             if let Some(power) =
                                                 total_yay_staked_tokens
                                                     .get_mut(vote)
@@ -207,104 +281,67 @@ pub fn compute_tally(
                                                 *power -= vote_power;
                                             } else {
                                                 return ProposalResult {
-                                                    result: TallyResult::Failed(format!("Expected PGF vote {:?} was not in tally", vote)),
-                                                    total_voting_power: total_stake,
+                                                    result: TallyResult::Failed(
+                                                        format!(
+                                                            "Expected PGF \
+                                                             vote {:?} was \
+                                                             not in tally",
+                                                            vote
+                                                        ),
+                                                    ),
+                                                    total_voting_power:
+                                                        total_stake,
                                                     total_yay_power: 0,
-                                                    total_nay_power: 0}
-                                            
+                                                    total_nay_power: 0,
+                                                };
                                             }
-                                        } else {
-                                            // Validator didn't vote for this, add voting power
-                                            *total_yay_staked_tokens
-                                                .entry(vote)
-                                                .or_insert(0) += vote_power;
                                         }
-                                    }
-                                } else {
-                                    return ProposalResult {
-                                        
-                                        result: TallyResult::Failed(format!("Unexpected vote type. Expected: PGFCouncil, Found: {}", validator_vote)),
+                                    } else {
+                                        return ProposalResult {
+                                            result: TallyResult::Failed(
+                                                format!(
+                                                    "Unexpected vote type. \
+                                                     Expected: PGFCouncil, \
+                                                     Found: {}",
+                                                    validator_vote
+                                                ),
+                                            ),
                                             total_voting_power: total_stake,
                                             total_yay_power: 0,
-                                            total_nay_power: 0}
-                                }
-                            }
-                            None => {
-                                // Validator didn't vote or voted nay, add delegator vote
-
-                                for vote in delegator_votes {
-                                    *total_yay_staked_tokens
-                                        .entry(vote)
-                                        .or_insert(0) += vote_power;
+                                            total_nay_power: 0,
+                                        };
+                                    }
                                 }
                             }
                         }
-                        },
-                        ProposalVote::Nay => {
-                            
-
-
-                            
-for (validator_address, (vote_power, _delegator_vote)) in
-                    vote_map.iter()
-                {
-                    if yay_validators.contains_key(validator_address) {
-                        for (_, validator_vote) in
-                            yay_validators.get(validator_address)
-                        {
-                            if let ProposalVote::Yay(VoteType::PGFCouncil(
-                                votes,
-                            )) = validator_vote
-                            {
-                                for vote in votes {
-                                    if let Some(power) =
-                                        total_yay_staked_tokens.get_mut(vote)
-                                    {
-                                        *power -= vote_power;
-                                    } else {
-                                        return ProposalResult{
-                                            result:  TallyResult::Failed(format!("Expected PGF vote {:?} was not in tally", vote)),
-                                            total_voting_power: total_stake,
-                                            total_yay_power: 0,
-                                            total_nay_power: 0}
-                                    }
-                                }
-                            } else {
- return ProposalResult{
-                                result:  TallyResult::Failed(format!("Unexpected vote type. Expected: PGFCouncil, Found: {}", validator_vote)),
+                        _ => {
+                            return ProposalResult {
+                                result: TallyResult::Failed(format!(
+                                    "Unexpected vote type. Expected: \
+                                     PGFCouncil, Found: {}",
+                                    delegator_vote
+                                )),
                                 total_voting_power: total_stake,
                                 total_yay_power: 0,
-                                total_nay_power: 0}
-                            }
+                                total_nay_power: 0,
+                            };
                         }
                     }
                 }
-                        },
-                        _ => 
-return ProposalResult {
-                                        
-                                        result: TallyResult::Failed(format!("Unexpected vote type. Expected: PGFCouncil, Found: {}", delegator_vote)),
-                                            total_voting_power: total_stake,
-                                            total_yay_power: 0,
-                                            total_nay_power: 0}
-                                }
-                    }}
+            }
 
-
-
-                    
-                       
             // At least 1/3 of the total voting power must vote Yay
             let total_yay_voted_power = total_yay_staked_tokens
                 .iter()
                 .fold(0, |acc, (_, vote_power)| acc + vote_power);
 
             match total_yay_voted_power.checked_mul(3) {
-                Some(v) if v < total_stake => ProposalResult{
-                        result: TallyResult::Rejected,
-                        total_voting_power: total_stake,
-                        total_yay_power: total_yay_voted_power,
-                        total_nay_power: 0},
+                Some(v) if v < total_stake => ProposalResult {
+                    result: TallyResult::Rejected,
+                    total_voting_power: total_stake,
+                    total_yay_power: total_yay_voted_power,
+                    total_nay_power: 0,
+                },
                 _ => {
                     // Select the winner council based on simple majority
                     let council = total_yay_staked_tokens
@@ -313,11 +350,12 @@ return ProposalResult {
                         .map(|(vote, _)| vote.to_owned())
                         .unwrap(); // Cannot be None at this point
 
-                    ProposalResult{
-                            result: TallyResult::Passed(Tally::PGFCouncil(council)),
-                            total_voting_power: total_stake,
-                            total_yay_power: total_yay_voted_power,
-                            total_nay_power: 0}
+                    ProposalResult {
+                        result: TallyResult::Passed(Tally::PGFCouncil(council)),
+                        total_voting_power: total_stake,
+                        total_yay_power: total_yay_voted_power,
+                        total_nay_power: 0,
+                    }
                 }
             }
         }
@@ -378,8 +416,13 @@ where
                                     .1;
 
                             if amount != token::Amount::default() {
-                                let entry = delegators.entry(voter_address.to_owned()).or_default();
-                                entry.insert(validator.to_owned(), (VotePower::from(amount), vote));
+                                let entry = delegators
+                                    .entry(voter_address.to_owned())
+                                    .or_default();
+                                entry.insert(
+                                    validator.to_owned(),
+                                    (VotePower::from(amount), vote),
+                                );
                             }
                         }
                         None => continue,
