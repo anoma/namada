@@ -923,7 +923,7 @@ mod test_finalize_block {
     /// and effects the expected storage changes.
     fn test_bp_roots_protocol_tx() {
         test_bp_roots(|shell: &TestShell| {
-            let vext = shell.extend_vote_with_bp_roots();
+            let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
             ProtocolTxType::BridgePoolVext(vext)
                 .sign(shell.mode.get_protocol_key().expect("Test failed"))
         });
@@ -934,7 +934,7 @@ mod test_finalize_block {
     /// and effects the expected storage changes.
     fn test_bp_roots_vext() {
         test_bp_roots(|shell: &TestShell| {
-            let vext = shell.extend_vote_with_bp_roots();
+            let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
             ProtocolTxType::BridgePool(vext.into())
                 .sign(shell.mode.get_protocol_key().expect("Test failed"))
         });
