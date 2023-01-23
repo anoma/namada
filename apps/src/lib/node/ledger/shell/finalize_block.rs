@@ -3,7 +3,9 @@
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
+use namada::ledger::replay_protection;
 use namada::ledger::storage_api::StorageRead;
+use namada::types::hash;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
 
@@ -90,39 +92,6 @@ where
                 continue;
             };
             let tx_length = processed_tx.tx.len();
-            // If [`process_proposal`] rejected a Tx due to invalid signature,
-            // emit an event here and move on to next tx.
-            if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
-                == ErrorCodes::InvalidSig
-            {
-                let mut tx_event = match process_tx(tx.clone()) {
-                    Ok(tx @ TxType::Wrapper(_))
-                    | Ok(tx @ TxType::Protocol(_)) => {
-                        Event::new_tx_event(&tx, height.0)
-                    }
-                    _ => match TxType::try_from(tx) {
-                        Ok(tx @ TxType::Wrapper(_))
-                        | Ok(tx @ TxType::Protocol(_)) => {
-                            Event::new_tx_event(&tx, height.0)
-                        }
-                        _ => {
-                            tracing::error!(
-                                "Internal logic error: FinalizeBlock received \
-                                 a tx with an invalid signature error code \
-                                 that could not be deserialized to a \
-                                 WrapperTx / ProtocolTx type"
-                            );
-                            continue;
-                        }
-                    },
-                };
-                tx_event["code"] = processed_tx.result.code.to_string();
-                tx_event["info"] =
-                    format!("Tx rejected: {}", &processed_tx.result.info);
-                tx_event["gas_used"] = "0".into();
-                response.events.push(tx_event);
-                continue;
-            }
 
             let tx_type = if let Ok(tx_type) = process_tx(tx) {
                 tx_type
@@ -145,11 +114,22 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed
-                // Tx hash has already been removed from storage in
-                // process_proposal
+                // from the queue of txs to be processed and remove the hash from storage
                 if let TxType::Decrypted(_) = &tx_type {
-                    self.wl_storage.storage.tx_queue.pop();
+                    let tx_hash = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
+                    let tx_hash_key =
+                        replay_protection::get_tx_hash_key(&tx_hash);
+                    self.wl_storage
+                        .storage
+                        .delete(&tx_hash_key)
+                        .expect("Error while deleting tx hash from storage");
                 }
                 continue;
             }
@@ -157,6 +137,24 @@ where
             let (mut tx_event, tx_unsigned_hash) = match &tx_type {
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+
+                    // Writes both txs hash to storage
+                    let tx = Tx::try_from(processed_tx.tx.as_ref()).unwrap();
+                    let wrapper_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&hash::Hash(
+                            tx.unsigned_hash(),
+                        ));
+                    self.wl_storage
+                        .storage
+                        .write(&wrapper_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
+
+                    let inner_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                    self.wl_storage
+                        .storage
+                        .write(&inner_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
 
                     #[cfg(not(feature = "mainnet"))]
                     let has_valid_pow =
@@ -222,12 +220,14 @@ where
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    let wrapper = self
+                    let wrapper_hash = self
                         .wl_storage
                         .storage
                         .tx_queue
                         .pop()
-                        .expect("Missing wrapper tx in queue");
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
                     let mut event = Event::new_tx_event(&tx_type, height.0);
 
                     match inner {
@@ -246,7 +246,7 @@ where
                             event["code"] = ErrorCodes::Undecryptable.into();
                         }
                     }
-                    (event, Some(wrapper.tx.tx_hash))
+                    (event, Some(wrapper_hash))
                 }
                 TxType::Raw(_) => {
                     tracing::error!(

@@ -40,14 +40,17 @@ where
         let tx_results = self.process_txs(&req.txs);
 
         ProcessProposal {
-            status: if tx_results
-                .iter()
-                .any(|res| matches!(res.code, 1 | 2 | 4 | 5 | 7))
-            {
-                ProposalStatus::Reject as i32
-            } else {
+            status: if tx_results.iter().all(|res| {
+                matches!(
+                    ErrorCodes::from_u32(res.code).unwrap(),
+                    ErrorCodes::Ok | ErrorCodes::Undecryptable
+                )
+            }) {
                 ProposalStatus::Accept as i32
+            } else {
+                ProposalStatus::Reject as i32
             },
+
             tx_results,
         }
     }
@@ -63,9 +66,9 @@ where
                     &mut tx_queue_iter,
                     &mut temp_wl_storage,
                 );
-                if result.code == 0 || result.code == 6 {
-                    // Commit write log in case of success or if the decrypted
-                    // tx was invalid to remove its hash from storage
+                if let ErrorCodes::Ok =
+                    ErrorCodes::from_u32(result.code).unwrap()
+                {
                     temp_wl_storage.write_log.commit_tx();
                 } else {
                     temp_wl_storage.write_log.drop_tx();
@@ -154,16 +157,7 @@ where
                                         .into(),
                                 }
                             } else {
-                                // Remove decrypted transaction hash from
-                                // storage
-                                let inner_hash_key =
-                                    replay_protection::get_tx_hash_key(
-                                        &wrapper.tx.tx_hash,
-                                    );
-                                temp_wl_storage.write_log.delete(&inner_hash_key).expect(
-                                "Couldn't delete transaction hash from write log",
-                            );
-
+                                // Wrong inner tx commitment
                                 TxResult {
                                     code: ErrorCodes::Undecryptable.into(),
                                     info: "The encrypted payload of tx was \
@@ -193,38 +187,12 @@ where
                         }
                     } else {
                         // Replay protection checks
-                        // Decrypted txs hash may be removed from storage in
-                        // case the tx was invalid. Txs in the block, though,
-                        // are listed with the Wrapper txs before the decrypted
-                        // ones, so there's no need to check the WAL before the
-                        // storage
                         let inner_hash_key = replay_protection::get_tx_hash_key(
                             &wrapper.tx_hash,
                         );
-                        if temp_wl_storage
-                            .storage
-                            .has_key(&inner_hash_key)
-                            .expect(
-                                "Error while checking inner tx hash key in \
-                                 storage",
-                            )
-                            .0
-                        {
-                            return TxResult {
-                                code: ErrorCodes::ReplayTx.into(),
-                                info: format!(
-                                    "Inner transaction hash {} already in \
-                                     storage, replay attempt",
-                                    &wrapper.tx_hash
-                                ),
-                            };
-                        }
-                        // Check in WAL for replay attack in the same block
-                        if let (
-                            Some(StorageModification::Write { value: _ }),
-                            _,
-                        ) = temp_wl_storage.write_log.read(&inner_hash_key)
-                        {
+                        if temp_wl_storage.has_key(&inner_hash_key).expect(
+                            "Error while checking inner tx hash key in storage",
+                        ) {
                             return TxResult {
                                 code: ErrorCodes::ReplayTx.into(),
                                 info: format!(
@@ -243,45 +211,12 @@ where
                         let wrapper_hash = Hash(tx.unsigned_hash());
                         let wrapper_hash_key =
                             replay_protection::get_tx_hash_key(&wrapper_hash);
-                        if temp_wl_storage.storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage").0 {
+                        if temp_wl_storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage"){
                                                return TxResult {
                                         code: ErrorCodes::ReplayTx.into(),
                                         info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
                                     };
                                 }
-                        if temp_wl_storage
-                            .storage
-                            .has_key(&wrapper_hash_key)
-                            .expect(
-                                "Error while checking wrapper tx hash key in \
-                                 storage",
-                            )
-                            .0
-                        {
-                            return TxResult {
-                                code: ErrorCodes::ReplayTx.into(),
-                                info: format!(
-                                    "Wrapper transaction hash {} already in \
-                                     storage, replay attempt",
-                                    wrapper_hash
-                                ),
-                            };
-                        }
-                        // Check in WAL for replay attack in the same block
-                        if let (
-                            Some(StorageModification::Write { value: _ }),
-                            _,
-                        ) = temp_wl_storage.write_log.read(&wrapper_hash_key)
-                        {
-                            return TxResult {
-                                code: ErrorCodes::ReplayTx.into(),
-                                info: format!(
-                                    "Wrapper transaction hash {} already in \
-                                     storage, replay attempt",
-                                    wrapper_hash
-                                ),
-                            };
-                        }
 
                         // Write wrapper hash to WAL
                         temp_wl_storage
