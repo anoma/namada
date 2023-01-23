@@ -167,7 +167,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryTransfers::def().display_order(3))
+                // .subcommand(QueryTransfers::def().display_order(3))
                 .subcommand(QueryConversions::def().display_order(3))
                 .subcommand(QueryBlock::def().display_order(3))
                 .subcommand(QueryBalance::def().display_order(3))
@@ -201,7 +201,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
-            let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
+            // let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
@@ -231,7 +231,7 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(query_epoch)
-                .or(query_transfers)
+                // .or(query_transfers)
                 .or(query_conversions)
                 .or(query_block)
                 .or(query_balance)
@@ -293,7 +293,7 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         QueryEpoch(QueryEpoch),
-        QueryTransfers(QueryTransfers),
+        // QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
