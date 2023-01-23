@@ -37,8 +37,7 @@ The Namada public testnet is permissionless, anyone can join without the authori
   - Tendermint version: `v0.1.4-abciplus`
   - CHAIN_ID: `public-testnet-2.0.2feaf2d718c`
 
-The above hardfork was meant to take effect on Block Height `37370`, 
-but failed due to dev and coordination error.
+The above hardfork was meant to take effect on Block Height `37370`, but some issues arised. You can read more [here](https://blog.namada.net/namada-testnet-v0-13-0-upgrade-postmortem).
 
 - Namada public testnet 2.0:
   - From date: 12th of January 2023  
