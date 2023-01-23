@@ -569,3 +569,9 @@ pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
         .expect("Cannot obtain a storage key");
     Ok(prefix)
 }
+
+/// Returns true if the sub prefix is for IBC
+pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
+    matches!(&sub_prefix.segments[0],
+             DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
+}
