@@ -183,7 +183,7 @@ mod testing {
             Ok(response)
         }
 
-        async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
+        async fn perform<R>(&self, _request: R) -> Result<R::Response, RpcError>
         where
             R: tendermint_rpc::SimpleRequest,
         {
