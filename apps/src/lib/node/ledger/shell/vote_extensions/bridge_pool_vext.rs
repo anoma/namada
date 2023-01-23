@@ -386,7 +386,10 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert_eq!(vote_ext, shell.extend_vote_with_bp_roots());
+        assert_eq!(
+            vote_ext,
+            shell.extend_vote_with_bp_roots().expect("Test failed")
+        );
         assert!(
             shell.validate_bp_roots_vext(vote_ext, shell.storage.last_height,)
         )
@@ -422,7 +425,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert_eq!(vote_extension.bridge_pool_root, bp_root);
+        assert_eq!(vote_extension.bridge_pool_root, Some(bp_root));
         let req = request::VerifyVoteExtension {
             hash: vec![],
             validator_address: address

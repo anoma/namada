@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{into_tm_voting_power, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
@@ -126,6 +127,13 @@ where
         if let Some(config) = genesis.ethereum_bridge_params {
             tracing::debug!("Initializing Ethereum bridge storage.");
             config.init_storage(&mut self.storage);
+        } else {
+            self.storage
+                .write(
+                    &namada::eth_bridge::storage::active_key(),
+                    EthBridgeStatus::Disabled.try_to_vec().unwrap(),
+                )
+                .unwrap();
         }
 
         // Depends on parameters being initialized

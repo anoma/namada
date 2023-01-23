@@ -11,6 +11,7 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::Key;
 use serde::{Deserialize, Serialize};
 
+use crate::storage::eth_bridge_queries::{EthBridgeEnabled, EthBridgeStatus};
 use crate::{bridge_pool_vp, storage as bridge_storage, vp};
 
 /// Represents a configuration value for the minimum number of
@@ -156,10 +157,17 @@ impl EthereumBridgeConfig {
                     governance,
                 },
         } = self;
+        let active_key = bridge_storage::active_key();
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
+        storage
+            .write(
+                &active_key,
+                encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+            )
+            .unwrap();
         storage
             .write(&min_confirmations_key, encode(min_confirmations))
             .unwrap();

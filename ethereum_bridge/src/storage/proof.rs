@@ -1,11 +1,15 @@
 //! Proofs over some arbitrary data.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
+use namada_core::types::eth_abi;
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::storage::Epoch;
+use namada_core::types::vote_extensions::validator_set_update::{
+    valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
+};
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
 /// over some data to be signed.
@@ -16,7 +20,7 @@ use namada_core::types::storage::BlockHeight;
 #[derive(Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct EthereumProof<T> {
     /// The signatures contained in the proof.
-    pub signatures: BTreeMap<(Address, BlockHeight), secp256k1::Signature>,
+    pub signatures: HashMap<EthAddrBook, secp256k1::Signature>,
     /// The signed data.
     pub data: T,
 }
@@ -26,30 +30,81 @@ impl<T> EthereumProof<T> {
     pub fn new(data: T) -> Self {
         Self {
             data,
-            signatures: BTreeMap::new(),
+            signatures: HashMap::new(),
+        }
+    }
+
+    /// Map a function over the inner data of this [`EthereumProof`].
+    #[inline]
+    pub fn map<F, O>(self, mut f: F) -> EthereumProof<O>
+    where
+        F: FnMut(T) -> O,
+    {
+        EthereumProof {
+            signatures: self.signatures,
+            data: f(self.data),
         }
     }
 
     /// Add a new signature to this [`EthereumProof`].
     pub fn attach_signature(
         &mut self,
-        addr: Address,
-        height: BlockHeight,
+        addr_book: EthAddrBook,
         signature: common::Signature,
     ) {
         if let common::Signature::Secp256k1(sig) = signature {
-            self.signatures.insert((addr, height), sig);
+            self.signatures.insert(addr_book, sig);
         }
     }
 
     /// Add a new batch of signatures to this [`EthereumProof`].
     pub fn attach_signature_batch<I>(&mut self, batch: I)
     where
-        I: IntoIterator<Item = ((Address, BlockHeight), common::Signature)>,
+        I: IntoIterator<Item = (EthAddrBook, common::Signature)>,
     {
-        for ((address, block_height), signature) in batch {
-            self.attach_signature(address, block_height, signature);
+        for (addr_book, signature) in batch {
+            self.attach_signature(addr_book, signature);
         }
+    }
+}
+
+impl eth_abi::Encode<1> for EthereumProof<(Epoch, VotingPowersMap)> {
+    fn tokenize(&self) -> [eth_abi::Token; 1] {
+        let (hot_key_addrs, cold_key_addrs, voting_powers) =
+            self.data.1.get_abi_encoded();
+        let signatures = (hot_key_addrs.iter().zip(cold_key_addrs.iter()))
+            .map(|addresses| {
+                let (bridge_addr, gov_addr) = match addresses {
+                    (
+                        &eth_abi::Token::Address(hot),
+                        &eth_abi::Token::Address(cold),
+                    ) => (hot, cold),
+                    _ => unreachable!(
+                        "Hot and cold key address tokens should have the \
+                         correct variant"
+                    ),
+                };
+                let addr_book = EthAddrBook {
+                    hot_key_addr: bridge_addr.into(),
+                    cold_key_addr: gov_addr.into(),
+                };
+                let sig = &self.signatures[&addr_book];
+                let [tokenized_sig] = sig.tokenize();
+                tokenized_sig
+            })
+            .collect();
+        let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
+            valset_upd_toks_to_hashes(
+                self.data.0,
+                hot_key_addrs,
+                cold_key_addrs,
+                voting_powers,
+            );
+        [eth_abi::Token::Tuple(vec![
+            eth_abi::Token::FixedBytes(bridge_hash.to_vec()),
+            eth_abi::Token::FixedBytes(gov_hash.to_vec()),
+            eth_abi::Token::Array(signatures),
+        ])]
     }
 }
 
@@ -59,7 +114,8 @@ mod test_ethbridge_proofs {
 
     use assert_matches::assert_matches;
     use namada_core::proto::Signed;
-    use namada_core::types::{address, key};
+    use namada_core::types::ethereum_events::EthAddress;
+    use namada_core::types::key;
 
     use super::*;
 
@@ -73,8 +129,10 @@ mod test_ethbridge_proofs {
         assert_matches!(&key, common::SecretKey::Ed25519(_));
         let signed = Signed::<&'static str>::new(&key, ":)))))))");
         proof.attach_signature(
-            address::testing::established_address_1(),
-            777.into(),
+            EthAddrBook {
+                hot_key_addr: EthAddress([0; 20]),
+                cold_key_addr: EthAddress([0; 20]),
+            },
             signed.sig,
         );
         assert!(proof.signatures.is_empty());

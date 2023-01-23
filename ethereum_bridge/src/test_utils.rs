@@ -14,7 +14,6 @@ use namada_core::types::key::{
 use namada_core::types::storage::Key;
 use namada_core::types::token;
 use namada_proof_of_stake::epoched::Epoched;
-use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet, WeightedValidator,
 };
@@ -109,7 +108,7 @@ pub fn setup_storage_with_validators(
             .collect(),
         inactive: BTreeSet::default(),
     };
-    let validator_sets = Epoched::init_at_genesis(validator_set, 1);
+    let validator_sets = Epoched::init_at_genesis(validator_set, 0);
     storage.write_validator_set(&validator_sets);
 
     // write validator keys
@@ -137,17 +136,11 @@ pub fn setup_storage_validator(
         )
         .expect("Test failed");
 
-    // change pipeline length to 1
-    let params = PosParams {
-        pipeline_len: 1,
-        ..PosParams::default()
-    };
-
     // register consensus key
     let consensus_key = gen_ed25519_keypair();
     storage.write_validator_consensus_key(
         validator,
-        &ValidatorConsensusKeys::init(consensus_key.ref_to(), 0, &params),
+        &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
     );
 
     // register ethereum keys
@@ -155,11 +148,11 @@ pub fn setup_storage_validator(
     let cold_key = gen_secp256k1_keypair();
     storage.write_validator_eth_hot_key(
         validator,
-        &ValidatorEthKey::init(hot_key.ref_to(), 0, &params),
+        &ValidatorEthKey::init_at_genesis(hot_key.ref_to(), 0),
     );
     storage.write_validator_eth_cold_key(
         validator,
-        &ValidatorEthKey::init(cold_key.ref_to(), 0, &params),
+        &ValidatorEthKey::init_at_genesis(cold_key.ref_to(), 0),
     );
 
     TestValidatorKeys {
