@@ -92,9 +92,12 @@ impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
     pub fn new(
         root: KeccakHash,
-        leaves: BTreeMap<KeccakHash, BlockHeight>,
+        store: BTreeMap<KeccakHash, BlockHeight>,
     ) -> Self {
-        Self { root, leaves }
+        Self {
+            root,
+            leaves: store,
+        }
     }
 
     /// Parse the key to ensure it is of the correct type.
