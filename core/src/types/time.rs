@@ -111,6 +111,12 @@ impl DateTimeUtc {
     }
 }
 
+impl Default for DateTimeUtc {
+    fn default() -> Self {
+        DateTimeUtc::now()
+    }
+}
+
 impl FromStr for DateTimeUtc {
     type Err = ParseError;
 
@@ -238,6 +244,12 @@ impl TryFrom<Rfc3339String> for DateTimeUtc {
 impl From<DateTimeUtc> for Rfc3339String {
     fn from(dt: DateTimeUtc) -> Self {
         Self(DateTime::to_rfc3339(&dt.0))
+    }
+}
+
+impl Display for DateTimeUtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

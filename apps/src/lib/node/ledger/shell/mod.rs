@@ -684,7 +684,7 @@ where
         self.mode.get_validator_address().map(|addr| {
             let sk: common::SecretKey = self
                 .wl_storage
-                .read(&pk_key(addr))
+                .read(&pk_key(addr, 0))
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",

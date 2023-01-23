@@ -1,18 +1,20 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::{env, fs};
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
+use data_encoding::HEXLOWER;
 use itertools::Either::*;
+use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::{BranchId, TestNetwork};
 use masp_primitives::convert::AllowedConversion;
@@ -66,11 +68,12 @@ use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
+use super::signing::sign_tx_multisignature;
 use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
-use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::client::signing::{find_keypair, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::types::ParsedTxTransferArgs;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -103,24 +106,50 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
-    let tx_code = ctx.read_wasm(args.code_path);
-    let data = args.data_path.map(|data_path| {
-        std::fs::read(data_path).expect("Expected a file at given data path")
-    });
-    let tx = Tx::new(tx_code, data);
-    let (ctx, initialized_accounts) = process_tx(
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
+    let tx_code = match ctx.try_read_wasm(&args.code_path) {
+        Some(bytes) => bytes,
+        None => {
+            fs::read(args.clone().code_path).expect("Code path file not found.")
+        }
+    };
+    let tx_data = std::fs::read(args.clone().data_path.unwrap())
+        .expect("Expected a file at given data path");
+    let timestamp = args.timestamp.unwrap_or_default();
+
+    let address = match args.address {
+        Some(address) => ctx.get(&address),
+        None => {
+            if args.tx.signers.len() == 1 {
+                ctx.get(args.tx.signers.first().unwrap())
+            } else {
+                eprintln!("Must specify and address.");
+                safe_exit(1);
+            }
+        }
+    };
+
+    // let address = ctx.get(&args.address);
+    let pks_index_map = rpc::get_address_pks_map(&client, &address).await;
+
+    let tx = Tx::new_with_timestamp(tx_code, Some(tx_data), timestamp);
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::None,
+        pks_index_map,
+        vec![TxSigningKey::None],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
     .await;
-    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
     let addr = ctx.get(&args.addr);
 
     // Check that the address is established and exists on chain
@@ -167,15 +196,22 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
 
-    let data = UpdateVp { addr, vp_code };
+    let data = UpdateVp {
+        addr: addr.clone(),
+        vp_code,
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    process_tx(
+
+    let pks_map = rpc::get_address_pks_map(&client, &addr).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(args.addr),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(args.addr)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -183,7 +219,34 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
-    let public_key = ctx.get_cached(&args.public_key);
+    let public_keys: Vec<common::PublicKey> = args
+        .public_keys
+        .iter()
+        .map(|pk| ctx.get_cached(pk))
+        .sorted()
+        .collect();
+
+    let threshold = match args.threshold {
+        Some(threshold) => {
+            if threshold > public_keys.len() as u64 {
+                eprintln!(
+                    "Threshold must be less or equal to the number of pks."
+                );
+                safe_exit(1);
+            } else {
+                threshold
+            }
+        }
+        None => {
+            if public_keys.len() as u64 == 1 {
+                1u64
+            } else {
+                eprintln!("Missing threshold for multisignature account.");
+                safe_exit(1);
+            }
+        }
+    };
+
     let vp_code = args
         .vp_code_path
         .map(|path| ctx.read_wasm(path))
@@ -198,17 +261,28 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
 
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
-        public_key,
+        public_keys: public_keys.clone(),
         vp_code,
+        threshold,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let mut pks_map = HashMap::new();
+    for (index, pk) in public_keys.iter().enumerate() {
+        pks_map.insert(pk.clone(), index as u64);
+    }
+
+    // TODO: refactor args.source and require either --signer or --signing-keys
+    // or --signatures
+    let default_signer = args.source.unwrap();
 
     let tx = Tx::new(tx_code, Some(data));
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(args.source),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -222,12 +296,13 @@ pub async fn submit_init_validator(
         tx: tx_args,
         source,
         scheme,
-        account_key,
+        account_keys,
         consensus_key,
         protocol_key,
         commission_rate,
         max_commission_rate_change,
         validator_vp_code_path,
+        threshold,
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
 ) {
@@ -239,17 +314,47 @@ pub async fn submit_init_validator(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
+
+    let account_keys = if !account_keys.is_empty() {
+        account_keys
+            .iter()
+            .map(|account_key| ctx.get_cached(account_key))
+            .collect()
+    } else {
         println!("Generating validator account key...");
-        ctx.wallet
+        let public_key = ctx
+            .wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
             )
             .1
-            .ref_to()
-    });
+            .ref_to();
+        vec![public_key]
+    };
+
+    let threshold = match threshold {
+        Some(threshold) => {
+            if threshold > account_keys.len() as u64 {
+                eprintln!(
+                    "Threshold must be less or equal to the number of public \
+                     keys."
+                );
+                safe_exit(1);
+            } else {
+                threshold
+            }
+        }
+        None => {
+            if account_keys.len() as u64 == 1 {
+                1u64
+            } else {
+                eprintln!("Missing threshold for multisignature account.");
+                safe_exit(1);
+            }
+        }
+    };
 
     let consensus_key = ctx
         .get_opt_cached(&consensus_key)
@@ -327,21 +432,24 @@ pub async fn submit_init_validator(
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
-        account_key,
+        account_keys,
         consensus_key: consensus_key.ref_to(),
         protocol_key,
         dkg_key,
         commission_rate,
         max_commission_rate_change,
+        threshold,
         validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
+
     let (mut ctx, initialized_accounts) = process_tx(
         ctx,
         &tx_args,
         tx,
-        TxSigningKey::WalletAddress(source),
+        HashMap::new(),
+        vec![TxSigningKey::WalletAddress(source)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1585,27 +1693,28 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) =
-        if source == masp_addr && target == masp_addr {
-            // TODO Refactor me, we shouldn't rely on any specific token here.
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                0.into(),
-                ctx.native_token.clone(),
-            )
-        } else if source == masp_addr {
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        } else {
-            (
-                TxSigningKey::WalletAddress(args.source.to_address()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        };
+    let (default_signer, amount, token) = if args.tx.offline_tx {
+        (TxSigningKey::None, args.amount, parsed_args.token.clone())
+    } else if source == masp_addr && target == masp_addr {
+        // TODO Refactor me, we shouldn't rely on any specific token here.
+        (
+            TxSigningKey::SecretKey(masp_tx_key()),
+            0.into(),
+            ctx.native_token.clone(),
+        )
+    } else if source == masp_addr {
+        (
+            TxSigningKey::SecretKey(masp_tx_key()),
+            args.amount,
+            parsed_args.token.clone(),
+        )
+    } else {
+        (
+            TxSigningKey::WalletAddress(args.source.to_address()),
+            args.amount,
+            parsed_args.token.clone(),
+        )
+    };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
     let chosen_signer = tx_signer(&mut ctx, &args.tx, default_signer.clone())
@@ -1623,7 +1732,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
 
     let transfer = token::Transfer {
-        source,
+        source: source.clone(),
         target,
         token,
         sub_prefix,
@@ -1673,6 +1782,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             }
         },
     };
+
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
@@ -1681,11 +1791,14 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    process_tx(
+    let pks_map = rpc::get_address_pks_map(&client, &source).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        signing_address,
+        pks_map,
+        vec![signing_address],
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
     )
@@ -1799,11 +1912,15 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         .expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
+
+    let pks_map = rpc::get_address_pks_map(&client, &source).await;
+
     process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(args.source),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(args.source)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1945,11 +2062,14 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let tx = Tx::new(tx_code, Some(data));
 
+        let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+
         process_tx(
             ctx,
             &args.tx,
             tx,
-            TxSigningKey::WalletAddress(signer),
+            pks_map,
+            vec![TxSigningKey::WalletAddress(signer)],
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -1958,7 +2078,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 }
 
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
-    let signer = if let Some(addr) = &args.tx.signer {
+    // TODO: fix me
+    let signer = if let Some(addr) = args.tx.signers.get(0) {
         addr
     } else {
         eprintln!("Missing mandatory argument --signer.");
@@ -2035,6 +2156,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             serde_json::from_reader(file).expect("JSON was not well-formatted");
         let public_key = rpc::get_public_key(
             &proposal.address,
+            0,
             args.tx.ledger_address.clone(),
         )
         .await
@@ -2082,7 +2204,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         })
         .await;
 
-        let voter_address = ctx.get(signer);
+        let voter_address = ctx.get(&args.address);
         let proposal_id = args.proposal_id.unwrap();
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
@@ -2186,7 +2308,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: proposal_vote,
-                    voter: voter_address,
+                    voter: voter_address.clone(),
                     delegations: delegations.into_iter().collect(),
                 };
 
@@ -2196,11 +2318,15 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
                 let tx = Tx::new(tx_code, Some(data));
 
+                let pks_map =
+                    rpc::get_address_pks_map(&client, &voter_address).await;
+
                 process_tx(
                     ctx,
                     &args.tx,
                     tx,
-                    TxSigningKey::WalletAddress(signer.clone()),
+                    pks_map,
+                    vec![TxSigningKey::WalletAddress(args.address)],
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
@@ -2252,7 +2378,7 @@ pub async fn has_revealed_pk(
     addr: &Address,
     ledger_address: TendermintAddress,
 ) -> bool {
-    rpc::get_public_key(addr, ledger_address).await.is_some()
+    rpc::get_public_key(addr, 0, ledger_address).await.is_some()
 }
 
 pub async fn submit_reveal_pk_aux(
@@ -2269,9 +2395,9 @@ pub async fn submit_reveal_pk_aux(
     let tx = Tx::new(tx_code, Some(tx_data));
 
     // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_key {
+    let keypair = if let Some(signing_key) = args.signing_keys.get(0) {
         ctx.get_cached(signing_key)
-    } else if let Some(signer) = args.signer.as_ref() {
+    } else if let Some(signer) = args.signers.get(0) {
         let signer = ctx.get(signer);
         find_keypair(&mut ctx.wallet, &signer, args.ledger_address.clone())
             .await
@@ -2437,6 +2563,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&ctx.native_token, bond_source);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
@@ -2463,19 +2590,23 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
     println!("Wasm tx bond code bytes length = {}\n", tx_code.len());
     let bond = pos::Bond {
-        validator,
+        validator: validator.clone(),
         amount: args.amount,
-        source,
+        source: source.clone(),
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+
+    let pks_map = rpc::get_address_pks_map(&client, bond_source).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(default_signer),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2526,11 +2657,15 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    let (_ctx, _) = process_tx(
+
+    let pks_map = rpc::get_address_pks_map(&client, &bond_source).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(default_signer),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2585,17 +2720,24 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         println!("Submitting transaction to withdraw them...");
     }
 
-    let data = pos::Withdraw { validator, source };
+    let data = pos::Withdraw {
+        validator: validator.clone(),
+        source: source.clone(),
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+
+    let pks_map = rpc::get_address_pks_map(&client, &bond_source).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(default_signer),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2677,11 +2819,15 @@ pub async fn submit_validator_commission_change(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator;
-    process_tx(
+
+    let pks_map = rpc::get_address_pks_map(&client, &validator).await;
+
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        TxSigningKey::WalletAddress(default_signer),
+        pks_map,
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -2694,27 +2840,53 @@ async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
-    default_signer: TxSigningKey,
+    pks_index_map: HashMap<common::PublicKey, u64>,
+    default_signers: Vec<TxSigningKey>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
-    let (ctx, to_broadcast) = sign_tx(
+    if args.offline_tx {
+        // TODO: use async version of fs
+        tokio::fs::write("code.tx", tx.clone().code)
+            .await
+            .expect("Should be able to write a file to disk.");
+        if let Some(ref data) = tx.data {
+            tokio::fs::write("data.tx", data)
+                .await
+                .expect("Should be able to write a file to disk.");
+        }
+
+        let signing_tx_blob = tx
+            .clone()
+            .signing_tx()
+            .try_to_vec()
+            .expect("Tx should be serializable.");
+        println!(
+            "Transaction code, data and timestmamp have been written to files \
+             code.tx and data.tx."
+        );
+        println!(
+            "You can share the following blob with the other signers:\n{}\n",
+            HEXLOWER.encode(&signing_tx_blob)
+        );
+        println!(
+            "You can later submit the tx with:\nnamada client tx --code-path \
+             code.tx --data-path data.tx --timestamp {}",
+            tx.timestamp.to_rfc3339()
+        );
+
+        return (ctx, vec![]);
+    }
+
+    let (ctx, to_broadcast) = sign_tx_multisignature(
         ctx,
         tx,
         args,
-        default_signer,
+        pks_index_map,
+        default_signers,
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
     .await;
-    // NOTE: use this to print the request JSON body:
-
-    // let request =
-    // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
-    //     tx_bytes.clone().into(),
-    // );
-    // use tendermint_rpc::Request;
-    // let request_body = request.into_json();
-    // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
         if let TxBroadcastData::DryRun(tx) = to_broadcast {

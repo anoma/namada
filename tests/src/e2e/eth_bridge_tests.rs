@@ -56,7 +56,7 @@ fn everything() {
     let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
     let tx_args = vec![
         "tx",
-        "--signer",
+        "--signers",
         ALBERT,
         "--code-path",
         &tx_code_path,

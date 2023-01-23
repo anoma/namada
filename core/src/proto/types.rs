@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
@@ -37,6 +38,22 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct SignatureIndex {
+    pub sig: common::Signature,
+    pub index: u64,
+}
+
+impl SignatureIndex {
+    pub fn from_single_signature(sig: common::Signature) -> Self {
+        Self { sig, index: 0 }
+    }
+
+    pub fn to_vec(&self) -> Vec<Self> {
+        vec![self.clone()]
+    }
+}
+
 /// This can be used to sign an arbitrary tx. The signature is produced and
 /// verified on the tx data concatenated with the tx code, however the tx code
 /// itself is not part of this structure.
@@ -50,7 +67,35 @@ pub struct SignedTxData {
     pub data: Option<Vec<u8>>,
     /// The signature is produced on the tx data concatenated with the tx code
     /// and the timestamp.
-    pub sig: common::Signature,
+    pub sigs: Vec<SignatureIndex>,
+}
+
+impl SignedTxData {
+    pub fn get_signature_by_index(
+        &self,
+        index: u64,
+    ) -> Option<common::Signature> {
+        for signature in &self.sigs {
+            if signature.index == index {
+                return Some(signature.sig.clone());
+            }
+        }
+        None
+    }
+
+    pub fn total_signatures(&self) -> u64 {
+        self.sigs.len() as u64
+    }
+
+    pub fn from_single_signature(
+        data: Option<Vec<u8>>,
+        signature: common::Signature,
+    ) -> Self {
+        Self {
+            data,
+            sigs: vec![SignatureIndex::from_single_signature(signature)],
+        }
+    }
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
@@ -154,11 +199,10 @@ impl SigningTx {
 
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let to_sign = self.hash();
-        let sig = common::SigScheme::sign(keypair, to_sign);
+        let sig = self.compute_signature(keypair);
         let signed = SignedTxData {
             data: self.data,
-            sig,
+            sigs: SignatureIndex::from_single_signature(sig).to_vec(),
         }
         .try_to_vec()
         .expect("Encoding transaction data shouldn't fail");
@@ -167,6 +211,86 @@ impl SigningTx {
             data: Some(signed),
             timestamp: self.timestamp,
         }
+    }
+
+    pub fn compute_signature(
+        &self,
+        keypair: &common::SecretKey,
+    ) -> common::Signature {
+        let to_sign = self.hash();
+        common::SigScheme::sign(keypair, to_sign)
+    }
+
+    pub fn sign_multisignature(
+        self,
+        keypairs: &[common::SecretKey],
+        pks_index_map: HashMap<common::PublicKey, u64>,
+    ) -> Self {
+        let signatures = self.compute_signatures(keypairs);
+        let signature_indexes =
+            self.compute_signature_indexes(signatures, pks_index_map);
+
+        let signed = SignedTxData {
+            data: self.data,
+            sigs: signature_indexes,
+        };
+
+        SigningTx {
+            code_hash: self.code_hash,
+            data: signed.try_to_vec().ok(),
+            timestamp: self.timestamp,
+        }
+    }
+
+    pub fn add_signatures(
+        self,
+        signatures: Vec<(common::PublicKey, common::Signature)>,
+        pks_index_map: HashMap<common::PublicKey, u64>,
+    ) -> Self {
+        let signature_indexes =
+            self.compute_signature_indexes(signatures, pks_index_map);
+        let signed = SignedTxData {
+            data: self.data,
+            sigs: signature_indexes,
+        };
+
+        SigningTx {
+            code_hash: self.code_hash,
+            data: signed.try_to_vec().ok(),
+            timestamp: self.timestamp,
+        }
+    }
+
+    fn compute_signature_indexes(
+        &self,
+        signatures: Vec<(common::PublicKey, common::Signature)>,
+        pks_index_map: HashMap<common::PublicKey, u64>,
+    ) -> Vec<SignatureIndex> {
+        signatures
+            .iter()
+            .filter_map(|(public_key, signature)| {
+                let pk_index = pks_index_map.get(public_key);
+                pk_index.map(|index| SignatureIndex {
+                    sig: signature.clone(),
+                    index: *index,
+                })
+            })
+            .collect::<Vec<SignatureIndex>>()
+    }
+
+    fn compute_signatures(
+        &self,
+        keypairs: &[common::SecretKey],
+    ) -> Vec<(common::PublicKey, common::Signature)> {
+        let to_sign = self.hash();
+        keypairs
+            .iter()
+            .map(|key| {
+                let signature = common::SigScheme::sign(key, to_sign);
+                let public_key = key.ref_to();
+                (public_key, signature)
+            })
+            .collect()
     }
 
     /// Verify that the transaction has been signed by the secret key
@@ -350,6 +474,18 @@ impl Tx {
         }
     }
 
+    pub fn new_with_timestamp(
+        code: Vec<u8>,
+        data: Option<Vec<u8>>,
+        timestamp: DateTimeUtc,
+    ) -> Self {
+        Tx {
+            code,
+            data,
+            timestamp,
+        }
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
         let tx: types::Tx = self.clone().into();
@@ -371,6 +507,34 @@ impl Tx {
         let code = self.code.clone();
         SigningTx::from(self)
             .sign(keypair)
+            .expand(code)
+            .expect("code hashes to unexpected value")
+    }
+
+    pub fn signing_tx(self) -> SigningTx {
+        SigningTx::from(self)
+    }
+
+    pub fn add_signatures(
+        self,
+        signatures: Vec<(common::PublicKey, common::Signature)>,
+        pks_index_map: HashMap<common::PublicKey, u64>,
+    ) -> Self {
+        let code = self.code.clone();
+        SigningTx::from(self)
+            .add_signatures(signatures, pks_index_map)
+            .expand(code)
+            .expect("code hashes to unexpected value")
+    }
+
+    pub fn sign_multisignature(
+        self,
+        keypairs: &[common::SecretKey],
+        pks_index_map: HashMap<common::PublicKey, u64>,
+    ) -> Self {
+        let code = self.code.clone();
+        SigningTx::from(self)
+            .sign_multisignature(keypairs, pks_index_map)
             .expand(code)
             .expect("code hashes to unexpected value")
     }
