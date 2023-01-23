@@ -6,7 +6,7 @@ If you don't want to build Namada from source you can [install Namada from binar
 Export the following variables:
 
 ```bash
-export NAMADA_TAG=v0.13.0
+export NAMADA_TAG=v0.13.2
 export TM_HASH=v0.1.4-abciplus
 ```
 

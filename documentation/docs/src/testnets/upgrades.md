@@ -1,7 +1,12 @@
 # Upgrades
 This page covers all installation steps required by various upgrades to testnets.
 
-## Latest Upgrade 
+## Latest Upgrade
+
+### Testnet `public-testnet-2.1.4014f207f6d`
+
+A new testnet was released before the fortnightly testnet release schedule due to the below hardfork not working as intended. Follow the steps in [setting up a new testnet](./environment-setup.md)
+
 ### Hardfork v0.13.1
 
 This hardfork is set to be instantiated at block height `37370`, which is predicted to occur at around 17.00 UTC on 18/01/2023.

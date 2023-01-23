@@ -23,7 +23,7 @@ With the new update, the folder will be located in the `.namada` folder rather t
 - Wait for the genesis file to be ready, `CHAIN_ID`.
 - Join the network with the `CHAIN_ID`
     ``` bash
-    export CHAIN_ID="public-testnet-2.0.2feaf2d718c"
+    export CHAIN_ID="public-testnet-2.1.4014f207f6d"
     namada client utils join-network \
     --chain-id $CHAIN_ID --genesis-validator $ALIAS
     ```
