@@ -180,6 +180,8 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
+                // Commands
+                .subcommand(SignTx::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -220,6 +222,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -247,6 +250,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(sign_tx)
                 .or(utils)
         }
     }
@@ -310,6 +314,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        SignTx(SignTx),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1557,6 +1562,25 @@ pub mod cmds {
                 .add_args::<args::InitGenesisValidator>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct SignTx(pub args::SignTx);
+
+    impl SubCmd for SignTx {
+        const CMD: &'static str = "sign-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::SignTx::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Sign and dump a transaction signature.")
+                .add_args::<args::SignTx>()
+        }
+    }
 }
 
 pub mod args {
@@ -1587,6 +1611,7 @@ pub mod args {
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
+    const ADDRESS_OPT: ArgOpt<WalletAddress> = ADDRESS.opt();
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
     const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
@@ -1617,8 +1642,9 @@ pub mod args {
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
-    const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const DUMP_TX: ArgFlag = flag("dump-tx");
+    const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    const OFFLINE_TX: ArgFlag = flag("offline-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
@@ -1638,7 +1664,6 @@ pub mod args {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
-
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
@@ -1660,6 +1685,7 @@ pub mod args {
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
@@ -1671,9 +1697,10 @@ pub mod args {
     const RECEIVER: Arg<String> = arg("receiver");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    const SIGNERS: ArgMulti<WalletAddress> = arg_multi("signers");
+    const SIGNING_TX: ArgOpt<String> = arg_opt("signing-tx");
+    const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -1684,13 +1711,15 @@ pub mod args {
     const TOKEN: Arg<WalletAddress> = arg("token");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    const THRESHOLD: ArgOpt<u64> = arg_opt("threshold");
     const TX_HASH: Arg<String> = arg("tx-hash");
+    const TX_TIMESTAMP: ArgOpt<DateTimeUtc> = arg_opt("timestamp");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
     const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
-    const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
-        arg_opt("account-key");
+    const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("account-keys");
     const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
@@ -1831,6 +1860,10 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
+        /// Optional timestamp field
+        pub timestamp: Option<DateTimeUtc>,
+        /// The address
+        pub address: Option<WalletAddress>,
     }
 
     impl Args for TxCustom {
@@ -1838,10 +1871,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
+            let timestamp = TX_TIMESTAMP.parse(matches);
+            let address = ADDRESS_OPT.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
+                timestamp,
+                address,
             }
         }
 
@@ -1857,6 +1894,48 @@ pub mod args {
                      will be passed to the transaction code when it's \
                      executed.",
                 ))
+                .arg(
+                    TX_TIMESTAMP.def().about(
+                        "The timestamp to set be set on the transaction.",
+                    ),
+                )
+                .arg(ADDRESS_OPT.def().about("The address to lookup."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignTx {
+        pub tx: Tx,
+        pub data_path: Option<PathBuf>,
+        pub signing_tx: Option<String>,
+    }
+
+    impl Args for SignTx {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let data_path = DATA_PATH_OPT.parse(matches);
+            let signing_tx = SIGNING_TX.parse(matches);
+            Self {
+                tx,
+                data_path,
+                signing_tx,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(
+                    DATA_PATH_OPT
+                        .def()
+                        .about("Path to hex encoeded signing tx file.")
+                        .conflicts_with(SIGNING_TX.name),
+                )
+                .arg(
+                    SIGNING_TX
+                        .def()
+                        .about("The hex encoded transaction to be signed.")
+                        .conflicts_with(DATA_PATH_OPT.name),
+                )
         }
     }
 
@@ -2006,41 +2085,59 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// Address of the source account
-        pub source: WalletAddress,
+        pub source: Option<WalletAddress>,
         /// Path to the VP WASM code file for the new account
         pub vp_code_path: Option<PathBuf>,
         /// Public key for the new account
-        pub public_key: WalletPublicKey,
+        pub public_keys: Vec<WalletPublicKey>,
+        /// The threshold for multsignature account
+        pub threshold: Option<u64>,
     }
 
     impl Args for TxInitAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
+            let source = SOURCE_OPT.parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
-            let public_key = PUBLIC_KEY.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
                 source,
                 vp_code_path,
-                public_key,
+                public_keys,
+                threshold,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
-                .arg(SOURCE.def().about(
-                    "The source account's address that signs the transaction.",
-                ))
+                .arg(
+                    SOURCE_OPT
+                        .def()
+                        .about(
+                            "The source account's address that signs the \
+                             transaction.",
+                        )
+                        .required(true)
+                        .min_values(1),
+                )
                 .arg(CODE_PATH_OPT.def().about(
                     "The path to the validity predicate WASM code to be used \
                      for the new account. Uses the default user VP if none \
                      specified.",
                 ))
-                .arg(PUBLIC_KEY.def().about(
-                    "A public key to be used for the new account in \
-                     hexadecimal encoding.",
-                ))
+                .arg(
+                    PUBLIC_KEYS
+                        .def()
+                        .about(
+                            "A public key to be used for the new account in \
+                             hexadecimal encoding.",
+                        )
+                        .required(true)
+                        .min_values(1),
+                )
+                .arg(THRESHOLD.def().about("Multisgnature threshold."))
         }
     }
 
@@ -2050,12 +2147,13 @@ pub mod args {
         pub tx: Tx,
         pub source: WalletAddress,
         pub scheme: SchemeType,
-        pub account_key: Option<WalletPublicKey>,
+        pub account_keys: Vec<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub protocol_key: Option<WalletPublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
+        pub threshold: Option<u64>,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -2064,24 +2162,26 @@ pub mod args {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
             let scheme = SCHEME.parse(matches);
-            let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
+            let account_keys = VALIDATOR_ACCOUNT_KEYS.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 tx,
                 source,
                 scheme,
-                account_key,
+                account_keys,
                 consensus_key,
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
                 validator_vp_code_path,
+                threshold,
                 unsafe_dont_encrypt,
             }
         }
@@ -2095,7 +2195,7 @@ pub mod args {
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEY.def().about(
+                .arg(VALIDATOR_ACCOUNT_KEYS.def().about(
                     "A public key for the validator account. A new one will \
                      be generated if none given.",
                 ))
@@ -2122,6 +2222,9 @@ pub mod args {
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
+                ))
+                .arg(THRESHOLD.def().about(
+                    "Specifiy the treshold if a multisignature account.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
@@ -2302,6 +2405,8 @@ pub mod args {
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
+        /// The address that will send the vote
+        pub address: WalletAddress,
     }
 
     impl Args for VoteProposal {
@@ -2313,6 +2418,7 @@ pub mod args {
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
+            let address = ADDRESS.parse(matches);
 
             Self {
                 tx,
@@ -2322,6 +2428,7 @@ pub mod args {
                 proposal_eth,
                 offline,
                 proposal_data,
+                address,
             }
         }
 
@@ -2378,6 +2485,7 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+                .arg(ADDRESS.def().about("The address to vote with."))
         }
     }
 
@@ -2894,10 +3002,14 @@ pub mod args {
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
+        /// Dump the signing tx to file
+        pub offline_tx: bool,
         /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
+        pub signing_keys: Vec<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
+        pub signers: Vec<WalletAddress>,
+        /// The paths to signatures
+        pub signatures: Vec<PathBuf>,
     }
 
     impl Tx {
@@ -2914,11 +3026,18 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
-                signing_key: self
-                    .signing_key
-                    .as_ref()
-                    .map(|sk| ctx.get_cached(sk)),
-                signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
+                offline_tx: self.offline_tx,
+                signing_keys: self
+                    .signing_keys
+                    .iter()
+                    .map(|sk| ctx.get_cached(sk))
+                    .collect(),
+                signers: self
+                    .signers
+                    .iter()
+                    .map(|signer| ctx.get(signer))
+                    .collect(),
+                signatures: self.signatures.clone(),
             }
         }
     }
@@ -2954,25 +3073,27 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
+            .arg(OFFLINE_TX.def().about("Dump tx to file."))
             .arg(
-                SIGNING_KEY_OPT
+                SIGNING_KEYS
                     .def()
                     .about(
                         "Sign the transaction with the key for the given \
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name),
+                    .conflicts_with_all(&[SIGNERS.name]),
             )
             .arg(
-                SIGNER
+                SIGNERS
                     .def()
                     .about(
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
+                    .conflicts_with_all(&[SIGNING_KEYS.name]),
             )
+            .arg(SIGNATURES.def().about("The paths to signatures."))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -2985,9 +3106,10 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let signer = SIGNER.parse(matches);
+            let offline_tx = OFFLINE_TX.parse(matches);
+            let signing_keys = SIGNING_KEYS.parse(matches);
+            let signers = SIGNERS.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
@@ -2998,8 +3120,10 @@ pub mod args {
                 fee_amount,
                 fee_token,
                 gas_limit,
-                signing_key,
-                signer,
+                signing_keys,
+                signers,
+                offline_tx,
+                signatures,
             }
         }
     }

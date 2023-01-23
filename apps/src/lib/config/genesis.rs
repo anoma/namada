@@ -6,6 +6,7 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::ledger::pgf::parameters::PgfParams;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::governance::parameters::GovParams;
@@ -31,6 +32,7 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    use namada::core::ledger::pgf::parameters::PgfParams;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
@@ -135,6 +137,8 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
+        // Pgf parameters
+        pub pgf_params: PgfParamsConfig,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -159,6 +163,13 @@ pub mod genesis_config {
         // Minimum number of epoch between end and grace epoch
         // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PgfParamsConfig {
+        // Max number of epoch for which a candidacy is valid
+        // XXX: u64 doesn't work with toml-rs!
+        pub candidacy_expiration: u64
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -534,6 +545,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            pgf_params,
             wasm,
         } = config;
 
@@ -627,6 +639,7 @@ pub mod genesis_config {
             min_proposal_grace_epochs,
             max_proposal_period,
         } = gov_params;
+
         let gov_params = GovParams {
             min_proposal_fund,
             max_proposal_code_size,
@@ -634,6 +647,14 @@ pub mod genesis_config {
             max_proposal_content_size,
             min_proposal_grace_epochs,
             max_proposal_period,
+        };
+
+        let PgfParamsConfig {
+            candidacy_expiration
+        } = pgf_params;
+
+        let pgf_params = PgfParams {
+            candidacy_expiration
         };
 
         let PosParamsConfig {
@@ -675,6 +696,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            pgf_params
         };
         genesis.init();
         genesis
@@ -727,6 +749,7 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    pub pgf_params: PgfParams
 }
 
 impl Genesis {
@@ -1000,6 +1023,7 @@ pub fn genesis() -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        pgf_params: PgfParams::default(),
         native_token: address::nam(),
         #[cfg(not(feature = "mainnet"))]
         faucet_pow_difficulty: None,

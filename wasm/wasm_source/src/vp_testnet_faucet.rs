@@ -29,18 +29,7 @@ fn validate_tx(
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            let pk = key::get(ctx, &addr);
-            match pk {
-                Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
-                        Ok(true)
-                    )
-                }
-                _ => false,
-            }
-        }
+        Ok(signed_tx_data) => verify_signatures(ctx, signed_tx_data, &addr),
         _ => false,
     });
 
@@ -239,7 +228,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -353,10 +342,7 @@ mod tests {
         // The signature itself doesn't matter and is not being checked in this
         // test, it's just used to construct `SignedTxData`
         let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
-        let signed_solution = SignedTxData {
-            data: Some(solution_bytes),
-            sig,
-        };
+        let signed_solution = SignedTxData::from_single_signature(Some(solution_bytes), sig);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -403,7 +389,7 @@ mod tests {
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, public_key);
+            tx_env.write_public_key(&vp_owner, public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {

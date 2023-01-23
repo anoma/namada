@@ -278,6 +278,21 @@ where
     }
 }
 
+impl<T> ArgMulti<FromContext<T>> {
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name)
+            .long(self.name)
+            .takes_value(true)
+            .multiple(true)
+            .require_delimiter(true)
+    }
+
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
+        let raw = matches.values_of(self.name).unwrap_or_default();
+        raw.map(|val| FromContext::new(val.to_string())).collect()
+    }
+}
+
 /// Extensions for defining commands and arguments.
 /// Every function here should have a matcher in [`ArgMatchesExt`].
 pub trait AppExt {

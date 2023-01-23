@@ -292,19 +292,6 @@ pub fn read_wasm(
     ))
 }
 
-pub fn read_wasm_or_exit(
-    wasm_directory: impl AsRef<Path>,
-    file_path: impl AsRef<Path>,
-) -> Vec<u8> {
-    match read_wasm(wasm_directory, file_path) {
-        Ok(wasm) => wasm,
-        Err(err) => {
-            eprintln!("Error reading wasm: {}", err);
-            safe_exit(1);
-        }
-    }
-}
-
 async fn download_wasm(url: String) -> Result<Vec<u8>, Error> {
     tracing::info!("Downloading WASM {}...", url);
     let response = reqwest::get(&url).await;

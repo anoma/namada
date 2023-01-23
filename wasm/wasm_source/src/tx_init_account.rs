@@ -12,8 +12,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         .wrap_err("failed to decode InitAccount")?;
     debug_log!("apply_tx called to init a new established account");
 
-    let address = ctx.init_account(&tx_data.vp_code)?;
-    let pk_key = key::pk_key(&address);
-    ctx.write(&pk_key, &tx_data.public_key)?;
+    match account::init_account(ctx, tx_data) {
+        Ok(account_address) => {
+            debug_log!("Created account {}", account_address.encode())
+        }
+        Err(err) => {
+            debug_log!("Account creation failed with: {}", err);
+            panic!()
+        }
+    }
     Ok(())
 }
