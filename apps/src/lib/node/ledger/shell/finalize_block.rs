@@ -140,7 +140,8 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed and remove the hash from storage
+                // from the queue of txs to be processed and remove the hash
+                // from storage
                 if let TxType::Decrypted(_) = &tx_type {
                     let tx_hash = self
                         .wl_storage
