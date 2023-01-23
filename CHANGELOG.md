@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## v0.13.2
+
+Namada 0.13.2 is a bugfix release addressing issues with the 0.13
+release series.
+
+### BUG FIXES
+
+- Fixes testnet wrapper fee checks
+  ([#1019](https://github.com/anoma/namada/pull/1019))
+
+### CI
+
+- Correctly report e2e test failures in CI.
+  ([#1045](https://github.com/anoma/namada/pull/1045))
+
+### IMPROVEMENTS
+
+- Append Namada version number to tendermint moniker.
+  ([#1057](https://github.com/anoma/namada/pull/1057))
+
+### TESTING
+
+- Correct the whitelist test in vp_implicit to use case-insensitive whitelist
+  hashes. ([#1037](https://github.com/anoma/namada/pull/1037))
+- Address failing e2e tests which were not caught earlier.
+  ([#1062](https://github.com/anoma/namada/pull/1062))
+
 ## v0.13.1
 
 Namada 0.13.1 is a maintenance release fixing an error in the tx and vp
