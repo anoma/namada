@@ -269,25 +269,23 @@ where
     ) -> bool {
         if !self.storage.is_bridge_active() {
             ext.is_none()
-        } else {
-            if let Some(ext) = ext {
-                self.validate_eth_events_vext(
-                    ext,
-                    self.storage.get_current_decision_height(),
-                )
-                .then_some(true)
-                .unwrap_or_else(| | {
-                    tracing::warn!(
-                        ?req.validator_address,
-                        ?req.hash,
-                        req.height,
-                        "Received Ethereum events vote extension that didn't validate"
-                    );
-                    false
-                })
-            } else {
+        } else if let Some(ext) = ext {
+            self.validate_eth_events_vext(
+                ext,
+                self.storage.get_current_decision_height(),
+            )
+            .then_some(true)
+            .unwrap_or_else(| | {
+                tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Received Ethereum events vote extension that didn't validate"
+                );
                 false
-            }
+            })
+        } else {
+            false
         }
     }
 
@@ -301,19 +299,19 @@ where
         if self.storage.is_bridge_active() {
             if let Some(ext) = ext {
                 self.validate_bp_roots_vext(
-                    ext.unwrap(),
+                    ext,
                     self.storage.last_height,
                 )
-                    .then_some(true)
-                    .unwrap_or_else(|| {
-                        tracing::warn!(
-                    ?req.validator_address,
-                    ?req.hash,
-                    req.height,
-                    "Received Bridge pool root vote extension that didn't validate"
-                );
-                        false
-                    })
+                .then_some(true)
+                .unwrap_or_else(|| {
+                    tracing::warn!(
+                        ?req.validator_address,
+                        ?req.hash,
+                        req.height,
+                        "Received Bridge pool root vote extension that didn't validate"
+                    );
+                    false
+                })
             } else {
                 false
             }
