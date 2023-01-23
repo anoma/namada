@@ -19,6 +19,7 @@ struct Keys {
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
+    max_signature_per_tx: &'static str,
     faucet_account: &'static str,
     wrapper_tx_fees: &'static str,
 }
@@ -257,6 +258,16 @@ pub fn get_wrapper_tx_fees_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.wrapper_tx_fees.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for max signature per transaction parameter
+pub fn get_max_signature_per_tx_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.max_signature_per_tx.to_string()),
         ],
     }
 }

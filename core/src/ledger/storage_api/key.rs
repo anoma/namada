@@ -6,11 +6,25 @@ use crate::types::key::*;
 
 /// Get the public key associated with the given address. Returns `Ok(None)` if
 /// not found.
-pub fn get<S>(storage: &S, owner: &Address) -> Result<Option<common::PublicKey>>
+pub fn get<S>(
+    storage: &S,
+    owner: &Address,
+    index: u64,
+) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
 {
-    let key = pk_key(owner);
+    let key = pk_key(owner, index);
+    storage.read(&key)
+}
+
+/// Get the public key associated with the given address. Returns `Ok(None)` if
+/// not found.
+pub fn threshold<S>(storage: &S, owner: &Address) -> Result<Option<u64>>
+where
+    S: StorageRead,
+{
+    let key = threshold_key(owner);
     storage.read(&key)
 }
 
@@ -21,6 +35,6 @@ where
     S: StorageWrite,
 {
     let addr: Address = pk.into();
-    let key = pk_key(&addr);
+    let key = pk_key(&addr, 0);
     storage.write(&key, pk)
 }
