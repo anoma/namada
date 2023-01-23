@@ -71,18 +71,31 @@ where
         receiver,
     } in transfers
     {
-        if asset != &wrapped_native_erc20 {
-            let mut changed =
-                mint_wrapped_erc20s(storage, asset, receiver, amount)?;
-            changed_keys.append(&mut changed)
+        let mut changed = if asset != &wrapped_native_erc20 {
+            mint_wrapped_erc20s(storage, asset, receiver, amount)?
         } else {
-            tracing::warn!(
-                "Redemption of the wrapped native token is not yet supported \
-                 - (receiver - {receiver}, amount - {amount})"
-            )
-        }
+            redeem_native_token(storage, receiver, amount)?
+        };
+        changed_keys.append(&mut changed)
     }
     Ok(changed_keys)
+}
+
+/// Redeems `amount` of the native token for `receiver` from escrow.
+fn redeem_native_token<D, H>(
+    _storage: &mut Storage<D, H>,
+    receiver: &Address,
+    amount: &token::Amount,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    tracing::warn!(
+        "Redemption of the wrapped native token is not yet supported - \
+         (receiver - {receiver}, amount - {amount})"
+    );
+    Ok(BTreeSet::default())
 }
 
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
