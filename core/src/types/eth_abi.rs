@@ -25,6 +25,12 @@ pub struct EncodeCell<T: ?Sized> {
     _marker: PhantomData<*const T>,
 }
 
+impl<T> AsRef<[u8]> for EncodeCell<T> {
+    fn as_ref(&self) -> &[u8] {
+        &self.encoded_data
+    }
+}
+
 impl<T> ::std::cmp::Eq for EncodeCell<T> {}
 
 impl<T> ::std::cmp::PartialEq for EncodeCell<T> {
