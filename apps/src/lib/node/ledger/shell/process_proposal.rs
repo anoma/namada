@@ -2,7 +2,6 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use namada::core::types::hash::Hash;
-use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::TempWlStorage;
 use namada::types::internal::WrapperTxInQueue;
 
@@ -204,19 +203,32 @@ where
                         }
 
                         // Write inner hash to WAL
-                        temp_wl_storage.write_log.write(&inner_hash_key, vec![]).expect("Couldn't write inner transaction hash to write log");
+                        temp_wl_storage
+                            .write_log
+                            .write(&inner_hash_key, vec![])
+                            .expect(
+                                "Couldn't write inner transaction hash to \
+                                 write log",
+                            );
 
                         let tx = Tx::try_from(tx_bytes)
                             .expect("Deserialization shouldn't fail");
                         let wrapper_hash = Hash(tx.unsigned_hash());
                         let wrapper_hash_key =
                             replay_protection::get_tx_hash_key(&wrapper_hash);
-                        if temp_wl_storage.has_key(&wrapper_hash_key).expect("Error while checking wrapper tx hash key in storage"){
-                                               return TxResult {
-                                        code: ErrorCodes::ReplayTx.into(),
-                                        info: format!("Wrapper transaction hash {} already in storage, replay attempt", wrapper_hash)
-                                    };
-                                }
+                        if temp_wl_storage.has_key(&wrapper_hash_key).expect(
+                            "Error while checking wrapper tx hash key in \
+                             storage",
+                        ) {
+                            return TxResult {
+                                code: ErrorCodes::ReplayTx.into(),
+                                info: format!(
+                                    "Wrapper transaction hash {} already in \
+                                     storage, replay attempt",
+                                    wrapper_hash
+                                ),
+                            };
+                        }
 
                         // Write wrapper hash to WAL
                         temp_wl_storage

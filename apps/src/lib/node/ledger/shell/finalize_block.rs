@@ -2,9 +2,8 @@
 
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::pos::types::into_tm_voting_power;
-use namada::ledger::protocol;
-use namada::ledger::replay_protection;
 use namada::ledger::storage_api::StorageRead;
+use namada::ledger::{protocol, replay_protection};
 use namada::types::hash;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
@@ -114,7 +113,8 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed and remove the hash from storage
+                // from the queue of txs to be processed and remove the hash
+                // from storage
                 if let TxType::Decrypted(_) = &tx_type {
                     let tx_hash = self
                         .wl_storage
