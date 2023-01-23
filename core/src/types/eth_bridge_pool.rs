@@ -7,9 +7,11 @@ use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
-use crate::types::address::Address;
+use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_abi::Encode;
-use crate::types::ethereum_events::{EthAddress, Uint};
+use crate::types::ethereum_events::{
+    EthAddress, TransferToEthereum as TransferToEthereumEvent, Uint,
+};
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{BlockHeight, DbKeySeg, Key};
 use crate::types::token::Amount;
@@ -80,6 +82,23 @@ impl Encode<7> for PendingTransfer {
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
         [version, namespace, from, to, amount, fee, fee_from]
+    }
+}
+
+impl From<&TransferToEthereumEvent> for PendingTransfer {
+    fn from(event: &TransferToEthereumEvent) -> Self {
+        let transfer = TransferToEthereum {
+            asset: event.asset,
+            recipient: event.receiver,
+            // The sender is dummy because it doesn't affect the hash
+            sender: Address::Internal(InternalAddress::EthBridgePool),
+            amount: event.amount,
+        };
+        let gas_fee = GasFee {
+            amount: event.gas_amount,
+            payer: event.gas_payer.clone(),
+        };
+        Self { transfer, gas_fee }
     }
 }
 

@@ -74,7 +74,7 @@ where
     };
 
     let transfers: Vec<PendingTransfer> = store
-        .iter()
+        .keys()
         .map(|hash| {
             let res = ctx
                 .storage
@@ -264,7 +264,7 @@ where
 
 #[cfg(test)]
 mod test_ethbridge_router {
-    use std::collections::BTreeSet;
+    use std::collections::BTreeMap;
 
     use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
@@ -640,7 +640,7 @@ mod test_ethbridge_router {
 
         let tree = BridgePoolTree::new(
             transfer.keccak256(),
-            BTreeSet::from([transfer.keccak256()]),
+            BTreeMap::from([(transfer.keccak256(), 1.into())]),
         );
         let proof = tree
             .get_membership_proof(vec![transfer])

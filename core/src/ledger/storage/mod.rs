@@ -539,7 +539,7 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
-        self.block.tree.update(key, value)?;
+        self.block.tree.update(self.block.height, key, value)?;
 
         let len = value.len();
         let gas = key.len() + len;
@@ -959,23 +959,29 @@ where
         let key = key_prefix
             .push(&"epoch_start_height".to_string())
             .map_err(Error::KeyError)?;
-        self.block
-            .tree
-            .update(&key, types::encode(&self.next_epoch_min_start_height))?;
+        self.block.tree.update(
+            self.block.height,
+            &key,
+            types::encode(&self.next_epoch_min_start_height),
+        )?;
 
         let key = key_prefix
             .push(&"epoch_start_time".to_string())
             .map_err(Error::KeyError)?;
-        self.block
-            .tree
-            .update(&key, types::encode(&self.next_epoch_min_start_time))?;
+        self.block.tree.update(
+            self.block.height,
+            &key,
+            types::encode(&self.next_epoch_min_start_time),
+        )?;
 
         let key = key_prefix
             .push(&"current_epoch".to_string())
             .map_err(Error::KeyError)?;
-        self.block
-            .tree
-            .update(&key, types::encode(&self.block.epoch))?;
+        self.block.tree.update(
+            self.block.height,
+            &key,
+            types::encode(&self.block.epoch),
+        )?;
 
         Ok(())
     }
@@ -1000,7 +1006,7 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        self.block.tree.update(key, value)?;
+        self.block.tree.update(self.block.height, key, value)?;
         self.db
             .batch_write_subspace_val(batch, self.block.height, key, value)
     }
@@ -1109,7 +1115,10 @@ where
         // gas and storage bytes len diff accounting, because it can only be
         // used by the protocol that has a direct mutable access to storage
         let val = val.as_ref();
-        self.block.tree.update(key, val).into_storage_result()?;
+        self.block
+            .tree
+            .update(self.block.height, key, val)
+            .into_storage_result()?;
         let _ = self
             .db
             .write_subspace_val(self.block.height, key, val)

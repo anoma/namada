@@ -1,6 +1,6 @@
 //! Tools for accessing the storage subspaces of the Ethereum
 //! bridge pool
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -12,7 +12,7 @@ use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::{keccak_hash, KeccakHash};
-use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::storage::{BlockHeight, DbKeySeg, Key, KeySeg};
 
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
@@ -68,6 +68,13 @@ pub fn is_bridge_pool_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &BRIDGE_POOL_ADDRESS)
 }
 
+/// Check if a key is for a pending transfer
+pub fn is_pending_transfer_key(key: &Key) -> bool {
+    is_bridge_pool_key(key)
+        && *key != get_signed_root_key()
+        && *key != get_nonce_key()
+}
+
 /// A simple Merkle tree for the Ethereum bridge pool
 ///
 /// Note that an empty tree has root [0u8; 20] by definition.
@@ -78,16 +85,16 @@ pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,
     /// The underlying storage, containing hashes of [`PendingTransfer`]s.
-    leaves: BTreeSet<KeccakHash>,
+    leaves: BTreeMap<KeccakHash, BlockHeight>,
 }
 
 impl BridgePoolTree {
     /// Create a new merkle tree for the Ethereum bridge pool
-    pub fn new(root: KeccakHash, store: BTreeSet<KeccakHash>) -> Self {
-        Self {
-            root,
-            leaves: store,
-        }
+    pub fn new(
+        root: KeccakHash,
+        leaves: BTreeMap<KeccakHash, BlockHeight>,
+    ) -> Self {
+        Self { root, leaves }
     }
 
     /// Parse the key to ensure it is of the correct type.
@@ -95,16 +102,31 @@ impl BridgePoolTree {
     /// If it is, it can be converted to a hash.
     /// Checks if the hash is in the tree.
     pub fn contains_key(&self, key: &Key) -> Result<bool, Error> {
-        Ok(self.leaves.contains(&Self::parse_key(key)?))
+        Ok(self.leaves.contains_key(&Self::parse_key(key)?))
+    }
+
+    /// Get the height at which the key was inserted
+    ///
+    /// Returns the height if successful. Will
+    /// return an error if the key is malformed.
+    pub fn get_inserted_height(&self, key: &Key) -> Result<BlockHeight, Error> {
+        let hash = Self::parse_key(key)?;
+        self.leaves.get(&hash).cloned().ok_or_else(|| {
+            eyre!("Could not parse key segment as a hash").into()
+        })
     }
 
     /// Update the tree with a new value.
     ///
     /// Returns the new root if successful. Will
     /// return an error if the key is malformed.
-    pub fn insert_key(&mut self, key: &Key) -> Result<Hash, Error> {
+    pub fn insert_key(
+        &mut self,
+        height: BlockHeight,
+        key: &Key,
+    ) -> Result<Hash, Error> {
         let hash = Self::parse_key(key)?;
-        _ = self.leaves.insert(hash);
+        _ = self.leaves.insert(hash, height);
         self.root = self.compute_root();
         Ok(self.root().into())
     }
@@ -119,7 +141,7 @@ impl BridgePoolTree {
 
     /// Compute the root of the merkle tree
     fn compute_root(&self) -> KeccakHash {
-        let mut hashes: Vec<KeccakHash> = self.leaves.iter().cloned().collect();
+        let mut hashes: Vec<KeccakHash> = self.leaves.keys().cloned().collect();
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
             for pair in hashes.chunks(2) {
@@ -143,7 +165,7 @@ impl BridgePoolTree {
     }
 
     /// Get a reference to the backing store
-    pub fn store(&self) -> &BTreeSet<KeccakHash> {
+    pub fn store(&self) -> &BTreeMap<KeccakHash, BlockHeight> {
         &self.leaves
     }
 
@@ -158,7 +180,7 @@ impl BridgePoolTree {
         // get the leaf hashes
         let leaves: BTreeSet<KeccakHash> =
             values.iter().map(|v| v.keccak256()).collect();
-        if !leaves.is_subset(&self.leaves) {
+        if !leaves.iter().all(|h| self.leaves.contains_key(h)) {
             return Err(eyre!(
                 "Cannot generate proof for values that aren't in the tree"
             )
@@ -168,7 +190,7 @@ impl BridgePoolTree {
         let mut flags = vec![];
         let mut hashes: Vec<_> = self
             .leaves
-            .iter()
+            .keys()
             .cloned()
             .map(|hash| {
                 if leaves.contains(&hash) {
@@ -230,7 +252,7 @@ impl BridgePoolTree {
     ///
     /// It should have one string segment which should
     /// parse into a [`struct@Hash`].
-    fn parse_key(key: &Key) -> Result<KeccakHash, Error> {
+    pub fn parse_key(key: &Key) -> Result<KeccakHash, Error> {
         if key.segments.len() == 1 {
             match &key.segments[0] {
                 DbKeySeg::StringSeg(str) => {
@@ -407,9 +429,12 @@ mod test_bridge_pool_tree {
             },
         };
         let key = Key::from(&transfer);
-        let root =
-            KeccakHash::from(tree.insert_key(&key).expect("Test failed"));
+        let root = KeccakHash::from(
+            tree.insert_key(BlockHeight(1), &key).expect("Test failed"),
+        );
         assert_eq!(root, transfer.keccak256());
+        let height = tree.get_inserted_height(&key).expect("Test failed");
+        assert_eq!(BlockHeight(1), height);
     }
 
     #[test]
@@ -431,7 +456,7 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         let expected =
             hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
@@ -458,12 +483,12 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
         let hashes: BTreeSet<KeccakHash> =
             transfers.iter().map(|t| t.keccak256()).collect();
-        assert_eq!(hashes, tree.leaves);
+        assert_eq!(hashes, tree.leaves.keys().cloned().collect());
 
         let left_hash =
             hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
@@ -491,8 +516,9 @@ mod test_bridge_pool_tree {
             },
         };
         let key = Key::from(&transfer);
-        let root =
-            KeccakHash::from(tree.insert_key(&key).expect("Test failed"));
+        let root = KeccakHash::from(
+            tree.insert_key(BlockHeight(1), &key).expect("Test failed"),
+        );
         assert_eq!(root, transfer.keccak256());
         tree.delete_key(&key).expect("Test failed");
         assert_eq!(tree.root().0, [0; 32]);
@@ -519,15 +545,16 @@ mod test_bridge_pool_tree {
 
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
-        tree.delete_key(&Key::from(&transfers[1]))
-            .expect("Test failed");
+        let deleted_key = Key::from(&transfers[1]);
+        tree.delete_key(&deleted_key).expect("Test failed");
 
         let expected =
             hash_pair(transfers[0].keccak256(), transfers[2].keccak256());
         assert_eq!(tree.root(), expected);
+        assert_matches!(tree.get_inserted_height(&deleted_key), Err(_));
     }
 
     /// Test that parse key works correctly
@@ -603,7 +630,8 @@ mod test_bridge_pool_tree {
                 payer: bertha_address(),
             },
         };
-        tree.insert_key(&Key::from(&transfer)).expect("Test failed");
+        tree.insert_key(BlockHeight(1), &Key::from(&transfer))
+            .expect("Test failed");
         assert!(
             tree.contains_key(&Key::from(&transfer))
                 .expect("Test failed")
@@ -653,7 +681,7 @@ mod test_bridge_pool_tree {
         };
         let mut tree = BridgePoolTree::default();
         let key = Key::from(&transfer);
-        let _ = tree.insert_key(&key).expect("Test failed");
+        let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         let proof = tree
             .get_membership_proof(vec![transfer])
             .expect("Test failed");
@@ -682,7 +710,7 @@ mod test_bridge_pool_tree {
 
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         let proof = tree
             .get_membership_proof(vec![transfers.remove(0)])
@@ -711,7 +739,7 @@ mod test_bridge_pool_tree {
 
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
         let values = vec![transfers[0].clone(), transfers[1].clone()];
@@ -739,7 +767,7 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         let values = vec![];
         let proof = tree.get_membership_proof(values).expect("Test failed");
@@ -766,7 +794,7 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
         let proof = tree.get_membership_proof(transfers).expect("Test failed");
@@ -793,7 +821,7 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
         let proof = tree.get_membership_proof(transfers).expect("Test failed");
@@ -820,7 +848,7 @@ mod test_bridge_pool_tree {
             };
             let key = Key::from(&transfer);
             transfers.push(transfer);
-            let _ = tree.insert_key(&key).expect("Test failed");
+            let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
         }
         transfers.sort_by_key(|t| t.keccak256());
         let values: Vec<_> = transfers.iter().step_by(2).cloned().collect();
@@ -878,7 +906,7 @@ mod test_bridge_pool_tree {
             let mut tree = BridgePoolTree::default();
             for transfer in &transfers {
                 let key = Key::from(transfer);
-                let _ = tree.insert_key(&key).expect("Test failed");
+                let _ = tree.insert_key(BlockHeight(1), &key).expect("Test failed");
             }
 
             to_prove.sort_by_key(|t| t.keccak256());

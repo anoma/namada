@@ -640,7 +640,7 @@ mod test_bp_vote_extensions {
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(4.into(), &key, [0])
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -654,7 +654,7 @@ mod test_bp_vote_extensions {
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(5.into(), &key, [0])
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -708,7 +708,7 @@ mod test_bp_vote_extensions {
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(4.into(), &key, [0])
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -722,7 +722,7 @@ mod test_bp_vote_extensions {
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(5.into(), &key, [0])
             .expect("Test failed");
         shell.commit();
         assert_eq!(
