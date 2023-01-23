@@ -3,17 +3,17 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds;
-use namada_apps::client::eth_bridge_pool;
+use namada_apps::client::eth_bridge::bridge_pool;
 
 pub async fn main() -> Result<()> {
     let (cmd, _) = cli::namada_relayer_cli()?;
     match cmd {
         cmds::NamadaRelayer::EthBridgePool(sub) => match sub {
             cmds::EthBridgePool::ConstructProof(args) => {
-                eth_bridge_pool::construct_bridge_pool_proof(args).await;
+                bridge_pool::construct_bridge_pool_proof(args).await;
             }
             cmds::EthBridgePool::QueryPool(query) => {
-                eth_bridge_pool::query_bridge_pool(query).await;
+                bridge_pool::query_bridge_pool(query).await;
             }
         },
     }
