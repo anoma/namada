@@ -259,16 +259,7 @@ where
                                         .into(),
                                 }
                             } else {
-                                // Remove decrypted transaction hash from
-                                // storage
-                                let inner_hash_key =
-                                    replay_protection::get_tx_hash_key(
-                                        &wrapper.tx.tx_hash,
-                                    );
-                                temp_wl_storage.write_log.delete(&inner_hash_key).expect(
-                                "Couldn't delete transaction hash from write log",
-                            );
-
+                                // Wrong inner tx commitment
                                 TxResult {
                                     code: ErrorCodes::Undecryptable.into(),
                                     info: "The encrypted payload of tx was \
