@@ -175,7 +175,9 @@ where
                         #[cfg(feature = "mainnet")]
                         let has_valid_pow = false;
 
-                        if has_valid_pow || Amount::from(MIN_FEE) <= balance {
+                        if has_valid_pow
+                            || self.get_wrapper_tx_fees() <= balance
+                        {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \
@@ -408,14 +410,6 @@ mod test_process_proposal {
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
         let keypair = crate::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token fee
         let balance_key = token::balance_key(
@@ -424,7 +418,7 @@ mod test_process_proposal {
         );
         shell
             .storage
-            .write(&balance_key, Amount::from(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
             .unwrap();
 
         let tx = Tx::new(
@@ -433,7 +427,7 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: Amount::whole(100),
                 token: shell.storage.native_token.clone(),
             },
             &keypair,

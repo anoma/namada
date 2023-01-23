@@ -478,10 +478,10 @@ where
     let (value, gas_wrapper_tx_fees) = storage
         .read(&wrapper_tx_fees_key)
         .map_err(ReadError::StorageError)?;
-    let address: Option<token::Amount> = value
+    let fee: Option<token::Amount> = value
         .map(|value| decode(value).map_err(ReadError::StorageTypeError))
         .transpose()?;
-    Ok((address, gas_wrapper_tx_fees))
+    Ok((fee, gas_wrapper_tx_fees))
 }
 
 // Read the all the parameters from storage. Returns the parameters and gas

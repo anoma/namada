@@ -37,6 +37,7 @@ for index, machine in enumerate(MACHINES):
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 
 test_results = {}
+has_failures = False
 
 for test_name in tasks:
     try:
@@ -51,6 +52,7 @@ for test_name in tasks:
             'status': 'fail',
             'command': command
         }
+        has_failures = True
         continue
 
 print("\nTest run:")
@@ -61,3 +63,6 @@ for test_name in test_results.keys():
     if test_results[test_name]['status'] != 'ok':
         test_command = test_results[test_name]['command']
         print("     Run locally with: {}".format(test_command))
+
+if has_failures:
+    exit(1)

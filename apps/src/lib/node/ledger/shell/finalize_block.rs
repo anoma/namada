@@ -204,9 +204,10 @@ where
                                         Amount::from(0).try_to_vec().unwrap(),
                                     )
                                     .unwrap();
-                                tx_event["log"] =
+                                tx_event["info"] =
                                     "Insufficient balance for fee".into();
                                 tx_event["code"] = ErrorCodes::InvalidTx.into();
+                                tx_event["gas_used"] = "0".to_string();
 
                                 response.events.push(tx_event);
                                 continue;
@@ -473,7 +474,7 @@ mod test_finalize_block {
         );
         shell
             .storage
-            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
 
         // create some wrapper txs
@@ -674,7 +675,7 @@ mod test_finalize_block {
         );
         shell
             .storage
-            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
 
         // create two decrypted txs

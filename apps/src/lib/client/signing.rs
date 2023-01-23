@@ -189,7 +189,7 @@ pub async fn sign_wrapper(
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
     let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::from(MIN_FEE)
+        Amount::whole(MIN_FEE)
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
         rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
