@@ -24,14 +24,15 @@ const APP_NAME: &str = "Namada";
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
-const BRIDGE_POOL_CMD: &str = "ethereum-bridge-pool";
+const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
-    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
-    use crate::cli::BRIDGE_POOL_CMD;
+    use super::{
+        args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
+    };
 
     /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
@@ -39,12 +40,15 @@ pub mod cmds {
     pub enum Namada {
         // Sub-binary-commands
         Node(NamadaNode),
+        Relayer(NamadaRelayer),
         Client(NamadaClient),
         Wallet(NamadaWallet),
 
         // Inlined commands from the node.
-        EthBridgePool(EthBridgePool),
         Ledger(Ledger),
+
+        // Inlined commands from the relayer.
+        EthBridgePool(EthBridgePool),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
@@ -59,6 +63,7 @@ pub mod cmds {
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
             app.subcommand(NamadaNode::def())
+                .subcommand(NamadaRelayer::def())
                 .subcommand(NamadaClient::def())
                 .subcommand(NamadaWallet::def())
                 .subcommand(EthBridgePool::def())
@@ -133,6 +138,42 @@ pub mod cmds {
             <Self as Cmd>::add_sub(
                 App::new(Self::CMD)
                     .about("Node sub-commands.")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
+            )
+        }
+    }
+
+    /// Used as top-level commands (`Cmd` instance) in `namadar` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
+    #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum NamadaRelayer {
+        EthBridgePool(EthBridgePool),
+    }
+
+    impl Cmd for NamadaRelayer {
+        fn add_sub(app: App) -> App {
+            app.subcommand(EthBridgePool::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            SubCmd::parse(matches).map(Self::EthBridgePool)
+        }
+    }
+
+    impl SubCmd for NamadaRelayer {
+        const CMD: &'static str = RELAYER_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(<Self as Cmd>::parse)
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD)
+                    .about("Relayer sub-commands.")
                     .setting(AppSettings::SubcommandRequiredElseHelp),
             )
         }
@@ -1529,6 +1570,7 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app.subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
+                .setting(AppSettings::SubcommandRequiredElseHelp)
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -1541,7 +1583,7 @@ pub mod cmds {
     }
 
     impl SubCmd for EthBridgePool {
-        const CMD: &'static str = BRIDGE_POOL_CMD;
+        const CMD: &'static str = "ethereum-bridge-pool";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             Cmd::parse(matches)
@@ -1554,6 +1596,7 @@ pub mod cmds {
                      pool. This pool holds transfers waiting to be relayed to \
                      Ethereum.",
                 )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
         }
@@ -3705,9 +3748,9 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-pub fn namada_relayer_cli() -> Result<(cmds::EthBridgePool, Context)> {
+pub fn namada_relayer_cli() -> Result<(cmds::NamadaRelayer, Context)> {
     let app = namada_relayer_app();
-    cmds::EthBridgePool::parse_or_print_help(app)
+    cmds::NamadaRelayer::parse_or_print_help(app)
 }
 
 fn namada_app() -> App {
@@ -3745,7 +3788,7 @@ fn namada_wallet_app() -> App {
 fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
-        .about("Namada Ethereum bridge pool command line interface.")
+        .about("Namada relayer command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::EthBridgePool::add_sub(args::Global::def(app))
+    cmds::NamadaRelayer::add_sub(args::Global::def(app))
 }
