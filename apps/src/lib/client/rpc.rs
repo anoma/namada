@@ -22,6 +22,7 @@ use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::core::types::key;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
@@ -33,7 +34,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
-use namada::proto::{SignedTxData, Tx};
+use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
@@ -52,7 +53,8 @@ use namada::types::transaction::{
 use namada::types::{storage, token};
 use tokio::time::{Duration, Instant};
 
-use crate::cli::{self, args, Context};
+use super::signing::{tx_signers, OfflineSignature};
+use crate::cli::{self, args, safe_exit, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
@@ -1273,16 +1275,21 @@ pub async fn query_proposal_result(
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let public_key = get_public_key(
-                            &proposal.address,
-                            args.query.ledger_address.clone(),
-                        )
-                        .await
-                        .expect("Public key should exist.");
+                        let proposer_pks_map =
+                            get_address_pks_map(&client, &proposal.address)
+                                .await;
+                        let proposer_threshold =
+                            get_address_threshold(&client, &proposal.address)
+                                .await;
 
-                        if !proposal.check_signature(&public_key) {
-                            eprintln!("Bad proposal signature.");
-                            cli::safe_exit(1)
+                        if !proposal.check_signature(
+                            proposer_pks_map,
+                            proposer_threshold,
+                        ) {
+                            eprintln!(
+                                "Invalid proposal signature from proposer."
+                            );
+                            safe_exit(1)
                         }
 
                         let votes = get_proposal_offline_votes(
@@ -1409,6 +1416,74 @@ pub async fn query_bond(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
     )
 }
+pub async fn sign_tx(
+    mut ctx: Context,
+    args::SignTx {
+        tx,
+        data_path,
+        signing_tx,
+    }: args::SignTx,
+) {
+    let data = match (data_path, signing_tx) {
+        (None, Some(data)) => HEXLOWER
+            .decode(data.as_bytes())
+            .expect("SHould be hex decodable."),
+        (Some(path), None) => {
+            let data = fs::read(path.clone()).await.unwrap_or_else(|_| {
+                panic!("File {} should exist.", path.to_string_lossy())
+            });
+            HEXLOWER.decode(&data).expect("SHould be hex decodable.")
+        }
+        (_, _) => {
+            println!("--data-path or --signing-tx required.");
+            safe_exit(1)
+        }
+    };
+
+    let signing_tx =
+        SigningTx::try_from_slice(&data).expect("Tx should be deserialiable.");
+    let keypairs =
+        tx_signers(&mut ctx, &tx, vec![super::signing::TxSigningKey::None])
+            .await;
+    let keypair = match keypairs.len() {
+        1 => keypairs.get(0).expect("One signer should be provided."),
+        _ => {
+            eprintln!("You can sign a tx only with one key at a time.");
+            safe_exit(1)
+        }
+    };
+
+    let tx_hash = Hash::sha256(data);
+
+    let signature = signing_tx.compute_signature(keypair);
+    let public_key = keypair.ref_to();
+
+    let offline_signature = OfflineSignature {
+        sig: signature,
+        public_key: public_key.clone(),
+    };
+
+    let signature_path = format!(
+        "{}-{}-signature.tx",
+        tx_hash.to_string().to_ascii_lowercase(),
+        public_key
+    );
+    let offline_signature_out = File::create(&signature_path)
+        .expect("Should be able to create a file.");
+
+    match serde_json::to_writer_pretty(
+        offline_signature_out,
+        &offline_signature,
+    ) {
+        Ok(_) => {
+            println!("Signature has been serialized to {}", signature_path);
+        }
+        Err(_) => {
+            eprintln!("Couldn't serialize the signature.");
+            safe_exit(1)
+        }
+    }
+}
 
 pub async fn query_unbond_with_slashing(
     client: &HttpClient,
@@ -1421,6 +1496,32 @@ pub async fn query_unbond_with_slashing(
             .unbond_with_slashing(client, source, validator)
             .await,
     )
+}
+
+pub async fn query_account(ctx: Context, args: args::QueryAccount) {
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+
+    let account_address = ctx.get(&args.address);
+    let pks_map = get_address_pks_map(&client, &account_address).await;
+    let threshold = get_address_threshold(&client, &account_address).await;
+
+    match pks_map.len() {
+        0 => {
+            eprintln!(
+                "Account {} doesn't exist on-chain.",
+                account_address.to_pretty_string()
+            );
+            safe_exit(1)
+        }
+        _ => {
+            println!("Address {}", account_address.to_pretty_string());
+            println!("Threshold: {}", threshold);
+            println!("Public keys:");
+            for pk in pks_map.keys() {
+                println!("-{:2 }{}", "", pk);
+            }
+        }
+    }
 }
 
 pub async fn query_and_print_unbonds(
@@ -1692,6 +1793,14 @@ pub async fn query_and_print_commission_rate(
     }
 }
 
+pub async fn get_address_threshold(
+    client: &HttpClient,
+    address: &Address,
+) -> u64 {
+    let key = key::threshold_key(address);
+    query_storage_value::<u64>(client, &key).await.unwrap_or(1)
+}
+
 /// Query PoS slashes
 pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
@@ -1783,10 +1892,11 @@ pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
     address: &Address,
+    index: u64,
     ledger_address: TendermintAddress,
 ) -> Option<common::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
-    let key = pk_key(address);
+    let key = pk_key(address, index);
     query_storage_value(&client, &key).await
 }
 
@@ -1814,6 +1924,24 @@ pub async fn is_delegator_at(
             .is_delegator(client, address, &Some(epoch))
             .await,
     )
+}
+
+pub async fn get_address_pks_map(
+    client: &HttpClient,
+    address: &Address,
+) -> HashMap<common::PublicKey, u64> {
+    let key = key::pk_prefix_key(address);
+    let pks_iter =
+        query_storage_prefix::<common::PublicKey>(client, &key).await;
+    if let Some(pks) = pks_iter {
+        HashMap::from_iter(
+            pks.map(|(_key, pk)| pk)
+                .zip(0u64..)
+                .collect::<HashMap<common::PublicKey, u64>>(),
+        )
+    } else {
+        HashMap::new()
+    }
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
@@ -2334,13 +2462,14 @@ pub async fn get_proposal_offline_votes(
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
 
-        let key = pk_key(&proposal_vote.address);
-        let public_key = query_storage_value(client, &key)
-            .await
-            .expect("Public key should exist.");
+        let proposer_pks_map =
+            get_address_pks_map(client, &proposal.address).await;
+        let proposer_threshold =
+            get_address_threshold(client, &proposal.address).await;
 
         if !proposal_vote.proposal_hash.eq(&proposal_hash)
-            || !proposal_vote.check_signature(&public_key)
+            || !proposal_vote
+                .check_signature(proposer_pks_map, proposer_threshold)
         {
             continue;
         }

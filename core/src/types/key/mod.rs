@@ -22,21 +22,50 @@ use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
 use crate::types::address;
 
-const PK_STORAGE_KEY: &str = "public_key";
+const PK_STORAGE_KEY: &str = "public_keys";
 const PROTOCOL_PK_STORAGE_KEY: &str = "protocol_public_key";
+const PK_STORAGE_THRESHOLD_KEY: &str = "threshold";
 
 /// Obtain a storage key for user's public key.
-pub fn pk_key(owner: &Address) -> storage::Key {
+pub fn pk_key(owner: &Address, index: u64) -> storage::Key {
     Key::from(owner.to_db_key())
         .push(&PK_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&index) // this should be fine if the architecture is 64bit
+        .expect("Cannot obtain a storage key")
+}
+
+/// Obtain a storage key for user's public key.
+pub fn pk_prefix_key(owner: &Address) -> storage::Key {
+    Key::from(owner.to_db_key())
+        .push(&PK_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Obtain a storage key for user's threshold.
+pub fn threshold_key(owner: &Address) -> storage::Key {
+    Key::from(owner.to_db_key())
+        .push(&PK_STORAGE_THRESHOLD_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
 /// Check if the given storage key is a public key. If it is, returns the owner.
 pub fn is_pk_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(owner),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(_index),
+        ] if key == PK_STORAGE_KEY => Some(owner),
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is a public key. If it is, returns the owner.
+pub fn is_threshold_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
         [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
-            if key == PK_STORAGE_KEY =>
+            if key == PK_STORAGE_THRESHOLD_KEY =>
         {
             Some(owner)
         }
