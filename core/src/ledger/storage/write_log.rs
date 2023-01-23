@@ -349,7 +349,7 @@ impl WriteLog {
             + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        // This hole function is almost the same as `commit_block`, except that
+        // This whole function is almost the same as `commit_block`, except that
         // we commit the state directly from `tx_write_log`
         let mut batch = Storage::<DB, H>::batch();
         for (key, entry) in self.tx_write_log.iter() {
