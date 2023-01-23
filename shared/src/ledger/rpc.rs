@@ -20,7 +20,7 @@ use crate::proto::Tx;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
-use crate::tendermint_rpc::{Client, Order};
+use crate::tendermint_rpc::Order;
 use crate::types::governance::{
     ProposalResult, ProposalVote, TallyResult, VotePower,
 };
@@ -34,9 +34,7 @@ use crate::types::{storage, token};
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     status: TxEventQuery<'_>,
     deadline: Instant,
@@ -83,7 +81,7 @@ pub async fn query_tx_status<
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Epoch {
     let epoch = unwrap_client_response::<C, _>(RPC.shell().epoch(client).await);
@@ -92,7 +90,7 @@ pub async fn query_epoch<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Query the last committed block
-pub async fn query_block<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> crate::tendermint_rpc::endpoint::block::Response {
     let response = client.latest_block().await.unwrap();
@@ -115,18 +113,14 @@ fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
 }
 
 /// Query the results of the last committed block
-pub async fn query_results<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn query_results<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Vec<BlockResults> {
     unwrap_client_response::<C, _>(RPC.shell().read_results(client).await)
 }
 
 /// Query token amount of owner.
-pub async fn get_token_balance<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
@@ -136,9 +130,7 @@ pub async fn get_token_balance<
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_public_key<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Option<common::PublicKey> {
@@ -147,7 +139,7 @@ pub async fn get_public_key<
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn is_validator<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -157,7 +149,7 @@ pub async fn is_validator<C: Client + crate::ledger::queries::Client + Sync>(
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn is_delegator<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -167,9 +159,7 @@ pub async fn is_delegator<C: Client + crate::ledger::queries::Client + Sync>(
     bonds.is_some() && bonds.unwrap().count() > 0
 }
 
-pub async fn is_delegator_at<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn is_delegator_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -186,9 +176,7 @@ pub async fn is_delegator_at<
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn known_address<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -203,9 +191,7 @@ pub async fn known_address<
 }
 
 /// Query a conversion.
-pub async fn query_conversion<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     asset_type: AssetType,
 ) -> Option<(
@@ -220,15 +206,13 @@ pub async fn query_conversion<
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<
-    C: Client + crate::ledger::queries::Client + Sync,
-    T,
->(
+pub async fn query_storage_value<C, T>(
     client: &C,
     key: &storage::Key,
 ) -> Option<T>
 where
     T: BorshDeserialize,
+    C: crate::ledger::queries::Client + Sync,
 {
     // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
     // use `storage_has_key` instead of `storage_value`, because `storage_value`
@@ -261,7 +245,7 @@ where
 
 /// Query a storage value and the proof without decoding.
 pub async fn query_storage_value_bytes<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
     key: &storage::Key,
@@ -284,10 +268,7 @@ pub async fn query_storage_value_bytes<
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<
-    C: Client + crate::ledger::queries::Client + Sync,
-    T,
->(
+pub async fn query_storage_prefix<C: crate::ledger::queries::Client + Sync, T>(
     client: &C,
     key: &storage::Key,
 ) -> Option<impl Iterator<Item = (storage::Key, T)>>
@@ -320,9 +301,7 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn query_has_storage_key<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     key: &storage::Key,
 ) -> bool {
@@ -372,9 +351,7 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transation.
-pub async fn query_tx_events<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn query_tx_events<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     tx_event_query: TxEventQuery<'_>,
 ) -> std::result::Result<
@@ -383,25 +360,20 @@ pub async fn query_tx_events<
 > {
     let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
     match tx_event_query {
-        TxEventQuery::Accepted(_) => RPC
-            .shell()
-            .accepted(client, &tx_hash)
-            .await
-            /*.wrap_err_with(|| {
-                eyre!("Failed querying whether a transaction was accepted")
-            })*/,
-        TxEventQuery::Applied(_) => RPC
-            .shell()
-            .applied(client, &tx_hash)
-            .await
-            /*.wrap_err_with(|| {
-                eyre!("Error querying whether a transaction was applied")
-            })*/,
+        TxEventQuery::Accepted(_) => {
+            RPC.shell().accepted(client, &tx_hash).await
+        }
+        /*.wrap_err_with(|| {
+            eyre!("Failed querying whether a transaction was accepted")
+        })*/,
+        TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await, /*.wrap_err_with(|| {
+                                                                                     eyre!("Error querying whether a transaction was applied")
+                                                                                 })*/
     }
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: Client + crate::ledger::queries::Client + Sync>(
+pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     tx_bytes: Vec<u8>,
 ) -> namada_core::types::transaction::TxResult {
@@ -505,7 +477,7 @@ impl TxResponse {
 
 /// Lookup the full response accompanying the specified transaction event
 // TODO: maybe remove this in favor of `query_tx_status`
-pub async fn query_tx_response<C: Client + Sync>(
+pub async fn query_tx_response<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     tx_query: TxEventQuery<'_>,
 ) -> Result<TxResponse, TError> {
@@ -574,9 +546,7 @@ pub async fn query_tx_response<C: Client + Sync>(
     Ok(result)
 }
 
-pub async fn get_proposal_votes<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
     proposal_id: u64,
@@ -643,9 +613,7 @@ pub async fn get_proposal_votes<
     }
 }
 
-pub async fn get_all_validators<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
@@ -658,7 +626,7 @@ pub async fn get_all_validators<
 }
 
 pub async fn get_total_staked_tokens<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
     epoch: Epoch,
@@ -668,9 +636,7 @@ pub async fn get_total_staked_tokens<
     )
 }
 
-pub async fn get_validator_stake<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
@@ -684,7 +650,7 @@ pub async fn get_validator_stake<
 }
 
 pub async fn get_delegators_delegation<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
@@ -695,7 +661,7 @@ pub async fn get_delegators_delegation<
 }
 
 pub async fn get_governance_parameters<
-    C: Client + crate::ledger::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
 ) -> GovParams {
@@ -741,9 +707,7 @@ pub async fn get_governance_parameters<
 }
 
 // Compute the result of a proposal
-pub async fn compute_tally<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn compute_tally<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
     votes: Votes,
@@ -797,9 +761,7 @@ pub async fn compute_tally<
     }
 }
 
-pub async fn get_bond_amount_at<
-    C: Client + crate::ledger::queries::Client + Sync,
->(
+pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     delegator: &Address,
     validator: &Address,
