@@ -72,11 +72,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let current_epoch = storage.get_current_epoch().0;
     let next_epoch = {
         // proofs should be written to the sub-key space of the next epoch.
         // this way, we do, for instance, an RPC call to `E=2` to query a
         // validator set proof for epoch 2 signed by validators of epoch 1.
-        storage.get_current_epoch().0.next()
+        current_epoch.next()
     };
     let epoch_2nd_height = storage.get_epoch_start_height() + 1;
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
@@ -115,11 +116,16 @@ where
             return Ok(changed);
         }
         let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
-        proof.attach_signature_batch(
-            ext.signatures
-                .into_iter()
-                .map(|(addr, sig)| ((addr, epoch_2nd_height), sig)),
-        );
+        proof.attach_signature_batch(ext.signatures.into_iter().map(
+            |(addr, sig)| {
+                (
+                    storage
+                        .get_eth_addr_book(&addr, Some(current_epoch))
+                        .expect("All validators should have eth keys"),
+                    sig,
+                )
+            },
+        ));
         (tally, proof, changed, confirmed)
     } else {
         tracing::debug!(
@@ -129,11 +135,16 @@ where
         );
         let tally = votes::calculate_new(seen_by, &voting_powers)?;
         let mut proof = EthereumProof::new(ext.voting_powers);
-        proof.attach_signature_batch(
-            ext.signatures
-                .into_iter()
-                .map(|(addr, sig)| ((addr, epoch_2nd_height), sig)),
-        );
+        proof.attach_signature_batch(ext.signatures.into_iter().map(
+            |(addr, sig)| {
+                (
+                    storage
+                        .get_eth_addr_book(&addr, Some(current_epoch))
+                        .expect("All validators should have eth keys"),
+                    sig,
+                )
+            },
+        ));
         let changed = valset_upd_keys.into_iter().collect();
         let confirmed = tally.seen;
         (tally, proof, changed, confirmed)
@@ -223,17 +234,26 @@ mod test_valset_upd_state_changes {
         let mut proof_sigs: Vec<_> = proof.signatures.into_keys().collect();
         assert_eq!(proof_sigs.len(), 1);
 
-        let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_2nd_height = storage.get_epoch_start_height() + 1;
-        assert_eq!(height, epoch_2nd_height);
-        assert_eq!(addr, address::testing::established_address_1());
+        let addr_book = proof_sigs.pop().expect("Test failed");
+        assert_eq!(
+            addr_book,
+            storage
+                .get_eth_addr_book(
+                    &address::testing::established_address_1(),
+                    Some(signing_epoch)
+                )
+                .expect("Test failed")
+        );
 
         // since only one validator is configured, we should
         // have reached a complete proof
         let total_voting_power =
             storage.get_total_voting_power(Some(signing_epoch)).into();
         let validator_voting_power: u64 = storage
-            .get_validator_from_address(&addr, Some(signing_epoch))
+            .get_validator_from_address(
+                &address::testing::established_address_1(),
+                Some(signing_epoch),
+            )
             .expect("Test failed")
             .0
             .into();
@@ -308,16 +328,25 @@ mod test_valset_upd_state_changes {
         let mut proof_sigs: Vec<_> = proof.signatures.into_keys().collect();
         assert_eq!(proof_sigs.len(), 1);
 
-        let (addr, height) = proof_sigs.pop().expect("Test failed");
-        let epoch_2nd_height = storage.get_epoch_start_height() + 1;
-        assert_eq!(height, epoch_2nd_height);
-        assert_eq!(addr, address::testing::established_address_1());
+        let addr_book = proof_sigs.pop().expect("Test failed");
+        assert_eq!(
+            addr_book,
+            storage
+                .get_eth_addr_book(
+                    &address::testing::established_address_1(),
+                    Some(signing_epoch)
+                )
+                .expect("Test failed")
+        );
 
         // make sure we do not have a complete proof yet
         let total_voting_power =
             storage.get_total_voting_power(Some(signing_epoch)).into();
         let validator_voting_power: u64 = storage
-            .get_validator_from_address(&addr, Some(signing_epoch))
+            .get_validator_from_address(
+                &address::testing::established_address_1(),
+                Some(signing_epoch),
+            )
             .expect("Test failed")
             .0
             .into();
