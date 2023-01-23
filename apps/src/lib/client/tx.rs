@@ -31,7 +31,6 @@ use namada::vm;
 use rust_decimal::Decimal;
 
 use super::rpc;
-use super::tm::RpcHttpClient;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
@@ -325,7 +324,7 @@ impl Default for CLIShieldedUtils {
 }
 
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = RpcHttpClient<tendermint_rpc::HttpClient>;
+    type C = tendermint_rpc::HttpClient;
 
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {

@@ -4,7 +4,6 @@ use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::tm::RpcHttpClient;
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::wallet::CliWalletUtils;
 use tendermint_rpc::{HttpClient, SubscriptionClient, WebSocketClient};
@@ -20,11 +19,10 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_custom::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -42,10 +40,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_transfer::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                         _,
                     >(
@@ -57,10 +54,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_ibc_transfer::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -69,10 +65,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_update_vp::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -81,11 +76,10 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
                     tx::submit_init_account::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -103,9 +97,8 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_validator::<RpcHttpClient<HttpClient>>(
+                    tx::submit_init_validator::<HttpClient>(
                         &client, ctx, args,
                     )
                     .await;
@@ -114,9 +107,8 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_proposal::<RpcHttpClient<HttpClient>>(
+                    tx::submit_init_proposal::<HttpClient>(
                         &client, ctx, args,
                     )
                     .await?;
@@ -125,10 +117,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_vote_proposal::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -137,10 +128,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_reveal_pk::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -149,9 +139,8 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_bond::<RpcHttpClient<HttpClient>, CliWalletUtils>(
+                    tx::submit_bond::<HttpClient, CliWalletUtils>(
                         &client,
                         &mut ctx.wallet,
                         args,
@@ -162,10 +151,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_unbond::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -174,10 +162,9 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_withdraw::<
-                        RpcHttpClient<HttpClient>,
+                        HttpClient,
                         CliWalletUtils,
                     >(&client, &mut ctx.wallet, args)
                     .await?;
@@ -185,14 +172,12 @@ pub async fn main() -> Result<()> {
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
                     let client = HttpClient::new(args.ledger_address).unwrap();
-                    let client = RpcHttpClient::new(client);
                     rpc::query_epoch(&client).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_transfers(
                         &client,
@@ -206,21 +191,18 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_conversions(&client, args).await;
                 }
                 Sub::QueryBlock(QueryBlock(args)) => {
                     let client =
                         HttpClient::new(args.ledger_address.clone()).unwrap();
-                    let client = RpcHttpClient::new(client);
                     rpc::query_block(&client).await;
                 }
                 Sub::QueryBalance(QueryBalance(args)) => {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_balance(
                         &client,
@@ -234,7 +216,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonds(&client, args).await;
                 }
@@ -242,7 +223,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonded_stake(&client, args).await;
                 }
@@ -250,7 +230,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_commission_rate(&client, args).await;
                 }
@@ -258,7 +237,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_slashes(&client, args).await;
                 }
@@ -267,7 +245,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_result(&client, args).await;
                 }
@@ -275,7 +252,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_raw_bytes(&client, args).await;
                 }
@@ -284,7 +260,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal(&client, args).await;
                 }
@@ -292,7 +267,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_proposal_result(&client, args).await;
                 }
@@ -300,7 +274,6 @@ pub async fn main() -> Result<()> {
                     let client =
                         HttpClient::new(args.query.ledger_address.clone())
                             .unwrap();
-                    let client = RpcHttpClient::new(client);
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
                 }
