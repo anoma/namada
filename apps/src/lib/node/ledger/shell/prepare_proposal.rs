@@ -28,12 +28,8 @@ use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[allow(unused_imports)]
 use crate::node::ledger::shell::block_space_alloc;
-#[cfg(not(feature = "abcipp"))]
-use crate::node::ledger::shell::vote_extensions::deserialize_vote_extensions;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
-#[cfg(feature = "abcipp")]
-use crate::node::ledger::shell::vote_extensions::split_vote_extensions;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
@@ -186,7 +182,7 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let (eth_events, bp_roots, valset_upds) = split_vote_extensions(
+        let (eth_events, bp_roots, valset_upds) = self.split_vote_extensions(
             local_last_commit
                 .expect(
                     "Honest Namada validators will always sign \
@@ -200,13 +196,15 @@ where
                 .votes,
         );
 
-        let ethereum_events = self
-            .compress_ethereum_events(eth_events)
-            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+        let ethereum_events = eth_events.map(|events| {
+            self.compress_ethereum_events(events)
+                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()))
+        });
 
-        let bp_roots = self
-            .compress_bridge_pool_roots(bp_roots)
-            .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()));
+        let bp_roots = bp_roots.map(|bp_roots| {
+            self.compress_bridge_pool_roots(bp_roots)
+                .unwrap_or_else(|| panic!("{}", not_enough_voting_power_msg()))
+        });
 
         let validator_set_update =
             if self
@@ -256,11 +254,8 @@ where
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
-        let deserialized_iter = deserialize_vote_extensions(
-            txs,
-            protocol_tx_indices,
-            self.storage.get_current_epoch().0,
-        );
+        let deserialized_iter =
+            self.deserialize_vote_extensions(txs, protocol_tx_indices);
         let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
@@ -494,9 +489,7 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
-    #[cfg(feature = "abcipp")]
-    use namada::proto::SignableEthBytes;
-    use namada::proto::{Signed, SignedTxData};
+    use namada::proto::{SignableEthBytes, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -505,20 +498,17 @@ mod test_prepare_proposal {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::bridge_pool_roots;
-    use namada::types::vote_extensions::ethereum_events;
-    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
-    #[cfg(feature = "abcipp")]
-    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell,
+        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
+        setup_at_height, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -619,8 +609,8 @@ mod test_prepare_proposal {
         };
 
         let vote_extension = VoteExtension {
-            ethereum_events: evts,
-            bridge_pool_root: bp_root,
+            ethereum_events: Some(evts),
+            bridge_pool_root: Some(bp_root),
             validator_set_update: None,
         }
         .try_to_vec()
@@ -663,7 +653,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
@@ -838,6 +828,72 @@ mod test_prepare_proposal {
         }
     }
 
+    /// Test that we do not include vote extensions voting on ethereum
+    /// events or signing bridge pool roots + nonces if the bridge
+    /// is inactive.
+    #[test]
+    #[cfg(feature = "abcipp")]
+    fn test_filter_vexts_bridge_inactive() {
+        let (mut shell, _, _, _) = setup_at_height(3);
+        deactivate_bridge(&mut shell);
+        let vext = get_local_last_commit(&shell);
+        let rsp = shell.prepare_proposal(RequestPrepareProposal {
+            local_last_commit: vext,
+            ..Default::default()
+        });
+        assert!(rsp.txs.is_empty());
+    }
+
+    /// Test that we do not include protocol txs voting on ethereum
+    /// events or signing bridge pool roots + nonces if the bridge
+    /// is inactive.
+    #[test]
+    #[cfg(not(feature = "abcipp"))]
+    fn test_filter_protocol_txs_bridge_inactive() {
+        let (mut shell, _, _, _) = setup_at_height(3);
+        deactivate_bridge(&mut shell);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let eth_vext = ProtocolTxType::EthEventsVext(
+            ethereum_events::Vext {
+                validator_addr: address.clone(),
+                block_height: shell.storage.last_height,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+
+        let to_sign = get_bp_bytes_to_sign();
+        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
+        let sig =
+            Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig;
+        let bp_vext = ProtocolTxType::BridgePoolVext(
+            bridge_pool_roots::Vext {
+                block_height: shell.storage.last_height,
+                validator_addr: address,
+                sig,
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+        let rsp = shell.prepare_proposal(RequestPrepareProposal {
+            txs: vec![eth_vext, bp_vext],
+            ..Default::default()
+        });
+        assert!(rsp.txs.is_empty());
+    }
+
     /// Creates an Ethereum events digest manually.
     #[cfg(feature = "abcipp")]
     fn manually_assemble_digest(
@@ -919,8 +975,8 @@ mod test_prepare_proposal {
             .sign(shell.mode.get_protocol_key().expect("Test failed"))
         };
         let vote_extension = VoteExtension {
-            ethereum_events,
-            bridge_pool_root: bp_root,
+            ethereum_events: Some(ethereum_events),
+            bridge_pool_root: Some(bp_root),
             validator_set_update: None,
         };
         let vote = ExtendedVoteInfo {
@@ -936,7 +992,7 @@ mod test_prepare_proposal {
             ..Default::default()
         });
         let rsp_digest = {
-            assert_eq!(rsp.txs.len(), 1);
+            assert_eq!(rsp.txs.len(), 2);
             let tx_bytes = rsp.txs.remove(0);
             let got = Tx::try_from(tx_bytes.as_slice()).expect("Test failed");
             let got_signed_tx =
@@ -958,7 +1014,7 @@ mod test_prepare_proposal {
 
         let digest = manually_assemble_digest(
             &protocol_key,
-            vote_extension.ethereum_events,
+            vote_extension.ethereum_events.expect("Test failed"),
             LAST_HEIGHT,
         );
 
@@ -1104,8 +1160,8 @@ mod test_prepare_proposal {
                 .sign(shell.mode.get_protocol_key().expect("Test failed"))
             };
             let vote_extension = VoteExtension {
-                ethereum_events: signed_eth_ev_vote_extension,
-                bridge_pool_root: bp_root,
+                ethereum_events: Some(signed_eth_ev_vote_extension),
+                bridge_pool_root: Some(bp_root),
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
@@ -1195,7 +1251,7 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 1);
+        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
         #[cfg(not(feature = "abcipp"))]
         assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }

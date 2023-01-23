@@ -1270,6 +1270,19 @@ mod test_utils {
         }
     }
 
+    /// Set the Ethereum bridge to be inactive
+    pub(super) fn deactivate_bridge(shell: &mut TestShell) {
+        use namada::eth_bridge::storage::active_key;
+        use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
+        shell
+            .storage
+            .write(
+                &active_key(),
+                EthBridgeStatus::Disabled.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+    }
+
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
     /// on startup it is read successfully
     #[test]

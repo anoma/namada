@@ -7,6 +7,8 @@ use crate::types::address::nam;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token::balance_key;
 
+/// Sub-key for storing the acitve / inactive status of the Ethereum bridge.
+pub const ACTIVE_SUBKEY: &str = "active_status";
 /// Sub-key for storing the minimum confirmations parameter
 pub const MIN_CONFIRMATIONS_SUBKEY: &str = "min_confirmations";
 /// Sub-key for storing the Ethereum address for wNam.
@@ -30,6 +32,17 @@ pub fn escrow_key() -> Key {
 pub fn is_eth_bridge_key(key: &Key) -> bool {
     key == &escrow_key()
         || matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
+}
+
+/// A key for storing the active / inactive status
+/// of the Ethereum bridge.
+pub fn active_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(ACTIVE_SUBKEY.into()),
+        ],
+    }
 }
 
 /// Storage key for the minimum confirmations parameter.
