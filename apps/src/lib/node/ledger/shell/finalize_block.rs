@@ -14,7 +14,7 @@ use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage_api::StorageRead;
 use namada::types::address::Address;
 #[cfg(feature = "abcipp")]
-use namada::types::key::tm_raw_hash_to_string;
+use namada::types::key::{tm_consensus_key_raw_hash, tm_raw_hash_to_string};
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
@@ -765,6 +765,8 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
+    use data_encoding::HEXUPPER;
+    use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
@@ -1115,5 +1117,98 @@ mod test_finalize_block {
             counter += 1;
         }
         assert_eq!(counter, 2);
+    }
+
+    /// A unit test for PoS inflationary rewards
+    #[test]
+    fn test_inflation_accounting() {
+        // GENERAL IDEA OF THE TEST:
+        // For the duration of an epoch, choose some number of times for each of
+        // 3 genesis validators to propose a block and choose some arbitrary
+        // voting distribution for each block. After each call of
+        // finalize_block, check the validator rewards accumulators to ensure
+        // that the proper inflation is being applied for each validator. Can
+        // also check that the last and current block proposers are being stored
+        // properly. At the end of the epoch, check that the validator rewards
+        // products are appropriately updated.
+
+        let (mut shell, _) = setup();
+        dbg!(&shell.storage.block.height);
+        dbg!(&shell.storage.block.epoch);
+
+        let mut validator_set = shell
+            .storage
+            .read_validator_set()
+            .get(Epoch::default())
+            .unwrap()
+            .to_owned()
+            .active;
+        let val1 = validator_set.pop_first_shim().unwrap();
+        let val2 = validator_set.pop_first_shim().unwrap();
+        let val3 = validator_set.pop_first_shim().unwrap();
+
+        let ck1 = shell
+            .storage
+            .read_validator_consensus_key(&val1.address)
+            .unwrap()
+            .get(Epoch::default())
+            .unwrap()
+            .to_owned();
+        let hash_string1 = tm_consensus_key_raw_hash(&ck1);
+        let bytes1 = HEXUPPER.decode(hash_string1.as_bytes()).unwrap();
+        dbg!(bytes1);
+
+        // TODO: figure out how to get the Tendermint public key hash bytes from
+        // a Namada address!! Possible this won't work with my randomly chosen
+        // validator address and consensus key
+        let pkh1 = Vec::<u8>::new();
+        let pkh2 = Vec::<u8>::new();
+        let pkh3 = Vec::<u8>::new();
+
+        let mut votes = Vec::<VoteInfo>::new();
+        votes.push(VoteInfo {
+            validator_address: pkh1.clone(),
+            validator_vp: val1.bonded_stake,
+            signed_last_block: true,
+        });
+        votes.push(VoteInfo {
+            validator_address: pkh2.clone(),
+            validator_vp: val2.bonded_stake,
+            signed_last_block: true,
+        });
+        votes.push(VoteInfo {
+            validator_address: pkh3.clone(),
+            validator_vp: val3.bonded_stake,
+            signed_last_block: true,
+        });
+
+        // Want to manually set the block proposer and the vote information in a
+        // FinalizeBlock object. In non-abcipp mode, the block proposer is
+        // written in ProcessProposal, so need to manually do it here
+        // let proposer_address = pkh1.clone();
+        next_block_for_inflation(&mut shell, &val1.address, vec![]);
+        let reward_acc =
+            shell.storage.read_consensus_validator_rewards_accumulator();
+        let reward_prd =
+            shell.storage.read_validator_rewards_products(&val1.address);
+
+        // dbg!(&reward_acc, &reward_prd);
+
+        next_block_for_inflation(&mut shell, &val1.address, votes);
+    }
+
+    fn next_block_for_inflation(
+        shell: &mut TestShell,
+        next_proposer: &Address,
+        votes: Vec<VoteInfo>,
+    ) {
+        shell
+            .storage
+            .write_current_block_proposer_address(&next_proposer.clone());
+        let req = FinalizeBlock {
+            votes,
+            ..Default::default()
+        };
+        shell.finalize_block(req);
     }
 }

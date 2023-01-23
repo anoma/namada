@@ -220,6 +220,7 @@ pub mod shim {
             pub result: super::response::TxResult,
         }
 
+        #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
             pub hash: BlockHash,
             pub header: Header,

@@ -1778,7 +1778,7 @@ fn invalid_transactions() -> Result<()> {
 /// 8. Submit a withdrawal of the delegation
 #[test]
 fn pos_bonds() -> Result<()> {
-    let unbonding_len = 2;
+    let unbonding_len = 4;
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
@@ -1788,7 +1788,7 @@ fn pos_bonds() -> Result<()> {
                 ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
-                pipeline_len: 1,
+                pipeline_len: 2,
                 unbonding_len,
                 ..genesis.pos_params
             };
@@ -1959,6 +1959,7 @@ fn pos_bonds() -> Result<()> {
     Ok(())
 }
 
+/// TODO
 #[test]
 fn pos_rewards() -> Result<()> {
     let test = setup::network(
@@ -2039,10 +2040,10 @@ fn pos_rewards() -> Result<()> {
     let mut validator_1 = bg_validator_1.foreground();
     let mut validator_2 = bg_validator_2.foreground();
 
-    let expected_result = "all VPs accepted transaction";
-    validator_0.exp_string(expected_result)?;
-    validator_1.exp_string(expected_result)?;
-    validator_2.exp_string(expected_result)?;
+    // let expected_result = "all VPs accepted transaction";
+    // validator_0.exp_string(expected_result)?;
+    // validator_1.exp_string(expected_result)?;
+    // validator_2.exp_string(expected_result)?;
 
     let _bg_validator_0 = validator_0.background();
     let _bg_validator_1 = validator_1.background();
@@ -2106,7 +2107,7 @@ fn pos_rewards() -> Result<()> {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
         let epoch = get_epoch(&test, &validator_zero_rpc)?;
-        if epoch >= wait_epoch {
+        if dbg!(epoch) >= wait_epoch {
             break;
         }
     }

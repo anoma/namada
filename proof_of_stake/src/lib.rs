@@ -25,12 +25,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::num::TryFromIntError;
 
+use data_encoding::HEXUPPER;
 use epoched::{
     DynEpochOffset, EpochOffset, Epoched, EpochedDelta, OffsetPipelineLen,
 };
 use namada_core::ledger::storage_api;
 use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::key::common;
+use namada_core::types::key::{common, tm_consensus_key_raw_hash};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 pub use parameters::PosParams;
@@ -944,7 +945,10 @@ pub trait PosBase {
         // finalizing block n)
 
         let epoch: Epoch = epoch.into();
+        dbg!(&epoch);
+
         let validator_set = self.read_validator_set();
+        dbg!(&validator_set);
         let validators = validator_set.get(epoch).unwrap();
         let pos_params = self.read_pos_params();
 
@@ -956,7 +960,17 @@ pub trait PosBase {
         );
         for val in &validators.active {
             println!("STAKE: {}, ADDRESS: {}", val.bonded_stake, val.address);
+            let ck = self
+                .read_validator_consensus_key(&val.address)
+                .unwrap()
+                .get(epoch)
+                .unwrap()
+                .to_owned();
+            let hash_string1 = tm_consensus_key_raw_hash(&ck);
+            let bytes1 = HEXUPPER.decode(hash_string1.as_bytes()).unwrap();
+            dbg!(bytes1);
         }
+        dbg!(votes);
 
         // Get total stake of the consensus validator set
         // TODO: does this need to account for rewards prodcuts?

@@ -53,7 +53,7 @@ where
             );
         }
         #[cfg(feature = "dev")]
-        let genesis = genesis::genesis();
+        let genesis = genesis::genesis(3);
 
         let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
         let initial_height = init
