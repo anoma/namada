@@ -267,6 +267,8 @@ pub mod genesis_config {
         pub pos_gain_p: Decimal,
         /// PoS gain d
         pub pos_gain_d: Decimal,
+        /// Maximum number of signatures allowed per transactions
+        pub max_signature_per_tx: u64,
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
@@ -615,7 +617,9 @@ pub mod genesis_config {
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Decimal::ZERO,
+            max_signature_per_tx: 15,
             pos_inflation_amount: 0,
+            #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
@@ -862,6 +866,8 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Maximum number of signature per transaction
+    pub max_signature_per_tx: u64,
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
@@ -961,6 +967,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
+        max_signature_per_tx: 15,
+        #[cfg(not(feature = "mainnet"))]
         wrapper_tx_fees: Some(token::Amount::whole(0)),
     };
     let albert = EstablishedAccount {
