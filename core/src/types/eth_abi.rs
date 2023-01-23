@@ -25,6 +25,26 @@ pub struct EncodeCell<T: ?Sized> {
     _marker: PhantomData<*const T>,
 }
 
+impl<T> ::std::cmp::Eq for EncodeCell<T> {}
+
+impl<T> ::std::cmp::PartialEq for EncodeCell<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.encoded_data == other.encoded_data
+    }
+}
+
+impl<T> ::std::cmp::PartialOrd for EncodeCell<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
+        self.encoded_data.partial_cmp(&other.encoded_data)
+    }
+}
+
+impl<T> ::std::cmp::Ord for EncodeCell<T> {
+    fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
+        self.encoded_data.cmp(&other.encoded_data)
+    }
+}
+
 impl<T> EncodeCell<T> {
     /// Return a new ABI encoded value of type `T`.
     pub fn new<const N: usize>(value: &T) -> Self

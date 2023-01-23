@@ -416,9 +416,10 @@ mod test_vote_extensions {
 
         let [event_first, event_second]: [EthereumEvent; 2] = vote_extension
             .ethereum_events
+            .clone()
+            .expect("Test failed")
             .data
             .ethereum_events
-            .clone()
             .try_into()
             .expect("Test failed");
 
@@ -474,7 +475,7 @@ mod test_vote_extensions {
                 .to_vec(),
             height: 0,
             vote_extension: VoteExtension {
-                ethereum_events: ethereum_events.clone(),
+                ethereum_events: Some(ethereum_events.clone()),
                 bridge_pool_root: {
                     let to_sign = [
                         KeccakHash([0; 32]).encode().into_inner(),
@@ -489,12 +490,16 @@ mod test_vote_extensions {
                         to_sign,
                     )
                     .sig;
-                    bridge_pool_roots::Vext {
-                        block_height: shell.storage.last_height,
-                        validator_addr: address,
-                        sig,
-                    }
-                    .sign(shell.mode.get_protocol_key().expect("Test failed"))
+                    Some(
+                        bridge_pool_roots::Vext {
+                            block_height: shell.storage.last_height,
+                            validator_addr: address,
+                            sig,
+                        }
+                        .sign(
+                            shell.mode.get_protocol_key().expect("Test failed"),
+                        ),
+                    )
                 },
                 validator_set_update: None,
             }
@@ -635,8 +640,8 @@ mod test_vote_extensions {
                 validator_address: address.try_to_vec().expect("Test failed"),
                 height: 0,
                 vote_extension: VoteExtension {
-                    ethereum_events: signed_vext,
-                    bridge_pool_root: bp_root,
+                    ethereum_events: Some(signed_vext),
+                    bridge_pool_root: Some(bp_root),
                     validator_set_update: None,
                 }
                 .try_to_vec()

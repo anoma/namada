@@ -55,6 +55,7 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     let data = args.transfers.try_to_vec().unwrap();
     let response = RPC
         .shell()
+        .eth_bridge()
         .generate_bridge_pool_proof(&client, Some(data), None, false)
         .await
         .unwrap();
@@ -78,6 +79,7 @@ pub async fn query_bridge_pool(args: args::Query) {
     let client = HttpClient::new(args.ledger_address).unwrap();
     let response: Vec<PendingTransfer> = RPC
         .shell()
+        .eth_bridge()
         .read_ethereum_bridge_pool(&client)
         .await
         .unwrap();

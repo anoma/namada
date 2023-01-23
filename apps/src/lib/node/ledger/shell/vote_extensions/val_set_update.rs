@@ -378,8 +378,8 @@ mod test_vote_extensions {
             };
             let req = request::VerifyVoteExtension {
                 vote_extension: VoteExtension {
-                    ethereum_events,
-                    bridge_pool_root: bp_root,
+                    ethereum_events: Some(ethereum_events),
+                    bridge_pool_root: Some(bp_root),
                     validator_set_update,
                 }
                 .try_to_vec()
@@ -458,8 +458,8 @@ mod test_vote_extensions {
             };
             let req = request::VerifyVoteExtension {
                 vote_extension: VoteExtension {
-                    ethereum_events,
-                    bridge_pool_root: bp_root,
+                    ethereum_events: Some(ethereum_events),
+                    bridge_pool_root: Some(bp_root),
                     validator_set_update,
                 }
                 .try_to_vec()
@@ -620,8 +620,8 @@ mod test_vote_extensions {
             };
             let req = request::VerifyVoteExtension {
                 vote_extension: VoteExtension {
-                    ethereum_events,
-                    bridge_pool_root: bp_root,
+                    ethereum_events: Some(ethereum_events),
+                    bridge_pool_root: Some(bp_root),
                     validator_set_update: validator_set_update.clone(),
                 }
                 .try_to_vec()
