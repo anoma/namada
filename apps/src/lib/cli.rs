@@ -1988,6 +1988,30 @@ pub mod args {
         }
     }
 
+    #[derive(Debug, Clone)]
+    pub struct ActiveValidatorSet {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ActiveValidatorSet {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH.def().about(
+                    "The epoch of the active set of validators to query.",
+                ),
+            )
+        }
+    }
+
     /// Custom transaction arguments
     #[derive(Clone, Debug)]
     pub struct TxCustom {
