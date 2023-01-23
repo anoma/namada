@@ -10,8 +10,6 @@ use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::proto::{SignableEthBytes, Signed};
-#[cfg(not(feature = "abcipp"))]
-use namada::types::storage::Epoch;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
@@ -59,6 +57,13 @@ pub enum VoteExtensionError {
     DivergesFromStorage,
     #[error("The signature of the Bridge pool root is invalid")]
     InvalidBPRootSig,
+    #[error(
+        "Received a vote extension for the Ethereum bridge which is currently \
+         not active"
+    )]
+    EthereumBridgeInactive,
+    #[error("A vote extension for the Ethereum bridge is missing.")]
+    MissingBridgeVext,
 }
 
 impl<D, H> Shell<D, H>
@@ -95,7 +100,10 @@ where
     /// Extend PreCommit votes with [`ethereum_events::Vext`] instances.
     pub fn extend_vote_with_ethereum_events(
         &mut self,
-    ) -> Signed<ethereum_events::Vext> {
+    ) -> Option<Signed<ethereum_events::Vext>> {
+        if !self.storage.is_bridge_active() {
+            return None;
+        }
         let validator_addr = self
             .mode
             .get_validator_address()
@@ -124,11 +132,16 @@ where
             _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
         };
 
-        ext.sign(protocol_key)
+        Some(ext.sign(protocol_key))
     }
 
     /// Extend PreCommit votes with [`bridge_pool_roots::Vext`] instances.
-    pub fn extend_vote_with_bp_roots(&self) -> Signed<bridge_pool_roots::Vext> {
+    pub fn extend_vote_with_bp_roots(
+        &self,
+    ) -> Option<Signed<bridge_pool_roots::Vext>> {
+        if !self.storage.is_bridge_active() {
+            return None;
+        }
         let validator_addr = self
             .mode
             .get_validator_address()
@@ -150,7 +163,7 @@ where
         };
         let protocol_key =
             self.mode.get_protocol_key().expect(VALIDATOR_EXPECT_MSG);
-        ext.sign(protocol_key)
+        Some(ext.sign(protocol_key))
     }
 
     /// Extend PreCommit votes with [`validator_set_update::Vext`]
@@ -252,22 +265,30 @@ where
     pub fn verify_ethereum_events(
         &self,
         req: &request::VerifyVoteExtension,
-        ext: Signed<ethereum_events::Vext>,
+        ext: Option<Signed<ethereum_events::Vext>>,
     ) -> bool {
-        self.validate_eth_events_vext(
-            ext,
-            self.storage.get_current_decision_height(),
-        )
-        .then_some(true)
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                ?req.validator_address,
-                ?req.hash,
-                req.height,
-                "Received Ethereum events vote extension that didn't validate"
-            );
-            false
-        })
+        if !self.storage.is_bridge_active() {
+            ext.is_none()
+        } else {
+            if let Some(ext) = ext {
+                self.validate_eth_events_vext(
+                    ext,
+                    self.storage.get_current_decision_height(),
+                )
+                .then_some(true)
+                .unwrap_or_else(| | {
+                    tracing::warn!(
+                        ?req.validator_address,
+                        ?req.hash,
+                        req.height,
+                        "Received Ethereum events vote extension that didn't validate"
+                    );
+                    false
+                })
+            } else {
+                false
+            }
+        }
     }
 
     /// Check if [`bridge_pool_roots::Vext`] instances are valid.
@@ -275,22 +296,30 @@ where
     pub fn verify_bridge_pool_root(
         &self,
         req: &request::VerifyVoteExtension,
-        ext: Signed<bridge_pool_roots::Vext>,
+        ext: Option<bridge_pool_roots::SignedVext>,
     ) -> bool {
-        self.validate_bp_roots_vext(
-            ext,
-            self.storage.last_height,
-        )
-        .then_some(true)
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                ?req.validator_address,
-                ?req.hash,
-                req.height,
-                "Received Bridge pool root vote extension that didn't validate"
-            );
-            false
-        })
+        if self.storage.is_bridge_active() {
+            if let Some(ext) = ext {
+                self.validate_bp_roots_vext(
+                    ext.unwrap(),
+                    self.storage.last_height,
+                )
+                    .then_some(true)
+                    .unwrap_or_else(|| {
+                        tracing::warn!(
+                    ?req.validator_address,
+                    ?req.hash,
+                    req.height,
+                    "Received Bridge pool root vote extension that didn't validate"
+                );
+                        false
+                    })
+            } else {
+                false
+            }
+        } else {
+            ext.is_none()
+        }
     }
 
     /// Check if [`validator_set_update::Vext`] instances are valid.
@@ -344,6 +373,104 @@ where
                 false
             })
     }
+
+    /// Given a slice of [`TxBytes`], return an iterator over the
+    /// ones we could deserialize to vote extension protocol txs.
+    #[cfg(not(feature = "abcipp"))]
+    pub fn deserialize_vote_extensions<'shell>(
+        &'shell self,
+        txs: &'shell [TxBytes],
+        protocol_tx_indices: &'shell mut VecIndexSet<u128>,
+    ) -> impl Iterator<Item = TxBytes> + 'shell {
+        use namada::types::transaction::protocol::ProtocolTx;
+        let current_epoch = self.storage.get_current_epoch().0;
+
+        txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
+            let tx = match Tx::try_from(tx_bytes.as_slice()) {
+                Ok(tx) => tx,
+                Err(err) => {
+                    tracing::warn!(
+                        ?err,
+                        "Failed to deserialize tx in \
+                         deserialize_vote_extensions"
+                    );
+                    return None;
+                }
+            };
+            match process_tx(tx).ok()? {
+                TxType::Protocol(ProtocolTx {
+                    tx:
+                        ProtocolTxType::EthEventsVext(_)
+                        | ProtocolTxType::BridgePoolVext(_),
+                    ..
+                }) => {
+                    // mark tx for inclusion or it is skipped
+                    // if the bridge is inactive
+                    protocol_tx_indices.insert(index);
+                    self.storage.is_bridge_active().then_some(tx_bytes.clone())
+                }
+                TxType::Protocol(ProtocolTx {
+                    tx: ProtocolTxType::ValSetUpdateVext(ext),
+                    ..
+                }) => {
+                    // mark tx, so it's skipped when
+                    // building the batch of remaining txs
+                    protocol_tx_indices.insert(index);
+
+                    // only include non-stale validator set updates
+                    // in block proposals. it might be sitting long
+                    // enough in the mempool for it to no longer be
+                    // relevant to propose (e.g. the new epoch was
+                    // installed before this validator set update got
+                    // a chance to be decided). unfortunately, we won't
+                    // be able to remove it from the mempool this way,
+                    // but it will eventually be evicted, getting replaced
+                    // by newer txs.
+                    (ext.data.signing_epoch == current_epoch)
+                        .then(|| tx_bytes.clone())
+                }
+                _ => None,
+            }
+        })
+    }
+
+    /// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
+    /// out invalid data, and splits these into [`ethereum_events::Vext`]
+    /// and [`validator_set_update::Vext`] instances.
+    #[cfg(feature = "abcipp")]
+    #[allow(clippy::type_complexity)]
+    pub fn split_vote_extensions(
+        &self,
+        vote_extensions: Vec<ExtendedVoteInfo>,
+    ) -> (
+        Option<Vec<Signed<ethereum_events::Vext>>>,
+        Option<Vec<Signed<bridge_pool_roots::Vext>>>,
+        Vec<validator_set_update::SignedVext>,
+    ) {
+        let mut eth_evs = vec![];
+        let mut bp_roots = vec![];
+        let mut valset_upds = vec![];
+        let bridge_active = self.storage.is_bridge_active();
+
+        for ext in deserialize_vote_extensions(vote_extensions) {
+            if let Some(validator_set_update) = ext.validator_set_update {
+                valset_upds.push(validator_set_update);
+            }
+            if bridge_active {
+                if let Some(events) = ext.ethereum_events {
+                    eth_evs.push(events);
+                }
+                if let Some(roots) = ext.bridge_pool_root {
+                    bp_roots.push(roots);
+                }
+            }
+        }
+        if bridge_active {
+            (Some(eth_evs), Some(bp_roots), valset_upds)
+        } else {
+            (None, None, valset_upds)
+        }
+    }
 }
 
 /// Given a `Vec` of [`ExtendedVoteInfo`], return an iterator over the
@@ -365,63 +492,6 @@ pub fn deserialize_vote_extensions(
     })
 }
 
-/// Given a slice of [`TxBytes`], return an iterator over the
-/// ones we could deserialize to vote extension protocol txs.
-#[cfg(not(feature = "abcipp"))]
-pub fn deserialize_vote_extensions<'shell>(
-    txs: &'shell [TxBytes],
-    protocol_tx_indices: &'shell mut VecIndexSet<u128>,
-    current_epoch: Epoch,
-) -> impl Iterator<Item = TxBytes> + 'shell {
-    use namada::types::transaction::protocol::ProtocolTx;
-
-    txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
-        let tx = match Tx::try_from(tx_bytes.as_slice()) {
-            Ok(tx) => tx,
-            Err(err) => {
-                tracing::warn!(
-                    ?err,
-                    "Failed to deserialize tx in deserialize_vote_extensions"
-                );
-                return None;
-            }
-        };
-        match process_tx(tx).ok()? {
-            TxType::Protocol(ProtocolTx {
-                tx:
-                    ProtocolTxType::EthEventsVext(_)
-                    | ProtocolTxType::BridgePoolVext(_),
-                ..
-            }) => {
-                // mark tx for inclusion
-                protocol_tx_indices.insert(index);
-                Some(tx_bytes.clone())
-            }
-            TxType::Protocol(ProtocolTx {
-                tx: ProtocolTxType::ValSetUpdateVext(ext),
-                ..
-            }) => {
-                // mark tx, so it's skipped when
-                // building the batch of remaining txs
-                protocol_tx_indices.insert(index);
-
-                // only include non-stale validator set updates
-                // in block proposals. it might be sitting long
-                // enough in the mempool for it to no longer be
-                // relevant to propose (e.g. the new epoch was
-                // installed before this validator set update got
-                // a chance to be decided). unfortunately, we won't
-                // be able to remove it from the mempool this way,
-                // but it will eventually be evicted, getting replaced
-                // by newer txs.
-                (ext.data.signing_epoch == current_epoch)
-                    .then(|| tx_bytes.clone())
-            }
-            _ => None,
-        }
-    })
-}
-
 /// Yields an iterator over the [`ProtocolTxType`] transactions
 /// in a [`VoteExtensionDigest`].
 #[cfg(feature = "abcipp")]
@@ -429,7 +499,8 @@ pub fn iter_protocol_txs(
     digest: VoteExtensionDigest,
 ) -> impl Iterator<Item = ProtocolTxType> {
     [
-        Some(ProtocolTxType::EthereumEvents(digest.ethereum_events)),
+        digest.ethereum_events.map(ProtocolTxType::EthereumEvents),
+        digest.bridge_pool_roots.map(ProtocolTxType::BridgePool),
         digest
             .validator_set_update
             .map(ProtocolTxType::ValidatorSetUpdate),
@@ -450,36 +521,10 @@ pub fn iter_protocol_txs(
         validator_set_update,
     } = ext;
     [
-        Some(ProtocolTxType::EthEventsVext(ethereum_events)),
-        Some(ProtocolTxType::BridgePoolVext(bridge_pool_root)),
+        ethereum_events.map(ProtocolTxType::EthEventsVext),
+        bridge_pool_root.map(ProtocolTxType::BridgePoolVext),
         validator_set_update.map(ProtocolTxType::ValSetUpdateVext),
     ]
     .into_iter()
     .flatten()
-}
-
-/// Deserializes `vote_extensions` as [`VoteExtension`] instances, filtering
-/// out invalid data, and splits these into [`ethereum_events::Vext`]
-/// and [`validator_set_update::Vext`] instances.
-#[cfg(feature = "abcipp")]
-pub fn split_vote_extensions(
-    vote_extensions: Vec<ExtendedVoteInfo>,
-) -> (
-    Vec<Signed<ethereum_events::Vext>>,
-    Vec<Signed<bridge_pool_roots::Vext>>,
-    Vec<validator_set_update::SignedVext>,
-) {
-    let mut eth_evs = vec![];
-    let mut bp_roots = vec![];
-    let mut valset_upds = vec![];
-
-    for ext in deserialize_vote_extensions(vote_extensions) {
-        if let Some(validator_set_update) = ext.validator_set_update {
-            valset_upds.push(validator_set_update);
-        }
-        eth_evs.push(ext.ethereum_events);
-        bp_roots.push(ext.bridge_pool_root);
-    }
-
-    (eth_evs, bp_roots, valset_upds)
 }

@@ -1,4 +1,5 @@
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_nonce_key, get_signed_nonce_key, get_signed_root_key,
 };
@@ -24,7 +25,35 @@ pub enum SendValsetUpd {
     AtPrevHeight,
 }
 
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+/// An enum indicating if the Ethereum bridge is enabled.
+pub enum EthBridgeStatus {
+    Disabled,
+    Enabled(EthBridgeEnabled),
+}
+
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+/// Enum indicating if the bridge was initialized at genesis
+/// or a later epoch.
+pub enum EthBridgeEnabled {
+    AtGenesis,
+    AtEpoch(
+        // bridge is enabled from this epoch
+        // onwards. a validator set proof must
+        // exist for this epoch.
+        Epoch,
+    ),
+}
+
 pub trait EthBridgeQueries {
+    /// Check if the bridge is disabled, enabled, or
+    /// scheduled to be enabled at a specified epoch.
+    fn check_bridge_status(&self) -> EthBridgeStatus;
+
+    /// Returns a boolean indicating whether the bridge
+    /// is currently active.
+    fn is_bridge_active(&self) -> bool;
+
     /// Fetch the first [`BlockHeight`] of the last [`Epoch`]
     /// committed to storage.
     fn get_epoch_start_height(&self) -> BlockHeight;
@@ -82,6 +111,34 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
+    fn check_bridge_status(&self) -> EthBridgeStatus {
+        BorshDeserialize::try_from_slice(
+            self.read(&active_key())
+                .expect(
+                    "Reading the Ethereum bridge active key shouldn't fail.",
+                )
+                .0
+                .expect("The Ethereum bridge active key should be in storage")
+                .as_slice(),
+        )
+        .expect("Deserializing the Ethereum bridge active key shouldn't fail.")
+    }
+
+    fn is_bridge_active(&self) -> bool {
+        if let EthBridgeStatus::Enabled(enabled_at) = self.check_bridge_status()
+        {
+            match enabled_at {
+                EthBridgeEnabled::AtGenesis => true,
+                EthBridgeEnabled::AtEpoch(epoch) => {
+                    let current_epoch = self.get_current_epoch().0;
+                    epoch <= current_epoch
+                }
+            }
+        } else {
+            false
+        }
+    }
+
     #[inline]
     fn get_epoch_start_height(&self) -> BlockHeight {
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
