@@ -818,7 +818,7 @@ pub trait PosBase {
         current_epoch: Epoch,
         f: impl FnMut(ValidatorSetUpdate),
     ) {
-        let current_epoch: Epoch = current_epoch;
+        let current_epoch: Epoch = current_epoch.next();
         let current_epoch_u64: u64 = current_epoch.into();
         // INVARIANT: We can only access the previous epochs data, because
         // this function is called on a beginning of a new block, before
@@ -986,16 +986,13 @@ pub trait PosBase {
                      tendermint raw hash",
                 );
             signer_set.insert(native_address.clone());
+            total_signing_stake += vote.validator_vp;
 
-            // vote.validator_vp is updating at a constant delay relative to the
-            // validator deltas.
-            // Use validator deltas in namada protocol to get voting power
-            // instead
-            // TODO: change this back to get from TM perhaps
+            // Ensure TM stake updates properly with a debug_assert
             let deltas = self.read_validator_deltas(&native_address).unwrap();
             let stake: token::Change = deltas.get(epoch).unwrap();
             let stake: u64 = Into::<i128>::into(stake).try_into().unwrap();
-            total_signing_stake += stake;
+            debug_assert_eq!(stake, vote.validator_vp);
         }
 
         // Get the block rewards coefficients (proposing, signing/voting,
