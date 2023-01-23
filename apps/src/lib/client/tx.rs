@@ -182,7 +182,64 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
-    let public_key = ctx.get_cached(&args.public_key);
+    // let public_key = ctx.get_cached(&args.public_key);
+    // let vp_code = args
+    //     .vp_code_path
+    //     .map(|path| ctx.read_wasm(path))
+    //     .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
+    // // Validate the VP code
+    // if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+    //     eprintln!("Validity predicate code validation failed with {}", err);
+    //     if !args.tx.force {
+    //         safe_exit(1)
+    //     }
+    // }
+
+    // let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
+    // let data = InitAccount {
+    //     public_key,
+    //     vp_code,
+    // };
+    // let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    // let tx = Tx::new(tx_code, Some(data));
+    // let (ctx, initialized_accounts) = process_tx(
+    //     ctx,
+    //     &args.tx,
+    //     tx,
+    //     TxSigningKey::WalletAddress(args.source),
+    //     #[cfg(not(feature = "mainnet"))]
+    //     false,
+    // )
+    // .await;
+    // save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+}
+
+pub async fn submit_init_account_multisignature(
+    mut ctx: Context,
+    args: args::TxInitAccountMultiSignature,
+) {
+    let public_keys: Vec<common::PublicKey> = args
+        .public_keys
+        .iter()
+        .map(|pk| {
+            println!("{:?}", pk);
+            ctx.get_cached(pk)
+        })
+        .collect();
+
+    let threshold = match args.threshold {
+        Some(threshold) => threshold,
+        None => {
+            if public_keys.len() == 1 {
+                1
+            } else {
+                eprintln!("Missing threshold for multisignature account.");
+                safe_exit(1)
+            }
+        }
+    };
+
     let vp_code = args
         .vp_code_path
         .map(|path| ctx.read_wasm(path))
@@ -197,22 +254,23 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
 
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
-        public_key,
+        public_keys,
         vp_code,
+        threshold
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) = process_tx(
-        ctx,
-        &args.tx,
-        tx,
-        TxSigningKey::WalletAddress(args.source),
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await;
-    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+    // let (ctx, initialized_accounts) = process_tx(
+    //     ctx,
+    //     &args.tx,
+    //     tx,
+    //     TxSigningKey::WalletAddress(args.source),
+    //     #[cfg(not(feature = "mainnet"))]
+    //     false,
+    // )
+    // .await;
+    // save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
 pub async fn submit_init_validator(

@@ -265,6 +265,7 @@ where
             .values_of(self.name)
             .unwrap_or_default()
             .map(|raw| {
+                println!("a: {}", raw);
                 raw.parse().unwrap_or_else(|e| {
                     eprintln!(
                         "Failed to parse the {} argument. Raw value: {}, \
@@ -275,6 +276,19 @@ where
                 })
             })
             .collect()
+    }
+}
+
+impl<T> ArgMulti<FromContext<T>> {
+
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name).long(self.name).takes_value(true).multiple(true).require_delimiter(true)
+    }
+
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
+        let raw = matches.values_of(self.name).unwrap_or_default();
+        println!("c: {}", raw.len());
+        raw.map(|val| FromContext::new(val.to_string())).collect()
     }
 }
 

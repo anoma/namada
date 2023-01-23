@@ -69,16 +69,21 @@ fn validate_tx(
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => {
-            let pk = key::get(ctx, &addr);
-            match pk {
-                Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
-                        Ok(true)
-                    )
-                }
-                _ => false,
+            let threshold = key::threshold(ctx, &addr);
+            if signed_tx_data.sigs.len() < threshold {
+                return false;
             }
+            let valid_signatures = 0;
+            for (index, signature) in signed_tx_data.sigs {
+                let pk = key::get(&addr, index);
+                if let Some(public_key) = pk {
+                    let signature_result = ctx.verify_tx_signature(&public_key, &signature).unwrap_or_else(|| false);
+                    if signature_result {
+                        valid_signatures += 1;
+                    }
+                }
+            }
+            return valid_signatures >= threshold;
         }
         _ => false,
     });

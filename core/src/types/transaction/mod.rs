@@ -162,9 +162,11 @@ pub struct InitAccount {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub public_key: common::PublicKey,
+    pub public_keys: Vec<common::PublicKey>,
     /// The VP code
     pub vp_code: Vec<u8>,
+    /// The multisignature threshold
+    pub threshold: u64
 }
 
 /// A tx data type to initialize a new validator account.

@@ -156,6 +156,7 @@ pub mod cmds {
                 .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateVp::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
+                .subcommand(TxInitAccountMultiSignature::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
                 .subcommand(TxInitProposal::def().display_order(1))
@@ -191,6 +192,7 @@ pub mod cmds {
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
             let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
+            let tx_init_account_multisignature = Self::parse_with_ctx(matches, TxInitAccountMultiSignature);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
@@ -226,6 +228,7 @@ pub mod cmds {
                 .or(tx_ibc_transfer)
                 .or(tx_update_vp)
                 .or(tx_init_account)
+                .or(tx_init_account_multisignature)
                 .or(tx_reveal_pk)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
@@ -289,6 +292,7 @@ pub mod cmds {
         QueryResult(QueryResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
+        TxInitAccountMultiSignature(TxInitAccountMultiSignature),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
@@ -1073,6 +1077,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxInitAccountMultiSignature(pub args::TxInitAccountMultiSignature);
+
+    impl SubCmd for TxInitAccountMultiSignature {
+        const CMD: &'static str = "init-account-m";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxInitAccountMultiSignature(args::TxInitAccountMultiSignature::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to create a new established \
+                     account.",
+                )
+                .add_args::<args::TxInitAccountMultiSignature>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxInitValidator(pub args::TxInitValidator);
 
     impl SubCmd for TxInitValidator {
@@ -1661,6 +1687,7 @@ pub mod args {
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    const PUBLIC_KEY_MULTISIGNATURE: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
@@ -1674,6 +1701,7 @@ pub mod args {
     const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
     const SOURCE: Arg<WalletAddress> = arg("source");
+    const SOURCE_MULTISIGNATURE: ArgMulti<WalletAddress> = arg_multi("sources");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
@@ -1683,6 +1711,7 @@ pub mod args {
     const TOKEN: Arg<WalletAddress> = arg("token");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    const THRESHOLD:  ArgOpt<u64> = arg_opt("threshold");
     const TX_HASH: Arg<String> = arg("tx-hash");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
@@ -2039,6 +2068,58 @@ pub mod args {
                 .arg(PUBLIC_KEY.def().about(
                     "A public key to be used for the new account in \
                      hexadecimal encoding.",
+                ))
+        }
+    }
+
+    /// Transaction to initialize a new account
+    #[derive(Clone, Debug)]
+    pub struct TxInitAccountMultiSignature {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Address of the source account
+        pub sources: Vec<WalletAddress>,
+        /// Path to the VP WASM code file for the new account
+        pub vp_code_path: Option<PathBuf>,
+        /// Public key for the new account
+        pub public_keys: Vec<WalletPublicKey>,
+        /// The threshold for multsignature account
+        pub threshold: Option<u64>
+    }
+
+    impl Args for TxInitAccountMultiSignature {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let sources = SOURCE_MULTISIGNATURE.parse(matches);
+            println!("b: {:?}", sources);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let public_keys = PUBLIC_KEY_MULTISIGNATURE.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
+            Self {
+                tx,
+                sources,
+                vp_code_path,
+                public_keys,
+                threshold
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(SOURCE_MULTISIGNATURE.def().about(
+                    "The source account's address that signs the transaction.",
+                ).required(true).min_values(1))
+                .arg(CODE_PATH_OPT.def().about(
+                    "The path to the validity predicate WASM code to be used \
+                     for the new account. Uses the default user VP if none \
+                     specified.",
+                ))
+                .arg(PUBLIC_KEY_MULTISIGNATURE.def().about(
+                    "A public key to be used for the new account in \
+                     hexadecimal encoding.",
+                ).required(true).min_values(1))
+                .arg(THRESHOLD.def().about(
+                    "Multisgnature threshold.",
                 ))
         }
     }

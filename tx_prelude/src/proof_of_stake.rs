@@ -78,7 +78,7 @@ impl Ctx {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
         let validator_address = self.init_account(&validator_vp_code)?;
-        let pk_key = key::pk_key(&validator_address);
+        let pk_key = key::pk_key(&validator_address, 0);
         self.write(&pk_key, &account_key)?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);
         self.write(&protocol_pk_key, &protocol_key)?;

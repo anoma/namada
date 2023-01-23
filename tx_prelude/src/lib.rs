@@ -10,6 +10,7 @@ pub mod ibc;
 pub mod key;
 pub mod proof_of_stake;
 pub mod token;
+pub mod account;
 
 use core::slice;
 use std::marker::PhantomData;
