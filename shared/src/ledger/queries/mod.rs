@@ -109,7 +109,7 @@ pub mod tm {
     }
 
     #[async_trait::async_trait]
-    impl Client for crate::tendermint_rpc::HttpClient {
+    impl<C: crate::tendermint_rpc::Client + std::marker::Sync> Client for C {
         type Error = Error;
 
         async fn request(

@@ -3674,11 +3674,8 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "tendermint 0.23.5",
  "tendermint 0.23.6",
- "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.5",
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
@@ -6137,7 +6134,7 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "async-trait",
  "bytes 1.2.1",
@@ -6180,7 +6177,7 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "flex-error",
  "serde 1.0.147",
@@ -6193,7 +6190,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "contracts",
  "crossbeam-channel 0.4.4",
@@ -6227,7 +6224,7 @@ dependencies = [
 [[package]]
 name = "tendermint-light-client-verifier"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -6256,7 +6253,7 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "bytes 1.2.1",
  "flex-error",
@@ -6306,7 +6303,7 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -6354,7 +6351,7 @@ dependencies = [
 [[package]]
 name = "tendermint-testgen"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
+source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
 dependencies = [
  "ed25519-dalek",
  "gumdrop",
