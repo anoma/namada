@@ -288,6 +288,7 @@ mod tests {
     #[test]
     fn test_vp_read_and_has_key() {
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let addr = address::testing::established_address_1();
         let addr_key = storage::Key::from(addr.to_db_key());
@@ -373,6 +374,7 @@ mod tests {
     #[test]
     fn test_vp_iter_prefix() {
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let addr = address::testing::established_address_1();
         let addr_key = storage::Key::from(addr.to_db_key());
@@ -438,7 +440,7 @@ mod tests {
         let addr = address::testing::established_address_1();
 
         // Write the public key to storage
-        let pk_key = key::pk_key(&addr);
+        let pk_key = key::pk_key(&addr, 0);
         let keypair = key::testing::keypair_1();
         let pk = keypair.ref_to();
         env.wl_storage
@@ -472,7 +474,10 @@ mod tests {
             assert_eq!(&signed_tx_data.data, data);
             assert!(
                 vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
+                    .verify_tx_signature(
+                        &pk,
+                        &signed_tx_data.sigs.get(0).unwrap().sig
+                    )
                     .unwrap()
             );
 
@@ -481,7 +486,7 @@ mod tests {
                 !vp::CTX
                     .verify_tx_signature(
                         &other_keypair.ref_to(),
-                        &signed_tx_data.sig
+                        &signed_tx_data.sigs.get(0).unwrap().sig
                     )
                     .unwrap()
             );

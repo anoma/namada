@@ -2669,6 +2669,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "ripemd",
+ "rand 0.8.5",
  "rust_decimal",
  "tracing",
  "tracing-subscriber",

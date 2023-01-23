@@ -30,9 +30,8 @@ pub async fn main() -> Result<()> {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
                     tx::submit_ibc_transfer(ctx, args).await;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(args)) => {
-                    wait_until_node_is_synched(&args.tx.ledger_address).await;
-                    tx::submit_update_vp(ctx, args).await;
+                Sub::TxUpdateAccount(TxUpdateAccount(args)) => {
+                    tx::submit_update_account(ctx, args).await;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     wait_until_node_is_synched(&args.tx.ledger_address).await;
@@ -141,6 +140,10 @@ pub async fn main() -> Result<()> {
                         .await;
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
+                Sub::QueryAccount(QueryAccount(args)) => {
+                    rpc::query_account(ctx, args).await;
+                }
+                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

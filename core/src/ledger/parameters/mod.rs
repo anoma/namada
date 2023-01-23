@@ -52,6 +52,8 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Maximum number of signature per transaction
+    pub max_signature_per_tx: u64,
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
@@ -118,6 +120,7 @@ impl Parameters {
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
+            max_signature_per_tx,
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
@@ -177,6 +180,9 @@ impl Parameters {
 
         let pos_inflation_key = storage::get_pos_inflation_amount_key();
         storage.write(&pos_inflation_key, pos_inflation_amount)?;
+
+        let max_signature_per_tx_key = storage::get_max_signature_per_tx_key();
+        storage.write(&max_signature_per_tx_key, max_signature_per_tx)?;
 
         #[cfg(not(feature = "mainnet"))]
         if let Some(faucet_account) = faucet_account {
@@ -244,6 +250,19 @@ where
             .map(|id| id.to_lowercase())
             .collect::<Vec<String>>(),
     )
+}
+
+/// Update the max signature per tx parameter. Returns the parameters and gas
+/// cost.
+pub fn update_max_signature_per_tx<S>(
+    storage: &mut S,
+    value: &u64,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage::get_max_signature_per_tx_key();
+    storage.write(&key, value)
 }
 
 /// Update the epoch parameter in storage. Returns the parameters and gas
@@ -460,6 +479,13 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read max signature per transaction
+    let max_signature_per_tx_key = storage::get_pos_inflation_amount_key();
+    let value = storage.read(&max_signature_per_tx_key)?;
+    let max_signature_per_tx: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read faucet account
     #[cfg(not(feature = "mainnet"))]
     let faucet_account = read_faucet_account_parameter(storage)?;
@@ -480,6 +506,7 @@ where
         pos_gain_d,
         staked_ratio,
         pos_inflation_amount,
+        max_signature_per_tx,
         #[cfg(not(feature = "mainnet"))]
         faucet_account,
         #[cfg(not(feature = "mainnet"))]

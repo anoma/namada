@@ -1,6 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
-use namada_core::types::transaction::InitValidator;
+use namada_core::types::transaction::{InitAccount, InitValidator};
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
@@ -66,20 +66,24 @@ impl Ctx {
     pub fn init_validator(
         &mut self,
         InitValidator {
-            account_key,
+            account_keys,
             consensus_key,
             protocol_key,
             dkg_key,
             commission_rate,
             max_commission_rate_change,
             validator_vp_code_hash,
+            threshold,
         }: InitValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
-        let validator_address = self.init_account(&validator_vp_code_hash)?;
-        let pk_key = key::pk_key(&validator_address);
-        self.write(&pk_key, &account_key)?;
+        let account_data = InitAccount {
+            public_keys: account_keys,
+            threshold,
+            vp_code_hash: validator_vp_code_hash,
+        };
+        let validator_address = account::init_account(self, account_data)?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);
         self.write(&protocol_pk_key, &protocol_key)?;
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);
