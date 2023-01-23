@@ -314,8 +314,7 @@ where
                 );
                         false
                     })
-            }
-            else {
+            } else {
                 false
             }
         } else {
