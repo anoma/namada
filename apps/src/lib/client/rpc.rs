@@ -120,10 +120,16 @@ pub async fn query_tx_status(
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
-    let client = HttpClient::new(args.ledger_address).unwrap();
-    let epoch = unwrap_client_response(RPC.shell().epoch(&client).await);
-    println!("Last committed epoch: {}", epoch);
+    let epoch = query_epoch_silent(args).await;
+    println!("Last committed epoch: {epoch}");
     epoch
+}
+
+/// Query the epoch of the last committed block,
+/// without printing it to stdout.
+pub async fn query_epoch_silent(args: args::Query) -> Epoch {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    unwrap_client_response(RPC.shell().epoch(&client).await)
 }
 
 /// Query the last committed block
