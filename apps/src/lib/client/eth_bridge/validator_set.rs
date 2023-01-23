@@ -12,6 +12,7 @@ pub async fn query_validator_set_update_proof() {
 }
 
 /// Query an ABI encoding of the validator set at a given epoch.
+// TODO: add CLI facing command calling this fn
 pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
