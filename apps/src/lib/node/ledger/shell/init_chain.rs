@@ -150,6 +150,10 @@ where
             .init_storage(&mut self.wl_storage)
             .expect("Initializing governance parameters must not fail");
 
+        genesis
+            .pgf_params
+            .init_storage(&mut self.wl_storage.storage);
+
         // Depends on parameters being initialized
         self.wl_storage
             .storage
@@ -200,7 +204,7 @@ where
                 .unwrap();
 
             if let Some(pk) = public_key {
-                let pk_storage_key = pk_key(&address);
+                let pk_storage_key = pk_key(&address, 0);
                 self.wl_storage
                     .write_bytes(&pk_storage_key, pk.try_to_vec().unwrap())
                     .unwrap();
@@ -233,7 +237,7 @@ where
         for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
         {
             let address: address::Address = (&public_key).into();
-            let pk_storage_key = pk_key(&address);
+            let pk_storage_key = pk_key(&address, 0);
             self.wl_storage.write(&pk_storage_key, public_key).unwrap();
         }
 
@@ -309,7 +313,7 @@ where
                 .write_bytes(&Key::validity_predicate(addr), vp_code)
                 .expect("Unable to write user VP");
             // Validator account key
-            let pk_key = pk_key(addr);
+            let pk_key = pk_key(addr, 0);
             self.wl_storage
                 .write(&pk_key, &validator.account_key)
                 .expect("Unable to set genesis user public key");

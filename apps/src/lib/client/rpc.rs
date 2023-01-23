@@ -24,6 +24,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::transaction::governance::ProposalType;
+use namada::core::types::key;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -34,7 +35,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::{self, RPC};
 use namada::ledger::storage::ConversionState;
-use namada::proto::{SignedTxData, Tx};
+use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
@@ -53,7 +54,8 @@ use namada::types::transaction::{
 use namada::types::{address, storage, token};
 use tokio::time::{Duration, Instant};
 
-use crate::cli::{self, args, Context};
+use super::signing::{tx_signers, OfflineSignature};
+use crate::cli::{self, args, safe_exit, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
     Conversions, PinnedBalanceError, TransactionDelta, TransferDelta,
@@ -1300,6 +1302,7 @@ pub async fn query_proposal_result(
 
                         let public_key = get_public_key(
                             &proposal.address,
+                            0,
                             args.query.ledger_address.clone(),
                         )
                         .await
@@ -1433,6 +1436,49 @@ pub async fn query_bond(
     unwrap_client_response(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
     )
+}
+pub async fn sign_tx(
+    mut ctx: Context,
+    args::SignTx {
+        tx,
+        data_path,
+        signing_tx,
+    }: args::SignTx,
+) {
+    let data = match (data_path, signing_tx) {
+        (None, Some(data)) => HEXLOWER
+            .decode(data.as_bytes())
+            .expect("SHould be hex decodable."),
+        (Some(path), None) => {
+            let data = fs::read(path.clone()).await.unwrap_or_else(|_| {
+                panic!("File {} should exist.", path.to_string_lossy())
+            });
+            HEXLOWER.decode(&data).expect("SHould be hex decodable.")
+        }
+        (_, _) => {
+            println!("--data-path or --signing-tx required.");
+            safe_exit(1)
+        }
+    };
+
+    let signing_tx =
+        SigningTx::try_from_slice(&data).expect("Tx should be deserialiable.");
+    let keypairs =
+        tx_signers(&mut ctx, &tx, vec![super::signing::TxSigningKey::None])
+            .await;
+    let keypair = keypairs.get(0).expect("One signer should be provided.");
+
+    let signature = signing_tx.compute_signature(keypair);
+    let public_key = keypair.ref_to();
+
+    let offline_signature = OfflineSignature {
+        sig: signature,
+        public_key,
+    };
+
+    let offline_signature_out = File::create("offline_signature.tx").unwrap();
+    serde_json::to_writer_pretty(offline_signature_out, &offline_signature)
+        .expect("Signature should be deserializable.")
 }
 
 pub async fn query_unbond_with_slashing(
@@ -1799,10 +1845,11 @@ pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key(
     address: &Address,
+    index: u64,
     ledger_address: TendermintAddress,
 ) -> Option<common::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
-    let key = pk_key(address);
+    let key = pk_key(address, index);
     query_storage_value(&client, &key).await
 }
 
@@ -1830,6 +1877,24 @@ pub async fn is_delegator_at(
             .is_delegator(client, address, &Some(epoch))
             .await,
     )
+}
+
+pub async fn get_address_pks_map(
+    client: &HttpClient,
+    address: &Address,
+) -> HashMap<common::PublicKey, u64> {
+    let key = key::pk_prefix_key(address);
+    let pks_iter =
+        query_storage_prefix::<common::PublicKey>(client, &key).await;
+    if let Some(pks) = pks_iter {
+        HashMap::from_iter(
+            pks.map(|(_key, pk)| pk)
+                .zip(0u64..)
+                .collect::<HashMap<common::PublicKey, u64>>(),
+        )
+    } else {
+        HashMap::new()
+    }
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
@@ -2327,7 +2392,7 @@ pub async fn get_proposal_offline_votes(
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
 
-        let key = pk_key(&proposal_vote.address);
+        let key = pk_key(&proposal_vote.address, 0);
         let public_key = query_storage_value(client, &key)
             .await
             .expect("Public key should exist.");

@@ -69,6 +69,8 @@ mod internal {
         "ibc::IBC Mint Address                        ";
     pub const ETH_BRIDGE: &str =
         "ano::ETH Bridge Address                      ";
+    pub const PGF: &str = 
+        "ano::Public Goods Funding                    ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -197,7 +199,8 @@ impl Address {
                     InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
                     InternalAddress::EthBridge => {
                         internal::ETH_BRIDGE.to_string()
-                    }
+                    },
+                    InternalAddress::Pgf => internal::PGF.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -466,6 +469,8 @@ pub enum InternalAddress {
     SlashFund,
     /// Bridge to Ethereum
     EthBridge,
+    /// Public Goods Funding
+    Pgf
 }
 
 impl InternalAddress {
@@ -500,6 +505,7 @@ impl Display for InternalAddress {
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
+                Self::Pgf => "PubliGoodsFunding".to_string(),
             }
         )
     }
@@ -783,7 +789,8 @@ pub mod testing {
             InternalAddress::IbcEscrow => {}
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
-            InternalAddress::EthBridge => {} /* Add new addresses in the
+            InternalAddress::EthBridge => {}
+            InternalAddress::Pgf => {} /* Add new addresses in the
                                               * `prop_oneof` below. */
         };
         prop_oneof![
@@ -799,6 +806,7 @@ pub mod testing {
             Just(InternalAddress::Governance),
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
+            Just(InternalAddress::Pgf),
         ]
     }
 
