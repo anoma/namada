@@ -78,6 +78,13 @@ impl Amount {
             .map(|result| Self { micro: result })
     }
 
+    /// Checked addition
+    pub fn checked_add(&self, amount: Amount) -> Option<Self> {
+        self.micro
+            .checked_add(amount.micro)
+            .map(|result| Self { micro: result })
+    }
+
     /// Create amount from Change
     ///
     /// # Panics
