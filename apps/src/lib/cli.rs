@@ -1680,6 +1680,10 @@ pub mod cmds {
         /// set in Namada, at the given epoch, or the latest
         /// one, if none is provided..
         ActiveValidatorSet(args::ActiveValidatorSet),
+        /// Query an Ethereum ABI encoding of a proof of the active
+        /// validator set in Namada, at the given epoch, or the next
+        /// one, if none is provided.
+        ValidatorSetProof(args::ValidatorSetProof),
     }
 
     impl SubCmd for ValidatorSet {
@@ -1689,9 +1693,9 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let active_validator_set = ActiveValidatorSet::parse(matches)
                     .map(|args| Self::ActiveValidatorSet(args.0));
-                // TODO: proof cmd
-                let proof = None;
-                active_validator_set.or(proof)
+                let validator_set_proof = ValidatorSetProof::parse(matches)
+                    .map(|args| Self::ValidatorSetProof(args.0));
+                active_validator_set.or(validator_set_proof)
             })
         }
 
@@ -1704,6 +1708,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(ActiveValidatorSet::def().display_order(1))
+                .subcommand(ValidatorSetProof::def().display_order(1))
         }
     }
 
@@ -1727,6 +1732,29 @@ pub mod cmds {
                      one, if no epoch is provided.",
                 )
                 .add_args::<args::ActiveValidatorSet>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidatorSetProof(args::ValidatorSetProof);
+
+    impl SubCmd for ValidatorSetProof {
+        const CMD: &'static str = "proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ValidatorSetProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of a proof of the active \
+                     validator set in Namada, at the requested epoch, or the \
+                     next one, if no epoch is provided.",
+                )
+                .add_args::<args::ValidatorSetProof>()
         }
     }
 }
@@ -2076,6 +2104,30 @@ pub mod args {
                 EPOCH.def().about(
                     "The epoch of the active set of validators to query.",
                 ),
+            )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ValidatorSetProof {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ValidatorSetProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH
+                    .def()
+                    .about("The epoch of the set of validators to be proven."),
             )
         }
     }
