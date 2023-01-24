@@ -85,7 +85,6 @@ where
 }
 
 /// Redeems `amount` of the native token for `receiver` from escrow.
-/// TODO: unit/integration tests
 fn redeem_native_token<D, H>(
     storage: &mut Storage<D, H>,
     receiver: &Address,
@@ -117,7 +116,6 @@ where
                 "Bridge pool should always have enough native tokens to \
                  redeem any confirmed transfers",
             );
-    // TODO: ? how best to handle overflows here?
     let receiver_native_token_balance_post = receiver_native_token_balance_pre
         .checked_add(amount)
         .expect("Receiver's balance is full");
