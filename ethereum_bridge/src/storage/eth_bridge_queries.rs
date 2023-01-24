@@ -10,10 +10,14 @@ use namada_core::types::ethereum_events::{EthAddress, Uint};
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token;
-use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
+use namada_core::types::vote_extensions::validator_set_update::{
+    EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
+};
+use namada_core::types::voting_power::{
+    EthBridgeVotingPower, FractionalVotingPower,
+};
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
-
 use crate::storage::proof::EthereumProof;
 
 /// This enum is used as a parameter to
@@ -106,12 +110,31 @@ pub trait EthBridgeQueries {
         epoch: Option<Epoch>,
     ) -> Option<EthAddress>;
 
+    /// For a given Namada validator, return its corresponding Ethereum
+    /// address book.
+    #[inline]
+    fn get_eth_addr_book(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<EthAddrBook> {
+        let bridge = self.get_ethbridge_from_namada_addr(validator, epoch)?;
+        let governance = self.get_ethgov_from_namada_addr(validator, epoch)?;
+        Some(EthAddrBook {
+            hot_key_addr: bridge,
+            cold_key_addr: governance,
+        })
+    }
+
     /// Extension of [`Self::get_active_validators`], which additionally returns
     /// all Ethereum addresses of some validator.
     fn get_active_eth_addresses<'db>(
         &'db self,
         epoch: Option<Epoch>,
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
+
+    /// Query the active [`ValidatorSetArgs`] at the given [`Epoch`].
+    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs;
 }
 
 impl<D, H> EthBridgeQueries for Storage<D, H>
@@ -310,5 +333,33 @@ where
                 )
             },
         ))
+    }
+
+    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs {
+        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+
+        let voting_powers_map: VotingPowersMap = self
+            .get_active_eth_addresses(Some(epoch))
+            .map(|(addr_book, _, power)| (addr_book, power))
+            .collect();
+
+        let total_power = self.get_total_voting_power(Some(epoch)).into();
+        let (validators, voting_powers) = voting_powers_map
+            .get_sorted()
+            .into_iter()
+            .map(|(&EthAddrBook { hot_key_addr, .. }, &power)| {
+                let voting_power: EthBridgeVotingPower =
+                    FractionalVotingPower::new(power.into(), total_power)
+                        .expect("Fractional voting power should be >1")
+                        .into();
+                (hot_key_addr, voting_power)
+            })
+            .unzip();
+
+        ValidatorSetArgs {
+            epoch,
+            validators,
+            voting_powers,
+        }
     }
 }

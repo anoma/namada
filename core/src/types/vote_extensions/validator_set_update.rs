@@ -5,16 +5,16 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
-use num_rational::Ratio;
 
 use crate::proto::Signed;
 use crate::types::address::Address;
 use crate::types::eth_abi::{AbiEncode, Encode, Token};
-use crate::types::ethereum_events::{EthAddress, Uint};
+use crate::types::ethereum_events::EthAddress;
 use crate::types::keccak::KeccakHash;
 use crate::types::key::common::{self, Signature};
 use crate::types::storage::Epoch;
 use crate::types::token;
+use crate::types::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 
 // the contract versions and namespaces plugged into validator set hashes
 // TODO: ideally, these values should not be hardcoded
@@ -154,6 +154,10 @@ pub type VotingPowersMap = HashMap<EthAddrBook, token::Amount>;
 /// This trait contains additional methods for a [`VotingPowersMap`], related
 /// with validator set update vote extensions logic.
 pub trait VotingPowersMapExt {
+    /// Returns a [`Vec`] of pairs of validator addresses and voting powers,
+    /// sorted in descending order by voting power.
+    fn get_sorted(&self) -> Vec<(&EthAddrBook, &token::Amount)>;
+
     /// Returns the list of Ethereum validator hot and cold addresses and their
     /// respective voting powers (in this order), with an Ethereum ABI
     /// compatible encoding. Implementations of this method must be
@@ -161,35 +165,89 @@ pub trait VotingPowersMapExt {
     /// sorted in descending order by voting power, as this is more efficient to
     /// deal with on the Ethereum side when working out if there is enough
     /// voting power for a given validator set update.
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>);
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
+        let sorted = self.get_sorted();
 
-    /// Returns the keccak hashes of this [`VotingPowersMap`],
-    /// to be signed by an Ethereum hot and cold key, respectively.
+        let total_voting_power: u64 = sorted
+            .iter()
+            .map(|&(_, &voting_power)| u64::from(voting_power))
+            .sum();
+
+        // split the vec into three portions
+        sorted.into_iter().fold(
+            Default::default(),
+            |accum, (addr_book, &voting_power)| {
+                let voting_power: EthBridgeVotingPower =
+                    FractionalVotingPower::new(
+                        voting_power.into(),
+                        total_voting_power,
+                    )
+                    .expect(
+                        "Voting power in map can't be larger than the total \
+                         voting power",
+                    )
+                    .into();
+
+                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
+                    accum;
+                let &EthAddrBook {
+                    hot_key_addr: EthAddress(hot_key_addr),
+                    cold_key_addr: EthAddress(cold_key_addr),
+                } = addr_book;
+
+                hot_key_addrs
+                    .push(Token::Address(ethereum::H160(hot_key_addr)));
+                cold_key_addrs
+                    .push(Token::Address(ethereum::H160(cold_key_addr)));
+                voting_powers.push(Token::Uint(voting_power.into()));
+
+                (hot_key_addrs, cold_key_addrs, voting_powers)
+            },
+        )
+    }
+
+    /// Returns the bridge and governance keccak hashes of
+    /// this [`VotingPowersMap`].
+    #[inline]
     fn get_bridge_and_gov_hashes(
         &self,
         signing_epoch: Epoch,
     ) -> (KeccakHash, KeccakHash) {
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
             self.get_abi_encoded();
-
-        let bridge_hash = compute_hash(
+        valset_upd_toks_to_hashes(
             signing_epoch,
-            BRIDGE_CONTRACT_VERSION,
-            BRIDGE_CONTRACT_NAMESPACE,
             hot_key_addrs,
-            voting_powers.clone(),
-        );
-
-        let governance_hash = compute_hash(
-            signing_epoch,
-            GOVERNANCE_CONTRACT_VERSION,
-            GOVERNANCE_CONTRACT_NAMESPACE,
             cold_key_addrs,
             voting_powers,
-        );
-
-        (bridge_hash, governance_hash)
+        )
     }
+}
+
+/// Returns the bridge and governance keccak hashes calculated from
+/// the given hot and cold key addresses, and their respective validator's
+/// voting powers, normalized to `2^32`.
+pub fn valset_upd_toks_to_hashes(
+    signing_epoch: Epoch,
+    hot_key_addrs: Vec<Token>,
+    cold_key_addrs: Vec<Token>,
+    voting_powers: Vec<Token>,
+) -> (KeccakHash, KeccakHash) {
+    let bridge_hash = compute_hash(
+        signing_epoch,
+        BRIDGE_CONTRACT_VERSION,
+        BRIDGE_CONTRACT_NAMESPACE,
+        hot_key_addrs,
+        voting_powers.clone(),
+    );
+    let governance_hash = compute_hash(
+        signing_epoch,
+        GOVERNANCE_CONTRACT_VERSION,
+        GOVERNANCE_CONTRACT_NAMESPACE,
+        cold_key_addrs,
+        voting_powers,
+    );
+    (bridge_hash, governance_hash)
 }
 
 /// Compare two items of [`VotingPowersMap`]. This comparison operation must
@@ -207,49 +265,10 @@ fn compare_voting_powers_map_items(
 }
 
 impl VotingPowersMapExt for VotingPowersMap {
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
-        // get addresses and voting powers all into one vec so that they can be
-        // sorted appropriately
-        let mut unsorted: Vec<_> = self.iter().collect();
-        unsorted.sort_by(compare_voting_powers_map_items);
-        let sorted = unsorted;
-
-        let total_voting_power: u64 = sorted
-            .iter()
-            .map(|&(_, &voting_power)| u64::from(voting_power))
-            .sum();
-
-        // split the vec into three portions
-        sorted.into_iter().fold(
-            Default::default(),
-            |accum, (addr_book, &voting_power)| {
-                let voting_power: u64 = voting_power.into();
-
-                // normalize the voting power
-                // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-                const NORMALIZED_VOTING_POWER: u64 = 1 << 32;
-
-                let voting_power = Ratio::new(voting_power, total_voting_power)
-                    * NORMALIZED_VOTING_POWER;
-                let voting_power = voting_power.round().to_integer();
-                let voting_power: ethereum::U256 = voting_power.into();
-
-                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
-                    accum;
-                let &EthAddrBook {
-                    hot_key_addr: EthAddress(hot_key_addr),
-                    cold_key_addr: EthAddress(cold_key_addr),
-                } = addr_book;
-
-                hot_key_addrs
-                    .push(Token::Address(ethereum::H160(hot_key_addr)));
-                cold_key_addrs
-                    .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power));
-
-                (hot_key_addrs, cold_key_addrs, voting_powers)
-            },
-        )
+    fn get_sorted(&self) -> Vec<(&EthAddrBook, &token::Amount)> {
+        let mut pairs: Vec<_> = self.iter().collect();
+        pairs.sort_by(compare_voting_powers_map_items);
+        pairs
     }
 }
 
@@ -261,9 +280,8 @@ fn epoch_to_token(Epoch(e): Epoch) -> Token {
 
 /// Compute the keccak hash of a validator set update.
 ///
-/// For more information, check the Ethereum bridge smart contracts:
-//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Governance.sol#L232>
-//    - <https://github.com/anoma/ethereum-bridge/blob/main/contracts/contract/Bridge.sol#L201>
+/// For more information, check the specs of the Ethereum bridge smart
+/// contracts.
 #[inline]
 fn compute_hash(
     signing_epoch: Epoch,
@@ -284,14 +302,17 @@ fn compute_hash(
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+// TODO: find a new home for this type
 pub struct ValidatorSetArgs {
-    /// Ethereum address of validators
+    /// Ethereum addresses of the validators.
     pub validators: Vec<EthAddress>,
-    /// Voting powers of validators
-    pub powers: Vec<Uint>,
-    /// A nonce
-    pub nonce: Uint,
+    /// The voting powers of the validators.
+    pub voting_powers: Vec<EthBridgeVotingPower>,
+    /// The epoch when the validators were active.
+    ///
+    /// Serves as a nonce.
+    pub epoch: Epoch,
 }
 
 impl Encode<1> for ValidatorSetArgs {
@@ -303,12 +324,12 @@ impl Encode<1> for ValidatorSetArgs {
                 .collect(),
         );
         let powers = Token::Array(
-            self.powers
+            self.voting_powers
                 .iter()
-                .map(|power| Token::Uint(power.clone().into()))
+                .map(|&power| Token::Uint(power.into()))
                 .collect(),
         );
-        let nonce = Token::Uint(self.nonce.clone().into());
+        let nonce = Token::Uint(self.epoch.0.into());
         [Token::Tuple(vec![addrs, powers, nonce])]
     }
 }

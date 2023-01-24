@@ -402,6 +402,7 @@ where
         {
             (Some(bytes), _) => {
                 BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
+                    .into()
             }
             _ => {
                 return Err(storage_api::Error::SimpleMessage(

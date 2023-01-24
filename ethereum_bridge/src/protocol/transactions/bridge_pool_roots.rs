@@ -8,6 +8,7 @@ use namada_core::types::storage::BlockHeight;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::protocol::transactions::utils::GetVoters;
 use crate::protocol::transactions::votes::update::NewVotes;
@@ -88,13 +89,14 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let height = multisigned.iter().next().unwrap().data.block_height;
+    let epoch = storage.get_epoch(height);
     let root = storage.get_bridge_pool_root_at_height(height);
     let nonce = storage.get_bridge_pool_nonce_at_height(height);
     let mut partial_proof = EthereumProof::new((root, nonce));
     partial_proof.attach_signature_batch(multisigned.clone().into_iter().map(
         |signed| {
             (
-                (signed.data.validator_addr, signed.data.block_height),
+                storage.get_eth_addr_book(&signed.data.validator_addr, epoch),
                 signed.data.sig,
             )
         },
