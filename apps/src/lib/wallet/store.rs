@@ -13,6 +13,10 @@ use thiserror::Error;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
+#[cfg(feature = "dev")]
+use crate::wallet::StoredKeypair;
+#[cfg(feature = "dev")]
+use namada::types::address::Address;
 
 #[derive(Error, Debug)]
 pub enum LoadStoreError {
