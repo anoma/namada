@@ -79,6 +79,12 @@ impl Display for Alias {
     }
 }
 
+impl Default for Alias {
+    fn default() -> Self {
+        Alias(String::from("Unknown Alias"))
+    }
+}
+
 impl FromStr for Alias {
     type Err = Infallible;
 

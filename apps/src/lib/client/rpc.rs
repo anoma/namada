@@ -1,5 +1,6 @@
 //! Client RPC queries
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
@@ -49,7 +50,12 @@ use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
 };
+<<<<<<< HEAD
+use namada::types::{address, storage, token};
+=======
 use namada::types::{storage, token};
+use rust_decimal::Decimal;
+>>>>>>> 1936a96c4 (removed hardcoded address::type from most places)
 use tokio::time::{Duration, Instant};
 
 use crate::cli::{self, args, Context};
@@ -226,7 +232,7 @@ pub async fn query_tx_deltas(
                     let mut transfer = None;
                     extract_payload(tx, &mut wrapper, &mut transfer);
                     // Epoch data is not needed for transparent transactions
-                    let epoch = Epoch::default();
+                    let epoch = wrapper.map(|x| x.epoch).unwrap_or_default();
                     if let Some(transfer) = transfer {
                         // Skip MASP addresses as they are already handled by
                         // ShieldedContext
@@ -1430,25 +1436,20 @@ pub async fn query_and_print_unbonds(
 ) {
     let unbonds = query_unbond_with_slashing(client, source, validator).await;
     let current_epoch = query_epoch(client).await;
-
-    let mut total_withdrawable = token::Amount::default();
-    let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
-    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
-        if withdraw_epoch <= current_epoch {
-            total_withdrawable += amount;
-        } else {
-            let withdrawable_amount =
-                not_yet_withdrawable.entry(withdraw_epoch).or_default();
-            *withdrawable_amount += amount;
-        }
-    }
+    let (withdrawable, not_yet_withdrawable): (HashMap<_, _>, HashMap<_, _>) =
+        unbonds.into_iter().partition(|((_, withdraw_epoch), _)| {
+            withdraw_epoch <= &current_epoch
+        });
+    let total_withdrawable = withdrawable
+        .into_iter()
+        .fold(token::Amount::default(), |acc, (_, amount)| acc + amount);
     if total_withdrawable != token::Amount::default() {
         println!("Total withdrawable now: {total_withdrawable}.");
     }
     if !not_yet_withdrawable.is_empty() {
         println!("Current epoch: {current_epoch}.")
     }
-    for (withdraw_epoch, amount) in not_yet_withdrawable {
+    for ((_start_epoch, withdraw_epoch), amount) in not_yet_withdrawable {
         println!(
             "Amount {amount} withdrawable starting from epoch \
              {withdraw_epoch}."
@@ -1471,10 +1472,7 @@ pub async fn query_withdrawable_tokens(
 }
 
 /// Query PoS bond(s) and unbond(s)
-pub async fn query_bonds(
-    ctx: Context,
-    args: args::QueryBonds,
-) -> std::io::Result<()> {
+pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
     let _epoch = query_and_print_epoch(args.query.clone()).await;
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
@@ -1507,13 +1505,14 @@ pub async fn query_bonds(
                 bond_id.source, bond_id.validator
             )
         };
-        writeln!(w, "{}:", bond_type)?;
+        writeln!(w, "{}:", bond_type).unwrap();
         for bond in details.bonds {
             writeln!(
                 w,
                 "  Remaining active bond from epoch {}: Δ {}",
                 bond.start, bond.amount
-            )?;
+            )
+            .unwrap();
             total += bond.amount;
             total_slashed += bond.slashed_amount.unwrap_or_default();
         }
@@ -1522,10 +1521,10 @@ pub async fn query_bonds(
                 w,
                 "Active (slashed) bonds total: {}",
                 total - total_slashed
-            )?;
+            )
+            .unwrap();
         }
-        writeln!(w, "Bonds total: {}", total)?;
-        writeln!(w)?;
+        writeln!(w, "Bonds total: {}", total).unwrap();
         bonds_total += total;
         bonds_total_slashed += total_slashed;
 
@@ -1538,7 +1537,7 @@ pub async fn query_bonds(
             } else {
                 format!("Unbonded delegations from {}", bond_id.source)
             };
-            writeln!(w, "{}:", bond_type)?;
+            writeln!(w, "{}:", bond_type).unwrap();
             for unbond in details.unbonds {
                 total += unbond.amount;
                 total_slashed += unbond.slashed_amount.unwrap_or_default();
@@ -1546,37 +1545,35 @@ pub async fn query_bonds(
                     w,
                     "  Withdrawable from epoch {} (active from {}): Δ {}",
                     unbond.withdraw, unbond.start, unbond.amount
-                )?;
+                )
+                .unwrap();
             }
             withdrawable = total - total_slashed;
-            writeln!(w, "Unbonded total: {}", total)?;
+            writeln!(w, "Unbonded total: {}", total).unwrap();
 
             unbonds_total += total;
             unbonds_total_slashed += total_slashed;
             total_withdrawable += withdrawable;
         }
-        writeln!(w, "Withdrawable total: {}", withdrawable)?;
-        writeln!(w)?;
+        writeln!(w, "Withdrawable total: {}", withdrawable).unwrap();
+        println!();
     }
     if bonds_total != bonds_total_slashed {
-        writeln!(
-            w,
+        println!(
             "All bonds total active: {}",
             bonds_total - bonds_total_slashed
-        )?;
+        );
     }
-    writeln!(w, "All bonds total: {}", bonds_total)?;
+    println!("All bonds total: {}", bonds_total);
 
     if unbonds_total != unbonds_total_slashed {
-        writeln!(
-            w,
+        println!(
             "All unbonds total active: {}",
             unbonds_total - unbonds_total_slashed
-        )?;
+        );
     }
-    writeln!(w, "All unbonds total: {}", unbonds_total)?;
-    writeln!(w, "All unbonds total withdrawable: {}", total_withdrawable)?;
-    Ok(())
+    println!("All unbonds total: {}", unbonds_total);
+    println!("All unbonds total withdrawable: {}", total_withdrawable);
 }
 
 /// Query PoS bonded stake
@@ -1940,31 +1937,6 @@ pub async fn query_conversion(
     Some(unwrap_client_response(
         RPC.shell().read_conversion(&client, &asset_type).await,
     ))
-}
-
-/// Query a wasm code hash
-pub async fn query_wasm_code_hash(
-    code_path: impl AsRef<str>,
-    ledger_address: TendermintAddress,
-) -> Option<Hash> {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
-    let hash_key = Key::wasm_hash(code_path.as_ref());
-    match query_storage_value_bytes(&client, &hash_key, None, false)
-        .await
-        .0
-    {
-        Some(hash) => {
-            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
-        }
-        None => {
-            eprintln!(
-                "The corresponding wasm code of the code path {} doesn't \
-                 exist on chain.",
-                code_path.as_ref(),
-            );
-            None
-        }
-    }
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
