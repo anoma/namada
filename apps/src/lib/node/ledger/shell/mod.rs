@@ -466,7 +466,7 @@ where
             TendermintMode::Seed => ShellMode::Seed,
         };
 
-        Self {
+        let mut shell = Self {
             chain_id,
             storage,
             gas_meter: BlockGasMeter::default(),
@@ -487,7 +487,20 @@ where
             proposal_data: HashSet::new(),
             // TODO: config event log params
             event_log: EventLog::default(),
+        };
+        if let ShellMode::Validator {
+            eth_oracle: Some(_),
+            ..
+        } = shell.mode
+        {
+            // if we've already synced past genesis, then we may be able to
+            // start the oracle straight away rather than waiting to
+            // sync/commit another block
+            if shell.storage.block.height > BlockHeight(0) {
+                shell.ensure_ethereum_oracle_started();
+            }
         }
+        shell
     }
 
     /// Return a reference to the [`EventLog`].
