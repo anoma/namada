@@ -13,7 +13,7 @@ use namada_core::types::storage::BlockHeight;
 /// At any given time, an [`EthereumProof`] will be considered
 /// "complete" once a number of signatures pertaining to validators
 /// reflecting more than 2/3 of the bonded stake on Namada is available.
-#[derive(Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct EthereumProof<T> {
     /// The signatures contained in the proof.
     pub signatures: BTreeMap<(Address, BlockHeight), secp256k1::Signature>,
@@ -43,12 +43,13 @@ impl<T> EthereumProof<T> {
     }
 
     /// Add a new batch of signatures to this [`EthereumProof`].
-    pub fn attach_signature_batch<I>(&mut self, batch: I)
+    pub fn attach_signature_batch<I, K>(&mut self, batch: I)
     where
-        I: IntoIterator<Item = ((Address, BlockHeight), common::Signature)>,
+        I: IntoIterator<Item = ((Address, BlockHeight), K)>,
+        K: Into<common::Signature>,
     {
         for ((address, block_height), signature) in batch {
-            self.attach_signature(address, block_height, signature);
+            self.attach_signature(address, block_height, signature.into());
         }
     }
 }

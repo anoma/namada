@@ -909,13 +909,13 @@ mod test_finalize_block {
             .expect("Reading signed Bridge pool root shouldn't fail.")
             .0;
         assert!(root.is_none());
-        let nonce = shell.storage.get_signed_bridge_pool_nonce();
-        assert_eq!(nonce, Uint::from(0));
         _ = shell.finalize_block(req).expect("Test failed");
-        let root = shell.storage.get_signed_bridge_pool_root();
-        let nonce = shell.storage.get_signed_bridge_pool_nonce();
-        assert_eq!(root, KeccakHash([1; 32]));
-        assert_eq!(nonce, Uint::from(1));
+        let root = shell
+            .storage
+            .get_signed_bridge_pool_root()
+            .expect("Test failed");
+        assert_eq!(root.data.0, KeccakHash([1; 32]));
+        assert_eq!(root.data.1, Uint::from(1));
     }
 
     #[test]
@@ -925,17 +925,6 @@ mod test_finalize_block {
         test_bp_roots(|shell: &TestShell| {
             let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
             ProtocolTxType::BridgePoolVext(vext)
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-        });
-    }
-
-    #[test]
-    /// Test that the generated vote extension passes Finalize Block
-    /// and effects the expected storage changes.
-    fn test_bp_roots_vext() {
-        test_bp_roots(|shell: &TestShell| {
-            let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-            ProtocolTxType::BridgePool(vext.into())
                 .sign(shell.mode.get_protocol_key().expect("Test failed"))
         });
     }

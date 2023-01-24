@@ -244,6 +244,7 @@ where
             .map_err(Error::ProtocolTxError)
         }
         ProtocolTxType::EthereumEvents(_)
+        | ProtocolTxType::BridgePool(_)
         | ProtocolTxType::ValidatorSetUpdate(_) => {
             // TODO(namada#198): implement this
             tracing::warn!(
@@ -251,10 +252,6 @@ where
                  no actions will be taken"
             );
             Ok(TxResult::default())
-        }
-        ProtocolTxType::BridgePool(vexts) => {
-            transactions::bridge_pool_roots::apply_derived_tx(storage, vexts)
-                .map_err(Error::ProtocolTxError)
         }
         _ => {
             tracing::error!(
@@ -587,6 +584,7 @@ mod tests {
     use namada_core::types::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::Votes;
     use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
+    use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::vote_tallies;
     use namada_ethereum_bridge::{bridge_pool_vp, test_utils};
 
@@ -680,40 +678,23 @@ mod tests {
         apply_protocol_tx(tx.clone(), &mut storage)?;
         apply_protocol_tx(tx, &mut storage)?;
 
-        let bp_root_keys =
-            vote_tallies::Keys::from(vote_tallies::BridgePoolRoot(root));
-        let bp_nonce_keys =
-            vote_tallies::Keys::from(vote_tallies::BridgePoolNonce(nonce));
+        let bp_root_keys = vote_tallies::Keys::from(
+            vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
+        );
         let (root_seen_by_bytes, _) = storage.read(&bp_root_keys.seen_by())?;
-        let (nonce_seen_by_bytes, _) =
-            storage.read(&bp_nonce_keys.seen_by())?;
         assert_eq!(
             Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
-            Votes::from([(validator_a.clone(), BlockHeight(100))])
-        );
-        assert_eq!(
-            Votes::try_from_slice(nonce_seen_by_bytes.as_ref().unwrap())?,
             Votes::from([(validator_a, BlockHeight(100))])
         );
-
         // the vote should have only be applied once
         let (root_voting_power_bytes, _) =
             storage.read(&bp_root_keys.voting_power())?;
-        let (nonce_voting_power_bytes, _) =
-            storage.read(&bp_nonce_keys.voting_power())?;
         assert_eq!(
             <(u64, u64)>::try_from_slice(
                 root_voting_power_bytes.as_ref().unwrap()
             )?,
             (1, 2)
         );
-        assert_eq!(
-            <(u64, u64)>::try_from_slice(
-                nonce_voting_power_bytes.as_ref().unwrap()
-            )?,
-            (1, 2)
-        );
-
         Ok(())
     }
 }

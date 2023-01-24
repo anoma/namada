@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_nonce_key, get_signed_root_key,
+    get_nonce_key, get_signed_root_key,
 };
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{Storage, StoreType};
@@ -13,6 +13,8 @@ use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::EthAddrBook;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
+
+use crate::storage::proof::EthereumProof;
 
 /// This enum is used as a parameter to
 /// [`EthBridgeQueries::must_send_valset_upd`].
@@ -62,16 +64,22 @@ pub trait EthBridgeQueries {
     /// pool.
     fn get_bridge_pool_nonce(&self) -> Uint;
 
-    /// Get the latest nonce with a quorum of signatures
-    fn get_signed_bridge_pool_nonce(&self) -> Uint;
+    /// Get the nonce at a particular block height.
+    fn get_bridge_pool_nonce_at_height(&self, height: BlockHeight) -> Uint;
 
     /// Get the latest root of the Ethereum bridge
     /// pool Merkle tree.
     fn get_bridge_pool_root(&self) -> KeccakHash;
 
-    /// Get the latest signed root of the Ethereum bridge
-    /// pool Merkle tree.
-    fn get_signed_bridge_pool_root(&self) -> KeccakHash;
+    /// Get a quorum of validator signatures over
+    /// the concatenation of the latest bridge pool
+    /// root and nonce.
+    ///
+    /// No value exists when the bridge if first
+    /// started.
+    fn get_signed_bridge_pool_root(
+        &self,
+    ) -> Option<EthereumProof<(KeccakHash, Uint)>>;
 
     /// Get the root of the Ethereum bridge
     /// pool Merkle tree at a given height.
@@ -168,12 +176,16 @@ where
         .expect("Deserializing the nonce from storage should not fail.")
     }
 
-    fn get_signed_bridge_pool_nonce(&self) -> Uint {
+    fn get_bridge_pool_nonce_at_height(&self, height: BlockHeight) -> Uint {
         Uint::try_from_slice(
             &self
-                .read(&get_signed_nonce_key())
+                .db
+                .read_subspace_val_with_height(
+                    &get_nonce_key(),
+                    height,
+                    self.last_height,
+                )
                 .expect("Reading signed Bridge pool nonce shouldn't fail.")
-                .0
                 .expect("Reading signed Bridge pool nonce shouldn't fail."),
         )
         .expect("Deserializing the signed nonce from storage should not fail.")
@@ -183,18 +195,18 @@ where
         self.block.tree.sub_root(&StoreType::BridgePool).into()
     }
 
-    fn get_signed_bridge_pool_root(&self) -> KeccakHash {
-        KeccakHash::try_from_slice(
-            &self
-                .read(&get_signed_root_key())
-                .expect("Reading signed Bridge pool root shouldn't fail.")
-                .0
-                .expect("Reading signed Bridge pool root shouldn't fail."),
-        )
-        .expect(
-            "Deserializing the signed bridge pool root from storage should \
-             not fail.",
-        )
+    fn get_signed_bridge_pool_root(
+        &self,
+    ) -> Option<EthereumProof<(KeccakHash, Uint)>> {
+        self.read(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.")
+            .0
+            .map(|bytes| {
+                BorshDeserialize::try_from_slice(&bytes).expect(
+                    "Deserializing the signed bridge pool root from storage \
+                     should not fail.",
+                )
+            })
     }
 
     fn get_bridge_pool_root_at_height(

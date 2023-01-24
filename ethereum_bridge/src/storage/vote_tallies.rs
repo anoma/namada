@@ -16,12 +16,9 @@ use crate::storage::proof::EthereumProof;
 pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
 
 /// Storage sub-key space reserved to keeping track of the
-/// voting power assigned to Ethereum bridge pool roots.
-pub const BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT: &str = "bp_root";
-
-/// Storage sub-key space reserved to keeping track of the
-/// voting power assigned to Ethereum bridge pool nonces.
-pub const BRIDGE_POOL_NONCE_PREFIX_KEY_SEGMENT: &str = "bp_nonce";
+/// voting power assigned to Ethereum bridge pool roots and
+/// nonces.
+pub const BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT: &str = "bp_root_and_nonce";
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to validator set updates.
@@ -120,9 +117,9 @@ impl From<&Hash> for Keys<EthereumEvent> {
 }
 
 /// A wrapper struct for managing keys related to
-/// tracking signatures over bridge pool roots.
+/// tracking signatures over bridge pool roots and nonces.
 #[derive(Clone)]
-pub struct BridgePoolRoot(pub KeccakHash);
+pub struct BridgePoolRoot(pub EthereumProof<(KeccakHash, Uint)>);
 
 impl BorshSerialize for BridgePoolRoot {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
@@ -132,30 +129,17 @@ impl BorshSerialize for BridgePoolRoot {
 
 impl BorshDeserialize for BridgePoolRoot {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        <KeccakHash as BorshDeserialize>::deserialize(buf).map(BridgePoolRoot)
+        <EthereumProof<(KeccakHash, Uint)> as BorshDeserialize>::deserialize(
+            buf,
+        )
+        .map(BridgePoolRoot)
     }
 }
 
-/// A wrapper struct for managing keys related to
-/// tracking signatures over bridge pool nonces.
-#[derive(Clone)]
-pub struct BridgePoolNonce(pub Uint);
-
-impl BorshSerialize for BridgePoolNonce {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.0, writer)
-    }
-}
-
-impl BorshDeserialize for BridgePoolNonce {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        <Uint as BorshDeserialize>::deserialize(buf).map(BridgePoolNonce)
-    }
-}
-
-impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
-    fn from(hash: BridgePoolRoot) -> Self {
-        let hash = hash.0.to_string();
+impl<'a> From<&'a BridgePoolRoot> for Keys<BridgePoolRoot> {
+    fn from(bp_root: &BridgePoolRoot) -> Self {
+        let hash = [bp_root.0.data.0.to_string(), bp_root.0.data.1.to_string()]
+            .concat();
         let prefix = super::prefix()
             .push(&BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT.to_owned())
             .expect("should always be able to construct this key")
@@ -168,18 +152,9 @@ impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
     }
 }
 
-impl From<BridgePoolNonce> for Keys<BridgePoolNonce> {
-    fn from(nonce: BridgePoolNonce) -> Self {
-        let nonce = nonce.0.to_string();
-        let prefix = super::prefix()
-            .push(&BRIDGE_POOL_NONCE_PREFIX_KEY_SEGMENT.to_owned())
-            .expect("should always be able to construct this key")
-            .push(&nonce)
-            .expect("should always be able to construct this key");
-        Keys {
-            prefix,
-            _phantom: std::marker::PhantomData,
-        }
+impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
+    fn from(bp_root: BridgePoolRoot) -> Self {
+        Self::from(&bp_root)
     }
 }
 

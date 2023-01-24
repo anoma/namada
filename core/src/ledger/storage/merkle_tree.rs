@@ -15,7 +15,7 @@ use thiserror::Error;
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_nonce_key, get_signed_root_key, BridgePoolTree,
+    get_nonce_key, get_signed_root_key, BridgePoolTree,
 };
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
 use crate::ledger::storage::{ics23_specs, types};
@@ -193,7 +193,6 @@ impl StoreType {
                         // storage along with a quorum of validator signatures
                         if *key == get_signed_root_key()
                             || *key == get_nonce_key()
-                            || *key == get_signed_nonce_key()
                         {
                             Ok((StoreType::Account, key.clone()))
                         } else {
