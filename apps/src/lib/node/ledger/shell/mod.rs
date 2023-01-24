@@ -695,9 +695,6 @@ where
                 e
             )
         });
-        // TODO(namada#1041): we check the Ethereum oracle is started on every
-        // block commit, but this is hardly necessary
-        self.start_ethereum_oracle_if_necessary();
 
         let root = self.storage.merkle_root();
         tracing::info!(
