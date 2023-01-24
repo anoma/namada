@@ -16,6 +16,7 @@ use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::ledger::parameters::read_epoch_duration_parameter;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{nam, Address};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
@@ -82,8 +83,9 @@ where
 }
 
 /// Redeems `amount` of the native token for `receiver` from escrow.
+/// TODO: unit/integration tests
 fn redeem_native_token<D, H>(
-    _storage: &mut Storage<D, H>,
+    storage: &mut Storage<D, H>,
     receiver: &Address,
     amount: &token::Amount,
 ) -> Result<BTreeSet<Key>>
@@ -91,9 +93,52 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    tracing::warn!(
-        "Redemption of the wrapped native token is not yet supported - \
-         (receiver - {receiver}, amount - {amount})"
+    let bridge_pool_native_token_balance_key =
+        token::balance_key(&storage.native_token, &BRIDGE_POOL_ADDRESS);
+    let receiver_native_token_balance_key =
+        token::balance_key(&storage.native_token, receiver);
+
+    let bridge_pool_native_token_balance_pre: token::Amount =
+        StorageRead::read(storage, &bridge_pool_native_token_balance_key)?
+            .expect(
+                "Bridge pool must always have an explicit balance of the \
+                 native token",
+            );
+    let receiver_native_token_balance_pre: token::Amount =
+        StorageRead::read(storage, &receiver_native_token_balance_key)?
+            .unwrap_or_default();
+
+    let bridge_pool_native_token_balance_post =
+        bridge_pool_native_token_balance_pre
+            .checked_sub(amount)
+            .expect(
+                "Bridge pool should always have enough native tokens to \
+                 redeem any confirmed transfers",
+            );
+    // TODO: ? how best to handle overflows here?
+    let receiver_native_token_balance_post = receiver_native_token_balance_pre
+        .checked_add(amount)
+        .expect("Receiver's balance is full");
+
+    StorageWrite::write(
+        storage,
+        &bridge_pool_native_token_balance_key,
+        bridge_pool_native_token_balance_post,
+    )?;
+    StorageWrite::write(
+        storage,
+        &receiver_native_token_balance_key,
+        receiver_native_token_balance_post,
+    )?;
+
+    tracing::info!(
+        %amount,
+        %receiver,
+        %bridge_pool_native_token_balance_pre,
+        %bridge_pool_native_token_balance_post,
+        %receiver_native_token_balance_pre,
+        %receiver_native_token_balance_post,
+        "Redeemed native token for wrapped ERC20 token"
     );
     Ok(BTreeSet::default())
 }

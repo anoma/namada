@@ -3,6 +3,7 @@ mod helpers;
 use std::num::NonZeroU64;
 
 use color_eyre::eyre::Result;
+use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -308,11 +309,20 @@ async fn test_wnam_transfer() -> Result<()> {
             },
         },
     };
+    // TODO: for a more realistic e2e test, the bridge pool shouldn't be
+    // initialized with a NAM balance - rather we should establish a balance
+    // there by making a proper `TransferToEthereum` of NAM
+    const BRIDGE_POOL_INITIAL_NAM_BALANCE: u64 = 100;
 
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
         |mut genesis| {
             genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            let native_token = genesis.token.get_mut("NAM").unwrap();
+            native_token.balances.as_mut().unwrap().insert(
+                BRIDGE_POOL_ADDRESS.to_string(),
+                BRIDGE_POOL_INITIAL_NAM_BALANCE,
+            );
             genesis
         },
         None,
@@ -333,13 +343,14 @@ async fn test_wnam_transfer() -> Result<()> {
 
     let bg_ledger = ledger.background();
 
+    const WNAM_TRANSFER_AMOUNT_MICROS: u64 = 10_000_000;
     let wnam_transfer = TransferToNamada {
-        amount: token::Amount::from(100),
+        amount: token::Amount::from(WNAM_TRANSFER_AMOUNT_MICROS),
         asset: ethereum_bridge_params.contracts.native_erc20,
         receiver: address::testing::established_address_1(),
     };
     let transfers = EthereumEvent::TransfersToNamada {
-        nonce: 100.into(),
+        nonce: 1.into(),
         transfers: vec![wnam_transfer.clone()],
     };
 
@@ -353,14 +364,8 @@ async fn test_wnam_transfer() -> Result<()> {
     client.send(&transfers).await?;
 
     let mut ledger = bg_ledger.foreground();
-    let TransferToNamada {
-        receiver, amount, ..
-    } = wnam_transfer;
     // TODO(namada#989): once implemented, check NAM balance of receiver
-    ledger.exp_string(&format!(
-        "Redemption of the wrapped native token is not yet supported - \
-         (receiver - {receiver}, amount - {amount})"
-    ))?;
+    ledger.exp_string("Redeemed native token for wrapped ERC20 token")?;
 
     Ok(())
 }
