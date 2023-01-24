@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
@@ -36,8 +37,7 @@ pub type Council = (Address, Amount);
 pub enum VoteType {
     /// A default vote without Memo
     Default,
-    /// A vote for the PGF council encoding for the proposed multisig addresses
-    /// and the budget cap
+    /// A vote for the PGF council
     PGFCouncil(BTreeSet<Council>),
 }
 
@@ -60,12 +60,69 @@ pub enum ProposalVote {
     Nay,
 }
 
+impl FromStr for ProposalVote {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let splits = s.trim().split_ascii_whitespace();
+        let mut iter = splits.clone().into_iter();
+
+        match iter.next() {
+            Some(t) => match t {
+                "yay" => {
+                    let mut set = BTreeSet::new();
+                    let address_iter =
+                        splits.clone().into_iter().skip(1).step_by(2);
+                    let cap_iter = splits.into_iter().skip(2).step_by(2);
+                    for (address, cap) in
+                        address_iter.zip(cap_iter).map(|(addr, cap)| {
+                            (
+                                addr.to_owned().parse().map_err(
+                                    |e: crate::types::address::DecodeError| {
+                                        e.to_string()
+                                    },
+                                ),
+                                cap.parse::<u64>().map_err(|e| e.to_string()),
+                            )
+                        })
+                    {
+                        set.insert((address?, cap?.into()));
+                    }
+
+                    if set.is_empty() {
+                        Ok(Self::Yay(VoteType::Default))
+                    } else {
+                        Ok(Self::Yay(VoteType::PGFCouncil(set)))
+                    }
+                }
+                "nay" => match iter.next() {
+                    Some(t) => {
+                        Err(format!("Unexpected {} argument for Nay vote", t))
+                    }
+                    None => Ok(Self::Nay),
+                },
+                _ => Err("Expected either yay or nay".to_string()),
+            },
+            None => Err("Expected either yay or nay".to_string()),
+        }
+    }
+}
+
 impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
         match self {
             ProposalVote::Yay(_) => true,
             ProposalVote::Nay => false,
+        }
+    }
+
+    /// Check if vote is of type default
+    pub fn is_default_vote(&self) -> bool {
+        match self {
+            ProposalVote::Yay(VoteType::Default) => true,
+            ProposalVote::Nay => true,
+            _ => false,
         }
     }
 }

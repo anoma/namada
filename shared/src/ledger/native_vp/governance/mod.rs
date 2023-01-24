@@ -201,7 +201,26 @@ where
                 Some(pre_voting_start_epoch),
                 Some(pre_voting_end_epoch),
             ) => {
-                let is_valid_vote_type = proposal_type.eq(&vote_type);
+                if proposal_type != vote_type {
+                    return Ok(false);
+                }
+
+                // Vote type specific checks
+                if let VoteType::PGFCouncil(set) = vote_type {
+                    // Check that all the addresses are established
+                    for (address, _) in set {
+                        match address {
+                            Address::Established(_) => {
+                                // Check that established address exists in storage
+                                let vp_key = Key::validity_predicate(&address);
+                                if !self.ctx.has_key_pre(&vp_key)? {
+                                    return Ok(false);
+                                }
+                            }
+                            _ => return Ok(false),
+                        }
+                    }
+                }
 
                 let is_delegator = self
                     .is_delegator(
@@ -228,8 +247,7 @@ where
                         pre_voting_end_epoch,
                     );
 
-                let is_valid = is_valid_vote_type
-                    && pre_counter > proposal_id
+                let is_valid = pre_counter > proposal_id
                     && current_epoch >= pre_voting_start_epoch
                     && current_epoch <= pre_voting_end_epoch
                     && (is_delegator

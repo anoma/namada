@@ -54,7 +54,7 @@ use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
@@ -1965,6 +1965,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     };
 
     if args.offline {
+        if !args.vote.is_default_vote() {
+            eprintln!(
+                "Wrong vote type for offline proposal. Just vote yay or nay!"
+            );
+            safe_exit(1);
+        }
         let signer = ctx.get(signer);
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
@@ -1990,17 +1996,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         )
         .await;
 
-        let vote = match args.vote.as_str() {
-            "yay" => ProposalVote::Yay(VoteType::Default),
-            "nay" => ProposalVote::Nay,
-            _ => {
-                eprintln!("Vote must be either yay or nay");
-                safe_exit(1);
-            }
-        };
-
-        let offline_vote =
-            OfflineVote::new(&proposal, vote, signer.clone(), &signing_key);
+        let offline_vote = OfflineVote::new(
+            &proposal,
+            args.vote,
+            signer.clone(),
+            &signing_key,
+        );
 
         let proposal_vote_filename = proposal_file_path
             .parent()
@@ -2036,6 +2037,48 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         )
         .await;
 
+        // Check vote type and memo
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: ProposalType =
+            rpc::query_storage_value(&client, &proposal_type_key)
+                .await
+                .expect(&format!(
+                    "Didn't find type of proposal id {} in storage",
+                    proposal_id
+                ));
+
+        if let ProposalVote::Yay(ref vote_type) = args.vote {
+            if &proposal_type != vote_type {
+                eprintln!(
+                    "Expected vote of type {}, found {}",
+                    proposal_type, args.vote
+                );
+                safe_exit(1);
+            } else if let VoteType::PGFCouncil(set) = vote_type {
+                // Check that addresses proposed as council are established and are present in storage
+                for (address, _) in set {
+                    match address {
+                        Address::Established(_) => {
+                            let vp_key = Key::validity_predicate(&address);
+                            if !rpc::query_has_storage_key(&client, &vp_key)
+                                .await
+                            {
+                                eprintln!("Proposed PGF council {} cannot be found in storage", address);
+                                safe_exit(1);
+                            }
+                        }
+                        _ => {
+                            eprintln!(
+                        "PGF council vote contains a non-established address: {}",
+                        address
+                    );
+                            safe_exit(1);
+                        }
+                    }
+                }
+            }
+        }
+
         match proposal_start_epoch {
             Some(epoch) => {
                 if current_epoch < epoch {
@@ -2053,23 +2096,6 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     rpc::get_delegators_delegation(&client, &voter_address)
                         .await;
 
-                let vote = match args.vote.as_str() {
-                    "yay" => match args.memo {
-                        Some(path) => {
-                            let memo_file = std::fs::File::open(path)
-                                .expect("Error while opening vote memo file");
-                            let vote = serde_json::from_reader(memo_file)
-                                .expect("Could not deserialize vote memo");
-                            ProposalVote::Yay(vote)
-                        }
-                        None => ProposalVote::Yay(VoteType::Default),
-                    },
-                    "nay" => ProposalVote::Nay,
-                    _ => {
-                        eprintln!("Vote must be either yay or nay");
-                        safe_exit(1);
-                    }
-                };
                 // Optimize by quering if a vote from a validator
                 // is equal to ours. If so, we can avoid voting, but ONLY if we
                 // are  voting in the last third of the voting
@@ -2089,14 +2115,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         &client,
                         delegations,
                         proposal_id,
-                        &vote,
+                        &args.vote,
                     )
                     .await;
                 }
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote,
+                    vote: args.vote,
                     voter: voter_address,
                     delegations: delegations.into_iter().collect(),
                 };
