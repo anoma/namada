@@ -1622,6 +1622,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Add a new transfer to the Ethereum bridge pool.")
+                .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::EthereumBridgePool>()
         }
     }
@@ -1644,6 +1645,7 @@ pub mod cmds {
                     "Construct a merkle proof that the given transfer is in \
                      the pool.",
                 )
+                .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::EthereumBridgePool>()
         }
     }
