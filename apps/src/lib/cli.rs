@@ -149,15 +149,20 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     pub enum NamadaRelayer {
         EthBridgePool(EthBridgePool),
+        ValidatorSet(ValidatorSet),
     }
 
     impl Cmd for NamadaRelayer {
         fn add_sub(app: App) -> App {
             app.subcommand(EthBridgePool::def())
+                .subcommand(ValidatorSet::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            SubCmd::parse(matches).map(Self::EthBridgePool)
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
+            let validator_set = SubCmd::parse(matches).map(Self::ValidatorSet);
+            eth_bridge_pool.or(validator_set)
         }
     }
 
@@ -1555,7 +1560,7 @@ pub mod cmds {
         }
     }
 
-    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
         /// Construct a proof that a set of transfers is in the pool.
@@ -1659,6 +1664,72 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Get the contents of the Ethereum bridge pool.")
                 .add_args::<args::Query>()
+        }
+    }
+
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
+    #[derive(Clone, Debug)]
+    pub enum ValidatorSet {
+        /// Query an Ethereum ABI encoding of the active validator
+        /// set in Namada, at the given epoch, or the latest
+        /// one, if none is provided..
+        ActiveValidatorSet(args::ActiveValidatorSet),
+    }
+
+    impl Cmd for ValidatorSet {
+        fn add_sub(app: App) -> App {
+            app.subcommand(ActiveValidatorSet::def().display_order(1))
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            let active_validator_set = ActiveValidatorSet::parse(matches)
+                .map(|args| Self::ActiveValidatorSet(args.0));
+            // TODO: proof cmd
+            let proof = None;
+            active_validator_set.or(proof)
+        }
+    }
+
+    impl SubCmd for ValidatorSet {
+        const CMD: &'static str = "validator-set";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            Cmd::parse(matches)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Validator set queries, that return data in a format to \
+                     be consumed by the Namada Ethereum bridge smart \
+                     contracts.",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(ActiveValidatorSet::def().display_order(1))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ActiveValidatorSet(args::ActiveValidatorSet);
+
+    impl SubCmd for ActiveValidatorSet {
+        const CMD: &'static str = "active";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ActiveValidatorSet::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of the active validator \
+                     set in Namada, at the requested epoch, or the current \
+                     one, if no epoch is provided.",
+                )
+                .add_args::<args::ActiveValidatorSet>()
         }
     }
 }
