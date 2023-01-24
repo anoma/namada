@@ -17,7 +17,7 @@ use namada_core::types::vote_extensions::validator_set_update::{
 /// At any given time, an [`EthereumProof`] will be considered
 /// "complete" once a number of signatures pertaining to validators
 /// reflecting more than 2/3 of the bonded stake on Namada is available.
-#[derive(Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct EthereumProof<T> {
     /// The signatures contained in the proof.
     pub signatures: HashMap<EthAddrBook, secp256k1::Signature>,

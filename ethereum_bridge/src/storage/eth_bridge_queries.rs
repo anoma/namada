@@ -18,6 +18,7 @@ use namada_core::types::voting_power::{
 };
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
+
 use crate::storage::proof::EthereumProof;
 
 /// This enum is used as a parameter to

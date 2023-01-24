@@ -96,7 +96,9 @@ where
     partial_proof.attach_signature_batch(multisigned.clone().into_iter().map(
         |signed| {
             (
-                storage.get_eth_addr_book(&signed.data.validator_addr, epoch),
+                storage
+                    .get_eth_addr_book(&signed.data.validator_addr, epoch)
+                    .unwrap(),
                 signed.data.sig,
             )
         },
@@ -573,8 +575,12 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
         };
         expected.0.attach_signature(
-            validators[0].clone(),
-            100.into(),
+            storage
+                .get_eth_addr_book(
+                    &validators[0],
+                    storage.get_epoch(100.into()),
+                )
+                .expect("Test failed"),
             vext.sig.clone(),
         );
         let vext = vext.sign(&keys[&validators[0]].protocol);
@@ -635,12 +641,16 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
+
         vexts.insert(vext);
+        let epoch = storage.get_epoch(100.into());
         let sigs: Vec<_> = vexts
             .iter()
             .map(|s| {
                 (
-                    (s.data.validator_addr.clone(), s.data.block_height),
+                    storage
+                        .get_eth_addr_book(&s.data.validator_addr, epoch)
+                        .expect("Test failed"),
                     s.data.sig.clone(),
                 )
             })
