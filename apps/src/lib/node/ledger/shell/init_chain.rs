@@ -127,13 +127,7 @@ where
         if let Some(config) = genesis.ethereum_bridge_params {
             tracing::debug!("Initializing Ethereum bridge storage.");
             config.init_storage(&mut self.storage);
-            if let ShellMode::Validator {
-                eth_oracle: Some(_),
-                ..
-            } = self.mode
-            {
-                self.ensure_ethereum_oracle_started();
-            }
+            self.start_ethereum_oracle_if_necessary();
         } else {
             self.storage
                 .write(

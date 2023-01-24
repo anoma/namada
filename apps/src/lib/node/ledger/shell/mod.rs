@@ -488,17 +488,11 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
-        if let ShellMode::Validator {
-            eth_oracle: Some(_),
-            ..
-        } = shell.mode
-        {
-            // if we've already synced past genesis, then we may be able to
-            // start the oracle straight away rather than waiting to
-            // sync/commit another block
-            if shell.storage.block.height > BlockHeight(0) {
-                shell.ensure_ethereum_oracle_started();
-            }
+        // if we've already synced past genesis, then we may be able to
+        // start any Ethereum oracle straight away rather than waiting to
+        // sync/commit another block
+        if shell.storage.block.height > BlockHeight(0) {
+            shell.start_ethereum_oracle_if_necessary();
         }
         shell
     }
@@ -703,7 +697,7 @@ where
         });
         // TODO(namada#1041): we check the Ethereum oracle is started on every
         // block commit, but this is hardly necessary
-        self.ensure_ethereum_oracle_started();
+        self.start_ethereum_oracle_if_necessary();
 
         let root = self.storage.merkle_root();
         tracing::info!(
@@ -740,7 +734,7 @@ where
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
     /// to signal it to start, using an initial configuration based on
     /// Ethereum bridge parameters in blockchain storage.
-    fn ensure_ethereum_oracle_started(&mut self) {
+    fn start_ethereum_oracle_if_necessary(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
             eth_oracle_started,
