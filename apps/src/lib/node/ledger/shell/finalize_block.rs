@@ -910,7 +910,7 @@ mod test_finalize_block {
             .0;
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");
-        let root = shell
+        let (root, _) = shell
             .storage
             .get_signed_bridge_pool_root()
             .expect("Test failed");

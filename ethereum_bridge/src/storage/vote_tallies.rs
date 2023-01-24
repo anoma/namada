@@ -9,7 +9,7 @@ use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
-use crate::storage::proof::EthereumProof;
+use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.
@@ -119,7 +119,7 @@ impl From<&Hash> for Keys<EthereumEvent> {
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool roots and nonces.
 #[derive(Clone)]
-pub struct BridgePoolRoot(pub EthereumProof<(KeccakHash, Uint)>);
+pub struct BridgePoolRoot(pub BridgePoolRootProof);
 
 impl BorshSerialize for BridgePoolRoot {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {

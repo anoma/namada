@@ -19,7 +19,7 @@ use namada_core::types::voting_power::{
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
 
-use crate::storage::proof::EthereumProof;
+use crate::storage::proof::BridgePoolRootProof;
 
 /// This enum is used as a parameter to
 /// [`EthBridgeQueries::must_send_valset_upd`].
@@ -80,11 +80,14 @@ pub trait EthBridgeQueries {
     /// the concatenation of the latest bridge pool
     /// root and nonce.
     ///
+    /// Also returns the block height at which the
+    /// a quorum of signatures was collected.
+    ///
     /// No value exists when the bridge if first
     /// started.
     fn get_signed_bridge_pool_root(
         &self,
-    ) -> Option<EthereumProof<(KeccakHash, Uint)>>;
+    ) -> Option<(BridgePoolRootProof, BlockHeight)>;
 
     /// Get the root of the Ethereum bridge
     /// pool Merkle tree at a given height.
@@ -135,7 +138,11 @@ pub trait EthBridgeQueries {
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
 
     /// Query the active [`ValidatorSetArgs`] at the given [`Epoch`].
-    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs;
+    /// Also returns a map of each validator's voting power.
+    fn get_validator_set_args(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap);
 }
 
 impl<D, H> EthBridgeQueries for Storage<D, H>
@@ -221,7 +228,7 @@ where
 
     fn get_signed_bridge_pool_root(
         &self,
-    ) -> Option<EthereumProof<(KeccakHash, Uint)>> {
+    ) -> Option<(BridgePoolRootProof, BlockHeight)> {
         self.read(&get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.")
             .0
@@ -336,7 +343,10 @@ where
         ))
     }
 
-    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs {
+    fn get_validator_set_args(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap) {
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
 
         let voting_powers_map: VotingPowersMap = self
@@ -357,10 +367,13 @@ where
             })
             .unzip();
 
-        ValidatorSetArgs {
-            epoch,
-            validators,
-            voting_powers,
-        }
+        (
+            ValidatorSetArgs {
+                epoch,
+                validators,
+                voting_powers,
+            },
+            voting_powers_map,
+        )
     }
 }

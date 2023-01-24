@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use borsh::BorshSerialize;
 use eyre::Result;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
@@ -15,7 +16,7 @@ use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{calculate_new, Votes};
 use crate::protocol::transactions::{utils, votes, ChangedKeys};
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
-use crate::storage::proof::EthereumProof;
+use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::vote_tallies::{self, BridgePoolRoot};
 
 /// Applies a tally of signatures on over the Ethereum
@@ -52,13 +53,20 @@ where
     // if the root is confirmed, update storage and add
     // relevant key to changed.
     if confirmed {
-        let proof_bytes = storage
-            .read(&vote_tallies::Keys::from(&partial_proof).body())?
-            .0
-            .expect("This key should be populated.");
-        storage.write(&get_signed_root_key(), proof_bytes).expect(
-            "Writing a signed bridge pool root to storage should not fail.",
-        );
+        let proof = votes::storage::read_body(
+            storage,
+            &vote_tallies::Keys::from(&partial_proof),
+        )?;
+        storage
+            .write(
+                &get_signed_root_key(),
+                (proof, storage.last_height)
+                    .try_to_vec()
+                    .expect("Serializing a Bridge pool root shouldn't fail."),
+            )
+            .expect(
+                "Writing a signed bridge pool root to storage should not fail.",
+            );
         changed.insert(get_signed_root_key());
     }
 
@@ -92,7 +100,7 @@ where
     let epoch = storage.get_epoch(height);
     let root = storage.get_bridge_pool_root_at_height(height);
     let nonce = storage.get_bridge_pool_nonce_at_height(height);
-    let mut partial_proof = EthereumProof::new((root, nonce));
+    let mut partial_proof = BridgePoolRootProof::new((root, nonce));
     partial_proof.attach_signature_batch(multisigned.clone().into_iter().map(
         |signed| {
             (
@@ -253,7 +261,7 @@ mod test_apply_bp_roots_to_storage {
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
         let expected: BTreeSet<Key> = bp_root_key.into_iter().collect();
         assert_eq!(expected, changed_keys);
@@ -312,7 +320,7 @@ mod test_apply_bp_roots_to_storage {
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut storage, vexts).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
 
         let mut expected: BTreeSet<Key> = bp_root_key.into_iter().collect();
@@ -356,7 +364,7 @@ mod test_apply_bp_roots_to_storage {
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
         let expected: BTreeSet<Key> = [
             bp_root_key.seen(),
@@ -381,7 +389,7 @@ mod test_apply_bp_roots_to_storage {
         let nonce = storage.get_bridge_pool_nonce();
         let to_sign = [root.0, nonce.clone().to_bytes()].concat();
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
 
         let hot_key = &keys[&validators[0]].eth_bridge;
@@ -441,7 +449,7 @@ mod test_apply_bp_roots_to_storage {
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
 
         let vext = bridge_pool_roots::Vext {
@@ -502,7 +510,7 @@ mod test_apply_bp_roots_to_storage {
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            EthereumProof::new((root, nonce)),
+            BridgePoolRootProof::new((root, nonce)),
         ));
 
         let vext = bridge_pool_roots::Vext {
@@ -566,7 +574,8 @@ mod test_apply_bp_roots_to_storage {
         let nonce = storage.get_bridge_pool_nonce();
         let to_sign = [root.0, nonce.clone().to_bytes()].concat();
         let hot_key = &keys[&validators[0]].eth_bridge;
-        let mut expected = BridgePoolRoot(EthereumProof::new((root, nonce)));
+        let mut expected =
+            BridgePoolRoot(BridgePoolRootProof::new((root, nonce)));
         let bp_root_key = vote_tallies::Keys::from(&expected);
 
         let vext = bridge_pool_roots::Vext {
@@ -586,16 +595,15 @@ mod test_apply_bp_roots_to_storage {
         let vext = vext.sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
 
-        let proof: EthereumProof<(KeccakHash, Uint)> =
-            BorshDeserialize::try_from_slice(
-                storage
-                    .read(&bp_root_key.body())
-                    .expect("Test failed")
-                    .0
-                    .expect("Test failed")
-                    .as_slice(),
-            )
-            .expect("Test failed");
+        let proof: BridgePoolRootProof = BorshDeserialize::try_from_slice(
+            storage
+                .read(&bp_root_key.body())
+                .expect("Test failed")
+                .0
+                .expect("Test failed")
+                .as_slice(),
+        )
+        .expect("Test failed");
         assert_eq!(proof.data, expected.0.data);
         assert_eq!(proof.signatures, expected.0.signatures);
     }
@@ -657,7 +665,7 @@ mod test_apply_bp_roots_to_storage {
             .collect();
 
         _ = apply_derived_tx(&mut storage, vexts).expect("Test failed");
-        let proof: EthereumProof<(KeccakHash, Uint)> =
+        let (proof, _): (BridgePoolRootProof, BlockHeight) =
             BorshDeserialize::try_from_slice(
                 storage
                     .read(&get_signed_root_key())
@@ -667,7 +675,7 @@ mod test_apply_bp_roots_to_storage {
                     .as_slice(),
             )
             .expect("Test failed");
-        let mut expected = EthereumProof::new((root, nonce));
+        let mut expected = BridgePoolRootProof::new((root, nonce));
         expected.attach_signature_batch(sigs);
         assert_eq!(proof.signatures, expected.signatures);
         assert_eq!(proof.data, expected.data);

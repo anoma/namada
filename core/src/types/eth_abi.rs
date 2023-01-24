@@ -61,6 +61,15 @@ impl<T> EncodeCell<T> {
         }
     }
 
+    /// Here the type information is not compiler deduced,
+    /// proceed with caution!
+    pub fn new_from<const N: usize>(tokens: [Token; N]) -> Self {
+        Self {
+            encoded_data: ethabi::encode(&tokens),
+            _marker: PhantomData,
+        }
+    }
+
     /// Return the underlying ABI encoded value.
     pub fn into_inner(self) -> Vec<u8> {
         self.encoded_data
