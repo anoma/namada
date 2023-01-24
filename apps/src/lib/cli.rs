@@ -80,6 +80,9 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let node = SubCmd::parse(matches).map(Self::Node);
             let client = SubCmd::parse(matches).map(Self::Client);
+            let relayer = SubCmd::parse(matches).map(Self::Relayer);
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
@@ -93,6 +96,8 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
+                .or(relayer)
+                .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
@@ -218,19 +223,19 @@ pub mod cmds {
                 // Ethereum bridge pool
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryTransfers::def().display_order(3))
-                .subcommand(QueryConversions::def().display_order(3))
-                .subcommand(QueryBlock::def().display_order(3))
-                .subcommand(QueryBalance::def().display_order(3))
-                .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryBondedStake::def().display_order(3))
-                .subcommand(QuerySlashes::def().display_order(3))
-                .subcommand(QueryResult::def().display_order(3))
-                .subcommand(QueryRawBytes::def().display_order(3))
-                .subcommand(QueryProposal::def().display_order(3))
-                .subcommand(QueryProposalResult::def().display_order(3))
-                .subcommand(QueryProtocolParameters::def().display_order(3))
+                .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryTransfers::def().display_order(4))
+                .subcommand(QueryConversions::def().display_order(4))
+                .subcommand(QueryBlock::def().display_order(4))
+                .subcommand(QueryBalance::def().display_order(4))
+                .subcommand(QueryBonds::def().display_order(4))
+                .subcommand(QueryBondedStake::def().display_order(4))
+                .subcommand(QuerySlashes::def().display_order(4))
+                .subcommand(QueryResult::def().display_order(4))
+                .subcommand(QueryRawBytes::def().display_order(4))
+                .subcommand(QueryProposal::def().display_order(4))
+                .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -1575,7 +1580,6 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app.subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
-                .setting(AppSettings::SubcommandRequiredElseHelp)
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -1591,7 +1595,7 @@ pub mod cmds {
         const CMD: &'static str = "ethereum-bridge-pool";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            Cmd::parse(matches)
+            matches.subcommand_matches(Self::CMD).and_then(Cmd::parse)
         }
 
         fn def() -> App {
@@ -1678,26 +1682,17 @@ pub mod cmds {
         ActiveValidatorSet(args::ActiveValidatorSet),
     }
 
-    impl Cmd for ValidatorSet {
-        fn add_sub(app: App) -> App {
-            app.subcommand(ActiveValidatorSet::def().display_order(1))
-                .setting(AppSettings::SubcommandRequiredElseHelp)
-        }
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            let active_validator_set = ActiveValidatorSet::parse(matches)
-                .map(|args| Self::ActiveValidatorSet(args.0));
-            // TODO: proof cmd
-            let proof = None;
-            active_validator_set.or(proof)
-        }
-    }
-
     impl SubCmd for ValidatorSet {
         const CMD: &'static str = "validator-set";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            Cmd::parse(matches)
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let active_validator_set = ActiveValidatorSet::parse(matches)
+                    .map(|args| Self::ActiveValidatorSet(args.0));
+                // TODO: proof cmd
+                let proof = None;
+                active_validator_set.or(proof)
+            })
         }
 
         fn def() -> App {
