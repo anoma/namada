@@ -5,6 +5,7 @@ use std::ops::Add;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use ethabi::ethereum_types::H160;
 use ethabi::{Token, Uint as ethUint};
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
@@ -115,6 +116,18 @@ impl EthAddress {
     /// e.g. "0x6b175474e89094c44da98b954eedeac495271d0f"
     pub fn to_canonical(&self) -> String {
         format!("{:?}", ethabi::ethereum_types::Address::from(&self.0))
+    }
+}
+
+impl From<H160> for EthAddress {
+    fn from(H160(addr): H160) -> Self {
+        Self(addr)
+    }
+}
+
+impl From<EthAddress> for H160 {
+    fn from(EthAddress(addr): EthAddress) -> Self {
+        Self(addr)
     }
 }
 
