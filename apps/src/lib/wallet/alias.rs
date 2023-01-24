@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
 /// `PartialEq` instance is case-insensitive.
-#[derive(Clone, Debug, Default, Deserialize, PartialOrd, Ord, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialOrd, Ord, Eq)]
 #[serde(transparent)]
 pub struct Alias(String);
 
@@ -76,6 +76,12 @@ impl<'a> From<&'a Alias> for String {
 impl Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.normalize().fmt(f)
+    }
+}
+
+impl Default for Alias {
+    fn default() -> Self {
+        Alias(String::from("Unknown Alias"))
     }
 }
 

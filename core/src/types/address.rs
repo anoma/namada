@@ -557,22 +557,6 @@ pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
 }
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
-/// informal currency codes.
-pub fn tokens() -> HashMap<Address, &'static str> {
-    vec![
-        (nam(), "NAM"),
-        (btc(), "BTC"),
-        (eth(), "ETH"),
-        (dot(), "DOT"),
-        (schnitzel(), "Schnitzel"),
-        (apfel(), "Apfel"),
-        (kartoffel(), "Kartoffel"),
-    ]
-    .into_iter()
-    .collect()
-}
-
-/// Temporary helper for testing, a hash map of tokens addresses with their
 /// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
 /// are dispensed for every b possessed tokens.
 pub fn masp_rewards() -> HashMap<Address, (u64, u64)> {

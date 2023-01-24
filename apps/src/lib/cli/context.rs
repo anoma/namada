@@ -1,5 +1,6 @@
 //! CLI input types can be used for command arguments
 
+use std::collections::HashSet;
 use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -16,7 +17,7 @@ use crate::client::tx::ShieldedContext;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
-use crate::wallet::Wallet;
+use crate::wallet::{AddressVpType, Wallet};
 use crate::wasm_loader;
 
 /// Env. var to set chain ID
@@ -186,6 +187,11 @@ impl Context {
     /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
         wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
+    }
+
+    /// Get address with vp type
+    pub fn tokens(&self) -> HashSet<Address> {
+        self.wallet.get_addresses_with_vp_type(AddressVpType::Token)
     }
 }
 

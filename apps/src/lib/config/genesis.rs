@@ -876,7 +876,9 @@ pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
 }
 #[cfg(feature = "dev")]
 pub fn genesis() -> Genesis {
-    use namada::types::address;
+    use namada::types::address::{
+        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,
+    };
     use rust_decimal_macros::dec;
 
     use crate::wallet;
@@ -982,7 +984,21 @@ pub fn genesis() -> Genesis {
         ),
         ((&validator.account_key).into(), default_key_tokens),
     ]);
-    let token_accounts = address::tokens()
+    /// Deprecated function, soon to be deleted. Generates default tokens
+    fn tokens() -> HashMap<Address, &'static str> {
+        vec![
+            (nam(), "NAM"),
+            (btc(), "BTC"),
+            (eth(), "ETH"),
+            (dot(), "DOT"),
+            (schnitzel(), "Schnitzel"),
+            (apfel(), "Apfel"),
+            (kartoffel(), "Kartoffel"),
+        ]
+        .into_iter()
+        .collect()
+    }
+    let token_accounts = tokens()
         .into_keys()
         .map(|address| TokenAccount {
             address,
