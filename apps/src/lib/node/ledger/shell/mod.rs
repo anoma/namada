@@ -491,7 +491,7 @@ where
         // if we've already synced past genesis, then we may be able to
         // start any Ethereum oracle straight away rather than waiting to
         // sync/commit another block
-        if shell.storage.block.height > BlockHeight(0) {
+        if shell.storage.last_height > BlockHeight(0) {
             shell.start_ethereum_oracle_if_necessary();
         }
         shell
