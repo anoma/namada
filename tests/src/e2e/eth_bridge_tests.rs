@@ -12,12 +12,13 @@ use namada::types::address::wnam;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::EventsEndpointClient;
-use crate::e2e::helpers::get_actor_rpc;
+use crate::e2e::helpers::{find_balance, get_actor_rpc};
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
     wasm_abs_path, ALBERT, BERTHA, NAM, TX_WRITE_STORAGE_KEY_WASM,
@@ -314,11 +315,14 @@ async fn test_wnam_transfer() -> Result<()> {
     // there by making a proper `TransferToEthereum` of NAM
     const BRIDGE_POOL_INITIAL_NAM_BALANCE: u64 = 100;
 
+    let mut native_token_address = None;
     // use a network-config.toml with eth bridge parameters in it
     let test = setup::network(
         |mut genesis| {
             genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
             let native_token = genesis.token.get_mut("NAM").unwrap();
+            native_token_address =
+                Some(native_token.address.as_ref().unwrap().clone());
             native_token.balances.as_mut().unwrap().insert(
                 BRIDGE_POOL_ADDRESS.to_string(),
                 BRIDGE_POOL_INITIAL_NAM_BALANCE,
@@ -327,6 +331,7 @@ async fn test_wnam_transfer() -> Result<()> {
         },
         None,
     )?;
+    let native_token_address = Address::decode(native_token_address.unwrap())?;
 
     set_ethereum_bridge_mode(
         &test,
@@ -364,8 +369,28 @@ async fn test_wnam_transfer() -> Result<()> {
     client.send(&transfers).await?;
 
     let mut ledger = bg_ledger.foreground();
-    // TODO(namada#989): once implemented, check NAM balance of receiver
     ledger.exp_string("Redeemed native token for wrapped ERC20 token")?;
+
+    // check NAM balance of receiver and bridge pool
+    let receiver_balance = find_balance(
+        &test,
+        &Who::Validator(0),
+        &native_token_address,
+        &wnam_transfer.receiver,
+    )?;
+    assert_eq!(receiver_balance, wnam_transfer.amount);
+
+    let bridge_pool_balance = find_balance(
+        &test,
+        &Who::Validator(0),
+        &native_token_address,
+        &BRIDGE_POOL_ADDRESS,
+    )?;
+    assert_eq!(
+        bridge_pool_balance,
+        token::Amount::from(BRIDGE_POOL_INITIAL_NAM_BALANCE * 1_000_000)
+            - wnam_transfer.amount
+    );
 
     Ok(())
 }
