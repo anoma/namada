@@ -498,6 +498,37 @@ mod tests {
         let zero = Amount::from(0);
         assert_eq!("0", zero.to_string());
     }
+
+    #[test]
+    fn test_amount_checked_sub() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_sub(zero), Some(zero));
+        assert_eq!(zero.checked_sub(one), None);
+        assert_eq!(zero.checked_sub(max), None);
+
+        assert_eq!(max.checked_sub(zero), Some(max));
+        assert_eq!(max.checked_sub(one), Some(max - one));
+        assert_eq!(max.checked_sub(max), Some(zero));
+    }
+
+    #[test]
+    fn test_amount_checked_add() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_add(zero), Some(zero));
+        assert_eq!(zero.checked_add(one), Some(one));
+        assert_eq!(zero.checked_add(max - one), Some(max - one));
+        assert_eq!(zero.checked_add(max), Some(max));
+
+        assert_eq!(max.checked_add(zero), Some(max));
+        assert_eq!(max.checked_add(one), None);
+        assert_eq!(max.checked_add(max), None);
+    }
 }
 
 /// Helpers for testing with addresses.
