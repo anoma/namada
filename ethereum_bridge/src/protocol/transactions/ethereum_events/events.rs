@@ -42,6 +42,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    // TODO: double check and/or otherwise make explicit link between ERC20
+    // amounts and our Amount micros units
     match &event {
         EthereumEvent::TransfersToNamada { transfers, .. } => {
             act_on_transfers_to_namada(storage, transfers)
@@ -140,7 +142,10 @@ where
         %receiver_native_token_balance_post,
         "Redeemed native token for wrapped ERC20 token"
     );
-    Ok(BTreeSet::default())
+    Ok(BTreeSet::from([
+        bridge_pool_native_token_balance_key,
+        receiver_native_token_balance_key,
+    ]))
 }
 
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
@@ -335,6 +340,7 @@ mod tests {
     use namada_core::ledger::parameters::{
         update_epoch_parameter, EpochDuration,
     };
+    use eyre::Result;
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::gen_established_address;
@@ -724,5 +730,45 @@ mod tests {
                 assert_eq!(escrow_balance, Amount::from(0));
             }
         }
+    }
+
+    #[test]
+    fn test_redeem_native_token() -> Result<()> {
+        let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let receiver = address::testing::established_address_1();
+        let amount = Amount::from(100);
+
+        let bridge_pool_initial_balance = Amount::from(100_000_000);
+        let bridge_pool_native_token_balance_key =
+            token::balance_key(&storage.native_token, &BRIDGE_POOL_ADDRESS);
+        StorageWrite::write(
+            &mut storage,
+            &bridge_pool_native_token_balance_key,
+            bridge_pool_initial_balance,
+        )?;
+        let receiver_native_token_balance_key =
+            token::balance_key(&storage.native_token, &receiver);
+
+        let changed_keys =
+            redeem_native_token(&mut storage, &receiver, &amount)?;
+
+        assert_eq!(
+            changed_keys,
+            BTreeSet::from([
+                bridge_pool_native_token_balance_key.clone(),
+                receiver_native_token_balance_key.clone()
+            ])
+        );
+        assert_eq!(
+            StorageRead::read(&storage, &bridge_pool_native_token_balance_key)?,
+            Some(bridge_pool_initial_balance - amount)
+        );
+        assert_eq!(
+            StorageRead::read(&storage, &receiver_native_token_balance_key)?,
+            Some(amount)
+        );
+
+        Ok(())
     }
 }
