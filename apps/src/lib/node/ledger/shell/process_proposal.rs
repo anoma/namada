@@ -928,7 +928,7 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
 
         let tx = Tx::new(
@@ -1053,7 +1053,7 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
 
         // Add unshielded balance for fee payment
@@ -1064,7 +1064,7 @@ mod test_process_proposal {
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::from(1000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
 
         let tx = Tx::new(
