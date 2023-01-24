@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs;
 use std::io::prelude::*;
 use std::io::{self, Write};
@@ -69,6 +70,14 @@ pub struct Store {
     pkhs: HashMap<PublicKeyHash, Alias>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
+    /// Namada address vp type
+    address_vp_types: HashMap<AddressVpType, HashSet<Address>>,
+}
+
+/// Grouping of addresses by validity predicate.
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+pub enum AddressVpType {
+    Token,
 }
 
 #[derive(Error, Debug)]
@@ -669,6 +678,29 @@ impl Store {
         });
     }
 
+    pub fn get_addresses_with_vp_type(
+        &self,
+        vp_type: AddressVpType,
+    ) -> HashSet<Address> {
+        // defaults to an empty set
+        self.address_vp_types
+            .get(&vp_type)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn add_vp_type_to_address(
+        &mut self,
+        vp_type: AddressVpType,
+        address: Address,
+    ) {
+        // defaults to an empty set
+        self.address_vp_types
+            .entry(vp_type)
+            .or_default()
+            .insert(address);
+    }
+
     fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
         toml::from_slice(&data)
     }
@@ -737,6 +769,46 @@ const FILE_NAME: &str = "wallet.toml";
 /// Get the path to the wallet store.
 pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
     store_dir.as_ref().join(FILE_NAME)
+}
+
+impl Display for AddressVpType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AddressVpType::Token => write!(f, "token"),
+        }
+    }
+}
+
+impl FromStr for AddressVpType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "token" => Ok(Self::Token),
+            _ => Err("unexpected address VP type"),
+        }
+    }
+}
+
+impl Serialize for AddressVpType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_string().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for AddressVpType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let raw: String = Deserialize::deserialize(deserializer)?;
+        Self::from_str(&raw).map_err(D::Error::custom)
+    }
 }
 
 /// Generate a new secret key.
