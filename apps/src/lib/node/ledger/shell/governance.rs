@@ -213,3 +213,30 @@ where
 
     Ok(proposals_result)
 }
+
+#[cfg(test)]
+mod tests {
+    use eyre::Result;
+
+    use super::*;
+
+    /// Tests that if no governance proposals are present in
+    /// `shell.proposal_data`, then no proposals are executed.
+    #[test]
+    fn test_no_governance_proposals() -> Result<()> {
+        let (mut shell, _) = test_utils::setup();
+
+        assert!(shell.proposal_data.is_empty());
+
+        let mut resp = shim::response::FinalizeBlock::default();
+
+        let proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+
+        assert!(proposals_result.passed.is_empty());
+        assert!(proposals_result.rejected.is_empty());
+        assert!(resp.events.is_empty());
+
+        Ok(())
+    }
+}
