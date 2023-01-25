@@ -322,15 +322,12 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     fn update_tree(
         &mut self,
         store_type: &StoreType,
-        height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        let sub_root = self.tree_mut(store_type).subtree_update(
-            height,
-            key,
-            value.as_ref(),
-        )?;
+        let sub_root = self
+            .tree_mut(store_type)
+            .subtree_update(key, value.as_ref())?;
         // update the base tree with the updated sub root without hashing
         if *store_type != StoreType::Base {
             let base_key = H::hash(store_type.to_string());
@@ -345,10 +342,10 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.tree(&store_type).subtree_has_key(&sub_key)
     }
 
-    /// Check if the key exists in the tree
-    pub fn get_inserted_height(&self, key: &Key) -> Result<BlockHeight> {
+    /// Get the value in the tree
+    pub fn get(&self, key: &Key) -> Result<Vec<u8>> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.tree(&store_type).subtree_inserted_height(&sub_key)
+        self.tree(&store_type).subtree_get(&sub_key)
     }
 
     /// Update the tree with the given key and value
@@ -359,7 +356,14 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         value: impl AsRef<[u8]>,
     ) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        self.update_tree(&store_type, height, &sub_key, value)
+        match store_type {
+            StoreType::BridgePool => self.update_tree(
+                &store_type,
+                &sub_key,
+                height.try_to_vec().expect("Encoding failed"),
+            ),
+            _ => self.update_tree(&store_type, &sub_key, value),
+        }
     }
 
     /// Delete the value corresponding to the given key

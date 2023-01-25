@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use eyre::Result;
+use namada_core::hints::likely;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
 };
@@ -127,13 +128,12 @@ where
     for event in transfers {
         let pending_transfer = event.into();
         let key = get_pending_key(&pending_transfer);
-        if storage.has_key(&key)?.0 {
+        if likely(storage.has_key(&key)?.0) {
             _ = storage.delete(&key)?;
             _ = pending_keys.remove(&key);
         } else {
-            return Err(eyre::eyre!(
-                "The transfer doesn't exist in the bridge pool"
-            ));
+            // The transfer should exist in the bridge pool
+            unreachable!()
         }
 
         _ = changed_keys.insert(key);
@@ -153,7 +153,8 @@ where
             BlockHeight(storage.block.height.0 - timeout_offset);
         for key in pending_keys {
             let inserted_height =
-                storage.block.tree.get_inserted_height(&key)?;
+                BlockHeight::try_from_slice(&storage.block.tree.get(&key)?)
+                    .expect("BlockHeight should be decoded");
             if inserted_height <= timeout_height {
                 let mut keys = refund_transfer(storage, key)?;
                 changed_keys.append(&mut keys);

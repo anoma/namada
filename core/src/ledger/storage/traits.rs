@@ -5,7 +5,7 @@ use std::fmt;
 
 use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{Key as TreeKey, H256};
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
@@ -28,7 +28,7 @@ pub trait SubTreeRead {
     /// Check if a key is present in the sub-tree
     fn subtree_has_key(&self, key: &Key) -> Result<bool, Error>;
     /// Get the height at which the key is inserted
-    fn subtree_inserted_height(&self, key: &Key) -> Result<BlockHeight, Error>;
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error>;
     /// Get a membership proof for various key-value pairs
     fn subtree_membership_proof(
         &self,
@@ -43,7 +43,6 @@ pub trait SubTreeWrite {
     /// Add a key-value pair to the sub-tree
     fn subtree_update(
         &mut self,
-        height: BlockHeight,
         key: &Key,
         value: StorageBytes,
     ) -> Result<Hash, Error>;
@@ -63,11 +62,11 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
         }
     }
 
-    fn subtree_inserted_height(
-        &self,
-        _key: &Key,
-    ) -> Result<BlockHeight, Error> {
-        Err(Error::MerkleTree("SMT can't store the height".to_string()))
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error> {
+        match self.get(&H::hash(key.to_string()).into()) {
+            Ok(hash) => Ok(hash.to_vec()),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
     }
 
     fn subtree_membership_proof(
@@ -101,7 +100,6 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
 impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     fn subtree_update(
         &mut self,
-        _height: BlockHeight,
         key: &Key,
         value: StorageBytes,
     ) -> Result<Hash, Error> {
@@ -132,11 +130,12 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
         }
     }
 
-    fn subtree_inserted_height(
-        &self,
-        _key: &Key,
-    ) -> Result<BlockHeight, Error> {
-        Err(Error::MerkleTree("AMT can't store the height".to_string()))
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        match self.get(&key) {
+            Ok(tree_bytes) => Ok(tree_bytes.into()),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
     }
 
     fn subtree_membership_proof(
@@ -168,7 +167,6 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
 impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
     fn subtree_update(
         &mut self,
-        _height: BlockHeight,
         key: &Key,
         value: StorageBytes,
     ) -> Result<Hash, Error> {
@@ -198,9 +196,11 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
-    fn subtree_inserted_height(&self, key: &Key) -> Result<BlockHeight, Error> {
-        self.get_inserted_height(key)
-            .map_err(|err| Error::MerkleTree(err.to_string()))
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error> {
+        match self.get(key) {
+            Ok(height) => Ok(height.try_to_vec().expect("Encoding failed")),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
     }
 
     fn subtree_membership_proof(
@@ -221,11 +221,12 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
 impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
     fn subtree_update(
         &mut self,
-        height: BlockHeight,
         key: &Key,
-        _: StorageBytes,
+        value: StorageBytes,
     ) -> Result<Hash, Error> {
-        self.insert_key(height, key)
+        let height = BlockHeight::try_from_slice(value)
+            .map_err(|err| Error::MerkleTree(err.to_string()))?;
+        self.insert_key(key, height)
             .map_err(|err| Error::MerkleTree(err.to_string()))
     }
 
