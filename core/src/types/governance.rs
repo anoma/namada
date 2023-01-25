@@ -65,7 +65,7 @@ impl FromStr for ProposalVote {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splits = s.trim().split_ascii_whitespace();
-        let mut iter = splits.clone().into_iter();
+        let mut iter = splits.clone();
 
         match iter.next() {
             Some(t) => match t {
@@ -119,11 +119,10 @@ impl ProposalVote {
 
     /// Check if vote is of type default
     pub fn is_default_vote(&self) -> bool {
-        match self {
-            ProposalVote::Yay(VoteType::Default) => true,
-            ProposalVote::Nay => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ProposalVote::Yay(VoteType::Default) | ProposalVote::Nay
+        )
     }
 }
 

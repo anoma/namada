@@ -2835,7 +2835,8 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // FIXME: test not 1/3 of total voting power (vote with just the delegator)
-    // FIXME: test majority when 1/3 of votes (vote with both BERTHA and validator 0 anche check that validtor 0 won)
+    // FIXME: test majority when 1/3 of votes (vote with both BERTHA and
+    // validator 0 anche check that validtor 0 won)
 
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
