@@ -34,6 +34,7 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 pub use parameters::PosParams;
 use rust_decimal::Decimal;
+use storage::into_tm_voting_power;
 use thiserror::Error;
 use types::{
     ActiveValidator, Bonds, CommissionRates, GenesisValidator, Slash,
@@ -770,6 +771,7 @@ pub trait PosBase {
     fn validator_set_update(
         &self,
         current_epoch: Epoch,
+        params: &PosParams,
         f: impl FnMut(ValidatorSetUpdate),
     ) {
         let current_epoch: Epoch = current_epoch;
@@ -805,14 +807,26 @@ pub trait PosBase {
                 if let (Some(prev_epoch), Some(prev_validators)) =
                     (previous_epoch, prev_validators)
                 {
-                    if prev_validators.active.contains(validator) {
+                    let prev_validator_stake =
+                        self.validator_stake(&validator.address, prev_epoch);
+                    let tm_vp = into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        validator.bonded_stake,
+                    );
+                    if prev_validators.active.contains(validator)
+                        || tm_vp
+                            == into_tm_voting_power(
+                                params.tm_votes_per_token,
+                                prev_validator_stake,
+                            )
+                    {
                         println!(
                             "skipping validator update, still the same {}",
                             validator.address
                         );
                         return None;
                     }
-                    if validator.bonded_stake == 0 {
+                    if tm_vp == 0 {
                         // If the validator was `Pending` in the previous epoch,
                         // it means that it just was just added to validator
                         // set. We have to skip it, because it's 0.
@@ -851,10 +865,22 @@ pub trait PosBase {
                 if let (Some(prev_epoch), Some(prev_validators)) =
                     (previous_epoch, prev_validators)
                 {
-                    if prev_validators.inactive.contains(validator) {
+                    let prev_validator_stake =
+                        self.validator_stake(&validator.address, prev_epoch);
+                    let tm_vp = into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        validator.bonded_stake,
+                    );
+                    if prev_validators.inactive.contains(validator)
+                        || tm_vp
+                            == into_tm_voting_power(
+                                params.tm_votes_per_token,
+                                prev_validator_stake,
+                            )
+                    {
                         return None;
                     }
-                    if validator.bonded_stake == 0 {
+                    if tm_vp == 0 {
                         // If the validator was `Pending` in the previous epoch,
                         // it means that it just was just added to validator
                         // set. We have to skip it, because it's 0.
@@ -936,6 +962,25 @@ pub trait PosBase {
             &Self::POS_SLASH_POOL_ADDRESS,
         );
         Ok(())
+    }
+
+    /// Get the total stake of a validator at the given epoch or current when
+    /// `None`. The total stake is a sum of validator's self-bonds and
+    /// delegations to their address.
+    fn validator_stake(
+        &self,
+        validator: &Address,
+        epoch: Epoch,
+    ) -> token::Amount {
+        let deltas = self.read_validator_deltas(validator);
+        let total_stake = deltas.and_then(|deltas| deltas.get(epoch)).and_then(
+            |total_stake| {
+                let sum: i128 = total_stake;
+                let sum: u64 = sum.try_into().ok()?;
+                Some(sum.into())
+            },
+        );
+        total_stake.unwrap_or_default()
     }
 }
 
