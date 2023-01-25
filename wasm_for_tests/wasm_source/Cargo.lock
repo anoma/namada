@@ -1939,9 +1939,9 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "subtle-encoding",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "tendermint-light-client-verifier",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "tendermint-testgen",
  "time",
  "tracing",
@@ -1957,7 +1957,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "tonic",
 ]
 
@@ -2000,10 +2000,10 @@ dependencies = [
  "sha2 0.10.6",
  "signature",
  "subtle-encoding",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "tendermint-light-client",
  "tendermint-light-client-verifier",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
@@ -2502,8 +2502,8 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client)",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client)",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tokio",
  "toml",
@@ -2551,8 +2551,8 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "sparse-merkle-tree",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -2600,9 +2600,9 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "tendermint-config",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "tendermint-rpc",
  "test-log",
  "tokio",
@@ -4100,34 +4100,6 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
-dependencies = [
- "async-trait",
- "bytes",
- "ed25519",
- "ed25519-dalek",
- "flex-error",
- "futures",
- "num-traits",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.9.9",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client)",
- "time",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.23.6"
 source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
  "async-trait",
@@ -4150,7 +4122,7 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "time",
  "zeroize",
 ]
@@ -4163,7 +4135,7 @@ dependencies = [
  "flex-error",
  "serde",
  "serde_json",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "toml",
  "url",
 ]
@@ -4182,7 +4154,7 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "static_assertions",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "tendermint-light-client-verifier",
  "tendermint-rpc",
  "time",
@@ -4197,24 +4169,7 @@ dependencies = [
  "derive_more",
  "flex-error",
  "serde",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
- "time",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?branch=murisi/trait-client#679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"
-dependencies = [
- "bytes",
- "flex-error",
- "num-derive",
- "num-traits",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
+ "tendermint",
  "time",
 ]
 
@@ -4256,9 +4211,9 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "tendermint-config",
- "tendermint-proto 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint-proto",
  "thiserror",
  "time",
  "tokio",
@@ -4279,7 +4234,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.23.6 (git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba)",
+ "tendermint",
  "time",
 ]
 

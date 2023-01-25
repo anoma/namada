@@ -39,7 +39,7 @@ async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "
 tendermint = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
 tendermint-config = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
 tendermint-proto = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-rpc = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client", default-features = false}
+tendermint-rpc = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
 tendermint-testgen = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
 tendermint-light-client = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
 tendermint-light-client-verifier = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
