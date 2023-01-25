@@ -216,7 +216,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use eyre::Result;
+    use namada::ledger::events::EventLevel;
+    use namada::ledger::storage_api::StorageWrite;
 
     use super::*;
 
@@ -236,6 +240,76 @@ mod tests {
         assert!(proposals_result.passed.is_empty());
         assert!(proposals_result.rejected.is_empty());
         assert!(resp.events.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    /// Tests that a governance proposal that ends without any votes is
+    /// rejected.
+    fn test_reject_single_governance_proposal() -> Result<()> {
+        let (mut shell, _) = test_utils::setup();
+
+        // set up a proposal in storage
+        let proposal_id = 123;
+
+        let proposal_funds = token::Amount::from(100_000_000);
+        let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
+        StorageWrite::write(
+            &mut shell.storage,
+            &proposal_funds_key,
+            proposal_funds,
+        )?;
+
+        let proposal_end_epoch = Epoch(9);
+        let proposal_end_epoch_key =
+            gov_storage::get_voting_end_epoch_key(proposal_id);
+        StorageWrite::write(
+            &mut shell.storage,
+            &proposal_end_epoch_key,
+            proposal_end_epoch,
+        )?;
+
+        // TODO: maybe storage needs to be set up properly under
+        // `gov_storage::get_proposal_vote_prefix_key(proposal_id)` as well for
+        // this test to be realistic, currently that's left empty and that
+        // results in a rejection - see `get_proposal_votes` for what is
+        // expected there
+
+        // TODO: maybe commit blocks up here in `TestShell` up until just before
+        // the first block of Epoch(9), to be more realistic? As governance
+        // proposals should only happen at epoch transitions
+        shell.proposal_data = HashSet::from([proposal_id]);
+
+        let mut resp = shim::response::FinalizeBlock::default();
+
+        let proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+
+        assert!(proposals_result.passed.is_empty());
+        assert_eq!(proposals_result.rejected, vec![proposal_id]);
+        assert_eq!(
+            resp.events,
+            vec![Event {
+                event_type: EventType::Proposal,
+                level: EventLevel::Block,
+                attributes: HashMap::from([
+                    ("proposal_id".to_string(), proposal_id.to_string()),
+                    (
+                        "has_proposal_code".to_string(),
+                        (true as u64).to_string()
+                    ),
+                    (
+                        "tally_result".to_string(),
+                        TallyResult::Rejected.to_string()
+                    ),
+                    (
+                        "proposal_code_exit_status".to_string(),
+                        (true as u64).to_string()
+                    ),
+                ])
+            }]
+        );
 
         Ok(())
     }
