@@ -42,8 +42,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    // TODO: double check and/or otherwise make explicit link between ERC20
-    // amounts and our Amount micros units
     match &event {
         EthereumEvent::TransfersToNamada { transfers, .. } => {
             act_on_transfers_to_namada(storage, transfers)
