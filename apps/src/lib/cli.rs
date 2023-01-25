@@ -2481,7 +2481,7 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .about("The vote for the proposal. Either yay or nay (with optional memo). For PGF vote: yay $council1 $cap1 $council2 $cap2 ..."),
+                        .about("The vote for the proposal. Either yay or nay (with optional memo).\nDefault vote: yay | nay\nPGF vote: yay $council1 $cap1 $council2 $cap2 ... | nay"),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
