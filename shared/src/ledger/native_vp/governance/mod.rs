@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
-use namada_core::types::governance::VoteType;
+use namada_core::types::governance::{ProposalVote, VoteType};
 use namada_core::types::transaction::governance::ProposalType;
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
@@ -176,14 +176,14 @@ where
 
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
-        let vote_type: Option<VoteType> = self.ctx.read_post(key)?;
+        let vote: Option<ProposalVote> = self.ctx.read_post(key)?;
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: Option<ProposalType> =
             self.ctx.read_pre(&proposal_type_key)?;
 
         match (
             pre_counter,
-            vote_type,
+            vote,
             proposal_type,
             voter,
             delegation_address,
@@ -193,7 +193,7 @@ where
         ) {
             (
                 Some(pre_counter),
-                Some(vote_type),
+                Some(vote),
                 Some(proposal_type),
                 Some(voter_address),
                 Some(delegation_address),
@@ -201,23 +201,27 @@ where
                 Some(pre_voting_start_epoch),
                 Some(pre_voting_end_epoch),
             ) => {
-                if proposal_type != vote_type {
-                    return Ok(false);
-                }
+                if let ProposalVote::Yay(vote_type) = vote {
+                    if proposal_type != vote_type {
+                        //FIXME: technically this is needed only for Yay votes
+                        return Ok(false);
+                    }
 
-                // Vote type specific checks
-                if let VoteType::PGFCouncil(set) = vote_type {
-                    // Check that all the addresses are established
-                    for (address, _) in set {
-                        match address {
-                            Address::Established(_) => {
-                                // Check that established address exists in storage
-                                let vp_key = Key::validity_predicate(&address);
-                                if !self.ctx.has_key_pre(&vp_key)? {
-                                    return Ok(false);
+                    // Vote type specific checks
+                    if let VoteType::PGFCouncil(set) = vote_type {
+                        // Check that all the addresses are established
+                        for (address, _) in set {
+                            match address {
+                                Address::Established(_) => {
+                                    // Check that established address exists in storage
+                                    let vp_key =
+                                        Key::validity_predicate(&address);
+                                    if !self.ctx.has_key_pre(&vp_key)? {
+                                        return Ok(false);
+                                    }
                                 }
+                                _ => return Ok(false),
                             }
-                            _ => return Ok(false),
                         }
                     }
                 }
