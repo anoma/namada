@@ -3,7 +3,23 @@ This page covers all installation steps required by various upgrades to testnets
 
 ## Latest Upgrade
 
-### Testnet `public-testnet-2.1.4014f207f6d`
+### Hotfix for Testnet `public-testnet-2.1.4014f207f6d`
+
+***25/01/2023***
+
+At around 06:15 UTC 25/01/2023, a validator with very little stake was scheduled to become part of the active validator set. From this tx, we discovered a conversion bug between the Namada state machine and Tendermint, which lead to a crash in the node.
+A patch was released [v0.13.3](https://github.com/anoma/namada/releases/tag/v0.13.3) in order to deal with this issue.
+
+In order to successfully update your node, please follow the below steps:
+1. Validators need to stop their node (`^c`)
+2. Upgrade their version to v0.13.3 
+3. Restart their node with the following `--time` argument:
+```bash!
+NAMADA_TM_STDOUT=true namadan ledger run --time 2023-01-25T18:00:00Z
+```
+
+
+***23/01/2023***
 
 A new testnet was released before the fortnightly testnet release schedule due to the below hardfork not working as intended. Follow the steps in [setting up a new testnet](./environment-setup.md)
 
