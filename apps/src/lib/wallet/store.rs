@@ -119,6 +119,19 @@ impl Store {
 
     /// Add addresses from a genesis configuration.
     pub fn add_genesis_addresses(&mut self, genesis: GenesisConfig) {
+        for (alias, token) in &genesis.token {
+            if let Some(address) = token.address.as_ref() {
+                match Address::from_str(address) {
+                    Ok(address) => self
+                        .add_vp_type_to_address(AddressVpType::Token, address),
+                    Err(_) => {
+                        tracing::error!(
+                            "Weird address for token {alias}: {address}"
+                        )
+                    }
+                }
+            }
+        }
         self.addresses.extend(
             super::defaults::addresses_from_genesis(genesis).into_iter(),
         );
