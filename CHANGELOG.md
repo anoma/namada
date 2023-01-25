@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.13.3
+
+Namada 0.13.3 is a bugfix release addressing issues with voting power
+calculation logic.
+
+### BUG FIXES
+
+- Fixed Tendermint validator set update check to
+  respect the PoS tm_votes_per_token parameter.
+  ([#1083](https://github.com/anoma/namada/pull/1083))
+
 ## v0.13.2
 
 Namada 0.13.2 is a bugfix release addressing issues with the 0.13

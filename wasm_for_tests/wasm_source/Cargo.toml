@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm_for_tests"
 resolver = "2"
-version = "0.13.2"
+version = "0.13.3"
 
 [lib]
 crate-type = ["cdylib"]
