@@ -237,9 +237,16 @@ mod tests {
         let proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
 
+        assert!(
+            shell.proposal_data.is_empty(),
+            "shell.proposal_data should always be empty after a \
+             `execute_governance_proposals` call"
+        );
         assert!(proposals_result.passed.is_empty());
         assert!(proposals_result.rejected.is_empty());
         assert!(resp.events.is_empty());
+        // TODO: also check expected key changes in `shell.storage` (for this
+        // test, that should be no keys changed?)
 
         Ok(())
     }
@@ -286,6 +293,11 @@ mod tests {
         let proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
 
+        assert!(
+            shell.proposal_data.is_empty(),
+            "shell.proposal_data should always be empty after a \
+             `execute_governance_proposals` call"
+        );
         assert!(proposals_result.passed.is_empty());
         assert_eq!(proposals_result.rejected, vec![proposal_id]);
         assert_eq!(
@@ -310,6 +322,7 @@ mod tests {
                 ])
             }]
         );
+        // TODO: also check expected key changes in `shell.storage`
 
         Ok(())
     }
