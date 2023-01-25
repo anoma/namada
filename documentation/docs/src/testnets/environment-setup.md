@@ -6,7 +6,7 @@ If you don't want to build Namada from source you can [install Namada from binar
 Export the following variables:
 
 ```bash
-export NAMADA_TAG=v0.13.2
+export NAMADA_TAG=v0.13.3
 export TM_HASH=v0.1.4-abciplus
 ```
 
@@ -55,4 +55,4 @@ export TM_HASH=v0.1.4-abciplus
 - Make sure you are using the correct tendermint version
     - `tendermint version` should output `0.1.4-abciplus`
 - Make sure you are using the correct Namada version
-    - `namada --version` should output `Namada v0.13.2`
+    - `namada --version` should output `Namada v0.13.3`
