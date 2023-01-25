@@ -203,7 +203,7 @@ where
             ) => {
                 if let ProposalVote::Yay(vote_type) = vote {
                     if proposal_type != vote_type {
-                        //FIXME: technically this is needed only for Yay votes
+                        // FIXME: technically this is needed only for Yay votes
                         return Ok(false);
                     }
 
@@ -213,7 +213,8 @@ where
                         for (address, _) in set {
                             match address {
                                 Address::Established(_) => {
-                                    // Check that established address exists in storage
+                                    // Check that established address exists in
+                                    // storage
                                     let vp_key =
                                         Key::validity_predicate(&address);
                                     if !self.ctx.has_key_pre(&vp_key)? {

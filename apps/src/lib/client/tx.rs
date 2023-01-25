@@ -2194,10 +2194,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         let proposal_type: ProposalType =
             rpc::query_storage_value(&client, &proposal_type_key)
                 .await
-                .expect(&format!(
-                    "Didn't find type of proposal id {} in storage",
-                    proposal_id
-                ));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Didn't find type of proposal id {} in storage",
+                        proposal_id
+                    )
+                });
 
         if let ProposalVote::Yay(ref vote_type) = args.vote {
             if &proposal_type != vote_type {
@@ -2207,23 +2209,29 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 );
                 safe_exit(1);
             } else if let VoteType::PGFCouncil(set) = vote_type {
-                // Check that addresses proposed as council are established and are present in storage
+                // Check that addresses proposed as council are established and
+                // are present in storage
                 for (address, _) in set {
                     match address {
                         Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(&address);
+                            let vp_key = Key::validity_predicate(address);
                             if !rpc::query_has_storage_key(&client, &vp_key)
                                 .await
                             {
-                                eprintln!("Proposed PGF council {} cannot be found in storage", address);
+                                eprintln!(
+                                    "Proposed PGF council {} cannot be found \
+                                     in storage",
+                                    address
+                                );
                                 safe_exit(1);
                             }
                         }
                         _ => {
                             eprintln!(
-                        "PGF council vote contains a non-established address: {}",
-                        address
-                    );
+                                "PGF council vote contains a non-established \
+                                 address: {}",
+                                address
+                            );
                             safe_exit(1);
                         }
                     }
