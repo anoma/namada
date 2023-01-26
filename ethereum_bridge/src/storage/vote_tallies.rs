@@ -1,15 +1,24 @@
 //! Functionality for accessing keys to do with tallying votes
 
-use namada_core::types::ethereum_events::EthereumEvent;
+use std::io::Write;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
-use crate::storage::proof::EthereumProof;
+use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.
 pub const ETH_MSGS_PREFIX_KEY_SEGMENT: &str = "eth_msgs";
+
+/// Storage sub-key space reserved to keeping track of the
+/// voting power assigned to Ethereum bridge pool roots and
+/// nonces.
+pub const BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT: &str = "bp_root_and_nonce";
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to validator set updates.
@@ -104,6 +113,48 @@ impl From<&Hash> for Keys<EthereumEvent> {
             prefix,
             _phantom: std::marker::PhantomData,
         }
+    }
+}
+
+/// A wrapper struct for managing keys related to
+/// tracking signatures over bridge pool roots and nonces.
+#[derive(Clone)]
+pub struct BridgePoolRoot(pub BridgePoolRootProof);
+
+impl BorshSerialize for BridgePoolRoot {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.0, writer)
+    }
+}
+
+impl BorshDeserialize for BridgePoolRoot {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        <EthereumProof<(KeccakHash, Uint)> as BorshDeserialize>::deserialize(
+            buf,
+        )
+        .map(BridgePoolRoot)
+    }
+}
+
+impl<'a> From<&'a BridgePoolRoot> for Keys<BridgePoolRoot> {
+    fn from(bp_root: &BridgePoolRoot) -> Self {
+        let hash = [bp_root.0.data.0.to_string(), bp_root.0.data.1.to_string()]
+            .concat();
+        let prefix = super::prefix()
+            .push(&BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
+            .push(&hash)
+            .expect("should always be able to construct this key");
+        Keys {
+            prefix,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
+    fn from(bp_root: BridgePoolRoot) -> Self {
+        Self::from(&bp_root)
     }
 }
 

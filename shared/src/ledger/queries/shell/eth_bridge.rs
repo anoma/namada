@@ -12,16 +12,15 @@ use namada_core::ledger::storage_api::{
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
-use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-use namada_ethereum_bridge::storage::proof::EthereumProof;
+use namada_ethereum_bridge::storage::proof::{
+    tokenize_relay_proof, EthereumProof, RelayProof,
+};
 use namada_ethereum_bridge::storage::vote_tallies;
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
-use crate::types::eth_bridge_pool::{
-    MultiSignedMerkleRoot, PendingTransfer, RelayProof,
-};
+use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::Epoch;
 use crate::types::storage::MembershipProof::BridgePool;
@@ -102,27 +101,20 @@ where
         <Vec<KeccakHash>>::try_from_slice(request.data.as_slice())
     {
         // get the latest signed merkle root of the Ethereum bridge pool
-        let signed_root: MultiSignedMerkleRoot = match ctx
+        let (signed_root, height) = ctx
             .storage
-            .read(&get_signed_root_key())
-            .expect("Reading the database should not fail")
-        {
-            (Some(bytes), _) => {
-                BorshDeserialize::try_from_slice(bytes.as_slice()).unwrap()
-            }
-            _ => {
-                return Err(storage_api::Error::SimpleMessage(
-                    "No signed root for the Ethereum bridge pool exists in \
-                     storage.",
-                ));
-            }
-        };
+            .get_signed_bridge_pool_root()
+            .ok_or(storage_api::Error::SimpleMessage(
+                "No signed root for the Ethereum bridge pool exists in \
+                 storage.",
+            ))
+            .into_storage_result()?;
 
         // get the merkle tree corresponding to the above root.
         let tree = MerkleTree::<H>::new(
             ctx.storage
                 .db
-                .read_merkle_tree_stores(signed_root.height)
+                .read_merkle_tree_stores(height)
                 .expect("We should always be able to read the database")
                 .expect(
                     "Every signed root should correspond to an existing block \
@@ -160,14 +152,18 @@ where
             values.iter().map(|v| v.as_slice()).collect(),
         ) {
             Ok(BridgePool(proof)) => {
+                let (validator_args, voting_powers) =
+                    ctx.storage.get_validator_set_args(None);
                 let data = RelayProof {
-                    validator_args: ctx.storage.get_validator_set_args(None),
+                    validator_args,
                     root: signed_root,
                     proof,
-                }
-                .encode()
+                };
+                let data = EncodeCell::<RelayProof>::new_from(
+                    tokenize_relay_proof(data, &voting_powers),
+                )
                 .try_to_vec()
-                .into_storage_result()?;
+                .expect("Serializing a relay proof should not fail.");
                 Ok(EncodedResponseQuery {
                     data,
                     ..Default::default()
@@ -258,7 +254,7 @@ where
             .into(),
         )))
     } else {
-        Ok(ctx.storage.get_validator_set_args(Some(epoch)).encode())
+        Ok(ctx.storage.get_validator_set_args(Some(epoch)).0.encode())
     }
 }
 
@@ -271,6 +267,7 @@ mod test_ethbridge_router {
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
     use namada_core::types::address::testing::established_address_1;
+    use namada_core::types::storage::BlockHeight;
     use namada_core::types::vote_extensions::validator_set_update;
     use namada_core::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMapExt,
@@ -279,6 +276,7 @@ mod test_ethbridge_router {
         EthBridgeVotingPower, FractionalVotingPower,
     };
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
+    use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_proof_of_stake::pos_queries::PosQueries;
 
     use super::test_utils::bertha_address;
@@ -287,8 +285,7 @@ mod test_ethbridge_router {
     use crate::ledger::queries::RPC;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
-        GasFee, MultiSignedMerkleRoot, PendingTransfer, RelayProof,
-        TransferToEthereum,
+        GasFee, PendingTransfer, TransferToEthereum,
     };
     use crate::types::ethereum_events::EthAddress;
 
@@ -590,11 +587,9 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-            nonce: 0.into(),
+        let signed_root = BridgePoolRootProof {
+            signatures: Default::default(),
+            data: (transfer.keccak256(), 0.into()),
         };
 
         // commit the changes and increase block height
@@ -615,7 +610,12 @@ mod test_ethbridge_router {
         // add the signature for the pool at the previous block height
         client
             .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
+            .write(
+                &get_signed_root_key(),
+                (signed_root.clone(), BlockHeight::from(0))
+                    .try_to_vec()
+                    .unwrap(),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -646,12 +646,16 @@ mod test_ethbridge_router {
             .get_membership_proof(vec![transfer])
             .expect("Test failed");
 
-        let proof = RelayProof {
-            validator_args: client.storage.get_validator_set_args(None),
-            root: signed_root,
-            proof,
-        }
-        .encode()
+        let (validator_args, voting_powers) =
+            client.storage.get_validator_set_args(None);
+        let proof = EncodeCell::<RelayProof>::new_from(tokenize_relay_proof(
+            RelayProof {
+                validator_args,
+                root: signed_root,
+                proof,
+            },
+            &voting_powers,
+        ))
         .into_inner();
         assert_eq!(proof, resp.data.into_inner());
     }
@@ -685,11 +689,9 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
-        let signed_root = MultiSignedMerkleRoot {
-            sigs: Default::default(),
-            root: transfer.keccak256(),
-            height: Default::default(),
-            nonce: 0.into(),
+        let signed_root = BridgePoolRootProof {
+            signatures: Default::default(),
+            data: (transfer.keccak256(), 0.into()),
         };
 
         // commit the changes and increase block height
@@ -710,7 +712,10 @@ mod test_ethbridge_router {
         // add the signature for the pool at the previous block height
         client
             .storage
-            .write(&get_signed_root_key(), signed_root.try_to_vec().unwrap())
+            .write(
+                &get_signed_root_key(),
+                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+            )
             .expect("Test failed");
 
         // commit the changes and increase block height
