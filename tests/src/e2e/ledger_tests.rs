@@ -2710,7 +2710,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2727,7 +2727,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2743,7 +2743,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2756,7 +2756,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("Proposal: 0")?;
     client.assert_success();
 
@@ -2768,7 +2768,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("Proposal: 1")?;
     client.assert_success();
 
@@ -2783,7 +2783,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
+    client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 999000")?;
     client.assert_success();
 
@@ -2798,7 +2798,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
+    client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 1000")?;
     client.assert_success();
 
@@ -2824,7 +2824,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run_as!(
+    client = run_as!(
         test,
         Who::Validator(0),
         Bin::Client,
@@ -2848,8 +2848,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client =
-        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2866,13 +2865,12 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client =
-        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // 4 - Query the proposal and check the result is the one voted by the validator (majority)
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 25 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
@@ -2886,7 +2884,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
+    client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string(&format!(
         "Result: passed with PGF council address: {}, spending cap: 0.001",
         albert_address
@@ -2922,7 +2920,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
@@ -2937,7 +2935,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 500")?;
     client.assert_success();
 
