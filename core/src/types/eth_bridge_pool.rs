@@ -1,21 +1,17 @@
 //! The necessary type definitions for the contents of the
 //! Ethereum bridge pool
-use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{
-    EthAddress, TransferToEthereum as TransferToEthereumEvent, Uint,
+    EthAddress, TransferToEthereum as TransferToEthereumEvent,
 };
-use crate::types::keccak::KeccakHash;
-use crate::types::storage::{BlockHeight, DbKeySeg, Key};
+use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
-use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 
 /// A namespace used in our Ethereuem smart contracts
 const NAMESPACE: &str = "transfer";
@@ -134,54 +130,4 @@ pub struct GasFee {
     pub amount: Amount,
     /// The account of fee payer.
     pub payer: Address,
-}
-
-/// A Merkle root (Keccak hash) of the Ethereum
-/// bridge pool that has been signed by validators'
-/// Ethereum keys.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub struct MultiSignedMerkleRoot {
-    /// The signatures from validators
-    pub sigs: BTreeSet<crate::types::key::secp256k1::Signature>,
-    /// The Merkle root being signed
-    pub root: KeccakHash,
-    /// The block height at which this root was valid
-    pub height: BlockHeight,
-    /// A nonce for the next transfer batch for replay protection
-    pub nonce: Uint,
-}
-
-impl Encode<3> for MultiSignedMerkleRoot {
-    fn tokenize(&self) -> [Token; 3] {
-        let MultiSignedMerkleRoot {
-            sigs, root, nonce, ..
-        } = self;
-        // TODO: check the tokenization of the signatures
-        let sigs = Token::Array(
-            sigs.iter().map(|sig| sig.tokenize()[0].clone()).collect(),
-        );
-        let root = Token::FixedBytes(root.0.to_vec());
-        [sigs, root, Token::Uint(nonce.clone().into())]
-    }
-}
-
-/// All the information to relay to Ethereum
-/// that a set of transfers exist in the Ethereum
-/// bridge pool.
-pub struct RelayProof {
-    /// Information about the signing validators
-    pub validator_args: ValidatorSetArgs,
-    /// A merkle root signed by a quorum of validators
-    pub root: MultiSignedMerkleRoot,
-    /// A membership proof
-    pub proof: BridgePoolProof,
-}
-
-impl Encode<7> for RelayProof {
-    fn tokenize(&self) -> [Token; 7] {
-        let [val_set_args] = self.validator_args.tokenize();
-        let [sigs, root, nonce] = self.root.tokenize();
-        let [proof, transfers, flags] = self.proof.tokenize();
-        [val_set_args, sigs, transfers, root, proof, flags, nonce]
-    }
 }
