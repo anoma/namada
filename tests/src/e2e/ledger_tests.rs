@@ -2894,7 +2894,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
+    client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string("Result: rejected")?;
     client.assert_success();
 
@@ -2918,7 +2918,7 @@ fn pgf_governance_proposal() -> Result<()> {
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
-    // Check if governance funds are 500
+    // Check if governance funds are 0
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -2930,7 +2930,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 500")?;
+    client.exp_string("NAM: 0")?;
     client.assert_success();
 
     Ok(())
