@@ -737,20 +737,19 @@ where
         } = &mut self.mode
         {
             if *eth_oracle_started {
+                tracing::info!("Not starting oracle as it was already started");
                 return;
             }
             if matches!(
                 self.storage.check_bridge_status(),
                 namada::ledger::eth_bridge::EthBridgeStatus::Disabled
             ) {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge is disabled"
+                );
                 return;
             }
             let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
-                // if we don't have a bridge configuration yet, it could
-                // be that it will become available in a later block
-                // (or possibly not, if the bridge hasn't been
-                // launched yet) - in any case, we don't need to
-                // start our Ethereum oracle just right now
                 return;
             };
             let config = oracle::config::Config {
