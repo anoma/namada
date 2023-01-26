@@ -691,6 +691,9 @@ where
             )
         });
 
+        // NOTE: the oracle isn't started through governance votes, so we don't
+        // check to see if we need to start it after epoch transitions
+
         let root = self.storage.merkle_root();
         tracing::info!(
             "Committed block hash: {}, height: {}",
