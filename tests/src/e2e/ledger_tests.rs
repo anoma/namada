@@ -2652,10 +2652,10 @@ fn proposal_submission() -> Result<()> {
 
 /// Test submission and vote of a PGF proposal
 ///
-/// 1 - Sumbit a proposal
+/// 1 - Sumbit two proposals
 /// 2 - Check balance
-/// 3 - Vote for the accepted proposal
-/// 4 - Check proposal passed
+/// 3 - Vote for the accepted proposals
+/// 4 - Check one proposal passed and the other one didn't
 /// 5 - Check funds
 #[test]
 fn pgf_governance_proposal() -> Result<()> {
@@ -2906,41 +2906,40 @@ fn pgf_governance_proposal() -> Result<()> {
     client.exp_string("Result: rejected")?;
     client.assert_success();
 
-    //FIXME: uncomment
-    // // 12. Wait proposal grace and check proposal author funds
-    // while epoch.0 < 31 {
-    //     sleep(1);
-    //     epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    // }
+    // 12. Wait proposals grace and check proposal author funds
+    while epoch.0 < 31 {
+        sleep(1);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
 
-    // let query_balance_args = vec![
-    //     "balance",
-    //     "--owner",
-    //     ALBERT,
-    //     "--token",
-    //     NAM,
-    //     "--ledger-address",
-    //     &validator_one_rpc,
-    // ];
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
 
-    // let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    // client.exp_string("NAM: 1000000")?;
-    // client.assert_success();
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client.exp_string("NAM: 999500")?;
+    client.assert_success();
 
-    // // Check if governance funds are 0
-    // let query_balance_args = vec![
-    //     "balance",
-    //     "--owner",
-    //     GOVERNANCE_ADDRESS,
-    //     "--token",
-    //     NAM,
-    //     "--ledger-address",
-    //     &validator_one_rpc,
-    // ];
+    // Check if governance funds are 500
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        GOVERNANCE_ADDRESS,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
 
-    // let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    // client.exp_string("NAM: 0")?;
-    // client.assert_success();
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client.exp_string("NAM: 500")?;
+    client.assert_success();
 
     Ok(())
 }
