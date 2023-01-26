@@ -223,15 +223,15 @@ where
 
                         let proposal_author_key =
                             gov_storage::get_author_key(id);
-                        let proposal_author = shell
+
+                        shell
                             .read_storage_key::<Address>(&proposal_author_key)
                             .ok_or_else(|| {
                                 Error::BadProposal(
                                     id,
                                     "Invalid proposal author.".to_string(),
                                 )
-                            })?;
-                        proposal_author
+                            })?
                     }
                 }
             }
