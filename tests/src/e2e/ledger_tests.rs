@@ -2443,7 +2443,9 @@ fn proposal_submission() -> Result<()> {
             "voting_start_epoch": 9999_u64,
             "voting_end_epoch": 10000_u64,
             "grace_epoch": 10009_u64,
-            "type": "Default"
+            "type": {
+                "Default":null
+                }
         }
     );
     let invalid_proposal_json_path =
@@ -2944,7 +2946,9 @@ fn proposal_offline() -> Result<()> {
             "voting_start_epoch": 3_u64,
             "voting_end_epoch": 9_u64,
             "grace_epoch": 18_u64,
-            "type": "Default"
+            "type": {
+                "Default": null
+                }
         }
     );
     let valid_proposal_json_path =

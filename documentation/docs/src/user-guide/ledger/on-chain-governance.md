@@ -27,7 +27,9 @@ Now, we need to create a json file `proposal.json` holding the content of our pr
     "voting_start_epoch": 3,
     "voting_end_epoch": 6,
     "grace_epoch": 12,
-    "type": "Default"
+    "type": {
+        "Default":null
+        }
 }
 ```
 
