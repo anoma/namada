@@ -740,10 +740,7 @@ where
                 tracing::info!("Not starting oracle as it was already started");
                 return;
             }
-            if matches!(
-                self.storage.check_bridge_status(),
-                namada::ledger::eth_bridge::EthBridgeStatus::Disabled
-            ) {
+            if self.storage.is_bridge_active() {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge is disabled"
                 );

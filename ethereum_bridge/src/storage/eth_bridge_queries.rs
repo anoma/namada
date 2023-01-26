@@ -54,8 +54,9 @@ pub enum EthBridgeEnabled {
 
 pub trait EthBridgeQueries {
     /// Check if the bridge is disabled, enabled, or
-    /// scheduled to be enabled at a specified epoch.
-    fn check_bridge_status(&self) -> EthBridgeStatus;
+    /// scheduled to be enabled at a specified epoch. Returns `None` if the
+    /// status cannot be found in storage.
+    fn check_bridge_status(&self) -> Option<EthBridgeStatus>;
 
     /// Returns a boolean indicating whether the bridge
     /// is currently active.
@@ -150,21 +151,22 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
-    fn check_bridge_status(&self) -> EthBridgeStatus {
-        BorshDeserialize::try_from_slice(
+    fn check_bridge_status(&self) -> Option<EthBridgeStatus> {
+        let status = BorshDeserialize::try_from_slice(
             self.read(&active_key())
                 .expect(
                     "Reading the Ethereum bridge active key shouldn't fail.",
                 )
-                .0
-                .expect("The Ethereum bridge active key should be in storage")
+                .0?
                 .as_slice(),
         )
-        .expect("Deserializing the Ethereum bridge active key shouldn't fail.")
+        .expect("Deserializing the Ethereum bridge active key shouldn't fail.");
+        Some(status)
     }
 
     fn is_bridge_active(&self) -> bool {
-        if let EthBridgeStatus::Enabled(enabled_at) = self.check_bridge_status()
+        if let Some(EthBridgeStatus::Enabled(enabled_at)) =
+            self.check_bridge_status()
         {
             match enabled_at {
                 EthBridgeEnabled::AtGenesis => true,
