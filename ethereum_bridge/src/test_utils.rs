@@ -152,10 +152,11 @@ pub fn commit_bridge_pool_root_at_height<D, H>(
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let value = height.try_to_vec().expect("Encoding failed");
     storage
         .block
         .tree
-        .update(&get_key_from_hash(root), [0])
+        .update(&get_key_from_hash(root), value)
         .unwrap();
     storage.block.height = height;
     storage.commit().unwrap();

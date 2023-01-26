@@ -214,10 +214,11 @@ mod test_apply_bp_roots_to_storage {
             &KeccakHash([1; 32]),
             100.into(),
         );
+        let value = BlockHeight(101).try_to_vec().expect("Test failed");
         storage
             .block
             .tree
-            .update(&get_key_from_hash(&KeccakHash([1; 32])), [0])
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
             .expect("Test failed");
         storage
             .write(
