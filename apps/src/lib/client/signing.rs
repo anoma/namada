@@ -1,7 +1,10 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::collections::HashMap;
+
 use borsh::BorshSerialize;
+use futures::future::join_all;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
@@ -33,7 +36,7 @@ pub async fn find_keypair(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key(addr, ledger_address)
+            let public_key = rpc::get_public_key(addr, 0, ledger_address)
                 .await
                 .unwrap_or_else(|| {
                     eprintln!(
@@ -96,9 +99,9 @@ pub async fn tx_signer(
     mut default: TxSigningKey,
 ) -> common::SecretKey {
     // Override the default signing key source if possible
-    if let Some(signing_key) = &args.signing_key {
+    if let Some(signing_key) = args.signing_keys.get(0) {
         default = TxSigningKey::WalletKeypair(signing_key.clone());
-    } else if let Some(signer) = &args.signer {
+    } else if let Some(signer) = args.signers.get(0) {
         default = TxSigningKey::WalletAddress(signer.clone());
     }
     // Now actually fetch the signing key and apply it
@@ -135,6 +138,66 @@ pub async fn tx_signer(
             );
         }
     }
+}
+
+pub async fn tx_signers(
+    ctx: &mut Context,
+    args: &args::Tx,
+    mut default: Vec<TxSigningKey>,
+) -> Vec<common::SecretKey> {
+    if !args.signing_keys.is_empty() {
+        default = args
+            .signing_keys
+            .iter()
+            .map(|signing_key| TxSigningKey::WalletKeypair(signing_key.clone()))
+            .collect();
+    } else if !args.signers.is_empty() {
+        default = args
+            .signers
+            .iter()
+            .map(|signing_key| TxSigningKey::WalletAddress(signing_key.clone()))
+            .collect();
+    }
+
+    let mut keys = Vec::new();
+
+    for key in default {
+        match key {
+            TxSigningKey::WalletKeypair(signing_key) => {
+                keys.push(ctx.get_cached(&signing_key));
+            }
+            TxSigningKey::WalletAddress(signer) => {
+                let signer = ctx.get(&signer);
+                let signing_key = find_keypair(
+                    &mut ctx.wallet,
+                    &signer,
+                    args.ledger_address.clone(),
+                )
+                .await;
+                // Check if the signer is implicit account that needs to reveal its
+                // PK first
+                if matches!(signer, Address::Implicit(_)) {
+                    let pk: common::PublicKey = signing_key.ref_to();
+                    super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+                }
+                keys.push(signing_key);
+            }
+            TxSigningKey::SecretKey(signing_key) => {
+                // Check if the signing key needs to reveal its PK first
+                let pk: common::PublicKey = signing_key.ref_to();
+                super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
+                keys.push(signing_key);
+            }
+            TxSigningKey::None => {
+                panic!(
+                    "All transactions must be signed; please either specify the \
+                        key or the address from which to look up the signing key."
+                );
+            }
+        }
+    }
+
+    keys
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -222,6 +285,38 @@ pub fn dump_tx_helper(
 
     std::fs::write(filename, tx_bytes)
         .expect("expected to be able to write tx dump file");
+}
+
+pub async fn sign_tx_multisignature(
+    mut ctx: Context,
+    tx: Tx,
+    args: &args::Tx,
+    pks_index_map: HashMap<common::PublicKey, u64>,
+    default: Vec<TxSigningKey>,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> (Context, TxBroadcastData) {
+    let keypairs = tx_signers(&mut ctx, args, default).await;
+    let tx = tx.sign_multisignature(&keypairs, pks_index_map);
+
+    let epoch = rpc::query_epoch(args::Query {
+        ledger_address: args.ledger_address.clone(),
+    })
+    .await;
+    let broadcast_data = if args.dry_run {
+        TxBroadcastData::DryRun(tx)
+    } else {
+        sign_wrapper(
+            &ctx,
+            args,
+            epoch,
+            tx,
+            &keypairs[0],
+            #[cfg(not(feature = "mainnet"))]
+            requires_pow,
+        )
+        .await
+    };
+    (ctx, broadcast_data)
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the

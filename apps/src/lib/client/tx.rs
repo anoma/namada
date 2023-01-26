@@ -7,6 +7,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
+use itertools::Itertools;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
@@ -226,6 +227,7 @@ pub async fn submit_init_account_multisignature(
             println!("{:?}", pk);
             ctx.get_cached(pk)
         })
+        .sorted()
         .collect();
 
     let threshold = match args.threshold {
@@ -254,11 +256,16 @@ pub async fn submit_init_account_multisignature(
 
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
     let data = InitAccount {
-        public_keys,
+        public_keys: public_keys.clone(),
         vp_code,
-        threshold
+        threshold,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let mut pks_map = HashMap::new();
+    for (index, pk) in public_keys.iter().enumerate() {
+        pks_map.insert(pk, index as u64);
+    }
 
     let tx = Tx::new(tx_code, Some(data));
     // let (ctx, initialized_accounts) = process_tx(
@@ -2015,7 +2022,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 }
 
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
-    let signer = if let Some(addr) = &args.tx.signer {
+    // TODO: fix me
+    let signer = if let Some(addr) = args.tx.signers.get(0) {
         addr
     } else {
         eprintln!("Missing mandatory argument --signer.");
@@ -2032,6 +2040,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             serde_json::from_reader(file).expect("JSON was not well-formatted");
         let public_key = rpc::get_public_key(
             &proposal.address,
+            0,
             args.tx.ledger_address.clone(),
         )
         .await
@@ -2198,7 +2207,7 @@ pub async fn has_revealed_pk(
     addr: &Address,
     ledger_address: TendermintAddress,
 ) -> bool {
-    rpc::get_public_key(addr, ledger_address).await.is_some()
+    rpc::get_public_key(addr, 0, ledger_address).await.is_some()
 }
 
 pub async fn submit_reveal_pk_aux(
@@ -2215,9 +2224,9 @@ pub async fn submit_reveal_pk_aux(
     let tx = Tx::new(tx_code, Some(tx_data));
 
     // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_key {
+    let keypair = if let Some(signing_key) = &args.signing_keys.get(0) {
         ctx.get_cached(signing_key)
-    } else if let Some(signer) = args.signer.as_ref() {
+    } else if let Some(signer) = args.signers.get(0) {
         let signer = ctx.get(signer);
         find_keypair(&mut ctx.wallet, &signer, args.ledger_address.clone())
             .await
@@ -2632,6 +2641,65 @@ pub async fn submit_validator_commission_change(
         false,
     )
     .await;
+}
+
+async fn process_tx_multisignature(
+    ctx: Context,
+    args: &args::Tx,
+    tx: Tx,
+    pks_index_map: HashMap<common::PublicKey, u64>,
+    default_signer: Vec<TxSigningKey>,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) {
+    // let (ctx, to_broadcast) = sign_tx_multisignature(
+    //     ctx,
+    //     tx,
+    //     args,
+    //     default_signer,
+    //     #[cfg(not(feature = "mainnet"))]
+    //     requires_pow,
+    // )
+    // .await;
+
+    // if args.dry_run {
+    //     if let TxBroadcastData::DryRun(tx) = to_broadcast {
+    //         rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+    //         (ctx, vec![])
+    //     } else {
+    //         panic!(
+    //             "Expected a dry-run transaction, received a wrapper \
+    //              transaction instead"
+    //         );
+    //     }
+    // } else {
+    //     // Either broadcast or submit transaction and collect result into
+    //     // sum type
+    //     let result = if args.broadcast_only {
+    //         Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
+    //     } else {
+    //         Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
+    //     };
+    //     // Return result based on executed operation, otherwise deal with
+    //     // the encountered errors uniformly
+    //     match result {
+    //         Right(Ok(result)) => (ctx, result.initialized_accounts),
+    //         Left(Ok(_)) => (ctx, Vec::default()),
+    //         Right(Err(err)) => {
+    //             eprintln!(
+    //                 "Encountered error while broadcasting transaction: {}",
+    //                 err
+    //             );
+    //             safe_exit(1)
+    //         }
+    //         Left(Err(err)) => {
+    //             eprintln!(
+    //                 "Encountered error while broadcasting transaction: {}",
+    //                 err
+    //             );
+    //             safe_exit(1)
+    //         }
+    //     }
+    // }
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses

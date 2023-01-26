@@ -27,11 +27,18 @@ const PROTOCOL_PK_STORAGE_KEY: &str = "protocol_public_key";
 const PK_STORAGE_THRESHOLD_KEY: &str = "threshold";
 
 /// Obtain a storage key for user's public key.
-pub fn pk_key(owner: &Address, index: usize) -> storage::Key {
+pub fn pk_key(owner: &Address, index: u64) -> storage::Key {
     Key::from(owner.to_db_key())
         .push(&PK_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
-        .push(&(index as u64)) // this should be fine if the architecture is 64bit
+        .push(&index) // this should be fine if the architecture is 64bit
+        .expect("Cannot obtain a storage key")
+}
+
+/// Obtain a storage key for user's public key.
+pub fn pk_prefix_key(owner: &Address) -> storage::Key {
+    Key::from(owner.to_db_key())
+        .push(&PK_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

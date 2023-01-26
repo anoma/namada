@@ -1697,9 +1697,8 @@ pub mod args {
     const RECEIVER: Arg<String> = arg("receiver");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    const SIGNERS: ArgMulti<WalletAddress> = arg_multi("signers");
+    const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_MULTISIGNATURE: ArgMulti<WalletAddress> = arg_multi("sources");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
@@ -2945,9 +2944,9 @@ pub mod args {
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
         /// Sign the tx with the key for the given alias from your wallet
-        pub signing_key: Option<WalletKeypair>,
+        pub signing_keys: Vec<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
-        pub signer: Option<WalletAddress>,
+        pub signers: Vec<WalletAddress>,
     }
 
     impl Tx {
@@ -2964,11 +2963,8 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
-                signing_key: self
-                    .signing_key
-                    .as_ref()
-                    .map(|sk| ctx.get_cached(sk)),
-                signer: self.signer.as_ref().map(|signer| ctx.get(signer)),
+                signing_keys: self.signing_keys.iter().map(|sk| ctx.get_cached(sk)).collect(),
+                signers: self.signers.iter().map(|signer| ctx.get(signer)).collect(),
             }
         }
     }
@@ -3005,23 +3001,23 @@ pub mod args {
                 ),
             )
             .arg(
-                SIGNING_KEY_OPT
+                SIGNING_KEYS
                     .def()
                     .about(
                         "Sign the transaction with the key for the given \
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name),
+                    .conflicts_with(SIGNERS.name),
             )
             .arg(
-                SIGNER
+                SIGNERS
                     .def()
                     .about(
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
-                    .conflicts_with(SIGNING_KEY_OPT.name),
+                    .conflicts_with(SIGNING_KEYS.name),
             )
         }
 
@@ -3036,8 +3032,8 @@ pub mod args {
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
 
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
-            let signer = SIGNER.parse(matches);
+            let signing_keys = SIGNING_KEYS.parse(matches);
+            let signers = SIGNERS.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
@@ -3048,8 +3044,8 @@ pub mod args {
                 fee_amount,
                 fee_token,
                 gas_limit,
-                signing_key,
-                signer,
+                signing_keys,
+                signers,
             }
         }
     }

@@ -6,11 +6,11 @@ use crate::types::key::*;
 
 /// Get the public key associated with the given address. Returns `Ok(None)` if
 /// not found.
-pub fn get<S>(storage: &S, owner: &Address, index: Option<usize>) -> Result<Option<common::PublicKey>>
+pub fn get<S>(storage: &S, owner: &Address, index: u64) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
 {
-    let key = pk_key(owner, index.unwrap_or_else(|| 0));
+    let key = pk_key(owner, index);
     storage.read(&key)
 }
 

@@ -9,7 +9,7 @@ pub fn init_account(ctx: &mut Ctx, data: InitAccount) -> TxResult {
     let pk_threshold = key::threshold_key(&address);
     ctx.write(&pk_threshold, &data.threshold)?;
     
-    for (index, pk) in data.public_keys.iter().enumerate() {
+    for (pk, index) in data.public_keys.iter().zip(0u64..) {
         let pk_key = key::pk_key(&address, index);
         ctx.write(&pk_key, pk)?;
     }

@@ -286,35 +286,34 @@ pub mod tx_types {
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
     pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
-        if let Some(Ok(SignedTxData {
-            data: Some(data),
-            ref sig,
-        })) = tx
+        if let Some(Ok(tx_data)) = tx
             .data
             .as_ref()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
                 code: tx.code,
-                data: Some(data.clone()),
+                data: tx_data.data.clone(),
                 timestamp: tx.timestamp,
             }
             .hash();
             match TxType::try_from(Tx {
                 code: vec![],
-                data: Some(data),
+                data: tx_data.data.clone(),
                 timestamp: tx.timestamp,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    wrapper.validate_sig(signed_hash, sig)?;
+                    let sig = tx_data.clone().get_signature_by_index(0).ok_or(TxError::SigError("Unsigned wrappr".to_string()))?;
+                    wrapper.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // verify signature and extract signed data
                 TxType::Protocol(protocol) => {
-                    protocol.validate_sig(signed_hash, sig)?;
+                    let sig = tx_data.clone().get_signature_by_index(0).ok_or(TxError::SigError("Unsigned protocol".to_string()))?;
+                    protocol.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Protocol(protocol))
                 }
                 // we extract the signed data, but don't check the signature
