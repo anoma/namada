@@ -132,8 +132,7 @@ where
             _ = storage.delete(&key)?;
             _ = pending_keys.remove(&key);
         } else {
-            // The transfer should exist in the bridge pool
-            unreachable!()
+            unreachable!("The transfer should exist in the bridge pool");
         }
 
         _ = changed_keys.insert(key);

@@ -349,21 +349,9 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Update the tree with the given key and value
-    pub fn update(
-        &mut self,
-        height: BlockHeight,
-        key: &Key,
-        value: impl AsRef<[u8]>,
-    ) -> Result<()> {
+    pub fn update(&mut self, key: &Key, value: impl AsRef<[u8]>) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
-        match store_type {
-            StoreType::BridgePool => self.update_tree(
-                &store_type,
-                &sub_key,
-                height.try_to_vec().expect("Encoding failed"),
-            ),
-            _ => self.update_tree(&store_type, &sub_key, value),
-        }
+        self.update_tree(&store_type, &sub_key, value)
     }
 
     /// Delete the value corresponding to the given key
@@ -704,16 +692,15 @@ mod test {
         assert!(!tree.has_key(&pos_key).unwrap());
 
         // update IBC tree
-        let height = BlockHeight(1);
-        tree.update(height, &ibc_key, [1u8; 8]).unwrap();
+        tree.update(&ibc_key, [1u8; 8]).unwrap();
         assert!(tree.has_key(&ibc_key).unwrap());
         assert!(!tree.has_key(&pos_key).unwrap());
         // update another tree
-        tree.update(height, &pos_key, [2u8; 8]).unwrap();
+        tree.update(&pos_key, [2u8; 8]).unwrap();
         assert!(tree.has_key(&pos_key).unwrap());
 
         // update IBC tree
-        tree.update(height, &ibc_non_key, [2u8; 8]).unwrap();
+        tree.update(&ibc_non_key, [2u8; 8]).unwrap();
         assert!(tree.has_key(&ibc_non_key).unwrap());
         assert!(tree.has_key(&ibc_key).unwrap());
         assert!(tree.has_key(&pos_key).unwrap());
@@ -780,9 +767,8 @@ mod test {
             Address::Internal(InternalAddress::PoS).to_db_key().into();
         let pos_key = key_prefix.push(&"test".to_string()).unwrap();
 
-        let height = BlockHeight(1);
-        tree.update(height, &ibc_key, [1u8; 8]).unwrap();
-        tree.update(height, &pos_key, [2u8; 8]).unwrap();
+        tree.update(&ibc_key, [1u8; 8]).unwrap();
+        tree.update(&pos_key, [2u8; 8]).unwrap();
 
         let stores_write = tree.stores();
         let mut stores_read = MerkleTreeStoresRead::default();
@@ -806,11 +792,10 @@ mod test {
             Address::Internal(InternalAddress::PoS).to_db_key().into();
         let pos_key = key_prefix.push(&"test".to_string()).unwrap();
 
-        let height = BlockHeight(1);
         let ibc_val = [1u8; 8].to_vec();
-        tree.update(height, &ibc_key, ibc_val.clone()).unwrap();
+        tree.update(&ibc_key, ibc_val.clone()).unwrap();
         let pos_val = [2u8; 8].to_vec();
-        tree.update(height, &pos_key, pos_val).unwrap();
+        tree.update(&pos_key, pos_val).unwrap();
 
         let specs = ibc_proof_specs::<Sha256Hasher>();
         let proof = match tree
@@ -868,11 +853,10 @@ mod test {
             Address::Internal(InternalAddress::PoS).to_db_key().into();
         let pos_key = key_prefix.push(&"test".to_string()).unwrap();
 
-        let height = BlockHeight(1);
         let ibc_val = [1u8; 8].to_vec();
-        tree.update(height, &ibc_key, ibc_val).unwrap();
+        tree.update(&ibc_key, ibc_val).unwrap();
         let pos_val = [2u8; 8].to_vec();
-        tree.update(height, &pos_key, pos_val.clone()).unwrap();
+        tree.update(&pos_key, pos_val.clone()).unwrap();
 
         let specs = proof_specs::<Sha256Hasher>();
         let proof = match tree
@@ -933,8 +917,7 @@ mod test {
         let ibc_key =
             key_prefix.push(&"test2".to_string()).expect("Test failed");
         let ibc_val = [2u8; 8].to_vec();
-        tree.update(BlockHeight(1), &ibc_key, ibc_val)
-            .expect("Test failed");
+        tree.update(&ibc_key, ibc_val).expect("Test failed");
 
         let nep = tree
             .get_non_existence_proof(&ibc_non_key)
