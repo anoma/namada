@@ -158,7 +158,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("NAM: 1000010.1")?;
+        client.exp_string("nam: 1000010.1")?;
         client.assert_success();
     }
 
@@ -441,7 +441,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect a decimal
-            r"NAM: \d+(\.\d+)?",
+            r"nam: \d+(\.\d+)?",
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
@@ -686,7 +686,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "No shielded BTC balance found",
+            "No shielded btc balance found",
         ),
         // 11. Assert ETH balance at VK(A) is 0
         (
@@ -699,7 +699,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "No shielded ETH balance found",
+            "No shielded eth balance found",
         ),
         // 12. Assert balance at VK(B) is 10 BTC
         (
@@ -710,7 +710,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "BTC : 20",
+            "btc : 20",
         ),
         // 13. Send 10 BTC from SK(B) to Bertha
         (
@@ -873,7 +873,7 @@ fn masp_pinned_txs() -> Result<()> {
         Some(300)
     )?;
     client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received 20 BTC")?;
+    client.exp_string("Received 20 btc")?;
     client.assert_success();
 
     // Assert PPA(C) has no NAM pinned to it
@@ -892,7 +892,7 @@ fn masp_pinned_txs() -> Result<()> {
         Some(300)
     )?;
     client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded NAM")?;
+    client.exp_string("Received no shielded nam")?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -914,7 +914,7 @@ fn masp_pinned_txs() -> Result<()> {
         Some(300)
     )?;
     client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded NAM")?;
+    client.exp_string("Received no shielded nam")?;
     client.assert_success();
 
     Ok(())
@@ -997,7 +997,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("BTC: 20")?;
+    client.exp_string("btc: 20")?;
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 0
@@ -1015,7 +1015,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded NAM balance found")?;
+    client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
     let masp_rewards = masp_rewards();
@@ -1038,7 +1038,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("BTC: 20")?;
+    client.exp_string("btc: 20")?;
     client.assert_success();
 
     let amt20 = token::Amount::from_str("20").unwrap();
@@ -1060,7 +1060,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1081,7 +1081,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1104,7 +1104,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("BTC: 20")?;
+    client.exp_string("btc: 20")?;
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
@@ -1123,7 +1123,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1144,7 +1144,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1189,7 +1189,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("ETH: 30")?;
+    client.exp_string("eth: 30")?;
     client.assert_success();
 
     // Assert NAM balance at VK(B) is 0
@@ -1207,7 +1207,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded NAM balance found")?;
+    client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1228,7 +1228,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("ETH: 30")?;
+    client.exp_string("eth: 30")?;
     client.assert_success();
 
     // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
@@ -1247,7 +1247,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
     ))?;
     client.assert_success();
@@ -1269,7 +1269,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
     ))?;
@@ -1317,7 +1317,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded ETH balance found")?;
+    client.exp_string("No shielded eth balance found")?;
     client.assert_success();
 
     let mut ep = get_epoch(&test, &validator_one_rpc)?;
@@ -1338,7 +1338,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
     ))?;
     client.assert_success();
@@ -1361,7 +1361,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
     ))?;
@@ -1409,7 +1409,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded BTC balance found")?;
+    client.exp_string("No shielded btc balance found")?;
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
@@ -1428,7 +1428,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1450,7 +1450,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
@@ -1475,7 +1475,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
     ))?;
     client.assert_success();
@@ -1496,7 +1496,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
     ))?;
     client.assert_success();
@@ -1518,7 +1518,7 @@ fn masp_incentives() -> Result<()> {
         Some(300)
     )?;
     client.exp_string(&format!(
-        "NAM: {}",
+        "nam: {}",
         ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
             + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
     ))?;
@@ -1594,7 +1594,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded NAM balance found")?;
+    client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
     // Assert NAM balance at VK(B) is 0
@@ -1612,7 +1612,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("No shielded NAM balance found")?;
+    client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is 0
@@ -1630,7 +1630,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("NAM: 0")?;
+    client.exp_string("nam: 0")?;
     client.assert_success();
 
     Ok(())
@@ -2348,7 +2348,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 999500")?;
+    client.exp_string("nam: 999500")?;
     client.assert_success();
 
     // 5. Query token balance governance
@@ -2363,7 +2363,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 500")?;
+    client.exp_string("nam: 500")?;
     client.assert_success();
 
     // 6. Submit an invalid proposal
@@ -2450,7 +2450,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 999500")?;
+    client.exp_string("nam: 999500")?;
     client.assert_success();
 
     // 9. Send a yay vote from a validator
@@ -2555,7 +2555,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 1000000")?;
+    client.exp_string("nam: 1000000")?;
     client.assert_success();
 
     // 13. Check if governance funds are 0
@@ -2570,7 +2570,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 0")?;
+    client.exp_string("nam: 0")?;
     client.assert_success();
 
     // // 14. Query parameters
@@ -3115,7 +3115,7 @@ fn test_genesis_validators() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("NAM: 1000000000010.1")?;
+        client.exp_string("nam: 1000000000010.1")?;
         client.assert_success();
     }
 
