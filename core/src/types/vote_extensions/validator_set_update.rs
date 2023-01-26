@@ -363,7 +363,9 @@ mod tag {
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
-                epoch_to_token(ext.signing_epoch),
+                // NOTE: the smart contract expects us to sign
+                // against the next nonce (i.e. the new epoch)
+                epoch_to_token(ext.signing_epoch.next()),
             ])
         }
     }
