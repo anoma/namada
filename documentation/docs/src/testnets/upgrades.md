@@ -15,7 +15,7 @@ In order to successfully update your node, please follow the below steps:
 2. Upgrade their version to v0.13.3 
 3. Restart their node with the following `--time` argument:
 ```bash!
-NAMADA_TM_STDOUT=true namadan ledger run --time 2023-01-25T18:00:00Z
+NAMADA_TM_STDOUT=true namadan ledger run --time 2023-01-25T21:00:00Z
 ```
 
 
