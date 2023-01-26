@@ -750,6 +750,9 @@ where
                 return;
             }
             let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
+                );
                 return;
             };
             let config = oracle::config::Config {
