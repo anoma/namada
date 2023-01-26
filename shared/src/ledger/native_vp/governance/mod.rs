@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
+use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::types::governance::{ProposalVote, VoteType};
 use namada_core::types::transaction::governance::ProposalType;
@@ -177,14 +178,10 @@ where
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
         let vote: Option<ProposalVote> = self.ctx.read_post(key)?;
-        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
-        let proposal_type: Option<ProposalType> =
-            self.ctx.read_pre(&proposal_type_key)?;
 
         match (
             pre_counter,
             vote,
-            proposal_type,
             voter,
             delegation_address,
             current_epoch,
@@ -194,7 +191,6 @@ where
             (
                 Some(pre_counter),
                 Some(vote),
-                Some(proposal_type),
                 Some(voter_address),
                 Some(delegation_address),
                 Some(current_epoch),
@@ -202,8 +198,13 @@ where
                 Some(pre_voting_end_epoch),
             ) => {
                 if let ProposalVote::Yay(vote_type) = vote {
+                    let proposal_type_key =
+                        gov_storage::get_proposal_type_key(proposal_id);
+                    let proposal_type: ProposalType = self
+                        .ctx
+                        .read_pre(&proposal_type_key)?
+                        .ok_or_err_msg("Missing proposal type in storage")?;
                     if proposal_type != vote_type {
-                        // FIXME: technically this is needed only for Yay votes
                         return Ok(false);
                     }
 

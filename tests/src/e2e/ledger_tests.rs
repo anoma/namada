@@ -2887,7 +2887,6 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    // FIXME: document spending cap is NAMNAM
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string(&format!(
         "Result: passed with PGF council address: {}, spending cap: 0.001",
@@ -2896,12 +2895,6 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Query the second proposal and check the it didn't pass
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 25 {
-        sleep(1);
-        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    }
-
     let query_proposal = vec![
         "query-proposal-result",
         "--proposal-id",
@@ -2911,15 +2904,11 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
-    client.exp_string(&format!(
-        "Result: passed with PGF council address: {}, spending cap: 0.001",
-        albert_address
-    ))?;
+    client.exp_string("Result: rejected")?;
     client.assert_success();
 
     //FIXME: uncomment
     // // 12. Wait proposal grace and check proposal author funds
-    // let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     // while epoch.0 < 31 {
     //     sleep(1);
     //     epoch = get_epoch(&test, &validator_one_rpc).unwrap();
