@@ -236,6 +236,18 @@ pub enum Signature {
     Secp256k1(secp256k1::Signature),
 }
 
+impl From<ed25519::Signature> for Signature {
+    fn from(sig: ed25519::Signature) -> Self {
+        Signature::Ed25519(sig)
+    }
+}
+
+impl From<secp256k1::Signature> for Signature {
+    fn from(sig: secp256k1::Signature) -> Self {
+        Signature::Secp256k1(sig)
+    }
+}
+
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
 
