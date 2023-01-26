@@ -2870,7 +2870,8 @@ fn pgf_governance_proposal() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 4 - Query the proposal and check the result is the one voted by the validator (majority)
+    // 4 - Query the proposal and check the result is the one voted by the
+    // validator (majority)
     epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 25 {
         sleep(1);
