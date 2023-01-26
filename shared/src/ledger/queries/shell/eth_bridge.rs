@@ -232,8 +232,8 @@ where
             "EthereumProof is seen in storage, therefore it must exist",
         );
 
-    // NOTE: `epoch - 1` is the epoch where we signed the proof
-    Ok(proof.map(|set| (epoch - 1, set)).encode())
+    // NOTE: we pass the epoch of the new set of validators
+    Ok(proof.map(|set| (epoch, set)).encode())
 }
 
 /// Read the active set of validators at the given [`Epoch`].
