@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::ledger::eth_bridge::EthereumBridgeConfig;
+use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -737,6 +737,12 @@ where
         } = &mut self.mode
         {
             if *eth_oracle_started {
+                return;
+            }
+            if matches!(
+                self.storage.check_bridge_status(),
+                namada::ledger::eth_bridge::EthBridgeStatus::Disabled
+            ) {
                 return;
             }
             let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
