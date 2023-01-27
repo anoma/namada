@@ -28,10 +28,12 @@
 //!   - `header`: block's header
 
 use std::cmp::Ordering;
+use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -237,6 +239,68 @@ impl RocksDB {
         self.0
             .write_opt(batch, &write_opts)
             .map_err(|e| Error::DBError(e.into_string()))
+    }
+
+    /// Dump last known block
+    pub fn dump_last_block(&self, out_file_path: std::path::PathBuf) {
+        use std::io::Write;
+
+        // Fine the last block height
+        let height: BlockHeight = types::decode(
+            self.0
+                .get("height")
+                .expect("Unable to read DB")
+                .expect("No block height found"),
+        )
+        .expect("Unable to decode block height");
+
+        let full_path = out_file_path
+            .with_file_name(format!(
+                "{}_{height}",
+                out_file_path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "dump_db".to_string())
+            ))
+            .with_extension("toml");
+
+        let mut file = File::options()
+            .append(true)
+            .create_new(true)
+            .open(&full_path)
+            .expect("Cannot open the output file");
+
+        println!("Will write to {} ...", full_path.to_string_lossy());
+
+        let mut dump_it = |prefix: String| {
+            for next in self.0.iterator(IteratorMode::From(
+                prefix.as_bytes(),
+                Direction::Forward,
+            )) {
+                match next {
+                    Err(e) => {
+                        eprintln!(
+                            "Something failed in a \"{prefix}\" iterator: {e}"
+                        )
+                    }
+                    Ok((raw_key, raw_val)) => {
+                        let key = std::str::from_utf8(&raw_key)
+                            .expect("All keys should be valid UTF-8 strings");
+                        let val = HEXLOWER.encode(&raw_val);
+                        let bytes = format!("\"{key}\" = \"{val}\"\n");
+                        file.write_all(bytes.as_bytes())
+                            .expect("Unable to write to output file");
+                    }
+                };
+            }
+        };
+
+        // Dump accounts subspace and block height data
+        dump_it("subspace".to_string());
+        let block_prefix = format!("{}/", height.raw());
+        dump_it(block_prefix);
+
+        println!("Done writing to {}", full_path.to_string_lossy());
     }
 }
 

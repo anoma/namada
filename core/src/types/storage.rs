@@ -162,6 +162,15 @@ impl Display for BlockHeight {
     }
 }
 
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let raw: u64 = FromStr::from_str(s)?;
+        Ok(Self(raw))
+    }
+}
+
 impl Add<u64> for BlockHeight {
     type Output = BlockHeight;
 

@@ -37,6 +37,9 @@ pub fn main() -> Result<()> {
                 ledger::reset(ctx.config.ledger)
                     .wrap_err("Failed to reset Namada node")?;
             }
+            cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
+                ledger::dump_db(ctx.config.ledger, args);
+            }
         },
         cmds::NamadaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {

@@ -22,6 +22,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::shims::abcipp_shim::AbciService;
+use crate::cli::args;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
@@ -196,6 +197,23 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
 /// Resets the tendermint_node state and removes database files
 pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
+}
+
+/// Dump Namada ledger node's DB from a block into a file
+pub fn dump_db(
+    config: config::Ledger,
+    args::LedgerDumpDb {
+        // block_height,
+        out_file_path,
+    }: args::LedgerDumpDb,
+) {
+    use namada::ledger::storage::DB;
+
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    db.dump_last_block(out_file_path);
 }
 
 /// Runs and monitors a few concurrent tasks.
