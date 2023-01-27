@@ -197,8 +197,8 @@ where
 {
     if epoch.0 == 0 {
         return Err(storage_api::Error::Custom(CustomError(
-            "Validator set update proofs should only be requested from
-             epoch 1 onwards"
+            "Validator set update proofs should only be requested from epoch \
+             1 onwards"
                 .into(),
         )));
     }
