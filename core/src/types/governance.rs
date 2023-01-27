@@ -40,6 +40,8 @@ pub enum VoteType {
     Default,
     /// A vote for the PGF council
     PGFCouncil(BTreeSet<Council>),
+    /// A vote for ETH bridge carrying the signature over the proposed message
+    ETHBridge(Signature),
 }
 
 #[derive(
@@ -71,13 +73,23 @@ impl FromStr for ProposalVote {
         match iter.next() {
             Some(t) => match t {
                 "yay" => {
-                    let mut set = BTreeSet::new();
-                    let address_iter =
-                        splits.clone().into_iter().skip(1).step_by(2);
-                    let cap_iter = splits.into_iter().skip(2).step_by(2);
-                    for (address, cap) in
-                        address_iter.zip(cap_iter).map(|(addr, cap)| {
-                            (
+                    // Check next token to detect vote type
+                    match iter.next() {
+                        Some(token) => {
+                            if Address::decode(token).is_ok() {
+                                // PGF vote
+                                let mut set = BTreeSet::new();
+                                let address_iter = splits
+                                    .clone()
+                                    .into_iter()
+                                    .skip(1)
+                                    .step_by(2);
+                                let cap_iter =
+                                    splits.into_iter().skip(2).step_by(2);
+                                for (address, cap) in address_iter
+                                    .zip(cap_iter)
+                                    .map(|(addr, cap)| {
+                                        (
                                 addr.to_owned().parse().map_err(
                                     |e: crate::types::address::DecodeError| {
                                         e.to_string()
@@ -85,15 +97,24 @@ impl FromStr for ProposalVote {
                                 ),
                                 cap.parse::<u64>().map_err(|e| e.to_string()),
                             )
-                        })
-                    {
-                        set.insert((address?, cap?.into()));
-                    }
+                                    })
+                                {
+                                    set.insert((address?, cap?.into()));
+                                }
 
-                    if set.is_empty() {
-                        Ok(Self::Yay(VoteType::Default))
-                    } else {
-                        Ok(Self::Yay(VoteType::PGFCouncil(set)))
+                                Ok(Self::Yay(VoteType::PGFCouncil(set)))
+                            } else {
+                                // ETH Bridge vote
+                                let signature = serde_json::from_str(token)
+                                    .map_err(|e| e.to_string())?;
+
+                                Ok(Self::Yay(VoteType::ETHBridge(signature)))
+                            }
+                        }
+                        None => {
+                            // Default vote
+                            Ok(Self::Yay(VoteType::Default))
+                        }
                     }
                 }
                 "nay" => match iter.next() {
@@ -112,10 +133,7 @@ impl FromStr for ProposalVote {
 impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
-        match self {
-            ProposalVote::Yay(_) => true,
-            ProposalVote::Nay => false,
-        }
+        matches!(self, ProposalVote::Yay(_))
     }
 
     /// Check if vote is of type default
@@ -130,7 +148,25 @@ impl ProposalVote {
 impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalVote::Yay(_) => write!(f, "yay"),
+            ProposalVote::Yay(vote_type) => match vote_type {
+                VoteType::Default => write!(f, "yay"),
+                VoteType::PGFCouncil(councils) => {
+                    writeln!(f, "yay with councils:")?;
+                    for (address, spending_cap) in councils {
+                        writeln!(
+                            f,
+                            "Council: {}, spending cap: {}",
+                            address, spending_cap
+                        )?
+                    }
+
+                    Ok(())
+                }
+                VoteType::ETHBridge(sig) => {
+                    write!(f, "yay with signature: {:#?}", sig)
+                }
+            },
+
             ProposalVote::Nay => write!(f, "nay"),
         }
     }
@@ -145,10 +181,12 @@ pub enum ProposalVoteParseError {
 
 /// The type of the tally
 pub enum Tally {
-    /// Tally a default proposal
+    /// Default proposal
     Default,
-    /// Tally a PGF proposal
+    /// PGF proposal
     PGFCouncil(Council),
+    /// ETH Bridge proposal
+    ETHBridge,
 }
 
 /// The result of a proposal
@@ -196,7 +234,7 @@ impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TallyResult::Passed(vote) => match vote {
-                Tally::Default => write!(f, "passed"),
+                Tally::Default | Tally::ETHBridge => write!(f, "passed"),
                 Tally::PGFCouncil((council, cap)) => write!(
                     f,
                     "passed with PGF council address: {}, spending cap: {}",
@@ -218,6 +256,8 @@ pub enum ProposalType {
     Default(Option<String>),
     /// A PGF council proposal
     PGFCouncil,
+    /// An ETH bridge proposal
+    ETHBridge,
 }
 
 #[derive(

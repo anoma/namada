@@ -24,6 +24,8 @@ pub enum ProposalType {
     Default(Option<Vec<u8>>),
     /// PGF council proposal
     PGFCouncil,
+    /// ETH proposal
+    ETHBridge,
 }
 
 impl Display for ProposalType {
@@ -31,6 +33,7 @@ impl Display for ProposalType {
         match self {
             ProposalType::Default(_) => write!(f, "Default"),
             ProposalType::PGFCouncil => write!(f, "PGF Council"),
+            ProposalType::ETHBridge => write!(f, "ETH Bridge"),
         }
     }
 }
@@ -43,6 +46,9 @@ impl PartialEq<VoteType> for ProposalType {
             }
             Self::PGFCouncil => {
                 matches!(other, VoteType::PGFCouncil(..))
+            }
+            Self::ETHBridge => {
+                matches!(other, VoteType::ETHBridge(_))
             }
         }
     }
@@ -64,6 +70,7 @@ impl TryFrom<governance::ProposalType> for ProposalType {
                 }
             }
             governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
+            governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
         }
     }
 }
