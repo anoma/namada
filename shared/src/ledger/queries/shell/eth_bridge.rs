@@ -678,6 +678,8 @@ mod test_ethbridge_router {
                 payer: bertha_address(),
             },
         };
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
 
         // write a transfer into the bridge pool
         client
@@ -730,6 +732,113 @@ mod test_ethbridge_router {
                 &client,
                 Some(
                     vec![transfer2.keccak256()]
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
+                None,
+                false,
+            )
+            .await;
+        // thus proof generation should fail
+        assert!(resp.is_err());
+    }
+
+    /// Test if the a transfer has been removed from the
+    /// pool (either because it was transferred or timed out),
+    /// a proof is not generated for it, even if it was
+    /// covered by a signed merkle root at a previous block
+    /// height.
+    #[tokio::test]
+    async fn test_cannot_get_proof_for_removed_transfer() {
+        let mut client = TestClient::new(RPC);
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: 0.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            },
+        };
+
+        // write a transfer into the bridge pool
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // create a signed Merkle root for this pool
+        let signed_root = BridgePoolRootProof {
+            signatures: Default::default(),
+            data: (transfer.keccak256(), 0.into()),
+        };
+
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+
+        // update the pool
+        let mut transfer2 = transfer.clone();
+        transfer2.transfer.amount = 1.into();
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // add the signature for the pool at the previous block height
+        client
+            .storage
+            .write(
+                &get_signed_root_key(),
+                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+            )
+            .expect("Test failed");
+
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+        // this was in the pool, covered by an old signed Merkle root.
+        let resp = RPC
+            .shell()
+            .eth_bridge()
+            .generate_bridge_pool_proof(
+                &client,
+                Some(
+                    vec![transfer.keccak256()]
+                        .try_to_vec()
+                        .expect("Test failed"),
+                ),
+                None,
+                false,
+            )
+            .await;
+        assert!(resp.is_ok());
+
+        // remove a transfer from the pool.
+        client
+            .storage
+            .delete(&get_pending_key(&transfer))
+            .expect("Test failed");
+
+        // this was in the pool, covered by an old signed Merkle root.
+        let resp = RPC
+            .shell()
+            .eth_bridge()
+            .generate_bridge_pool_proof(
+                &client,
+                Some(
+                    vec![transfer.keccak256()]
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
