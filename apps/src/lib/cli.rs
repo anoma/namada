@@ -1596,7 +1596,7 @@ pub mod cmds {
                     "Construct a merkle proof that the given transfer is in \
                      the pool.",
                 )
-                .add_args::<args::EthereumBridgePool>()
+                .add_args::<args::BridgePoolProof>()
         }
     }
 

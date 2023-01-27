@@ -61,7 +61,7 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
         .unwrap();
 
     println!(
-        "Ethereum ABI-encoded proof:\n {:#?}",
+        "Ethereum ABI-encoded proof:\n {:?}",
         response.data.into_inner()
     );
 }
