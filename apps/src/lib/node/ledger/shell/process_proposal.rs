@@ -302,7 +302,7 @@ mod test_process_proposal {
         .expect("Test failed");
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
-            sig,
+            sigs,
         })) = wrapper
             .data
             .take()
@@ -326,8 +326,8 @@ mod test_process_proposal {
                 code: vec![],
                 data: Some(
                     SignedTxData {
-                        sig,
                         data: Some(new_data),
+                        sigs: sigs
                     }
                     .try_to_vec()
                     .expect("Test failed"),

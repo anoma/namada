@@ -1,5 +1,5 @@
 use namada_core::types::transaction::InitAccount;
-use namada_core::types::key;
+use namada_core::types::key::{pk_key as the_keyyyyy};
 
 use super::*;
 
@@ -9,9 +9,11 @@ pub fn init_account(ctx: &mut Ctx, data: InitAccount) -> TxResult {
     let pk_threshold = key::threshold_key(&address);
     ctx.write(&pk_threshold, &data.threshold)?;
     
-    for (pk, index) in data.public_keys.iter().zip(0u64..) {
-        let pk_key = key::pk_key(&address, index);
+    let mut index = 0;
+    for pk in data.public_keys.iter() {
+        let pk_key = the_keyyyyy(&address, index);
         ctx.write(&pk_key, pk)?;
+        index += 1;
     }
 
     Ok(())

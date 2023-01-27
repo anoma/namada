@@ -86,6 +86,10 @@ impl SignedTxData {
         return None;
     }
 
+    pub fn total_signatures(&self) -> u64 {
+        self.sigs.len() as u64
+    }
+
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
@@ -454,14 +458,6 @@ impl Tx {
     ) -> std::result::Result<(), VerifySigError> {
         SigningTx::from(self.clone()).verify_sig(pk, sig)
     }
-
-    // pub fn verify_sig_multisignature(
-    //     &self,
-    //     pk: &Vec<common::PublicKey>,
-    //     sig: &Vec<common::Signature>,
-    // ) -> std::result::Result<(), VerifySigError> {
-    //     SigningTx::from(self.clone()).verify_sig(pk, sig)
-    // }
 }
 
 #[allow(dead_code)]

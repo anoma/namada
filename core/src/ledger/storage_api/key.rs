@@ -16,7 +16,7 @@ where
 
 /// Get the public key associated with the given address. Returns `Ok(None)` if
 /// not found.
-pub fn threshold<S>(storage: &S, owner: &Address) -> Result<Option<common::PublicKey>>
+pub fn threshold<S>(storage: &S, owner: &Address) -> Result<Option<u64>>
 where
     S: StorageRead,
 {

@@ -66,6 +66,7 @@ use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
+use super::signing::sign_tx_multisignature;
 use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
@@ -264,20 +265,21 @@ pub async fn submit_init_account_multisignature(
 
     let mut pks_map = HashMap::new();
     for (index, pk) in public_keys.iter().enumerate() {
-        pks_map.insert(pk, index as u64);
+        pks_map.insert(pk.clone(), index as u64);
     }
 
     let tx = Tx::new(tx_code, Some(data));
-    // let (ctx, initialized_accounts) = process_tx(
-    //     ctx,
-    //     &args.tx,
-    //     tx,
-    //     TxSigningKey::WalletAddress(args.source),
-    //     #[cfg(not(feature = "mainnet"))]
-    //     false,
-    // )
-    // .await;
-    // save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
+    let (ctx, initialized_accounts) = process_tx_multisignature(
+        ctx,
+        &args.tx,
+        tx,
+        pks_map,
+        args.sources.iter().map(|source| TxSigningKey::WalletAddress(source.clone())).collect(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
 pub async fn submit_init_validator(
@@ -2648,58 +2650,59 @@ async fn process_tx_multisignature(
     args: &args::Tx,
     tx: Tx,
     pks_index_map: HashMap<common::PublicKey, u64>,
-    default_signer: Vec<TxSigningKey>,
+    default_signers: Vec<TxSigningKey>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) {
-    // let (ctx, to_broadcast) = sign_tx_multisignature(
-    //     ctx,
-    //     tx,
-    //     args,
-    //     default_signer,
-    //     #[cfg(not(feature = "mainnet"))]
-    //     requires_pow,
-    // )
-    // .await;
+) -> (Context, Vec<Address>) {
+    let (ctx, to_broadcast) = sign_tx_multisignature(
+        ctx,
+        tx,
+        args,
+        pks_index_map,
+        default_signers,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await;
 
-    // if args.dry_run {
-    //     if let TxBroadcastData::DryRun(tx) = to_broadcast {
-    //         rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
-    //         (ctx, vec![])
-    //     } else {
-    //         panic!(
-    //             "Expected a dry-run transaction, received a wrapper \
-    //              transaction instead"
-    //         );
-    //     }
-    // } else {
-    //     // Either broadcast or submit transaction and collect result into
-    //     // sum type
-    //     let result = if args.broadcast_only {
-    //         Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
-    //     } else {
-    //         Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
-    //     };
-    //     // Return result based on executed operation, otherwise deal with
-    //     // the encountered errors uniformly
-    //     match result {
-    //         Right(Ok(result)) => (ctx, result.initialized_accounts),
-    //         Left(Ok(_)) => (ctx, Vec::default()),
-    //         Right(Err(err)) => {
-    //             eprintln!(
-    //                 "Encountered error while broadcasting transaction: {}",
-    //                 err
-    //             );
-    //             safe_exit(1)
-    //         }
-    //         Left(Err(err)) => {
-    //             eprintln!(
-    //                 "Encountered error while broadcasting transaction: {}",
-    //                 err
-    //             );
-    //             safe_exit(1)
-    //         }
-    //     }
-    // }
+    if args.dry_run {
+        if let TxBroadcastData::DryRun(tx) = to_broadcast {
+            rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+            (ctx, vec![])
+        } else {
+            panic!(
+                "Expected a dry-run transaction, received a wrapper \
+                 transaction instead"
+            );
+        }
+    } else {
+        // Either broadcast or submit transaction and collect result into
+        // sum type
+        let result = if args.broadcast_only {
+            Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
+        } else {
+            Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
+        };
+        // Return result based on executed operation, otherwise deal with
+        // the encountered errors uniformly
+        match result {
+            Right(Ok(result)) => (ctx, result.initialized_accounts),
+            Left(Ok(_)) => (ctx, Vec::default()),
+            Right(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+            Left(Err(err)) => {
+                eprintln!(
+                    "Encountered error while broadcasting transaction: {}",
+                    err
+                );
+                safe_exit(1)
+            }
+        }
+    }
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses

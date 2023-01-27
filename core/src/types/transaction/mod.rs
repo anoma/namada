@@ -533,7 +533,8 @@ pub mod tx_types {
                     .try_to_vec()
                     .expect("Test failed"),
             ),
-            sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
+            sigs: vec![]
+            // sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
         };
         // create the tx with signed decrypted data
         let tx =

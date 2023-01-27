@@ -434,7 +434,7 @@ mod tests {
         let addr = address::testing::established_address_1();
 
         // Write the public key to storage
-        let pk_key = key::pk_key(&addr);
+        let pk_key = key::pk_key(&addr, 0);
         let keypair = key::testing::keypair_1();
         let pk = keypair.ref_to();
         env.wl_storage
@@ -461,7 +461,7 @@ mod tests {
             assert_eq!(&signed_tx_data.data, data);
             assert!(
                 vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
+                    .verify_tx_signature(&pk, &signed_tx_data.sigs.get(0).unwrap().sig)
                     .unwrap()
             );
 
@@ -470,7 +470,7 @@ mod tests {
                 !vp::CTX
                     .verify_tx_signature(
                         &other_keypair.ref_to(),
-                        &signed_tx_data.sig
+                        &signed_tx_data.sigs.get(0).unwrap().sig
                     )
                     .unwrap()
             );
