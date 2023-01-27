@@ -760,6 +760,7 @@ pub mod cmds {
     pub enum Ledger {
         Run(LedgerRun),
         Reset(LedgerReset),
+        DumpDb(LedgerDumpDb),
     }
 
     impl SubCmd for Ledger {
@@ -769,7 +770,9 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
+                let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
                 run.or(reset)
+                    .or(dump_db)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -783,6 +786,7 @@ pub mod cmds {
                 )
                 .subcommand(LedgerRun::def())
                 .subcommand(LedgerReset::def())
+                .subcommand(LedgerDumpDb::def())
         }
     }
 
@@ -820,6 +824,25 @@ pub mod cmds {
                 "Delete Namada ledger node's and Tendermint node's storage \
                  data.",
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerDumpDb(pub args::LedgerDumpDb);
+
+    impl SubCmd for LedgerDumpDb {
+        const CMD: &'static str = "dump-db";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerDumpDb::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Dump Namada ledger node's DB from a block into a file.")
+                .add_args::<args::LedgerDumpDb>()
         }
     }
 
@@ -1578,6 +1601,7 @@ pub mod args {
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
+    // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -1736,6 +1760,38 @@ pub mod args {
                     .def()
                     .about("The start time of the ledger."),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerDumpDb {
+        // TODO: allow to specify height
+        // pub block_height: Option<BlockHeight>,
+        pub out_file_path: PathBuf,
+    }
+
+    impl Args for LedgerDumpDb {
+        fn parse(matches: &ArgMatches) -> Self {
+            // let block_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let out_file_path = OUT_FILE_PATH_OPT
+                .parse(matches)
+                .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
+            Self {
+                // block_height,
+                out_file_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app
+                // .arg(BLOCK_HEIGHT_OPT.def().about(
+                //     "The block height to dump. Defaults to latest committed
+                // block.", ))
+                .arg(OUT_FILE_PATH_OPT.def().about(
+                    "Path for the output file (omitting file extension). \
+                     Defaults to \"db_dump.{block_height}.toml\" in the \
+                     current working directory.",
+                ))
         }
     }
 
