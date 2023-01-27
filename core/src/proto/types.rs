@@ -12,6 +12,7 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -91,10 +92,10 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
 }
 
 impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
-    type Output = Vec<u8>;
+    type Output = KeccakHash;
 
-    fn as_signable(data: &T) -> Vec<u8> {
-        let eth_message = {
+    fn as_signable(data: &T) -> KeccakHash {
+        keccak_hash({
             let message = data.as_ref();
 
             let mut eth_message =
@@ -102,8 +103,7 @@ impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
                     .into_bytes();
             eth_message.extend_from_slice(message);
             eth_message
-        };
-        eth_message
+        })
     }
 }
 

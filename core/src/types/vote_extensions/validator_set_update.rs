@@ -352,7 +352,7 @@ mod tag {
     pub struct SerializeWithAbiEncode;
 
     impl Signable<Vext> for SerializeWithAbiEncode {
-        type Output = Vec<u8>;
+        type Output = KeccakHash;
 
         fn as_signable(ext: &Vext) -> Self::Output {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
