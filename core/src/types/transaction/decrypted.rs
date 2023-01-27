@@ -12,6 +12,7 @@ pub mod decrypted_tx {
     use super::EllipticCurve;
     use crate::proto::Tx;
     use crate::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
+    use crate::types::transaction::encrypted::EncryptedTx;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -75,10 +76,11 @@ pub mod decrypted_tx {
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
+        inner_tx: EncryptedTx,
     ) -> bool {
         match decrypted {
             DecryptedTx::Decrypted { .. } => true,
-            DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey).is_err(),
+            DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey, inner_tx).is_err(),
         }
     }
 

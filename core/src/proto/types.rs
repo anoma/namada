@@ -20,6 +20,10 @@ use crate::types::transaction::process_tx;
 use crate::types::transaction::DecryptedTx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::TxType;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::encrypted::EncryptedTx;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::EncryptionKey;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -146,6 +150,8 @@ impl SigningTx {
             code: self.code_hash.to_vec(),
             data: self.data.clone(),
             timestamp,
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -198,6 +204,8 @@ impl SigningTx {
                 code,
                 data: self.data,
                 timestamp: self.timestamp,
+                inner_tx: None,
+                inner_tx_code: None,
             })
         } else {
             None
@@ -219,12 +227,38 @@ impl From<Tx> for SigningTx {
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Hash,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    /// the encrypted payload
+    #[cfg(feature = "ferveo-tpke")]
+    pub inner_tx: Option<EncryptedTx>,
+    #[cfg(not(feature = "ferveo-tpke"))]
+    pub inner_tx: Option<Vec<u8>>,
+    /// the encrypted payload
+    #[cfg(feature = "ferveo-tpke")]
+    pub inner_tx_code: Option<EncryptedTx>,
+    #[cfg(not(feature = "ferveo-tpke"))]
+    pub inner_tx_code: Option<Vec<u8>>,
+}
+
+impl Hash for Tx {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.code.hash(state);
+        self.data.hash(state);
+        self.timestamp.hash(state);
+    }
+}
+
+impl PartialEq for Tx {
+    fn eq(&self, other: &Self) -> bool {
+        self.code.eq(&other.code) &&
+            self.data.eq(&other.data) &&
+            self.timestamp.eq(&other.timestamp)
+    }
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -236,10 +270,26 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
+        let inner_tx = match tx.inner_tx {
+            Some(x) => Some(
+                BorshDeserialize::try_from_slice(&x)
+                    .expect("Unable to deserialize encrypted transactions")
+            ),
+            None => None,
+        };
+        let inner_tx_code = match tx.inner_tx_code {
+            Some(x) => Some(
+                BorshDeserialize::try_from_slice(&x)
+                    .expect("Unable to deserialize encrypted transactions")
+            ),
+            None => None,
+        };
         Ok(Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            inner_tx,
+            inner_tx_code,
         })
     }
 }
@@ -247,10 +297,23 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
+        let inner_tx = if let Some(inner_tx) = tx.inner_tx {
+            Some(inner_tx.try_to_vec().expect("Unable to serialize encrypted transaction"))
+        } else {
+            None
+        };
+        let inner_tx_code = if let Some(inner_tx_code) = tx.inner_tx_code {
+            Some(inner_tx_code.try_to_vec().expect("Unable to serialize encrypted transaction"))
+        } else {
+            None
+        };
+        
         types::Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            inner_tx,
+            inner_tx_code,
         }
     }
 }
@@ -347,6 +410,8 @@ impl Tx {
             code,
             data,
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
     }
 
@@ -367,12 +432,15 @@ impl Tx {
     }
 
     /// Sign a transaction using [`SignedTxData`].
-    pub fn sign(self, keypair: &common::SecretKey) -> Self {
+    pub fn sign(mut self, keypair: &common::SecretKey) -> Self {
         let code = self.code.clone();
-        SigningTx::from(self)
+        let inner_tx = std::mem::take(&mut self.inner_tx);
+        let inner_tx_code = std::mem::take(&mut self.inner_tx_code);
+        let tx = SigningTx::from(self)
             .sign(keypair)
             .expand(code)
-            .expect("code hashes to unexpected value")
+            .expect("code hashes to unexpected value");
+        Self { inner_tx, inner_tx_code, ..tx }
     }
 
     /// Verify that the transaction has been signed by the secret key
@@ -383,6 +451,17 @@ impl Tx {
         sig: &common::Signature,
     ) -> std::result::Result<(), VerifySigError> {
         SigningTx::from(self.clone()).verify_sig(pk, sig)
+    }
+
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn attach_inner_tx(
+        mut self,
+        tx: &Tx,
+        encryption_key: EncryptionKey
+    ) -> Self {
+        let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
+        self.inner_tx = Some(inner_tx);
+        self
     }
 }
 
@@ -479,6 +558,8 @@ mod tests {
             code,
             data: Some(data),
             timestamp: None,
+            inner_tx: None,
+            inner_tx_code: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

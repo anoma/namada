@@ -18,7 +18,7 @@ pub mod wrapper_tx {
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{
-        hash_tx, EncryptionKey, Hash, TxError, TxType,
+        hash_tx, Hash, TxError, TxType,
     };
 
     /// Minimum fee amount in micro NAMs
@@ -173,8 +173,6 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// the encrypted payload
-        pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
         /// the contents of the encrypted payload
         pub tx_hash: Hash,
@@ -193,20 +191,16 @@ pub mod wrapper_tx {
             keypair: &common::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
-            tx: Tx,
-            encryption_key: EncryptionKey,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 crate::ledger::testnet_pow::Solution,
             >,
         ) -> WrapperTx {
-            let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
                 fee,
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                inner_tx,
-                tx_hash: hash_tx(&tx.to_bytes()),
+                tx_hash: Hash::default(),
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -219,8 +213,8 @@ pub mod wrapper_tx {
         }
 
         /// A validity check on the ciphertext.
-        pub fn validate_ciphertext(&self) -> bool {
-            self.inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
+        pub fn validate_ciphertext(inner_tx: EncryptedTx) -> bool {
+            inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
                 -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
             ))
         }
@@ -233,9 +227,10 @@ pub mod wrapper_tx {
         pub fn decrypt(
             &self,
             privkey: <EllipticCurve as PairingEngine>::G2Affine,
+            inner_tx: EncryptedTx,
         ) -> Result<Tx, WrapperTxErr> {
             // decrypt the inner tx
-            let decrypted = self.inner_tx.decrypt(privkey);
+            let decrypted = inner_tx.decrypt(privkey);
             // check that the hash equals commitment
             if hash_tx(&decrypted) != self.tx_hash {
                 Err(WrapperTxErr::DecryptedHash)
@@ -244,6 +239,12 @@ pub mod wrapper_tx {
                 Tx::try_from(decrypted.as_ref())
                     .map_err(|_| WrapperTxErr::InvalidTx)
             }
+        }
+
+        /// Bind the given transaction to this wrapper by recording its hash
+        pub fn bind(mut self, tx: Tx) -> Self {
+            self.tx_hash = hash_tx(&tx.to_bytes());
+            self
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
@@ -348,6 +349,7 @@ pub mod wrapper_tx {
         use super::*;
         use crate::proto::SignedTxData;
         use crate::types::address::nam;
+        use crate::types::transaction::EncryptionKey;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -366,6 +368,7 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
+            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
 
             let wrapper = WrapperTx::new(
                 Fee {
@@ -375,14 +378,12 @@ pub mod wrapper_tx {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            );
-            assert!(wrapper.validate_ciphertext());
+            ).bind(tx.clone());
+            assert!(WrapperTx::validate_ciphertext(encrypted_tx.clone()));
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let decrypted = wrapper.decrypt(privkey).expect("Test failed");
+            let decrypted = wrapper.decrypt(privkey, encrypted_tx).expect("Test failed");
             assert_eq!(tx, decrypted);
         }
 
@@ -394,6 +395,7 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
+            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
 
             let mut wrapper = WrapperTx::new(
                 Fee {
@@ -403,16 +405,14 @@ pub mod wrapper_tx {
                 &gen_keypair(),
                 Epoch(0),
                 0.into(),
-                tx,
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.tx_hash = Hash([0u8; 32]);
-            assert!(wrapper.validate_ciphertext());
+            assert!(WrapperTx::validate_ciphertext(encrypted_tx.clone()));
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let err = wrapper.decrypt(privkey).expect_err("Test failed");
+            let err = wrapper.decrypt(privkey, encrypted_tx).expect_err("Test failed");
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
@@ -437,13 +437,13 @@ pub mod wrapper_tx {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx,
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
-            .expect("Test failed");
+                .bind(tx.clone())
+                .sign(&keypair)
+                .expect("Test failed")
+                .attach_inner_tx(&tx, Default::default());
 
             // we now try to alter the inner tx maliciously
             let mut wrapper = if let TxType::Wrapper(wrapper) =
@@ -464,7 +464,7 @@ pub mod wrapper_tx {
                 Tx::new("Give me all the money".as_bytes().to_owned(), None);
 
             // We replace the inner tx with a malicious one
-            wrapper.inner_tx = EncryptedTx::encrypt(
+            let inner_tx = EncryptedTx::encrypt(
                 &malicious.to_bytes(),
                 EncryptionKey(pubkey),
             );
@@ -473,10 +473,11 @@ pub mod wrapper_tx {
             wrapper.tx_hash = hash_tx(&malicious.to_bytes());
 
             // we check ciphertext validity still passes
-            assert!(wrapper.validate_ciphertext());
+            assert!(WrapperTx::validate_ciphertext(inner_tx.clone()));
             // we check that decryption still succeeds
             let decrypted = wrapper.decrypt(
-                <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator()
+                <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(),
+                inner_tx,
             )
                 .expect("Test failed");
             assert_eq!(decrypted, malicious);

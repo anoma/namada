@@ -7,6 +7,7 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use namada::types::transaction::WrapperTx;
 
 impl<D, H> Shell<D, H>
 where
@@ -86,6 +87,7 @@ where
         };
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+        let inner_tx = tx.inner_tx.clone();
 
         match process_tx(tx) {
             // This occurs if the wrapper / protocol tx signature is invalid
@@ -110,6 +112,8 @@ where
                 TxType::Decrypted(tx) => match tx_queue_iter.next() {
                     Some(WrapperTxInQueue {
                         tx: wrapper,
+                        inner_tx,
+                        inner_tx_code,
                         #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: _,
                     }) => {
@@ -121,7 +125,8 @@ where
                                        determined in the previous block"
                                     .into(),
                             }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
+                        } else if inner_tx.is_some() &&
+                            verify_decrypted_correctly(&tx, privkey, inner_tx.clone().unwrap()) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -145,7 +150,7 @@ where
                 },
                 TxType::Wrapper(tx) => {
                     // validate the ciphertext via Ferveo
-                    if !tx.validate_ciphertext() {
+                    if inner_tx.is_none() || !WrapperTx::validate_ciphertext(inner_tx.unwrap()) {
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: format!(
@@ -244,16 +249,15 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
+        ).bind(tx.clone());
         let tx = Tx::new(
             vec![],
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
         )
-        .to_bytes();
+            .attach_inner_tx(&tx, Default::default())
+            .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone()],
@@ -280,8 +284,9 @@ mod test_process_proposal {
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
+        let inner_tx_code = "wasm_code".as_bytes().to_owned();
         let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
+            inner_tx_code.clone(),
             Some("transaction data".as_bytes().to_owned()),
         );
         let timestamp = tx.timestamp;
@@ -293,13 +298,14 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
-        .expect("Test failed");
+            .bind(tx.clone())
+            .sign(&keypair)
+            .expect("Test failed");
+        let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
+        let inner_tx_code = EncryptedTx::encrypt(&inner_tx_code, Default::default());
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
             sig,
@@ -333,6 +339,8 @@ mod test_process_proposal {
                     .expect("Test failed"),
                 ),
                 timestamp,
+                inner_tx: Some(inner_tx),
+                inner_tx_code: Some(inner_tx_code),
             }
         } else {
             panic!("Test failed");
@@ -377,13 +385,13 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
-        .expect("Test failed");
+            .bind(tx.clone())
+            .sign(&keypair)
+            .expect("Test failed")
+            .attach_inner_tx(&tx, Default::default());
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
         };
@@ -433,13 +441,13 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
-        .expect("Test failed");
+            .bind(tx.clone())
+            .sign(&keypair)
+            .expect("Test failed")
+            .attach_inner_tx(&tx, Default::default());
 
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
@@ -475,6 +483,7 @@ mod test_process_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
+            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
@@ -483,17 +492,16 @@ mod test_process_proposal {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            );
-            shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+            ).bind(tx.clone());
+            shell.enqueue_tx(wrapper, Some(encrypted_tx.clone()), None);
+            let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
-            })));
+            }));
+            txs.push(tx);
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
@@ -553,15 +561,15 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
-        shell.enqueue_tx(wrapper.clone());
+        ).bind(tx.clone());
 
         let tx =
-            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone())))
+            .attach_inner_tx(&tx, Default::default());
+
+        shell.enqueue_tx(wrapper.clone(), tx.inner_tx.clone(), tx.inner_tx_code.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -614,18 +622,17 @@ mod test_process_proposal {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
         wrapper.tx_hash = Hash([0; 32]);
 
-        shell.enqueue_tx(wrapper.clone());
         let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
-        )));
+        ))).attach_inner_tx(&tx, Default::default());
+
+        shell.enqueue_tx(wrapper.clone(), tx.inner_tx.clone(), tx.inner_tx_code.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -669,13 +676,12 @@ mod test_process_proposal {
             pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
-            inner_tx,
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
 
-        shell.enqueue_tx(wrapper.clone());
+        shell.enqueue_tx(wrapper.clone(), Some(inner_tx), None);
         let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),

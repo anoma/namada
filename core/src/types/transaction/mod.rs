@@ -296,12 +296,16 @@ pub mod tx_types {
                 code: tx.code,
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
+                inner_tx: None,
+                inner_tx_code: None,
             }
             .hash();
             match TxType::try_from(Tx {
                 code: vec![],
                 data: Some(data),
                 timestamp: tx.timestamp,
+                inner_tx: None,
+                inner_tx_code: None,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {
@@ -421,7 +425,7 @@ pub mod tx_types {
                 Some("transaction data".as_bytes().to_owned()),
             );
             // the signed tx
-            let wrapper = WrapperTx::new(
+            let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
                     token: nam(),
@@ -429,18 +433,18 @@ pub mod tx_types {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
-            .expect("Test failed");
+                .bind(tx.clone())
+                .sign(&keypair)
+                .expect("Test failed")
+                .attach_inner_tx(&tx, Default::default());
 
-            match process_tx(wrapper).expect("Test failed") {
+            match process_tx(wrapper_tx.clone()).expect("Test failed") {
                 TxType::Wrapper(wrapper) => {
                     let decrypted =
-                        wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
+                        wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(), wrapper_tx.inner_tx.unwrap())
                             .expect("Test failed");
                     assert_eq!(tx, decrypted);
                 }
@@ -453,7 +457,7 @@ pub mod tx_types {
         #[test]
         fn test_process_tx_wrapper_tx_unsigned() {
             let keypair = gen_keypair();
-            let tx = Tx::new(
+            let inner_tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
@@ -466,8 +470,6 @@ pub mod tx_types {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx,
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
@@ -477,7 +479,7 @@ pub mod tx_types {
                 Some(
                     TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
                 ),
-            );
+            ).attach_inner_tx(&inner_tx, Default::default());
             let result = process_tx(tx).expect_err("Test failed");
             assert_matches!(result, TxError::Unsigned(_));
         }

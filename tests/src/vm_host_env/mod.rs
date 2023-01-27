@@ -540,6 +540,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -577,6 +579,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -610,6 +614,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and update the client without a header
@@ -655,6 +661,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -684,6 +692,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // upgrade the client with the message
@@ -722,6 +732,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -759,6 +771,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -785,6 +799,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -821,6 +837,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -848,6 +866,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -889,6 +909,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // not bind a port
@@ -930,6 +952,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // bind a port
@@ -974,6 +998,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -998,6 +1024,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -1036,6 +1064,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -1061,6 +1091,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -1101,6 +1133,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -1141,6 +1175,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1186,6 +1222,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1226,6 +1264,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1275,6 +1315,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1340,6 +1382,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1417,6 +1461,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1464,6 +1510,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send a packet with the message
@@ -1493,6 +1541,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1544,6 +1594,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1606,6 +1658,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1678,6 +1732,8 @@ mod tests {
             code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 

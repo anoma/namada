@@ -100,12 +100,14 @@ where
             // decrypt the wrapper txs included in the previous block
             let decrypted_txs = self.storage.tx_queue.iter().map(
                 |WrapperTxInQueue {
-                     tx,
+                    tx,
+                    inner_tx,
+                    inner_tx_code,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                  }| {
-                    Tx::from(match tx.decrypt(privkey) {
-                        Ok(tx) => DecryptedTx::Decrypted {
+                    Tx::from(match inner_tx.clone().and_then(|x| tx.decrypt(privkey, x).ok()) {
+                        Some(tx) => DecryptedTx::Decrypted {
                             tx,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: *has_valid_pow,
@@ -230,16 +232,16 @@ mod test_prepare_proposal {
                     &keypair,
                     Epoch(0),
                     0.into(),
-                    tx,
-                    Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
                 )
-                .try_to_vec()
-                .expect("Test failed"),
+                    .bind(tx.clone())
+                    .try_to_vec()
+                    .expect("Test failed"),
             ),
         )
-        .to_bytes();
+            .attach_inner_tx(&tx, Default::default())
+            .to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
             txs: vec![wrapper.clone()],
@@ -290,13 +292,18 @@ mod test_prepare_proposal {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                tx,
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+            ).bind(tx.clone());
+            let wrapper = wrapper_tx
+                .sign(&keypair)
+                .expect("Test failed")
+                .attach_inner_tx(&tx, Default::default());
+            shell.enqueue_tx(
+                wrapper_tx,
+                wrapper.inner_tx.clone(),
+                wrapper.inner_tx_code.clone(),
             );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
-            shell.enqueue_tx(wrapper_tx);
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }

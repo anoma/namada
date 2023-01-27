@@ -386,12 +386,12 @@ fn extract_payload(
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
 ) {
-    match process_tx(tx) {
+    match process_tx(tx.clone()) {
         Ok(TxType::Wrapper(wrapper_tx)) => {
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             extract_payload(
-                Tx::from(match wrapper_tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted {
+                Tx::from(match tx.inner_tx.and_then(|inner_tx| wrapper_tx.decrypt(privkey, inner_tx).ok()) {
+                    Some(tx) => DecryptedTx::Decrypted {
                         tx,
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: false,

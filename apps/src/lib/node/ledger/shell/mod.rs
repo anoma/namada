@@ -774,6 +774,7 @@ mod test_utils {
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::transaction::encrypted::EncryptedTx;
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -921,9 +922,16 @@ mod test_utils {
         /// Add a wrapper tx to the queue of txs to be decrypted
         /// in the current block proposal
         #[cfg(test)]
-        pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
+        pub fn enqueue_tx(
+            &mut self,
+            wrapper: WrapperTx,
+            inner_tx: Option<EncryptedTx>,
+            inner_tx_code: Option<EncryptedTx>,
+        ) {
             self.shell.storage.tx_queue.push(WrapperTxInQueue {
                 tx: wrapper,
+                inner_tx,
+                inner_tx_code,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });
@@ -992,6 +1000,7 @@ mod test_utils {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
+        let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
@@ -1000,13 +1009,13 @@ mod test_utils {
             &keypair,
             Epoch(0),
             0.into(),
-            tx,
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
+        ).bind(tx);
         shell.storage.tx_queue.push(WrapperTxInQueue {
             tx: wrapper,
+            inner_tx: Some(encrypted_tx),
+            inner_tx_code: None,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });

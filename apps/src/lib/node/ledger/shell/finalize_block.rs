@@ -106,7 +106,7 @@ where
                 continue;
             }
 
-            let tx_type = if let Ok(tx_type) = process_tx(tx) {
+            let tx_type = if let Ok(tx_type) = process_tx(tx.clone()) {
                 tx_type
             } else {
                 tracing::error!(
@@ -217,6 +217,8 @@ where
 
                     self.storage.tx_queue.push(WrapperTxInQueue {
                         tx: wrapper.clone(),
+                        inner_tx: tx.inner_tx,
+                        inner_tx_code: tx.inner_tx_code,
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -454,6 +456,7 @@ where
 mod test_finalize_block {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::transaction::encrypted::EncryptedTx;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -495,12 +498,13 @@ mod test_finalize_block {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                raw_tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            );
-            let tx = wrapper.sign(&keypair).expect("Test failed");
+            ).bind(raw_tx.clone());
+            let tx = wrapper
+                .sign(&keypair)
+                .expect("Test failed")
+                .attach_inner_tx(&raw_tx, Default::default());
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: tx.to_bytes(),
@@ -511,7 +515,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(wrapper.clone());
+                shell.enqueue_tx(wrapper.clone(), tx.inner_tx, tx.inner_tx_code);
             }
 
             if i != 3 {
@@ -560,6 +564,7 @@ mod test_finalize_block {
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
         );
+        let encrypted_raw_tx = EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
@@ -568,11 +573,9 @@ mod test_finalize_block {
             &keypair,
             Epoch(0),
             0.into(),
-            raw_tx.clone(),
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
+        ).bind(raw_tx.clone());
 
         let processed_tx = ProcessedTx {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -586,7 +589,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper);
+        shell.enqueue_tx(wrapper, Some(encrypted_raw_tx), None);
 
         // check that the decrypted tx was not applied
         for event in shell
@@ -626,7 +629,6 @@ mod test_finalize_block {
             pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: 0.into(),
-            inner_tx,
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
@@ -642,7 +644,7 @@ mod test_finalize_block {
             },
         };
 
-        shell.enqueue_tx(wrapper);
+        shell.enqueue_tx(wrapper, Some(inner_tx), None);
 
         // check that correct error message is returned
         for event in shell
@@ -696,6 +698,7 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
             );
+            let encrypted_raw_tx = EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),
@@ -704,12 +707,10 @@ mod test_finalize_block {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                raw_tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            );
-            shell.enqueue_tx(wrapper_tx);
+            ).bind(raw_tx.clone());
+            shell.enqueue_tx(wrapper_tx, Some(encrypted_raw_tx), None);
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: raw_tx,
@@ -741,12 +742,13 @@ mod test_finalize_block {
                 &keypair,
                 Epoch(0),
                 0.into(),
-                raw_tx.clone(),
-                Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            ).bind(raw_tx.clone());
+            let wrapper = wrapper_tx
+                .sign(&keypair)
+                .expect("Test failed")
+                .attach_inner_tx(&raw_tx, Default::default());
             valid_txs.push(wrapper_tx);
             processed_txs.push(ProcessedTx {
                 tx: wrapper.to_bytes(),

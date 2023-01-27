@@ -236,8 +236,8 @@ pub async fn sign_wrapper(
             None
         }
     };
-
-    let tx = {
+    // This object governs how the payload will be processed
+    let wrapper_tx = {
         WrapperTx::new(
             Fee {
                 amount: fee_amount,
@@ -246,23 +246,29 @@ pub async fn sign_wrapper(
             keypair,
             epoch,
             args.gas_limit.clone(),
-            tx,
-            // TODO: Actually use the fetched encryption key
-            Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution,
         )
+            // Bind the inner transaction to the wrapper
+            .bind(tx.clone())
     };
-
+    // Then sign over the bound wrapper
+    let stx = wrapper_tx
+        .sign(keypair)
+        .expect("Wrapper tx signing keypair should be correct")
+    // Then encrypt and attach the payload to the wrapper
+        .attach_inner_tx(
+            &tx,
+            // TODO: Actually use the fetched encryption key
+            Default::default(),
+        );
     // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = hash_tx(&tx.try_to_vec().unwrap()).to_string();
+    let wrapper_hash = hash_tx(&wrapper_tx.try_to_vec().unwrap()).to_string();
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
-    let decrypted_hash = tx.tx_hash.to_string();
+    let decrypted_hash = wrapper_tx.tx_hash.to_string();
     TxBroadcastData::Wrapper {
-        tx: tx
-            .sign(keypair)
-            .expect("Wrapper tx signing keypair should be correct"),
+        tx: stx,
         wrapper_hash,
         decrypted_hash,
     }

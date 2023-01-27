@@ -19,6 +19,8 @@ mod tests {
             code: "wasm code".as_bytes().to_owned(),
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
+            inner_tx: None,
+            inner_tx_code: None,
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

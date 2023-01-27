@@ -4,6 +4,8 @@
 #[cfg(feature = "ferveo-tpke")]
 pub mod encrypted_tx {
     use std::io::{Error, ErrorKind, Write};
+    use std::hash::Hasher;
+    use std::hash::Hash;
 
     use ark_ec::PairingEngine;
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

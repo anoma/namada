@@ -9,6 +9,8 @@ message Tx {
   // TODO this optional is useless because it's default on proto3
   optional bytes data = 2;
   google.protobuf.Timestamp timestamp = 3;
+  optional bytes inner_tx = 4;
+  optional bytes inner_tx_code = 5;
 }
 
 message Dkg { string data = 1; }
