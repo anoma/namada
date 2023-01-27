@@ -342,6 +342,7 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
+                relayer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
@@ -352,6 +353,7 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
+                relayer: gen_established_address(),
             }],
         };
         let event_3 = EthereumEvent::NewContract {
@@ -400,6 +402,7 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
+                relayer: gen_established_address(),
             }],
         };
         let event_2 = EthereumEvent::NewContract {
@@ -459,6 +462,7 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
+                    relayer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.get_current_decision_height(),
@@ -541,6 +545,7 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
+                    relayer: gen_established_address(),
                 }],
             }],
             block_height: signed_height,
@@ -606,6 +611,7 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
+                    relayer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,
@@ -681,6 +687,7 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
+                    relayer: gen_established_address(),
                 }],
             }],
             block_height: shell.storage.last_height,

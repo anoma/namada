@@ -343,6 +343,7 @@ pub mod eth_events {
                          receiver,
                          gas_amount,
                          gas_payer,
+                        relayer,
                      }| {
                         Token::Tuple(vec![
                             Token::Address(asset.0.into()),
@@ -350,6 +351,7 @@ pub mod eth_events {
                             Token::Uint(u64::from(amount).into()),
                             Token::String(gas_payer.to_string()),
                             Token::Uint(u64::from(gas_amount).into()),
+                            Token::String(relayer.to_string()),
                         ])
                     },
                 )
@@ -715,12 +717,14 @@ pub mod eth_events {
                 let amount = items.remove(0).parse_amount()?;
                 let gas_payer = items.remove(0).parse_address()?;
                 let gas_amount = items.remove(0).parse_amount()?;
+                let relayer = items.remove(0).parse_address()?;
                 Ok(TransferToEthereum {
                     asset,
                     amount,
                     receiver,
                     gas_amount,
                     gas_payer,
+                    relayer,
                 })
             } else {
                 Err(Error::Decode(format!(
@@ -983,7 +987,8 @@ pub mod eth_events {
                         asset: EthAddress([1; 20]),
                         receiver: EthAddress([2; 20]),
                         gas_amount: Default::default(),
-                        gas_payer: address,
+                        gas_payer: address.clone(),
+                        relayer: address,
                     };
                     2
                 ],

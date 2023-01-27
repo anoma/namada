@@ -249,6 +249,7 @@ mod tests {
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
     use namada_core::types::{address, eth_bridge_pool};
+    use namada_core::types::address::gen_established_address;
 
     use super::*;
 
@@ -462,7 +463,7 @@ mod tests {
         let pending_transfers = init_bridge_pool(&mut storage);
         let pending_keys: HashSet<Key> =
             pending_transfers.iter().map(get_pending_key).collect();
-
+        let relayer = gen_established_address("random");
         let mut transfers = vec![];
         for transfer in pending_transfers {
             let transfer_to_eth = TransferToEthereum {
@@ -471,6 +472,7 @@ mod tests {
                 receiver: transfer.transfer.recipient,
                 gas_amount: transfer.gas_fee.amount,
                 gas_payer: transfer.gas_fee.payer,
+                relayer: relayer.clone(),
             };
             transfers.push(transfer_to_eth);
         }

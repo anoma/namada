@@ -310,6 +310,9 @@ pub struct TransferToEthereum {
     pub gas_amount: Amount,
     /// The account of fee payer.
     pub gas_payer: Address,
+    /// The Namada address that receives the gas fees
+    /// for relaying a batch of transfers
+    pub relayer: Address,
 }
 
 /// struct for whitelisting a token from Ethereum.
