@@ -11,6 +11,7 @@ message Tx {
   google.protobuf.Timestamp timestamp = 3;
   optional bytes inner_tx = 4;
   optional bytes inner_tx_code = 5;
+  bool is_literal = 6;
 }
 
 message Dkg { string data = 1; }

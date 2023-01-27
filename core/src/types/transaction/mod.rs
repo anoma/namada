@@ -293,19 +293,19 @@ pub mod tx_types {
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
-                code: tx.code,
+                code: tx.code.clone(),
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
-                inner_tx: None,
-                inner_tx_code: None,
+                inner_tx: tx.inner_tx.clone(),
+                inner_tx_code: tx.inner_tx_code.clone(),
             }
             .hash();
             match TxType::try_from(Tx {
-                code: vec![],
+                code: tx.code,
                 data: Some(data),
                 timestamp: tx.timestamp,
-                inner_tx: None,
-                inner_tx_code: None,
+                inner_tx: tx.inner_tx,
+                inner_tx_code: tx.inner_tx_code,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {

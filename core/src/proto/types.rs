@@ -128,97 +128,48 @@ where
     }
 }
 
-/// A Tx with its code replaced by a hash salted with the Borsh
-/// serialized timestamp of the transaction. This structure will almost
-/// certainly be smaller than a Tx, yet in the usual cases it contains
-/// enough information to confirm that the Tx is as intended and make a
-/// non-malleable signature.
+/// Represents either the literal code of a transaction or its hash.
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Hash,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Hash, PartialEq, Eq,
 )]
-pub struct SigningTx {
-    pub code_hash: [u8; 32],
-    pub data: Option<Vec<u8>>,
-    pub timestamp: DateTimeUtc,
+pub enum TxCode {
+    Hash([u8; 32]),
+    Literal(Vec<u8>),
 }
 
-impl SigningTx {
-    pub fn hash(&self) -> [u8; 32] {
-        let timestamp = Some(self.timestamp.into());
-        let mut bytes = vec![];
-        types::Tx {
-            code: self.code_hash.to_vec(),
-            data: self.data.clone(),
-            timestamp,
-            inner_tx: None,
-            inner_tx_code: None,
-        }
-        .encode(&mut bytes)
-        .expect("encoding a transaction failed");
-        hash_tx(&bytes).0
-    }
-
-    /// Sign a transaction using [`SignedTxData`].
-    pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let to_sign = self.hash();
-        let sig = common::SigScheme::sign(keypair, to_sign);
-        let signed = SignedTxData {
-            data: self.data,
-            sig,
-        }
-        .try_to_vec()
-        .expect("Encoding transaction data shouldn't fail");
-        SigningTx {
-            code_hash: self.code_hash,
-            data: Some(signed),
-            timestamp: self.timestamp,
+impl TxCode {
+    pub fn code(&self) -> Option<Vec<u8>> {
+        match self {
+            Self::Hash(_hash) => None,
+            Self::Literal(lit) => Some(lit.clone()),
         }
     }
-
-    /// Verify that the transaction has been signed by the secret key
-    /// counterpart of the given public key.
-    pub fn verify_sig(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
-    ) -> std::result::Result<(), VerifySigError> {
-        // Try to get the transaction data from decoded `SignedTxData`
-        let tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
-        let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
-            .expect("Decoding transaction data shouldn't fail");
-        let data = signed_tx_data.data;
-        let tx = SigningTx {
-            code_hash: self.code_hash,
-            data,
-            timestamp: self.timestamp,
-        };
-        let signed_data = tx.hash();
-        common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
+    pub fn code_hash(&self) -> [u8; 32] {
+        match self {
+            Self::Hash(hash) => hash.clone(),
+            Self::Literal(lit) => hash_tx(lit).0,
+        }
     }
-
     /// Expand this reduced Tx using the supplied code only if the the code
     /// hashes to the stored code hash
-    pub fn expand(self, code: Vec<u8>) -> Option<Tx> {
-        if hash_tx(&code).0 == self.code_hash {
-            Some(Tx {
-                code,
-                data: self.data,
-                timestamp: self.timestamp,
-                inner_tx: None,
-                inner_tx_code: None,
-            })
-        } else {
-            None
+    pub fn expand(&mut self, code: Vec<u8>) {
+        if TxCode::Hash(hash_tx(&code).0) == *self {
+            *self = TxCode::Literal(code);
         }
     }
-}
-
-impl From<Tx> for SigningTx {
-    fn from(tx: Tx) -> SigningTx {
-        SigningTx {
-            code_hash: hash_tx(&tx.code).0,
-            data: tx.data,
-            timestamp: tx.timestamp,
+    pub fn contract(&mut self) {
+        *self = TxCode::Hash(self.code_hash());
+    }
+    pub fn is_literal(&self) -> bool {
+        match self {
+            Self::Literal(_) => true,
+            _ => false,
+        }
+    }
+    pub fn is_hash(&self) -> bool {
+        match self {
+            Self::Hash(_) => true,
+            _ => false,
         }
     }
 }
@@ -230,7 +181,7 @@ impl From<Tx> for SigningTx {
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct Tx {
-    pub code: Vec<u8>,
+    pub code: TxCode,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
     /// the encrypted payload
@@ -284,8 +235,13 @@ impl TryFrom<&[u8]> for Tx {
             ),
             None => None,
         };
+        let code = if tx.is_literal {
+            TxCode::Literal(tx.code)
+        } else {
+            TxCode::Hash(tx.code.try_into().expect("Unable to deserialize code hash"))
+        };
         Ok(Tx {
-            code: tx.code,
+            code,
             data: tx.data,
             timestamp,
             inner_tx,
@@ -309,7 +265,8 @@ impl From<Tx> for types::Tx {
         };
         
         types::Tx {
-            code: tx.code,
+            code: tx.code.code().unwrap_or(tx.code.code_hash().to_vec()),
+            is_literal: tx.code.is_literal(),
             data: tx.data,
             timestamp,
             inner_tx,
@@ -407,7 +364,7 @@ impl From<Tx> for ResponseDeliverTx {
 impl Tx {
     pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
         Tx {
-            code,
+            code: TxCode::Literal(code),
             data,
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
@@ -424,23 +381,42 @@ impl Tx {
     }
 
     pub fn hash(&self) -> [u8; 32] {
-        SigningTx::from(self.clone()).hash()
+        let timestamp = Some(self.timestamp.into());
+        let mut bytes = vec![];
+        types::Tx {
+            code: self.code.code().unwrap_or(self.code.code_hash().to_vec()),
+            is_literal: self.code.is_literal(),
+            data: self.data.clone(),
+            timestamp,
+            inner_tx: None,
+            inner_tx_code: None,
+        }
+        .encode(&mut bytes)
+        .expect("encoding a transaction failed");
+        hash_tx(&bytes).0
     }
 
     pub fn code_hash(&self) -> [u8; 32] {
-        SigningTx::from(self.clone()).code_hash
+        self.code.code_hash()
     }
 
     /// Sign a transaction using [`SignedTxData`].
-    pub fn sign(mut self, keypair: &common::SecretKey) -> Self {
-        let code = self.code.clone();
-        let inner_tx = std::mem::take(&mut self.inner_tx);
-        let inner_tx_code = std::mem::take(&mut self.inner_tx_code);
-        let tx = SigningTx::from(self)
-            .sign(keypair)
-            .expand(code)
-            .expect("code hashes to unexpected value");
-        Self { inner_tx, inner_tx_code, ..tx }
+    pub fn sign(self, keypair: &common::SecretKey) -> Self {
+        let to_sign = self.hash();
+        let sig = common::SigScheme::sign(keypair, to_sign);
+        let signed = SignedTxData {
+            data: self.data,
+            sig,
+        }
+        .try_to_vec()
+        .expect("Encoding transaction data shouldn't fail");
+        Tx {
+            code: self.code,
+            data: Some(signed),
+            timestamp: self.timestamp,
+            inner_tx: self.inner_tx,
+            inner_tx_code: self.inner_tx_code,
+        }
     }
 
     /// Verify that the transaction has been signed by the secret key
@@ -450,7 +426,20 @@ impl Tx {
         pk: &common::PublicKey,
         sig: &common::Signature,
     ) -> std::result::Result<(), VerifySigError> {
-        SigningTx::from(self.clone()).verify_sig(pk, sig)
+        // Try to get the transaction data from decoded `SignedTxData`
+        let tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
+        let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
+            .expect("Decoding transaction data shouldn't fail");
+        let data = signed_tx_data.data;
+        let tx = Tx {
+            code: self.code.clone(),
+            data,
+            timestamp: self.timestamp,
+            inner_tx: self.inner_tx.clone(),
+            inner_tx_code: self.inner_tx_code.clone(),
+        };
+        let signed_data = tx.hash();
+        common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
     }
 
     #[cfg(feature = "ferveo-tpke")]
@@ -555,7 +544,8 @@ mod tests {
         assert_eq!(tx_from_bytes, tx);
 
         let types_tx = types::Tx {
-            code,
+            code: code.clone(),
+            is_literal: true,
             data: Some(data),
             timestamp: None,
             inner_tx: None,

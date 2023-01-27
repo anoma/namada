@@ -3,7 +3,7 @@
 pub mod generated;
 mod types;
 
-pub use types::{Dkg, Error, Signed, SignedTxData, Tx};
+pub use types::{Dkg, Error, Signed, SignedTxData, Tx, TxCode};
 
 #[cfg(test)]
 mod tests {
@@ -17,6 +17,7 @@ mod tests {
     fn encoding_round_trip() {
         let tx = Tx {
             code: "wasm code".as_bytes().to_owned(),
+            is_literal: true,
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
             inner_tx: None,

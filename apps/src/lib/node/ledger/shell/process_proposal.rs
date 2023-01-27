@@ -223,6 +223,7 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+    use namada::proto::TxCode;
 
     use super::*;
     use crate::facade::tendermint_proto::abci::RequestInitChain;
@@ -329,7 +330,7 @@ mod test_process_proposal {
                 .try_to_vec()
                 .expect("Test failed");
             Tx {
-                code: vec![],
+                code: TxCode::Literal(vec![]),
                 data: Some(
                     SignedTxData {
                         sig,

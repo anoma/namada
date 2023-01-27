@@ -191,7 +191,7 @@ impl TestTxEnv {
             &mut self.write_log,
             &mut self.gas_meter,
             &self.tx_index,
-            &self.tx.code,
+            &self.tx.code.code().expect("tx code not present"),
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
