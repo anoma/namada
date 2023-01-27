@@ -11,6 +11,7 @@ pub mod decrypted_tx {
 
     use super::EllipticCurve;
     use crate::proto::Tx;
+    use crate::types::chain::ChainId;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -92,6 +93,7 @@ pub mod decrypted_tx {
                         .try_to_vec()
                         .expect("Encrypting transaction should not fail"),
                 ),
+                ChainId("".to_string()),
             )
         }
     }

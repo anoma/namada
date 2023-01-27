@@ -9,6 +9,7 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::chain::ChainId;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -136,6 +137,7 @@ pub struct SigningTx {
     pub code_hash: [u8; 32],
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
 }
 
 impl SigningTx {
@@ -146,6 +148,7 @@ impl SigningTx {
             code: self.code_hash.to_vec(),
             data: self.data.clone(),
             timestamp,
+            chain_id: self.chain_id.as_str().to_owned(),
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -166,6 +169,7 @@ impl SigningTx {
             code_hash: self.code_hash,
             data: Some(signed),
             timestamp: self.timestamp,
+            chain_id: self.chain_id,
         }
     }
 
@@ -185,6 +189,7 @@ impl SigningTx {
             code_hash: self.code_hash,
             data,
             timestamp: self.timestamp,
+            chain_id: self.chain_id,
         };
         let signed_data = tx.hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -198,6 +203,7 @@ impl SigningTx {
                 code,
                 data: self.data,
                 timestamp: self.timestamp,
+                chain_id: self.chain_id,
             })
         } else {
             None
@@ -211,6 +217,7 @@ impl From<Tx> for SigningTx {
             code_hash: hash_tx(&tx.code).0,
             data: tx.data,
             timestamp: tx.timestamp,
+            chain_id: tx.chain_id,
         }
     }
 }
@@ -225,6 +232,7 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub chain_id: ChainId,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -236,10 +244,13 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
+        let chain_id = ChainId(tx.chain_id);
+
         Ok(Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            chain_id,
         })
     }
 }
@@ -251,6 +262,7 @@ impl From<Tx> for types::Tx {
             code: tx.code,
             data: tx.data,
             timestamp,
+            chain_id: tx.chain_id.as_str().to_owned(),
         }
     }
 }
@@ -342,11 +354,16 @@ impl From<Tx> for ResponseDeliverTx {
 }
 
 impl Tx {
-    pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
+    pub fn new(
+        code: Vec<u8>,
+        data: Option<Vec<u8>>,
+        chain_id: ChainId,
+    ) -> Self {
         Tx {
             code,
             data,
             timestamp: DateTimeUtc::now(),
+            chain_id,
         }
     }
 
@@ -372,6 +389,7 @@ impl Tx {
                             code: self.code.clone(),
                             data: signed_data.data,
                             timestamp: self.timestamp,
+                            chain_id: self.chain_id,
                         };
                         unsigned_tx.hash()
                     }
@@ -494,7 +512,8 @@ mod tests {
     fn test_tx() {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
-        let tx = Tx::new(code.clone(), Some(data.clone()));
+        let chain_id = ChainId("This chain".to_string());
+        let tx = Tx::new(code.clone(), Some(data.clone()), chain_id.clone());
 
         let bytes = tx.to_bytes();
         let tx_from_bytes =
@@ -505,6 +524,7 @@ mod tests {
             code,
             data: Some(data),
             timestamp: None,
+            chain_id,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");
