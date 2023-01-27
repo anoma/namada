@@ -130,9 +130,14 @@ pub fn network(
     let test_dir = TestDir::new();
 
     // Open the source genesis file
-    let genesis = genesis_config::open_genesis_config(
+    let mut genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     )?;
+
+    genesis.parameters.vp_whitelist =
+        Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
+    genesis.parameters.tx_whitelist =
+        Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);

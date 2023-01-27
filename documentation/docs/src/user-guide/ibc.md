@@ -56,7 +56,7 @@ Hermes CLI has commands to create them. Before the creation, a node of each inst
 Before conducting any IBC operations, we build Heliax's Hermes fork from source.
 
 ```bash
-export COMMIT="97554eab9a30a6efdea3d97e230b827fa7ab053a"
+export COMMIT="470137e845b997228f9bcda8eec8bc02bd0be6da"
 git clone git@github.com:heliaxdev/ibc-rs.git
 git checkout $COMMIT
 cd ibc-rs
@@ -189,7 +189,20 @@ cd ibc-rs
 ./scripts/join-namada.sh $NAMADA_DIR $CHAIN_ID_A $CHAIN_ID_B
 ```
 
-You need to wait to sync each node with the corresponding instance. After the sync, you can create the channel and start Hermes as we explain [above](#create-ibc-channel).
+You need to wait to sync each node with the corresponding instance.
+And, you have to transfer NAM token to the relayer account (the script will make an alias `relayer`) from the faucet or others on each instance because the fee for IBC transactions should be charged. For example, the following command transfers NAM from the faucet for namada-a instance which is created by the script. You can refer to [here](#transferring-assets-over-ibc) about `--base-dir` and `--ledger-address`.
+```bash
+${NAMADA_DIR}/target/release/namadac transfer \
+  --base-dir ${IBC_RS}/data/namada-a/.namada \
+  --source faucet \
+  --target relayer \
+  --token nam \
+  --amount 1000 \
+  --signer relayer \
+  --ledger-address 127.0.0.1:26657
+```
+
+After the sync, you can create the channel and start Hermes as we explain [above](#create-ibc-channel).
 ```bash
 # create a channel
 hermes -c $HERMES_CONFIG \
@@ -219,7 +232,7 @@ cd ibc-rs
 ./scripts/setup-namada.sh $NAMADA_DIR $CHAIN_ID_A $CHAIN_ID_B
 ```
 
-In this case, we don't have to wait for sync. You can create a channel and start Hermes immediately as we explain [above](#create-ibc-channel). You find these chain IDs of the instances in the config file `config_for_namada.toml`. One can run `grep "id" ${HERMES_CONFIG}`.
+In this case, we don't have to wait for sync. If the relayer account on each instance has enough balance, you can create a channel and start Hermes immediately as we explain [above](#create-ibc-channel). You find these chain IDs of the instances in the config file `config_for_namada.toml`. One can run `grep "id" ${HERMES_CONFIG}`.
 ```bash
 # create a channel
 hermes -c $HERMES_CONFIG \

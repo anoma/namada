@@ -33,13 +33,36 @@ for index, machine in enumerate(MACHINES):
     print("Machine {}: {} tasks for a total of {}s".format(index, len(machine['tasks']), machine['total_time']))
     for test in machine['tasks']:
         cargo = CARGO_TEST_COMMAND.format(test)
-        print("   - {}".format(cargo))
 
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
+
+test_results = {}
+has_failures = False
 
 for test_name in tasks:
     try:
         command = CARGO_TEST_COMMAND.format(test_name)
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
+        test_results[test_name] = {
+            'status': 'ok',
+            'command': command
+        }
     except:
+        test_results[test_name] = {
+            'status': 'fail',
+            'command': command
+        }
+        has_failures = True
         continue
+
+print("\nTest run:")
+
+for test_name in test_results.keys():
+    test_status = test_results[test_name]['status']
+    print("- Test {} -> status: {}".format(test_name, test_status))
+    if test_results[test_name]['status'] != 'ok':
+        test_command = test_results[test_name]['command']
+        print("     Run locally with: {}".format(test_command))
+
+if has_failures:
+    exit(1)

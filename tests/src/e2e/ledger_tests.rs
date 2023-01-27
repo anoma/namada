@@ -126,7 +126,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -271,8 +271,10 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 3. Submit a transaction to update an account's validity predicate
 /// 4. Submit a custom tx
 /// 5. Submit a tx to initialize a new account
-/// 6. Query token balance
-/// 7. Query the raw bytes of a storage key
+/// 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+///    solution)
+/// 7. Query token balance
+/// 8. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
@@ -388,6 +390,24 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--ledger-address",
             &validator_one_rpc,
         ],
+    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+    //    solution)
+        vec![
+            "transfer",
+            "--source",
+            "faucet",
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            // Faucet withdrawal requires an explicit signer
+            "--signer",
+            ALBERT,
+            "--ledger-address",
+            &validator_one_rpc,
+        ],
     ];
 
     for tx_args in &txs_args {
@@ -409,7 +429,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
 
     let query_args_and_expected_response = vec![
-        // 6. Query token balance
+        // 7. Query token balance
         (
             vec![
                 "balance",
@@ -436,7 +456,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
-        // 7. Query storage key and get hex-encoded raw bytes
+        // 8. Query storage key and get hex-encoded raw bytes
         (
             vec![
                 "query-bytes",
@@ -1684,7 +1704,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("some VPs rejected transaction")?;
+    ledger.exp_string("rejected txs: 1")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -2162,7 +2182,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10.1",
+        "1.01",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2175,7 +2195,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // 2. Spawn threads each submitting token transfer tx
     // We collect to run the threads in parallel.
     #[allow(clippy::needless_collect)]
-    let tasks: Vec<std::thread::JoinHandle<_>> = (0..3)
+    let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
         .into_iter()
         .map(|_| {
             let test = Arc::clone(&test);
@@ -2226,6 +2246,7 @@ fn proposal_submission() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
+                max_proposal_bytes: Default::default(),
                 min_num_of_blocks: 1,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
@@ -3062,7 +3083,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
 
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;

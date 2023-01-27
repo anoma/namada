@@ -9,8 +9,10 @@ use super::storage::types::{decode, encode};
 use super::storage::{types, Storage};
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::chain::ProposalBytes;
 use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
+use crate::types::token;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
 
@@ -32,6 +34,8 @@ pub struct Parameters {
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block (read only)
     pub max_expected_time_per_block: DurationSecs,
+    /// Max payload size, in bytes, for a tx batch proposal.
+    pub max_proposal_bytes: ProposalBytes,
     /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes (read only)
@@ -48,6 +52,12 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    #[cfg(not(feature = "mainnet"))]
+    /// Faucet account for free token withdrawal
+    pub faucet_account: Option<Address>,
+    #[cfg(not(feature = "mainnet"))]
+    /// Fixed fees for a wrapper tx to be accepted
+    pub wrapper_tx_fees: Option<token::Amount>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -101,6 +111,7 @@ impl Parameters {
         let Self {
             epoch_duration,
             max_expected_time_per_block,
+            max_proposal_bytes,
             vp_whitelist,
             tx_whitelist,
             implicit_vp,
@@ -109,7 +120,21 @@ impl Parameters {
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
         } = self;
+
+        // write max proposal bytes parameter
+        let max_proposal_bytes_key = storage::get_max_proposal_bytes_key();
+        let max_proposal_bytes_value = encode(&max_proposal_bytes);
+        storage
+            .write(&max_proposal_bytes_key, max_proposal_bytes_value)
+            .expect(
+                "Max proposal bytes parameter must be initialized in the \
+                 genesis block",
+            );
 
         // write epoch parameters
         let epoch_key = storage::get_epoch_duration_storage_key();
@@ -120,14 +145,24 @@ impl Parameters {
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
-        let vp_whitelist_value = encode(&vp_whitelist);
+        let vp_whitelist_value = encode(
+            &vp_whitelist
+                .iter()
+                .map(|id| id.to_lowercase())
+                .collect::<Vec<String>>(),
+        );
         storage.write(&vp_whitelist_key, vp_whitelist_value).expect(
             "Vp whitelist parameter must be initialized in the genesis block",
         );
 
         // write tx whitelist parameter
         let tx_whitelist_key = storage::get_tx_whitelist_storage_key();
-        let tx_whitelist_value = encode(&tx_whitelist);
+        let tx_whitelist_value = encode(
+            &tx_whitelist
+                .iter()
+                .map(|id| id.to_lowercase())
+                .collect::<Vec<String>>(),
+        );
         storage.write(&tx_whitelist_key, tx_whitelist_value).expect(
             "Tx whitelist parameter must be initialized in the genesis block",
         );
@@ -187,6 +222,30 @@ impl Parameters {
             "PoS inflation rate parameter must be initialized in the genesis \
              block",
         );
+
+        #[cfg(not(feature = "mainnet"))]
+        if let Some(faucet_account) = faucet_account {
+            let faucet_account_key = storage::get_faucet_account_key();
+            let faucet_account_val = encode(faucet_account);
+            storage
+                .write(&faucet_account_key, faucet_account_val)
+                .expect(
+                    "Faucet account parameter must be initialized in the \
+                     genesis block, if any",
+                );
+        }
+
+        #[cfg(not(feature = "mainnet"))]
+        {
+            let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
+            let wrapper_tx_fees_val =
+                encode(&wrapper_tx_fees.unwrap_or(token::Amount::whole(100)));
+            storage
+                .write(&wrapper_tx_fees_key, wrapper_tx_fees_val)
+                .expect(
+                    "Wrapper tx fees must be initialized in the genesis block",
+                );
+        }
     }
 }
 /// Update the max_expected_time_per_block parameter in storage. Returns the
@@ -214,7 +273,14 @@ where
     H: ledger_storage::StorageHasher,
 {
     let key = storage::get_vp_whitelist_storage_key();
-    update(storage, &value, key)
+    update(
+        storage,
+        &value
+            .iter()
+            .map(|id| id.to_lowercase())
+            .collect::<Vec<String>>(),
+        key,
+    )
 }
 
 /// Update the tx whitelist parameter in storage. Returns the parameters and gas
@@ -228,7 +294,14 @@ where
     H: ledger_storage::StorageHasher,
 {
     let key = storage::get_tx_whitelist_storage_key();
-    update(storage, &value, key)
+    update(
+        storage,
+        &value
+            .iter()
+            .map(|id| id.to_lowercase())
+            .collect::<Vec<String>>(),
+        key,
+    )
 }
 
 /// Update the epoch parameter in storage. Returns the parameters and gas
@@ -373,6 +446,44 @@ where
     Ok((epoch_duration, gas))
 }
 
+#[cfg(not(feature = "mainnet"))]
+/// Read the faucet account's address, if any
+pub fn read_faucet_account_parameter<DB, H>(
+    storage: &Storage<DB, H>,
+) -> std::result::Result<(Option<Address>, u64), ReadError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let faucet_account_key = storage::get_faucet_account_key();
+    let (value, gas_faucet_account) = storage
+        .read(&faucet_account_key)
+        .map_err(ReadError::StorageError)?;
+    let address: Option<Address> = value
+        .map(|value| decode(value).map_err(ReadError::StorageTypeError))
+        .transpose()?;
+    Ok((address, gas_faucet_account))
+}
+
+#[cfg(not(feature = "mainnet"))]
+/// Read the wrapper tx fees amount, if any
+pub fn read_wrapper_tx_fees_parameter<DB, H>(
+    storage: &Storage<DB, H>,
+) -> std::result::Result<(Option<token::Amount>, u64), ReadError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
+    let (value, gas_wrapper_tx_fees) = storage
+        .read(&wrapper_tx_fees_key)
+        .map_err(ReadError::StorageError)?;
+    let fee: Option<token::Amount> = value
+        .map(|value| decode(value).map_err(ReadError::StorageTypeError))
+        .transpose()?;
+    Ok((fee, gas_wrapper_tx_fees))
+}
+
 // Read the all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<DB, H>(
@@ -382,6 +493,17 @@ where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: ledger_storage::StorageHasher,
 {
+    // read max proposal bytes
+    let (max_proposal_bytes, gas_proposal_bytes) = {
+        let key = storage::get_max_proposal_bytes_key();
+        let (value, gas) =
+            storage.read(&key).map_err(ReadError::StorageError)?;
+        let value: ProposalBytes =
+            decode(value.ok_or(ReadError::ParametersMissing)?)
+                .map_err(ReadError::StorageTypeError)?;
+        (value, gas)
+    };
+
     // read epoch duration
     let (epoch_duration, gas_epoch) = read_epoch_duration_parameter(storage)
         .expect("Couldn't read epoch duration parameters");
@@ -464,10 +586,47 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read faucet account
+    #[cfg(not(feature = "mainnet"))]
+    let (faucet_account, gas_faucet_account) =
+        read_faucet_account_parameter(storage)?;
+    #[cfg(feature = "mainnet")]
+    let gas_faucet_account = 0;
+
+    // read faucet account
+    #[cfg(not(feature = "mainnet"))]
+    let (wrapper_tx_fees, gas_wrapper_tx_fees) =
+        read_wrapper_tx_fees_parameter(storage)?;
+    #[cfg(feature = "mainnet")]
+    let gas_wrapper_tx_fees = 0;
+
+    let total_gas_cost = [
+        gas_epoch,
+        gas_tx,
+        gas_vp,
+        gas_time,
+        gas_implicit_vp,
+        gas_epy,
+        gas_gain_p,
+        gas_gain_d,
+        gas_staked,
+        gas_reward,
+        gas_proposal_bytes,
+        gas_faucet_account,
+        gas_wrapper_tx_fees,
+    ]
+    .into_iter()
+    .fold(0u64, |accum, gas| {
+        accum
+            .checked_add(gas)
+            .expect("u64 overflow occurred while doing gas arithmetic")
+    });
+
     Ok((
         Parameters {
             epoch_duration,
             max_expected_time_per_block,
+            max_proposal_bytes,
             vp_whitelist,
             tx_whitelist,
             implicit_vp,
@@ -476,16 +635,11 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
         },
-        gas_epoch
-            + gas_tx
-            + gas_vp
-            + gas_time
-            + gas_implicit_vp
-            + gas_epy
-            + gas_gain_p
-            + gas_gain_d
-            + gas_staked
-            + gas_reward,
+        total_gas_cost,
     ))
 }

@@ -19,6 +19,7 @@ use namada_core::ledger::ibc::storage::{
 };
 use namada_core::ledger::parameters;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::storage::Key;
 use sha2::Digest;
 use thiserror::Error;
@@ -734,14 +735,13 @@ where
         let mut channels = vec![];
         let prefix = Key::parse("channelEnds/ports")
             .expect("Creating a key for the prefix shouldn't fail");
-        let mut iter = self
-            .ctx
+        let post = self.ctx.post();
+        let mut iter = post
             .iter_prefix(&prefix)
             .map_err(|_| Ics04Error::implementation_specific())?;
         loop {
-            let next = self
-                .ctx
-                .iter_post_next(&mut iter)
+            let next = post
+                .iter_next(&mut iter)
                 .map_err(|_| Ics04Error::implementation_specific())?;
             if let Some((key, value)) = next {
                 let channel = ChannelEnd::decode_vec(&value)
