@@ -179,8 +179,13 @@ where
         let delegation_address = gov_storage::get_vote_delegation_address(key);
         let vote: Option<ProposalVote> = self.ctx.read_post(key)?;
 
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: Option<ProposalType> =
+            self.ctx.read_pre(&proposal_type_key)?;
+
         match (
             pre_counter,
+            proposal_type,
             vote,
             voter,
             delegation_address,
@@ -190,6 +195,7 @@ where
         ) {
             (
                 Some(pre_counter),
+                Some(proposal_type),
                 Some(vote),
                 Some(voter_address),
                 Some(delegation_address),
@@ -197,13 +203,18 @@ where
                 Some(pre_voting_start_epoch),
                 Some(pre_voting_end_epoch),
             ) => {
+                if pre_counter <= proposal_id {
+                    // Invalid proposal id
+                    return Ok(false);
+                }
+                if current_epoch < pre_voting_start_epoch
+                    || current_epoch > pre_voting_end_epoch
+                {
+                    // Voted outside of voting window
+                    return Ok(false);
+                }
+
                 if let ProposalVote::Yay(vote_type) = vote {
-                    let proposal_type_key =
-                        gov_storage::get_proposal_type_key(proposal_id);
-                    let proposal_type: ProposalType = self
-                        .ctx
-                        .read_pre(&proposal_type_key)?
-                        .ok_or_err_msg("Missing proposal type in storage")?;
                     if proposal_type != vote_type {
                         return Ok(false);
                     }
@@ -225,41 +236,47 @@ where
                                 _ => return Ok(false),
                             }
                         }
+                    } else if let VoteType::ETHBridge(_sig) = vote_type {
+                        // TODO: Check the validity of the signature with the governance ETH key in storage for the given validator
                     }
                 }
 
-                let is_delegator = self
-                    .is_delegator(
-                        pre_voting_start_epoch,
-                        verifiers,
-                        voter_address,
-                        delegation_address,
-                    )
-                    .unwrap_or(false);
-
-                let is_validator = self
-                    .is_validator(
-                        pre_voting_start_epoch,
-                        verifiers,
-                        voter_address,
-                        delegation_address,
-                    )
-                    .unwrap_or(false);
-
-                let is_valid_validator_voting_period =
-                    is_valid_validator_voting_period(
-                        current_epoch,
-                        pre_voting_start_epoch,
-                        pre_voting_end_epoch,
-                    );
-
-                let is_valid = pre_counter > proposal_id
-                    && current_epoch >= pre_voting_start_epoch
-                    && current_epoch <= pre_voting_end_epoch
-                    && (is_delegator
-                        || (is_validator && is_valid_validator_voting_period));
-
-                Ok(is_valid)
+                match proposal_type {
+                    ProposalType::Default(_) | ProposalType::PGFCouncil => {
+                        if self
+                            .is_validator(
+                                pre_voting_start_epoch,
+                                verifiers,
+                                voter_address,
+                                delegation_address,
+                            )
+                            .unwrap_or(false)
+                        {
+                            Ok(is_valid_validator_voting_period(
+                                current_epoch,
+                                pre_voting_start_epoch,
+                                pre_voting_end_epoch,
+                            ))
+                        } else {
+                            Ok(self
+                                .is_delegator(
+                                    pre_voting_start_epoch,
+                                    verifiers,
+                                    voter_address,
+                                    delegation_address,
+                                )
+                                .unwrap_or(false))
+                        }
+                    }
+                    ProposalType::ETHBridge => Ok(self
+                        .is_validator(
+                            pre_voting_start_epoch,
+                            verifiers,
+                            voter_address,
+                            delegation_address,
+                        )
+                        .unwrap_or(false)),
+                }
             }
             _ => Ok(false),
         }
