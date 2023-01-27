@@ -636,11 +636,12 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
+        let height = shell.storage.block.height.try_to_vec().unwrap();
         shell
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(&key, height)
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -650,11 +651,12 @@ mod test_bp_vote_extensions {
         shell.storage.block.height = 5.into();
         shell.storage.block.tree.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
+        let height = shell.storage.block.height.try_to_vec().unwrap();
         shell
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(&key, height)
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -704,11 +706,12 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
+        let height = shell.storage.block.height.try_to_vec().unwrap();
         shell
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(&key, height)
             .expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -718,11 +721,12 @@ mod test_bp_vote_extensions {
         shell.storage.block.height = 5.into();
         shell.storage.block.tree.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
+        let height = shell.storage.block.height.try_to_vec().unwrap();
         shell
             .storage
             .block
             .tree
-            .update(&key, [0])
+            .update(&key, height)
             .expect("Test failed");
         shell.commit();
         assert_eq!(

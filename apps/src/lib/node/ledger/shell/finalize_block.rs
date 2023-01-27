@@ -878,11 +878,12 @@ mod test_finalize_block {
             &KeccakHash([1; 32]),
             3.into(),
         );
+        let value = BlockHeight(4).try_to_vec().expect("Test failed");
         shell
             .storage
             .block
             .tree
-            .update(&get_key_from_hash(&KeccakHash([1; 32])), [])
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
             .expect("Test failed");
         shell
             .storage
