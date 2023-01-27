@@ -238,14 +238,16 @@ fn test_add_to_bridge_pool() {
     )
     .unwrap();
     // get the returned hash of the transfer.
-    let regex = expectrl::Regex(r#""bridge_pool_contents":(?s).*(?-s)"[0-9A-F]+":"#);
-    let mut hash = String::from_utf8(namadar
-        .session
-        .expect(regex)
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .to_vec()
+    let regex =
+        expectrl::Regex(r#""bridge_pool_contents":(?s).*(?-s)"[0-9A-F]+":"#);
+    let mut hash = String::from_utf8(
+        namadar
+            .session
+            .expect(regex)
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .to_vec(),
     )
     .unwrap()
     .split_ascii_whitespace()
@@ -260,7 +262,7 @@ fn test_add_to_bridge_pool() {
         "--hash-list",
         &hash,
         "--ledger-address",
-        &ledger_addr
+        &ledger_addr,
     ];
     let mut namadar = run!(
         test,
