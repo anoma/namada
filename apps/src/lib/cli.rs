@@ -2481,8 +2481,8 @@ pub mod args {
                 .arg(PROPOSAL_VOTE.def().about(
                     "The vote for the proposal. Either yay or nay (with \
                      optional memo).\nDefault vote: yay | nay\nPGF vote: yay \
-                     $council1 $cap1 $council2 $cap2 ... | nay (cap is \
-                     expressed in microNAM)",
+                     $council1 $cap1 $council2 $cap2 ... | nay (council is bech32m encoded, cap is \
+                     expressed in microNAM)\nETH Bridge vote: yay $signature | nay (signature is json encoded)",
                 ))
                 .arg(
                     PROPOSAL_OFFLINE

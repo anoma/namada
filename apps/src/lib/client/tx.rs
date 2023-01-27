@@ -47,6 +47,7 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::hash::Hash;
+use namada::types::key::common::Signature;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
