@@ -23,6 +23,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
+use namada::core::types::ethereum;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
@@ -34,7 +35,7 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, DB};
+use namada::ledger::storage::{local_node, DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -53,7 +54,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use super::ethereum_node::oracle;
+use super::ethereum_node::oracle::{self, last_processed_block};
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -356,16 +357,19 @@ where
 pub struct EthereumOracleChannels {
     ethereum_receiver: EthereumReceiver,
     control_sender: oracle::control::Sender,
+    last_processed_block_receiver: last_processed_block::Receiver,
 }
 
 impl EthereumOracleChannels {
     pub fn new(
         events_receiver: Receiver<EthereumEvent>,
         control_sender: oracle::control::Sender,
+        last_processed_block_receiver: last_processed_block::Receiver,
     ) -> Self {
         Self {
             ethereum_receiver: EthereumReceiver::new(events_receiver),
             control_sender,
+            last_processed_block_receiver,
         }
     }
 }
@@ -401,12 +405,14 @@ where
         // load last state from storage
         let mut storage =
             Storage::open(db_path, chain_id.clone(), native_token, db_cache);
+
         storage
             .load_last_state()
             .map_err(|e| {
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
+        local_node::ensure_values_present(&mut storage);
 
         let vp_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");
@@ -703,6 +709,36 @@ where
         );
         response.data = root.0.to_vec();
 
+        if let ShellMode::Validator {
+            eth_oracle: Some(eth_oracle),
+            ..
+        } = &self.mode
+        {
+            let last_processed_block = eth_oracle
+                .last_processed_block_receiver
+                .borrow()
+                .as_ref()
+                .cloned();
+            match last_processed_block {
+                Some(mrpb) => {
+                    tracing::info!(
+                        "Ethereum oracle's most recently processed Ethereum \
+                         block is {}",
+                        mrpb
+                    );
+                    local_node::write_value(
+                        &mut self.storage,
+                        local_node::EthereumOracleLastProcessedBlock,
+                        Some(mrpb),
+                    )
+                }
+                None => tracing::info!(
+                    "Ethereum oracle has not yet fully processed any Ethereum \
+                     blocks"
+                ),
+            }
+        }
+
         #[cfg(not(feature = "abcipp"))]
         {
             use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
@@ -778,10 +814,23 @@ where
                 );
                 return;
             };
+            let start_block = match local_node::read_value(
+                &self.storage,
+                local_node::EthereumOracleLastProcessedBlock,
+            ) {
+                Some(start_block) => start_block,
+                None => ethereum::BlockHeight::from(0),
+            };
+            tracing::info!(
+                ?start_block,
+                "Found Ethereum height from which the Ethereum oracle should \
+                 start"
+            );
             let config = namada::eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 governance_contract: config.contracts.governance.address,
+                start_block,
             };
             tracing::info!(
                 ?config,
@@ -1166,9 +1215,14 @@ mod test_utils {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+            let (_, last_processed_block_receiver) =
+                last_processed_block::channel();
             let (control_sender, control_receiver) = oracle::control::channel();
-            let eth_oracle =
-                EthereumOracleChannels::new(eth_receiver, control_sender);
+            let eth_oracle = EthereumOracleChannels::new(
+                eth_receiver,
+                control_sender,
+                last_processed_block_receiver,
+            );
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1338,8 +1392,13 @@ mod test_utils {
         let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle =
-            EthereumOracleChannels::new(eth_receiver, control_sender);
+        let (_, last_processed_block_receiver) =
+            last_processed_block::channel();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            last_processed_block_receiver,
+        );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let native_token = address::nam();
@@ -1405,8 +1464,13 @@ mod test_utils {
         let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle =
-            EthereumOracleChannels::new(eth_receiver, control_sender);
+        let (_, last_processed_block_receiver) =
+            last_processed_block::channel();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            last_processed_block_receiver,
+        );
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(

@@ -15,7 +15,7 @@ pub fn channel() -> (Sender, Receiver) {
 }
 
 /// Commands used to configure and control an `Oracle`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum Command {
     /// Sends an initial configuration to the oracle for it to use. The oracle
     /// will not do anything until this command has been sent.
