@@ -44,6 +44,7 @@ use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
+use namada::types::key::common::Signature;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
