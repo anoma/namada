@@ -7,7 +7,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use serde::Serialize;
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
 use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;
@@ -37,9 +37,11 @@ use crate::types::{storage, token};
 pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     status: TxEventQuery<'_>,
-    deadline: Instant,
+    deadline: Duration,
 ) -> Event {
     const ONE_SECOND: Duration = Duration::from_secs(1);
+    let mut backoff = ONE_SECOND;
+
     // sleep for the duration of `backoff`,
     // and update the underlying value
     async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
@@ -50,34 +52,30 @@ pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
         );
         // simple linear backoff - if an event is not available,
         // increase the backoff duration by one second
-        tokio::time::sleep(*backoff).await;
+        async_std::task::sleep(*backoff).await;
         *backoff += ONE_SECOND;
     }
-    tokio::time::timeout_at(deadline, async move {
-        let mut backoff = ONE_SECOND;
 
-        loop {
-            tracing::debug!(query = ?status, "Querying tx status");
-            let maybe_event = match query_tx_events(client, status).await {
-                Ok(response) => response,
-                Err(_err) => {
-                    // tracing::debug!(%err, "ABCI query failed");
-                    sleep_update(status, &mut backoff).await;
-                    continue;
-                }
-            };
-            if let Some(e) = maybe_event {
-                break Ok(e);
+    loop {
+        tracing::debug!(query = ?status, "Querying tx status");
+        let maybe_event = match query_tx_events(client, status).await {
+            Ok(response) => response,
+            Err(_err) => {
+                // tracing::debug!(%err, "ABCI query failed");
+                sleep_update(status, &mut backoff).await;
+                continue;
             }
-            sleep_update(status, &mut backoff).await;
+        };
+        if let Some(e) = maybe_event {
+            break e;
         }
-    })
-    .await
-    .map_err(|_| {
-        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
-    })
-    .and_then(|result| result)
-    .unwrap_or_else(|_| panic!())
+        if deadline < backoff {
+            panic!(
+                "Transaction status query deadline of {deadline:?} exceeded"
+            );
+        }
+        sleep_update(status, &mut backoff).await;
+    }
 }
 
 /// Query the epoch of the last committed block
