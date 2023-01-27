@@ -209,10 +209,35 @@ where
                         }
                     }
                     Tally::PGFCouncil(council) => {
-                        // TODO: implement when PGF is in place
+                        // TODO: implement when PGF is in place, update the PGF council in storage
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),
                             TallyResult::Passed(Tally::PGFCouncil(council)),
+                            id,
+                            false,
+                            false,
+                        )
+                        .into();
+                        response.events.push(proposal_event);
+                        proposals_result.passed.push(id);
+
+                        let proposal_author_key =
+                            gov_storage::get_author_key(id);
+
+                        shell
+                            .read_storage_key::<Address>(&proposal_author_key)
+                            .ok_or_else(|| {
+                                Error::BadProposal(
+                                    id,
+                                    "Invalid proposal author.".to_string(),
+                                )
+                            })?
+                    }
+                    Tally::ETHBridge => {
+                        //TODO: implement when ETH Bridge. Apply the modification requested by the proposal
+                        let proposal_event: Event = ProposalEvent::new(
+                            EventType::Proposal.to_string(),
+                            TallyResult::Passed(Tally::ETHBridge),
                             id,
                             false,
                             false,
@@ -264,7 +289,16 @@ where
                 .into();
                 response.events.push(proposal_event);
 
-                slash_fund_address
+                //FIXME: panic here? Remove TallyResult::Failed? -> Yes remove failed
+                let proposal_author_key = gov_storage::get_author_key(id);
+                shell
+                    .read_storage_key::<Address>(&proposal_author_key)
+                    .ok_or_else(|| {
+                        Error::BadProposal(
+                            id,
+                            "Invalid proposal author.".to_string(),
+                        )
+                    })?
             }
         };
 
