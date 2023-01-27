@@ -190,6 +190,7 @@ mod tests {
         let ev_2 = EthereumEvent::TransfersToEthereum {
             nonce: 2u64.into(),
             transfers: vec![],
+            relayer: address::testing::established_address_1(),
         };
 
         let validator_1 = address::testing::established_address_1();

@@ -4,8 +4,9 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
+use namada_core::types::address::Address;
 use namada_core::types::eth_abi;
-use namada_core::types::eth_abi::Encode;
+use namada_core::types::eth_abi::{Encode, Token};
 use namada_core::types::ethereum_events::Uint;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
@@ -152,6 +153,9 @@ pub struct RelayProof {
     pub root: BridgePoolRootProof,
     /// A membership proof
     pub proof: BridgePoolProof,
+    /// The Namada address for the relayer to receive
+    /// gas fees for those transers relayed.
+    pub relayer: Address,
 }
 
 /// ABI encode a merkle proof of inclusion of a set of transfers in the
@@ -159,18 +163,28 @@ pub struct RelayProof {
 pub fn tokenize_relay_proof(
     relay_proof: RelayProof,
     voting_powers_map: &VotingPowersMap,
-) -> [eth_abi::Token; 7] {
+) -> [eth_abi::Token; 8] {
     let RelayProof {
         validator_args,
         root,
         proof,
+        relayer,
     } = relay_proof;
     let root: EthereumProof<(&VotingPowersMap, KeccakHash, Uint)> =
         root.map(|data| (voting_powers_map, data.0, data.1));
     let [sigs, root, nonce] = root.tokenize();
     let [val_set_args] = validator_args.tokenize();
     let [proof, transfers, flags] = proof.tokenize();
-    [val_set_args, sigs, transfers, root, proof, flags, nonce]
+    [
+        val_set_args,
+        sigs,
+        transfers,
+        root,
+        proof,
+        flags,
+        nonce,
+        Token::String(relayer.to_string()),
+    ]
 }
 
 #[cfg(test)]

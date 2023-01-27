@@ -1915,12 +1915,14 @@ pub mod args {
         /// The query parameters.
         pub query: Query,
         pub transfers: Vec<KeccakHash>,
+        pub relayer: WalletAddress,
     }
 
     impl Args for BridgePoolProof {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let hashes = HASH_LIST.parse(matches);
+            let relayer = ADDRESS.parse(matches);
             Self {
                 query,
                 transfers: hashes
@@ -1935,6 +1937,7 @@ pub mod args {
                         })
                     })
                     .collect(),
+                relayer,
             }
         }
 

@@ -144,6 +144,7 @@ pub mod eth_events {
                             event: EthereumEvent::TransfersToEthereum {
                                 nonce: txs.nonce,
                                 transfers: txs.transfers,
+                                relayer: txs.relayer,
                             },
                         }
                     })
@@ -223,8 +224,10 @@ pub mod eth_events {
         /// A list of transfers
         pub transfers: Vec<TransferToEthereum>,
         /// A monotonically increasing nonce
-        #[allow(dead_code)]
         pub nonce: Uint,
+        /// The Namada address that receives the gas fees
+        /// for relaying a batch of transfers
+        pub relayer: Address,
     }
 
     impl RawTransfersToNamada {
@@ -299,7 +302,7 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToEthereum`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, transfers]: [Token; 2] = decode(
+            let [nonce, transfers, relayer]: [Token; 3] = decode(
                 &[
                     ParamType::Uint(256),
                     ParamType::Array(Box::new(ParamType::Tuple(vec![
@@ -308,7 +311,9 @@ pub mod eth_events {
                         ParamType::Uint(256),
                         ParamType::String,
                         ParamType::Uint(256),
+                        ParamType::String,
                     ]))),
+                    ParamType::String,
                 ],
                 data,
             )
@@ -325,6 +330,7 @@ pub mod eth_events {
             Ok(Self {
                 transfers,
                 nonce: nonce.parse_uint256()?,
+                relayer: relayer.parse_address()?,
             })
         }
 
@@ -332,7 +338,11 @@ pub mod eth_events {
         /// ABI serialization scheme.
         #[cfg(test)]
         pub fn encode(self) -> Vec<u8> {
-            let RawTransfersToEthereum { transfers, nonce } = self;
+            let RawTransfersToEthereum {
+                transfers,
+                nonce,
+                relayer,
+            } = self;
 
             let transfers = transfers
                 .into_iter()
@@ -343,7 +353,6 @@ pub mod eth_events {
                          receiver,
                          gas_amount,
                          gas_payer,
-                        relayer,
                      }| {
                         Token::Tuple(vec![
                             Token::Address(asset.0.into()),
@@ -356,7 +365,11 @@ pub mod eth_events {
                     },
                 )
                 .collect();
-            encode(&[Token::Uint(nonce.into()), Token::Array(transfers)])
+            encode(&[
+                Token::Uint(nonce.into()),
+                Token::Array(transfers),
+                Token::String(relayer.to_string()),
+            ])
         }
     }
 
@@ -717,14 +730,12 @@ pub mod eth_events {
                 let amount = items.remove(0).parse_amount()?;
                 let gas_payer = items.remove(0).parse_address()?;
                 let gas_amount = items.remove(0).parse_amount()?;
-                let relayer = items.remove(0).parse_address()?;
                 Ok(TransferToEthereum {
                     asset,
                     amount,
                     receiver,
                     gas_amount,
                     gas_payer,
-                    relayer,
                 })
             } else {
                 Err(Error::Decode(format!(
@@ -988,11 +999,11 @@ pub mod eth_events {
                         receiver: EthAddress([2; 20]),
                         gas_amount: Default::default(),
                         gas_payer: address.clone(),
-                        relayer: address,
                     };
                     2
                 ],
                 nonce: Uint::from(1),
+                relayer: address,
             };
             let update = ValidatorSetUpdate {
                 nonce: Uint::from(1),

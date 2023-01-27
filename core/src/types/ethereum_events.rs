@@ -211,6 +211,10 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
+        /// The Namada address that receives the gas fees
+        /// for relaying a batch of transfers
+        #[allow(dead_code)]
+        relayer: Address,
     },
     /// Event indication that the validator set has been updated
     /// in the governance contract
@@ -310,9 +314,6 @@ pub struct TransferToEthereum {
     pub gas_amount: Amount,
     /// The account of fee payer.
     pub gas_payer: Address,
-    /// The Namada address that receives the gas fees
-    /// for relaying a batch of transfers
-    pub relayer: Address,
 }
 
 /// struct for whitelisting a token from Ethereum.

@@ -241,6 +241,8 @@ mod tests {
     };
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::ledger::storage::types::encode;
+    use namada_core::types::address::gen_established_address;
+    use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
@@ -249,7 +251,6 @@ mod tests {
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
     use namada_core::types::{address, eth_bridge_pool};
-    use namada_core::types::address::gen_established_address;
 
     use super::*;
 
@@ -374,6 +375,7 @@ mod tests {
             EthereumEvent::TransfersToEthereum {
                 nonce: arbitrary_nonce(),
                 transfers: vec![],
+                relayer: gen_implicit_address(),
             },
             EthereumEvent::UpdateBridgeWhitelist {
                 nonce: arbitrary_nonce(),
@@ -472,13 +474,13 @@ mod tests {
                 receiver: transfer.transfer.recipient,
                 gas_amount: transfer.gas_fee.amount,
                 gas_payer: transfer.gas_fee.payer,
-                relayer: relayer.clone(),
             };
             transfers.push(transfer_to_eth);
         }
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers,
+            relayer,
         };
 
         let changed_keys = act_on(&mut storage, &event).unwrap();
@@ -524,6 +526,7 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers: vec![],
+            relayer: gen_implicit_address(),
         };
         let _ = act_on(&mut storage, &event).unwrap();
 
