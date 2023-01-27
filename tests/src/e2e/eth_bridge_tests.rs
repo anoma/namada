@@ -181,7 +181,7 @@ fn test_add_to_bridge_pool() {
     )
     .unwrap();
     namadan_ledger
-        .exp_string("Anoma ledger node started")
+        .exp_string("Namada ledger node started")
         .unwrap();
     namadan_ledger
         .exp_string("Tendermint node started")
