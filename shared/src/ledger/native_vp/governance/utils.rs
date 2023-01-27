@@ -90,17 +90,31 @@ pub fn compute_tally(
     } = votes;
 
     match proposal_type {
-        ProposalType::Default(_) => {
+        ProposalType::Default(_) | ProposalType::ETHBridge => {
             let mut total_yay_staked_tokens = VotePower::default();
+
             for (_, (amount, validator_vote)) in yay_validators.iter() {
-                if let ProposalVote::Yay(VoteType::Default) = validator_vote {
-                    total_yay_staked_tokens += amount;
+                if let ProposalVote::Yay(vote_type) = validator_vote {
+                    if proposal_type == vote_type {
+                        total_yay_staked_tokens += amount;
+                    } else {
+                        return ProposalResult {
+                            result: TallyResult::Failed(format!(
+                                "Unexpected vote type. Expected: {}, Found: \
+                             {}",
+                                proposal_type, validator_vote
+                            )),
+                            total_voting_power: total_stake,
+                            total_yay_power: 0,
+                            total_nay_power: 0,
+                        };
+                    }
                 } else {
                     return ProposalResult {
                         result: TallyResult::Failed(format!(
-                            "Unexpected vote type. Expected: Default, Found: \
+                            "Unexpected vote type. Expected: {}, Found: \
                              {}",
-                            validator_vote
+                            proposal_type, validator_vote
                         )),
                         total_voting_power: total_stake,
                         total_yay_power: 0,
@@ -109,6 +123,7 @@ pub fn compute_tally(
                 }
             }
 
+            // This loop is taken only for Default proposals
             for (_, vote_map) in delegators.iter() {
                 for (validator_address, (vote_power, delegator_vote)) in
                     vote_map.iter()
@@ -133,9 +148,9 @@ pub fn compute_tally(
                         _ => {
                             return ProposalResult {
                                 result: TallyResult::Failed(format!(
-                                    "Unexpected vote type. Expected: Default, \
+                                    "Unexpected vote type. Expected: {}, \
                                      Found: {}",
-                                    delegator_vote
+                                    proposal_type, delegator_vote
                                 )),
                                 total_voting_power: total_stake,
                                 total_yay_power: 0,
@@ -148,8 +163,21 @@ pub fn compute_tally(
 
             // Proposal passes if 2/3 of total voting power voted Yay
             if total_yay_staked_tokens >= (total_stake / 3) * 2 {
+                let tally_result = match proposal_type {
+                    ProposalType::Default(_) => {
+                        TallyResult::Passed(Tally::Default)
+                    }
+                    ProposalType::ETHBridge => {
+                        TallyResult::Passed(Tally::ETHBridge)
+                    }
+                    _ => TallyResult::Failed(format!(
+                        "Unexpected proposal type {}",
+                        proposal_type
+                    )),
+                };
+
                 ProposalResult {
-                    result: TallyResult::Passed(Tally::Default),
+                    result: tally_result,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_staked_tokens,
                     total_nay_power: 0,
@@ -343,7 +371,7 @@ pub fn compute_tally(
                     total_nay_power: 0,
                 },
                 _ => {
-                    // Select the winner council based on simple majority
+                    // Select the winner council based on approval voting (majority)
                     let council = total_yay_staked_tokens
                         .into_iter()
                         .max_by(|a, b| a.1.cmp(&b.1))
