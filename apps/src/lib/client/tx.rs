@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -112,7 +113,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     });
     let tx = Tx::new(tx_code, data);
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -183,7 +184,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let pks_map = rpc::get_account_pks(&client, &addr).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -200,7 +201,6 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         .public_keys
         .iter()
         .map(|pk| {
-            println!("{:?}", pk);
             ctx.get_cached(pk)
         })
         .sorted()
@@ -244,7 +244,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     }
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -385,7 +385,8 @@ pub async fn submit_init_validator(
         ctx,
         &tx_args,
         tx,
-        TxSigningKey::WalletAddress(source),
+        HashMap::new(),
+        vec![TxSigningKey::WalletAddress(source)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1727,7 +1728,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
 
     let pks_map = rpc::get_account_pks(&client, &source).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -1849,7 +1850,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
 
     let pks_map = rpc::get_account_pks(&client, &source).await;
 
-    process_tx_multisignature(
+    process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2000,7 +2001,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             ctx,
             &args.tx,
             tx,
-            TxSigningKey::WalletAddress(signer),
+            HashMap::new(),
+            vec![TxSigningKey::WalletAddress(signer)],
             #[cfg(not(feature = "mainnet"))]
             false,
         )
@@ -2128,7 +2130,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let tx_data = VoteProposalData {
                     id: proposal_id,
                     vote: args.vote,
-                    voter: voter_address,
+                    voter: voter_address.clone(),
                     delegations: delegations.into_iter().collect(),
                 };
 
@@ -2138,11 +2140,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
                 let tx = Tx::new(tx_code, Some(data));
 
+                let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
+
                 process_tx(
                     ctx,
                     &args.tx,
                     tx,
-                    TxSigningKey::WalletAddress(signer.clone()),
+                    pks_map,
+                    vec![TxSigningKey::WalletAddress(signer.clone())],
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
@@ -2417,7 +2422,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
     let pks_map = rpc::get_account_pks(&client, bond_source).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2476,7 +2481,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 
     let pks_map = rpc::get_account_pks(&client, &bond_source).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2548,7 +2553,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
 
     let pks_map = rpc::get_account_pks(&client, &bond_source).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2638,7 +2643,7 @@ pub async fn submit_validator_commission_change(
 
     let pks_map = rpc::get_account_pks(&client, &validator).await;
 
-    let (_ctx, _initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2650,7 +2655,9 @@ pub async fn submit_validator_commission_change(
     .await;
 }
 
-async fn process_tx_multisignature(
+/// Submit transaction and wait for result. Returns a list of addresses
+/// initialized in the transaction if any. In dry run, this is always empty.
+async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
@@ -2658,6 +2665,12 @@ async fn process_tx_multisignature(
     default_signers: Vec<TxSigningKey>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
+    if args.dump_tx {
+        let serialized_signing_tx = tx.signing_tx().try_to_vec().expect("Tx should be serializable.");
+        println!("{}", HEXLOWER.encode(&serialized_signing_tx));
+        safe_exit(1)
+    }
+
     let (ctx, to_broadcast) = sign_tx_multisignature(
         ctx,
         tx,
@@ -2668,75 +2681,6 @@ async fn process_tx_multisignature(
         requires_pow,
     )
     .await;
-
-    if args.dry_run {
-        if let TxBroadcastData::DryRun(tx) = to_broadcast {
-            rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
-            (ctx, vec![])
-        } else {
-            panic!(
-                "Expected a dry-run transaction, received a wrapper \
-                 transaction instead"
-            );
-        }
-    } else {
-        // Either broadcast or submit transaction and collect result into
-        // sum type
-        let result = if args.broadcast_only {
-            Left(broadcast_tx(args.ledger_address.clone(), &to_broadcast).await)
-        } else {
-            Right(submit_tx(args.ledger_address.clone(), to_broadcast).await)
-        };
-        // Return result based on executed operation, otherwise deal with
-        // the encountered errors uniformly
-        match result {
-            Right(Ok(result)) => (ctx, result.initialized_accounts),
-            Left(Ok(_)) => (ctx, Vec::default()),
-            Right(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-            Left(Err(err)) => {
-                eprintln!(
-                    "Encountered error while broadcasting transaction: {}",
-                    err
-                );
-                safe_exit(1)
-            }
-        }
-    }
-}
-
-/// Submit transaction and wait for result. Returns a list of addresses
-/// initialized in the transaction if any. In dry run, this is always empty.
-async fn process_tx(
-    ctx: Context,
-    args: &args::Tx,
-    tx: Tx,
-    default_signer: TxSigningKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (Context, Vec<Address>) {
-    let (ctx, to_broadcast) = sign_tx(
-        ctx,
-        tx,
-        args,
-        default_signer,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
-    )
-    .await;
-    // NOTE: use this to print the request JSON body:
-
-    // let request =
-    // tendermint_rpc::endpoint::broadcast::tx_commit::Request::new(
-    //     tx_bytes.clone().into(),
-    // );
-    // use tendermint_rpc::Request;
-    // let request_body = request.into_json();
-    // println!("HTTP request body: {}", request_body);
 
     if args.dry_run {
         if let TxBroadcastData::DryRun(tx) = to_broadcast {

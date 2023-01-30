@@ -441,6 +441,10 @@ impl Tx {
             .expect("code hashes to unexpected value")
     }
 
+    pub fn signing_tx(self) -> SigningTx {
+        SigningTx::from(self)
+    }
+
     pub fn sign_multisignature(
         self,
         keypairs: &Vec<common::SecretKey>,

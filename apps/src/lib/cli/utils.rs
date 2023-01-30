@@ -290,7 +290,6 @@ impl<T> ArgMulti<FromContext<T>> {
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
         let raw = matches.values_of(self.name).unwrap_or_default();
-        println!("c: {}", raw.len());
         raw.map(|val| FromContext::new(val.to_string())).collect()
     }
 }

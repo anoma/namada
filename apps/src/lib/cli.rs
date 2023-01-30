@@ -2021,7 +2021,6 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let sources = SOURCE_MULTISIGNATURE.parse(matches);
-            println!("b: {:?}", sources);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
             let public_keys = PUBLIC_KEY_MULTISIGNATURE.parse(matches);
             let threshold = THRESHOLD.parse(matches);
@@ -2889,6 +2888,8 @@ pub mod args {
         pub signing_keys: Vec<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signers: Vec<WalletAddress>,
+        /// Dump the tx to file
+        pub dump_tx: bool,
     }
 
     impl Tx {
@@ -2915,6 +2916,7 @@ pub mod args {
                     .iter()
                     .map(|signer| ctx.get(signer))
                     .collect(),
+                dump_tx: self.dump_tx
             }
         }
     }
@@ -2969,6 +2971,9 @@ pub mod args {
                     )
                     .conflicts_with(SIGNING_KEYS.name),
             )
+            .arg(
+                DUMP_TX.def().about("Dump tx to file.")
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -2981,7 +2986,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-
+            let dump_tx = DUMP_TX.parse(matches).into();
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signers = SIGNERS.parse(matches);
             Self {
@@ -2996,6 +3001,7 @@ pub mod args {
                 gas_limit,
                 signing_keys,
                 signers,
+                dump_tx
             }
         }
     }

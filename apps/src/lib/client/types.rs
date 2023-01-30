@@ -39,6 +39,8 @@ pub struct ParsedTxArgs {
     pub signing_keys: Vec<key::common::SecretKey>,
     /// Sign the tx with the keypair of the public key of the given address
     pub signers: Vec<Address>,
+    /// Dump tx to file
+    pub dump_tx: bool
 }
 
 #[derive(Clone, Debug)]
