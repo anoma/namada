@@ -1,6 +1,6 @@
 # Replay Protection
 
-Replay protection is a mechanism to prevent _replay attacks_, which consist of a malicious user resubmitting an already executed transaction (also mentioned as tx in this document) to the ledger.
+Replay protection is a mechanism to prevent _replay attacks_, which consist of a malicious user resubmitting an already executed transaction (often shortened to "tx" in this document) to the ledger.
 
 A replay attack causes the state of the machine to deviate from the intended one (from the perspective of the parties involved in the original transaction) and causes economic damage to the fee payer of the original transaction, who finds himself paying more than once. Further economic damage is caused if the transaction involved the moving of value in some form (e.g. a transfer of tokens) with the sender being deprived of more value than intended.
 
@@ -51,7 +51,7 @@ A transaction is constructed as follows:
 
 1. The struct `Tx` is produced
 2. The hash of this transaction gets signed by the author, producing another `Tx` where the data field holds the concatenation of the original data and the signature (`SignedTxData`)
-3. The produced transaction is encrypted and embedded in a `WrapperTx`. The encryption step is there for a future implementation of DKG (see [Ferveo](https://github.com/anoma/ferveo))
+3. The produced transaction is encrypted and embedded in a `WrapperTx`. The encryption step is there for a future implementation of threshold transaction decryption (see [Ferveo](https://github.com/anoma/ferveo))
 4. Finally, the `WrapperTx` gets converted to a `Tx` struct, signed over its hash (same as step 2, relying on `SignedTxData`), and submitted to the network
 
 Note that the signer of the `WrapperTx` and that of the inner one don't need to coincide, but the signer of the wrapper will be charged with gas and fees.
@@ -59,8 +59,8 @@ In the execution steps:
 
 1. The `WrapperTx` signature is verified and, only if valid, the tx is processed
 2. In the following height the proposer decrypts the inner tx, checks that the hash matches that of the `tx_hash` field and, if everything went well, includes the decrypted tx in the proposed block
-3. The inner tx will then be executed by the Wasm runtime
-4. After the execution, the affected validity predicates (also mentioned as VP in this document) will check the storage changes and (if relevant) the signature of the transaction: if the signature is not valid, the VP will deem the transaction invalid and the changes won't be applied to the storage
+3. The inner tx will then be executed by the WASM runtime
+4. After the execution, the affected validity predicates (also mentioned as VPs in this document) will check the storage changes and (if relevant) the signature of the transaction: if the signature is not valid, the VP will deem the transaction invalid and the changes won't be applied to the storage
 
 The signature checks effectively prevent any tampering with the transaction data because that would cause the checks to fail and the transaction to be rejected.
 For a more in-depth view, please refer to the [Namada execution spec](./execution.md).
