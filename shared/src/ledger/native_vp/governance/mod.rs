@@ -323,12 +323,8 @@ where
 
         // Check that the proposal type admits wasm code
         match proposal_type {
-            Some(proposal_type) => {
-                if let ProposalType::PGFCouncil = proposal_type {
-                    return Ok(false);
-                }
-            }
-            None => return Ok(false),
+            Some(ProposalType::Default(_)) => (),
+            _ => return Ok(false),
         }
 
         let code_key = gov_storage::get_proposal_code_key(proposal_id);
