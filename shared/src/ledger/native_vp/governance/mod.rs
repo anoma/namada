@@ -6,7 +6,6 @@ use std::collections::BTreeSet;
 
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::types::governance::{ProposalVote, VoteType};
 use namada_core::types::transaction::governance::ProposalType;
