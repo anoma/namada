@@ -1,16 +1,14 @@
-# Namada Governance
+# Governance
 
-Before describing Namada governance, it is useful to define the concepts of validators, delegators, and NAM.
+Before describing Namada governance, it is useful to define the concepts of validators, delegators, and NAM:
 
-Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
+- Namada's economic model is based around a single native token, NAM, which is controlled by the protocol.
+- A Namada _validator_ is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+- A Namada _delegator_ is an account that delegates some tokens to a validator. A delegator may not also be a validator.
 
-A Namada validator is an account with a public consensus key, which may participate in producing blocks and governance activities. A validator may not also be a delegator.
+Namada introduces a governance mechanism to propose and apply protocol changes without the need for a hard fork, and to signal stakeholder approval for potential hard forks. Anyone holding some `NAM` will be able to propose some changes in a proposal for which delegators and validators will cast their `yay` or `nay` votes; in addition it will also be possible to attach some payloads to proposals, in specific cases, to embed additional information. Governance on Namada supports both `signaling` and `voting` mechanisms. The signaling mechanism is used for changes which require a hard fork, while the voting mechanism is used for changes which merely alter state. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain signaling](#off-chain-protocol) to agree on a common move.
 
-A Namada delegator is an account that delegates some tokens to a validator. A delegator may not also be a validator.
-
-Namada introduces a governance mechanism to propose and apply protocol changes with  or without the need for a hard fork. Anyone holding some `NAM` will be able to propose some changes to which delegators and validators will cast their `yay` or `nay` votes; in addition it will also be possible to attach some payloads to votes, in specific cases, to embed additional information.Governance on Namada supports both `signaling` and `voting` mechanisms. The difference between the the two is that the former is needed when the changes require a hard fork. In cases where the chain is not able to produce blocks anymore, Namada relies on [off chain](#off-chain-protocol) signaling to agree on a common move.
-
-Further informtion regarding delegators, validators, and NAM is contained in the [economics section](../economics.md).
+Further information about delegators, validators, and NAM can be found in the [economics section](../economics.md).
 
 ## On-chain protocol
 
@@ -42,8 +40,8 @@ Each proposal will be stored in a sub-key under the internal proposal address. T
 
 An epoch is a range of blocks or time that is defined by the base ledger and made available to the PoS system. This document assumes that epochs are identified by consecutive natural numbers. All the data relevant to PoS are [associated with epochs](../economics/proof-of-stake/bonding-mechanism.md#epoched-data).
 
-- `Author` address field will be used to credit the locked funds if the proposal is approved.
-- `/\$GovernanceAddress/proposal/\$epoch/\$id` is used for easing the ledger governance execution. `\$epoch` refers to the same value as the one specified in the `grace_epoch` field.
+Field semantics are as follows:
+
 - The `content` value should follow a standard format. We leverage a similar format to what is described in the [BIP2](https://github.com/bitcoin/bips/blob/master/bip-0002.mediawiki#bip-format-and-structure) document:
 
 ```json
@@ -60,14 +58,16 @@ An epoch is a range of blocks or time that is defined by the base ledger and mad
 }
 ```
 
-The `ProposalType` imply different combinations of:
-
-- the optional wasm code attached to the proposal
-- which actors should be allowed to vote (delegators and validators or validators only)
-- the threshold to be used in the tally process
-- the optional payload (memo) attached to the vote
+- The `Author` address field will be used to credit the locked funds if the proposal is approved.
+- The `ProposalType` imply different combinations of:
+  - the optional wasm code attached to the proposal
+  - which actors should be allowed to vote (delegators and validators or validators only)
+  - the threshold to be used in the tally process
+  - the optional payload (memo) attached to the vote
 
 The correct logic to handle these different types will be hardcoded in protocol. We'll also rely on type checking to strictly enforce the correctness of a proposal given its type. These two approaches combined will prevent a user from deviating from the intended logic for a certain proposal type (e.g. providing a wasm code when it's not needed or allowing only validators to vote when also delegators should, etc...). More details on the specific types supported can be found in the [relative](#supported-proposal-types) section of this document.
+
+- `/\$GovernanceAddress/proposal/\$epoch/\$id` is used for efficient iteration over proposals by epoch. `\$epoch` refers to the same value as the one specified in the `grace_epoch` field.
 
 `GovernanceAddress` parameters and global storage keys are:
 

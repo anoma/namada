@@ -2,10 +2,9 @@
 
 - [Introduction](./introduction.md)
 - [Base ledger](./base-ledger.md)
-    - [Core Concepts](./base-ledger/core-concepts.md)
+    - [Consensus](./base-ledger/consensus.md)
     - [Execution](./base-ledger/execution.md)
     - [Governance](./base-ledger/governance.md)
-    - [Default account](./base-ledger/default-account.md)
     - [Multisignature account](./base-ledger/multisignature.md)
     - [Fungible token](./base-ledger/fungible-token.md)
     - [Replay protection](./base-ledger/replay-protection.md)
