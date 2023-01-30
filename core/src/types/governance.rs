@@ -1,6 +1,6 @@
 //! Files defyining the types used in governance.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{self, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -12,7 +12,10 @@ use super::key::RefTo;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::key::{common, SigScheme};
+use crate::types::key::{
+    common::{self, Signature},
+    SigScheme,
+};
 use crate::types::storage::Epoch;
 use crate::types::token::{Amount, SCALE};
 
@@ -26,7 +29,6 @@ pub type Council = (Address, Amount);
 #[derive(
     Debug,
     Clone,
-    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
@@ -38,7 +40,7 @@ pub enum VoteType {
     /// A default vote without Memo
     Default,
     /// A vote for the PGF council
-    PGFCouncil(BTreeSet<Council>),
+    PGFCouncil(HashSet<Council>),
     /// A vote for ETH bridge carrying the signature over the proposed message
     ETHBridge(Signature),
 }
@@ -46,7 +48,6 @@ pub enum VoteType {
 #[derive(
     Debug,
     Clone,
-    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
