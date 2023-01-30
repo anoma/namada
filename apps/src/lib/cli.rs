@@ -1747,7 +1747,7 @@ pub mod args {
             // let block_height = BLOCK_HEIGHT_OPT.parse(matches);
             let out_file_path = OUT_FILE_PATH_OPT
                 .parse(matches)
-                .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
+                .unwrap_or_else(|| PathBuf::from("db_dump_conv".to_string()));
             Self {
                 // block_height,
                 out_file_path,
