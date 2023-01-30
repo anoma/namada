@@ -239,8 +239,13 @@ fn test_add_to_bridge_pool() {
 
     let mut namadar = run!(
         test,
-        Bin::BridgePool,
-        ["query", "--ledger-address", &ledger_addr,],
+        Bin::Relayer,
+        [
+            "ethereum-bridge-pool",
+            "query",
+            "--ledger-address",
+            &ledger_addr,
+        ],
         Some(QUERY_TIMEOUT_SECONDS),
     )
     .unwrap();

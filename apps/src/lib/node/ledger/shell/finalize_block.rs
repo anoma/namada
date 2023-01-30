@@ -168,8 +168,12 @@ where
                         }
                         Event::new_tx_event(&tx_type, height.0)
                     }
-                    ProtocolTxType::BridgePoolVext(_) => continue,
-                    ProtocolTxType::ValSetUpdateVext(_) => {
+                    ProtocolTxType::BridgePoolVext(_)
+                    | ProtocolTxType::BridgePool(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ProtocolTxType::ValSetUpdateVext(_)
+                    | ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
                     ProtocolTxType::EthereumEvents(ref digest) => {
@@ -186,11 +190,6 @@ where
                                 }
                             }
                         }
-                        Event::new_tx_event(&tx_type, height.0)
-                    }
-
-                    ProtocolTxType::BridgePool(_) => continue,
-                    ProtocolTxType::ValidatorSetUpdate(_) => {
                         Event::new_tx_event(&tx_type, height.0)
                     }
                     ref protocol_tx_type => {
@@ -376,7 +375,12 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::ethereum_events::EthAddress;
+    use namada::eth_bridge::storage::bridge_pool::{
+        get_key_from_hash, get_nonce_key, get_signed_root_key,
+    };
+    use namada::ledger::eth_bridge::EthBridgeQueries;
+    use namada::types::ethereum_events::{EthAddress, Uint};
+    use namada::types::keccak::KeccakHash;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee};
     use namada::types::vote_extensions::ethereum_events;
@@ -860,5 +864,69 @@ mod test_finalize_block {
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Helper function for testing the relevant protocol tx
+    /// for signing bridge pool roots and nonces
+    fn test_bp_roots<F>(craft_tx: F)
+    where
+        F: FnOnce(&TestShell) -> Tx,
+    {
+        let (mut shell, _, _, _) = setup_at_height(3u64);
+        namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
+            &mut shell.storage,
+            &KeccakHash([1; 32]),
+            3.into(),
+        );
+        let value = BlockHeight(4).try_to_vec().expect("Test failed");
+        shell
+            .storage
+            .block
+            .tree
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
+            .expect("Test failed");
+        shell
+            .storage
+            .write(
+                &get_nonce_key(),
+                Uint::from(1).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        let tx = craft_tx(&shell);
+        let processed_tx = ProcessedTx {
+            tx: tx.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        let req = FinalizeBlock {
+            txs: vec![processed_tx],
+            ..Default::default()
+        };
+        let root = shell
+            .storage
+            .read(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.")
+            .0;
+        assert!(root.is_none());
+        _ = shell.finalize_block(req).expect("Test failed");
+        let (root, _) = shell
+            .storage
+            .get_signed_bridge_pool_root()
+            .expect("Test failed");
+        assert_eq!(root.data.0, KeccakHash([1; 32]));
+        assert_eq!(root.data.1, Uint::from(1));
+    }
+
+    #[test]
+    /// Test that the generated protocol tx passes Finalize Block
+    /// and effects the expected storage changes.
+    fn test_bp_roots_protocol_tx() {
+        test_bp_roots(|shell: &TestShell| {
+            let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
+            ProtocolTxType::BridgePoolVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        });
     }
 }

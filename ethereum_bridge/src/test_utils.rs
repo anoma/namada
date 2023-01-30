@@ -5,13 +5,16 @@ use std::num::NonZeroU64;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::testing::TestStorage;
+use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{
     self, protocol_pk_key, RefTo, SecretKey, SigScheme,
 };
-use namada_core::types::storage::Key;
+use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::epoched::Epoched;
 use namada_proof_of_stake::types::{
@@ -177,4 +180,27 @@ pub fn gen_ed25519_keypair() -> key::common::SecretKey {
     key::ed25519::SigScheme::generate(&mut rng)
         .try_to_sk()
         .unwrap()
+}
+
+/// Commit a bridge pool root at a given height
+/// to storage.
+///
+/// N.B. assumes the bridge pool is empty.
+pub fn commit_bridge_pool_root_at_height<D, H>(
+    storage: &mut Storage<D, H>,
+    root: &KeccakHash,
+    height: BlockHeight,
+) where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let value = height.try_to_vec().expect("Encoding failed");
+    storage
+        .block
+        .tree
+        .update(&get_key_from_hash(root), value)
+        .unwrap();
+    storage.block.height = height;
+    storage.commit().unwrap();
+    storage.block.tree.delete(&get_key_from_hash(root)).unwrap();
 }
