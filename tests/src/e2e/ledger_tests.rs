@@ -3084,8 +3084,6 @@ fn pgf_governance_proposal() -> Result<()> {
         "--vote",
         "yay",
         "--pgf",
-        "yay",
-        "--pgf",
         &different_vote,
         "--signer",
         BERTHA,
