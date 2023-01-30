@@ -260,7 +260,7 @@ impl RocksDB {
                 out_file_path
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "dump_db".to_string())
+                    .unwrap_or_else(|| "dump_db_convs".to_string())
             ))
             .with_extension("toml");
 
@@ -296,9 +296,12 @@ impl RocksDB {
         };
 
         // Dump accounts subspace and block height data
-        dump_it("subspace".to_string());
-        let block_prefix = format!("{}/", height.raw());
-        dump_it(block_prefix);
+        for h in 0..=height.0 {
+            let block_prefix = format!("{}/diffs/old/#atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5/conv", BlockHeight(h).raw());
+            dump_it(block_prefix);
+            let block_prefix = format!("{}/diffs/new/#atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5/conv", BlockHeight(h).raw());
+            dump_it(block_prefix);
+        }
 
         println!("Done writing to {}", full_path.to_string_lossy());
     }
