@@ -55,8 +55,9 @@ struct PgfProposal{
 }
 ```
 
-The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal`. Once this condition has been met, [approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council. In other words, voters may vote for multiple PGF councils, and the council with the greatest proportion of votes will be elected.
+The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal`. [Approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council, *whilst* the `PgfProposal` is active. In other words, voters may vote for multiple PGF councils, and the council with the greatest proportion of votes will be elected.
 
+See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
 ### Constructing the council
 All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
@@ -64,17 +65,19 @@ All valid PGF councils will be established multisignature account addresses. The
 A new multisignature address will be constructed through the CLI with the following command
 
 ```bash!
-namadaw address-multsig gen
---owners Vec<"address1", "address2", "address3", ...> \
---threshold <number-of-signers-necessary>
+namada client init-account \
+--alias my-multisig \
+--publickeys pk1,pk2,pk3... \
+--signers signer1,signer2,signer3... \
+--threshold k
 ```
 
 The council will be resonsible to publish this address to voters and express their desired `spending_cap`. This will be done directly to the ledger through the following CLI command:
 
 ```bash!
 namadac pgf-broadcast \
---council "<multisig-address>" \
---spending-cap "<proposed-spending-cap>"
+--council my-multisig \
+--spending-cap 1.0
 ```
 The `--spending-cap` argument is a `float` $0 < x \leq 1$, which indicates the maximum proportion of the total funds available to the PGF council that the PGF council is able to spend during their term.
 
@@ -95,7 +98,7 @@ struct OnChainVote {
 }
 ```
 
-In turn the proposal vote will include the a structure like:
+In turn, the proposal vote will include the structure:
 
 ```rust
 HashSet<(address: Address, spending_cap: u64)>
@@ -113,6 +116,59 @@ In the case of equal tiebreaks, the addresses with lower alphabetical order will
 ### Electing the council
 
 Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored.
+
+### Example
+
+The below example hopefully demonstrates the mechanism more clearly.
+
+````admonish note
+The governance set consists of Alice, Bob, Charlie, Dave, and Elsa. Each member has 20% voting power.
+
+The current PGF council consits of Dave and Elsa.
+
+- At epoch 42, Alice proposes the `PgfProposal` with the following struct:
+
+```rust
+struct PgfProposal{
+  id: 2
+  content: Vec<32,54,01,24,13,37>,
+  author: 0xalice,
+  r#type: PGFCouncil,
+  votingStartEpoch: Epoch(45),
+  votingEndEpoch: Epoch(54),
+  graceEpoch: Epoch(57),
+}
+```
+
+- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1.0`.
+
+- At epoch 48, Elsa submits a broadcasts a multisig PGF council address which includes herself and her sister.
+
+- At epoch 49, Alice submits the vote:
+
+```rust
+struct OnChainVote {
+    id: 2,
+    voter: 0xalice,
+    yay: proposalVote,
+}
+```
+
+Whereby the `proposalVote` includes
+```rust
+HashSet<(address: 0xBobCharlieMultisig, spending_cap: 1.0)>
+```
+
+- At epoch 49, Bob and Charlie submit identical transactions. Charlie also 
+
+- At epoch 50, Dave votes `Nay` on the proposal.
+
+- At epoch 51, Elsa votes `Yay` but on the multisigs `0xElsaAndSisterMultisig` AND `0xBobCharlieMultisig`.
+
+- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted `Yay` on this proposal, a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council.
+
+- At epoch 57, Bob and Charlie have the effective power to carry out Public Goods Funding transactions.
+````
 
 ### End of Term Summary
 
@@ -153,28 +209,34 @@ The internal address VP will hold the allowance the 10% inflation of NAM. This w
 
 The council should be able to burn funds (up to their spending cap), but this hopefully should not require additional functionality beyond what currently exists.
 
-### `Impl`-ementations
-In addition to this, the VP must ensure that no council exceeds their respective spending cap.
+### VP checks
 
-```rust
-pub fn(self) -> bool {
-    if self.amount.iter().sum() > self.spending_cap {
-        return false
-    }
-    else {
-        turn true
-    }
-}
-```
+The VP must check that the council does not exceed its spending cap.
+
+The VP must also check that the any spending is only done by a the correctly elected PGF council multisig address. 
 
 ## Storage
 
 ### Storage keys
 
 Each recipient will be listed under this storage space (for cPGF)
-- `/PGFAddress/active_projects/Address = Amount`
+- `/PGFAddress/cPGF_recipients/Address = Amount`
+- `/PGFAddress/spending_cap = Amount`
+- `/PGFAddress/spent_amount = Amount`
 
 Some storage for PgfCouncils after they are broadcast?
+
+### Struct
+
+```rust
+struct PgfCoucil {
+    address: Address,
+    spending_cap_amount: u64,
+    spent_amount: u64,
+}
+```
+The spending cap amount here is different from the `spending_cap` float. This is an actual NAM value that is calculated through `spending_cap * PGF_VP.balance`
+
 
 
 
