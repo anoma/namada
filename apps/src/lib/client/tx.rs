@@ -1689,7 +1689,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
 
     let transfer = token::Transfer {
-        source,
+        source: source.clone(),
         target,
         token,
         sub_prefix,
@@ -1747,15 +1747,30 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    process_tx(
+    let pks_map = rpc::get_account_pks(&client, &source).await;
+
+    println!("{:?}", pks_map);
+
+    let (ctx, initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
-        signing_address,
+        pks_map,
+        vec![signing_address],
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
     )
     .await;
+
+    // process_tx(
+    //     ctx,
+    //     &args.tx,
+    //     tx,
+    //     signing_address,
+    //     #[cfg(not(feature = "mainnet"))]
+    //     is_source_faucet,
+    // )
+    // .await;
 }
 
 pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
@@ -2226,7 +2241,7 @@ pub async fn submit_reveal_pk_aux(
     let tx = Tx::new(tx_code, Some(tx_data));
 
     // submit_tx without signing the inner tx
-    let keypair = if let Some(signing_key) = &args.signing_keys.get(0) {
+    let keypair = if let Some(signing_key) = args.signing_keys.get(0) {
         ctx.get_cached(signing_key)
     } else if let Some(signer) = args.signers.get(0) {
         let signer = ctx.get(signer);

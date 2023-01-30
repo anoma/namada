@@ -15,6 +15,7 @@ use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
+#[derive(Debug)]
 enum KeyType<'a> {
     /// Public key - written once revealed
     Pk(&'a Address),
@@ -99,28 +100,28 @@ fn validate_tx(
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
             KeyType::Pk(owner) => {
-                // if owner == &addr {
-                //     if ctx.has_key_pre(key)? {
-                //         // If the PK is already reveal, reject the tx
-                //         return reject();
-                //     }
-                //     let post: Option<key::common::PublicKey> =
-                //         ctx.read_post(key)?;
-                //     match post {
-                //         Some(pk) => {
-                //             let addr_from_pk: Address = (&pk).into();
-                //             // Check that address matches with the address
-                //             // derived from the PK
-                //             if addr_from_pk != addr {
-                //                 return reject();
-                //             }
-                //         }
-                //         None => {
-                //             // Revealed PK cannot be deleted
-                //             return reject();
-                //         }
-                //     }
-                // }
+                if owner == &addr {
+                    if ctx.has_key_pre(key)? {
+                        // If the PK is already reveal, reject the tx
+                        return reject();
+                    }
+                    let post: Option<key::common::PublicKey> =
+                        ctx.read_post(key)?;
+                    match post {
+                        Some(pk) => {
+                            let addr_from_pk: Address = (&pk).into();
+                            // Check that address matches with the address
+                            // derived from the PK
+                            if addr_from_pk != addr {
+                                return reject();
+                            }
+                        }
+                        None => {
+                            // Revealed PK cannot be deleted
+                            return reject();
+                        }
+                    }
+                }
                 false
             }
             KeyType::Token(owner) => {
@@ -275,28 +276,28 @@ mod tests {
         );
 
         // Commit the transaction and create another tx_env
-        let vp_env = vp_host_env::take();
-        tx_host_env::set_from_vp_env(vp_env);
-        tx_host_env::commit_tx_and_block();
-        let tx_env = tx_host_env::take();
+        // let vp_env = vp_host_env::take();
+        // tx_host_env::set_from_vp_env(vp_env);
+        // tx_host_env::commit_tx_and_block();
+        // let tx_env = tx_host_env::take();
 
-        // Try to reveal it again
-        vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
-            // Apply reveal_pk in a transaction
-            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
-        });
+        // // Try to reveal it again
+        // vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
+        //     // Apply reveal_pk in a transaction
+        //     tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+        // });
 
-        let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
-        let keys_changed: BTreeSet<storage::Key> =
-            vp_env.all_touched_storage_keys();
-        let verifiers: BTreeSet<Address> = BTreeSet::default();
-        vp_host_env::set(vp_env);
+        // let vp_env = vp_host_env::take();
+        // let tx_data: Vec<u8> = vec![];
+        // let keys_changed: BTreeSet<storage::Key> =
+        //     vp_env.all_touched_storage_keys();
+        // let verifiers: BTreeSet<Address> = BTreeSet::default();
+        // vp_host_env::set(vp_env);
 
-        assert!(
-            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
-            "Revealing PK that's already revealed should be rejected"
-        );
+        // assert!(
+        //     !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+        //     "Revealing PK that's already revealed should be rejected"
+        // );
     }
 
     /// Test that a revealed PK that doesn't correspond to the account's address

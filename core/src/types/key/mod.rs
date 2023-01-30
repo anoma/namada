@@ -52,7 +52,7 @@ pub fn threshold_key(owner: &Address) -> storage::Key {
 /// Check if the given storage key is a public key. If it is, returns the owner.
 pub fn is_pk_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
+        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(_index)]
             if key == PK_STORAGE_KEY =>
         {
             Some(owner)

@@ -23,6 +23,7 @@ use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::core::types::key;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -1778,6 +1779,20 @@ pub async fn is_delegator_at(
             .is_delegator(client, address, &Some(epoch))
             .await,
     )
+}
+
+
+pub async fn get_account_pks(
+    client: &HttpClient,
+    address: &Address
+) -> HashMap<common::PublicKey, u64> {
+    let key = key::pk_prefix_key(&address);
+    let pks_iter = query_storage_prefix::<common::PublicKey>(client, &key).await;
+    if let Some(mut pks) = pks_iter {
+        HashMap::from_iter(pks.map(|(key, pk)| pk).zip(0u64..).collect::<HashMap<common::PublicKey, u64>>())
+    } else {
+        HashMap::new()
+    }
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
