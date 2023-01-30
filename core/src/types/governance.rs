@@ -1,6 +1,6 @@
 //! Files defyining the types used in governance.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{self, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -25,7 +25,6 @@ pub type Council = (Address, Amount);
 #[derive(
     Debug,
     Clone,
-    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
@@ -37,7 +36,7 @@ pub enum VoteType {
     /// A default vote without Memo
     Default,
     /// A vote for the PGF council
-    PGFCouncil(BTreeSet<Council>),
+    PGFCouncil(HashSet<Council>),
     /// A vote for ETH bridge carrying the signature over the proposed message
     ETHBridge(Signature),
 }
@@ -45,7 +44,6 @@ pub enum VoteType {
 #[derive(
     Debug,
     Clone,
-    Hash,
     PartialEq,
     BorshSerialize,
     BorshDeserialize,

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -1972,7 +1972,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 let splits = pgf.trim().split_ascii_whitespace();
                 let address_iter = splits.clone().into_iter().step_by(2);
                 let cap_iter = splits.into_iter().skip(1).step_by(2);
-                let mut set = BTreeSet::new();
+                let mut set = HashSet::new();
                 for (address, cap) in
                     address_iter.zip(cap_iter).map(|(addr, cap)| {
                         (
