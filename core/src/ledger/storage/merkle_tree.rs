@@ -15,10 +15,10 @@ use thiserror::Error;
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_root_key, BridgePoolTree,
+    is_pending_transfer_key, BridgePoolTree,
 };
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
-use crate::ledger::storage::{ics23_specs, types};
+use crate::ledger::storage::{ics23_specs, types, BlockHeight};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
@@ -64,7 +64,7 @@ pub type SmtStore = DefaultStore<SmtHash, Hash, 32>;
 /// Arse-merkle-tree store
 pub type AmtStore = DefaultStore<StringKey, TreeBytes, IBC_KEY_LIMIT>;
 /// Bridge pool store
-pub type BridgePoolStore = std::collections::BTreeSet<KeccakHash>;
+pub type BridgePoolStore = std::collections::BTreeMap<KeccakHash, BlockHeight>;
 /// Sparse-merkle-tree
 pub type Smt<H> = ArseMerkleTree<H, SmtHash, Hash, SmtStore, 32>;
 /// Arse-merkle-tree
@@ -191,12 +191,10 @@ impl StoreType {
                     InternalAddress::EthBridgePool => {
                         // the root of this sub-tree is kept in accounts
                         // storage along with a quorum of validator signatures
-                        if *key == get_signed_root_key()
-                            || *key == get_nonce_key()
-                        {
-                            Ok((StoreType::Account, key.clone()))
-                        } else {
+                        if is_pending_transfer_key(key) {
                             Ok((StoreType::BridgePool, key.sub_key()?))
+                        } else {
+                            Ok((StoreType::Account, key.clone()))
                         }
                     }
                     // use the same key for Parameters
@@ -342,6 +340,12 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     pub fn has_key(&self, key: &Key) -> Result<bool> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
         self.tree(&store_type).subtree_has_key(&sub_key)
+    }
+
+    /// Get the value in the tree
+    pub fn get(&self, key: &Key) -> Result<Vec<u8>> {
+        let (store_type, sub_key) = StoreType::sub_key(key)?;
+        self.tree(&store_type).subtree_get(&sub_key)
     }
 
     /// Update the tree with the given key and value

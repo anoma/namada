@@ -232,8 +232,13 @@ fn test_add_to_bridge_pool() {
 
     let mut namadar = run!(
         test,
-        Bin::BridgePool,
-        ["query", "--ledger-address", &ledger_addr,],
+        Bin::Relayer,
+        [
+            "ethereum-bridge-pool",
+            "query",
+            "--ledger-address",
+            &ledger_addr,
+        ],
         Some(QUERY_TIMEOUT_SECONDS),
     )
     .unwrap();
@@ -258,6 +263,7 @@ fn test_add_to_bridge_pool() {
     hash.truncate(hash.len() - 2);
 
     let proof_args = vec![
+        "ethereum-bridge-pool",
         "construct-proof",
         "--hash-list",
         &hash,
@@ -266,7 +272,7 @@ fn test_add_to_bridge_pool() {
     ];
     let mut namadar = run!(
         test,
-        Bin::BridgePool,
+        Bin::Relayer,
         proof_args,
         Some(QUERY_TIMEOUT_SECONDS),
     )

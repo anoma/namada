@@ -24,14 +24,15 @@ const APP_NAME: &str = "Namada";
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
-const BRIDGE_POOL_CMD: &str = "ethereum-bridge-pool";
+const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
-    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
-    use crate::cli::BRIDGE_POOL_CMD;
+    use super::{
+        args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
+    };
 
     /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
@@ -39,12 +40,15 @@ pub mod cmds {
     pub enum Namada {
         // Sub-binary-commands
         Node(NamadaNode),
+        Relayer(NamadaRelayer),
         Client(NamadaClient),
         Wallet(NamadaWallet),
 
         // Inlined commands from the node.
-        EthBridgePool(EthBridgePool),
         Ledger(Ledger),
+
+        // Inlined commands from the relayer.
+        EthBridgePool(EthBridgePool),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
@@ -59,6 +63,7 @@ pub mod cmds {
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
             app.subcommand(NamadaNode::def())
+                .subcommand(NamadaRelayer::def())
                 .subcommand(NamadaClient::def())
                 .subcommand(NamadaWallet::def())
                 .subcommand(EthBridgePool::def())
@@ -75,6 +80,9 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let node = SubCmd::parse(matches).map(Self::Node);
             let client = SubCmd::parse(matches).map(Self::Client);
+            let relayer = SubCmd::parse(matches).map(Self::Relayer);
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
@@ -88,6 +96,8 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
+                .or(relayer)
+                .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
@@ -138,6 +148,47 @@ pub mod cmds {
         }
     }
 
+    /// Used as top-level commands (`Cmd` instance) in `namadar` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
+    #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum NamadaRelayer {
+        EthBridgePool(EthBridgePool),
+        ValidatorSet(ValidatorSet),
+    }
+
+    impl Cmd for NamadaRelayer {
+        fn add_sub(app: App) -> App {
+            app.subcommand(EthBridgePool::def())
+                .subcommand(ValidatorSet::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
+            let validator_set = SubCmd::parse(matches).map(Self::ValidatorSet);
+            eth_bridge_pool.or(validator_set)
+        }
+    }
+
+    impl SubCmd for NamadaRelayer {
+        const CMD: &'static str = RELAYER_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(<Self as Cmd>::parse)
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD)
+                    .about("Relayer sub-commands.")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
+            )
+        }
+    }
+
     /// Used as top-level commands (`Cmd` instance) in `namadac` binary.
     /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
@@ -172,19 +223,19 @@ pub mod cmds {
                 // Ethereum bridge pool
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryTransfers::def().display_order(3))
-                .subcommand(QueryConversions::def().display_order(3))
-                .subcommand(QueryBlock::def().display_order(3))
-                .subcommand(QueryBalance::def().display_order(3))
-                .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryBondedStake::def().display_order(3))
-                .subcommand(QuerySlashes::def().display_order(3))
-                .subcommand(QueryResult::def().display_order(3))
-                .subcommand(QueryRawBytes::def().display_order(3))
-                .subcommand(QueryProposal::def().display_order(3))
-                .subcommand(QueryProposalResult::def().display_order(3))
-                .subcommand(QueryProtocolParameters::def().display_order(3))
+                .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryTransfers::def().display_order(4))
+                .subcommand(QueryConversions::def().display_order(4))
+                .subcommand(QueryBlock::def().display_order(4))
+                .subcommand(QueryBalance::def().display_order(4))
+                .subcommand(QueryBonds::def().display_order(4))
+                .subcommand(QueryBondedStake::def().display_order(4))
+                .subcommand(QuerySlashes::def().display_order(4))
+                .subcommand(QueryResult::def().display_order(4))
+                .subcommand(QueryRawBytes::def().display_order(4))
+                .subcommand(QueryProposal::def().display_order(4))
+                .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -1514,7 +1565,7 @@ pub mod cmds {
         }
     }
 
-    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
         /// Construct a proof that a set of transfers is in the pool.
@@ -1541,10 +1592,10 @@ pub mod cmds {
     }
 
     impl SubCmd for EthBridgePool {
-        const CMD: &'static str = BRIDGE_POOL_CMD;
+        const CMD: &'static str = "ethereum-bridge-pool";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            Cmd::parse(matches)
+            matches.subcommand_matches(Self::CMD).and_then(Cmd::parse)
         }
 
         fn def() -> App {
@@ -1554,6 +1605,7 @@ pub mod cmds {
                      pool. This pool holds transfers waiting to be relayed to \
                      Ethereum.",
                 )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
         }
@@ -1574,6 +1626,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Add a new transfer to the Ethereum bridge pool.")
+                .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::EthereumBridgePool>()
         }
     }
@@ -1596,6 +1649,7 @@ pub mod cmds {
                     "Construct a merkle proof that the given transfer is in \
                      the pool.",
                 )
+                .setting(AppSettings::ArgRequiredElseHelp)
                 .add_args::<args::BridgePoolProof>()
         }
     }
@@ -1616,6 +1670,91 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Get the contents of the Ethereum bridge pool.")
                 .add_args::<args::Query>()
+        }
+    }
+
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
+    #[derive(Clone, Debug)]
+    pub enum ValidatorSet {
+        /// Query an Ethereum ABI encoding of the active validator
+        /// set in Namada, at the given epoch, or the latest
+        /// one, if none is provided..
+        ActiveValidatorSet(args::ActiveValidatorSet),
+        /// Query an Ethereum ABI encoding of a proof of the active
+        /// validator set in Namada, at the given epoch, or the next
+        /// one, if none is provided.
+        ValidatorSetProof(args::ValidatorSetProof),
+    }
+
+    impl SubCmd for ValidatorSet {
+        const CMD: &'static str = "validator-set";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let active_validator_set = ActiveValidatorSet::parse(matches)
+                    .map(|args| Self::ActiveValidatorSet(args.0));
+                let validator_set_proof = ValidatorSetProof::parse(matches)
+                    .map(|args| Self::ValidatorSetProof(args.0));
+                active_validator_set.or(validator_set_proof)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Validator set queries, that return data in a format to \
+                     be consumed by the Namada Ethereum bridge smart \
+                     contracts.",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(ActiveValidatorSet::def().display_order(1))
+                .subcommand(ValidatorSetProof::def().display_order(1))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ActiveValidatorSet(args::ActiveValidatorSet);
+
+    impl SubCmd for ActiveValidatorSet {
+        const CMD: &'static str = "active";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ActiveValidatorSet::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of the active validator \
+                     set in Namada, at the requested epoch, or the current \
+                     one, if no epoch is provided.",
+                )
+                .add_args::<args::ActiveValidatorSet>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidatorSetProof(args::ValidatorSetProof);
+
+    impl SubCmd for ValidatorSetProof {
+        const CMD: &'static str = "proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ValidatorSetProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of a proof of the active \
+                     validator set in Namada, at the requested epoch, or the \
+                     next one, if no epoch is provided.",
+                )
+                .add_args::<args::ValidatorSetProof>()
         }
     }
 }
@@ -1942,6 +2081,54 @@ pub mod args {
             app.add_args::<Query>().arg(HASH_LIST.def().about(
                 "List of Keccak hashes of transfers in the bridge pool.",
             ))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ActiveValidatorSet {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ActiveValidatorSet {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH.def().about(
+                    "The epoch of the active set of validators to query.",
+                ),
+            )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ValidatorSetProof {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ValidatorSetProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH
+                    .def()
+                    .about("The epoch of the set of validators to be proven."),
+            )
         }
     }
 
@@ -3705,9 +3892,9 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-pub fn namada_relayer_cli() -> Result<(cmds::EthBridgePool, Context)> {
+pub fn namada_relayer_cli() -> Result<(cmds::NamadaRelayer, Context)> {
     let app = namada_relayer_app();
-    cmds::EthBridgePool::parse_or_print_help(app)
+    cmds::NamadaRelayer::parse_or_print_help(app)
 }
 
 fn namada_app() -> App {
@@ -3745,7 +3932,7 @@ fn namada_wallet_app() -> App {
 fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
-        .about("Namada Ethereum bridge pool command line interface.")
+        .about("Namada relayer command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
-    cmds::EthBridgePool::add_sub(args::Global::def(app))
+    cmds::NamadaRelayer::add_sub(args::Global::def(app))
 }

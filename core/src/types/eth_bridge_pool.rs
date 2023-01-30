@@ -5,9 +5,11 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
-use crate::types::address::Address;
+use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_abi::Encode;
-use crate::types::ethereum_events::EthAddress;
+use crate::types::ethereum_events::{
+    EthAddress, TransferToEthereum as TransferToEthereumEvent,
+};
 use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
 
@@ -76,6 +78,23 @@ impl Encode<7> for PendingTransfer {
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
         [version, namespace, from, to, amount, fee, fee_from]
+    }
+}
+
+impl From<&TransferToEthereumEvent> for PendingTransfer {
+    fn from(event: &TransferToEthereumEvent) -> Self {
+        let transfer = TransferToEthereum {
+            asset: event.asset,
+            recipient: event.receiver,
+            // The sender is dummy because it doesn't affect the hash
+            sender: Address::Internal(InternalAddress::EthBridgePool),
+            amount: event.amount,
+        };
+        let gas_fee = GasFee {
+            amount: event.gas_amount,
+            payer: event.gas_payer.clone(),
+        };
+        Self { transfer, gas_fee }
     }
 }
 
