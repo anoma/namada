@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -12,6 +13,7 @@ use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
+use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -47,7 +49,6 @@ use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::hash::Hash;
-use namada::types::key::common::Signature;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
@@ -2105,8 +2106,63 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
+    // Construct vote
+    let proposal_vote = match args.vote.as_str() {
+        "yay" => {
+            if let Some(pgf) = args.proposal_pgf {
+                let splits = pgf.trim().split_ascii_whitespace();
+                let address_iter = splits.clone().into_iter().step_by(2);
+                let cap_iter = splits.into_iter().skip(1).step_by(2);
+                let mut set = BTreeSet::new();
+                for (address, cap) in
+                    address_iter.zip(cap_iter).map(|(addr, cap)| {
+                        (
+                            addr.to_owned()
+                                .parse()
+                                .expect("Failed to parse pgf council address"),
+                            cap.parse::<u64>()
+                                .expect("Failed to parse pgf spending cap"),
+                        )
+                    })
+                {
+                    set.insert((address, cap.into()));
+                }
+
+                ProposalVote::Yay(VoteType::PGFCouncil(set))
+            } else if let Some(eth) = args.proposal_eth {
+                let mut splits = eth.trim().split_ascii_whitespace();
+                //Sign the message
+                let sigkey = splits
+                    .next()
+                    .expect("Expected signing key")
+                    .parse::<common::SecretKey>()
+                    .expect("Signing key parsing failed.");
+
+                let msg = splits.next().expect("Missing message to sign");
+                if splits.next().is_some() {
+                    eprintln!("Unexpected argument after message");
+                    safe_exit(1);
+                }
+
+                ProposalVote::Yay(VoteType::ETHBridge(common::SigScheme::sign(
+                    &sigkey,
+                    HEXLOWER_PERMISSIVE
+                        .decode(msg.as_bytes())
+                        .expect("Error while decoding message"),
+                )))
+            } else {
+                ProposalVote::Yay(VoteType::Default)
+            }
+        }
+        "nay" => ProposalVote::Nay,
+        _ => {
+            eprintln!("Vote must be either yay or nay");
+            safe_exit(1);
+        }
+    };
+
     if args.offline {
-        if !args.vote.is_default_vote() {
+        if !proposal_vote.is_default_vote() {
             eprintln!(
                 "Wrong vote type for offline proposal. Just vote yay or nay!"
             );
@@ -2202,7 +2258,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     )
                 });
 
-        if let ProposalVote::Yay(ref vote_type) = args.vote {
+        if let ProposalVote::Yay(ref vote_type) = proposal_vote {
             if &proposal_type != vote_type {
                 eprintln!(
                     "Expected vote of type {}, found {}",
@@ -2276,14 +2332,14 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                         &client,
                         delegations,
                         proposal_id,
-                        &args.vote,
+                        &proposal_vote,
                     )
                     .await;
                 }
 
                 let tx_data = VoteProposalData {
                     id: proposal_id,
-                    vote,
+                    vote: proposal_vote,
                     voter: voter_address.clone(),
                     delegations: delegations.into_iter().collect(),
                 };

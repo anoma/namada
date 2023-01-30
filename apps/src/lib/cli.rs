@@ -1621,7 +1621,6 @@ pub mod args {
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
-    use namada::types::governance::ProposalVote;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
@@ -1717,7 +1716,9 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
+    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
+    const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
@@ -2439,7 +2440,11 @@ pub mod args {
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
-        pub vote: ProposalVote,
+        pub vote: String,
+        /// PGF proposal
+        pub proposal_pgf: Option<String>,
+        /// ETH proposal
+        pub proposal_eth: Option<String>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
@@ -2452,6 +2457,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches); 
+            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
@@ -2461,6 +2468,8 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
+                proposal_pgf,
+                proposal_eth,
                 offline,
                 proposal_data,
                 address,
@@ -2479,10 +2488,19 @@ pub mod args {
                         ]),
                 )
                 .arg(PROPOSAL_VOTE.def().about(
-                    "The vote for the proposal. Either yay or nay (with \
-                     optional memo).\nDefault vote: yay | nay\nPGF vote: yay \
-                     $council1 $cap1 $council2 $cap2 ... | nay (council is bech32m encoded, cap is \
-                     expressed in microNAM)\nETH Bridge vote: yay $signature | nay (signature is json encoded)",
+                    "The vote for the proposal. Either yay or nay"
+                ))
+                .arg(PROPOSAL_VOTE_PGF_OPT.def().about("The list of proposed councils and spending caps:\n$council1 $cap1 $council2 $cap2 ... (council is bech32m encoded, cap is expressed in microNAM")
+                    .requires(PROPOSAL_ID.name)
+                    .conflicts_with(
+                        
+                    PROPOSAL_VOTE_ETH_OPT.name
+                    )
+                )
+                .arg(PROPOSAL_VOTE_ETH_OPT.def().about("The signing key and message bytes (hex encoded) to be signed: $signing_key $message")
+                    .requires(PROPOSAL_ID.name)
+                    .conflicts_with(
+                    PROPOSAL_VOTE_PGF_OPT.name
                 ))
                 .arg(
                     PROPOSAL_OFFLINE

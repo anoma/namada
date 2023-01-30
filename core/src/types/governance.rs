@@ -2,7 +2,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{self, Display};
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use rust_decimal::Decimal;
@@ -61,73 +60,6 @@ pub enum ProposalVote {
     Yay(VoteType),
     /// No
     Nay,
-}
-
-impl FromStr for ProposalVote {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let splits = s.trim().split_ascii_whitespace();
-        let mut iter = splits.clone();
-
-        match iter.next() {
-            Some(t) => match t {
-                "yay" => {
-                    // Check next token to detect vote type
-                    match iter.next() {
-                        Some(token) => {
-                            if Address::decode(token).is_ok() {
-                                // PGF vote
-                                let mut set = BTreeSet::new();
-                                let address_iter = splits
-                                    .clone()
-                                    .into_iter()
-                                    .skip(1)
-                                    .step_by(2);
-                                let cap_iter =
-                                    splits.into_iter().skip(2).step_by(2);
-                                for (address, cap) in address_iter
-                                    .zip(cap_iter)
-                                    .map(|(addr, cap)| {
-                                        (
-                                addr.to_owned().parse().map_err(
-                                    |e: crate::types::address::DecodeError| {
-                                        e.to_string()
-                                    },
-                                ),
-                                cap.parse::<u64>().map_err(|e| e.to_string()),
-                            )
-                                    })
-                                {
-                                    set.insert((address?, cap?.into()));
-                                }
-
-                                Ok(Self::Yay(VoteType::PGFCouncil(set)))
-                            } else {
-                                // ETH Bridge vote
-                                let signature = serde_json::from_str(token)
-                                    .map_err(|e| e.to_string())?;
-
-                                Ok(Self::Yay(VoteType::ETHBridge(signature)))
-                            }
-                        }
-                        None => {
-                            // Default vote
-                            Ok(Self::Yay(VoteType::Default))
-                        }
-                    }
-                }
-                "nay" => match iter.next() {
-                    Some(t) => {
-                        Err(format!("Unexpected {} argument for Nay vote", t))
-                    }
-                    None => Ok(Self::Nay),
-                },
-                _ => Err("Expected either yay or nay".to_string()),
-            },
-            None => Err("Expected either yay or nay".to_string()),
-        }
-    }
 }
 
 impl ProposalVote {

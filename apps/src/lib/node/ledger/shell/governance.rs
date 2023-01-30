@@ -289,7 +289,6 @@ where
                 .into();
                 response.events.push(proposal_event);
 
-                //FIXME: panic here? Remove TallyResult::Failed? -> Yes remove failed
                 let proposal_author_key = gov_storage::get_author_key(id);
                 shell
                     .read_storage_key::<Address>(&proposal_author_key)
