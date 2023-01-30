@@ -2,7 +2,7 @@ pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
     pub const TRANSFER_TO_ETHEREUM_SIG: &str =
-        "TransferToErc(uint256,(address,address,uint256,string,uint256)[])";
+        "TransferToErc(uint256,(address,address,uint256,string,uint256)[],string)";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
     pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
@@ -311,7 +311,6 @@ pub mod eth_events {
                         ParamType::Uint(256),
                         ParamType::String,
                         ParamType::Uint(256),
-                        ParamType::String,
                     ]))),
                     ParamType::String,
                 ],
