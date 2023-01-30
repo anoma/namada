@@ -33,7 +33,7 @@ jobs:
         mdbook_linkcheck: [Michael-F-Bryan/mdbook-linkcheck@v0.7.6]
         mdbook_open_on_gh: [badboy/mdbook-open-on-gh@v2.2.0]
         mdbook_admonish: [tommilligan/mdbook-admonish@v1.7.0]
-        mdbook_katex: [lzanini/mdbook-katex@v0.2.10]
+        mdbook_katex: [lzanini/mdbook-katex@v0.3.4]
         make:
           - name: Build specs
             folder: documentation/specs
