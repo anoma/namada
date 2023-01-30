@@ -2849,7 +2849,7 @@ fn eth_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 999500")?;
+    client.exp_string("NAM: 1000000")?;
     client.assert_success();
 
     // Check if governance funds are 0
