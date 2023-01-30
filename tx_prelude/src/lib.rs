@@ -6,11 +6,12 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub mod account;
+pub mod governance;
 pub mod ibc;
 pub mod key;
 pub mod proof_of_stake;
 pub mod token;
-pub mod account;
 
 use core::slice;
 use std::marker::PhantomData;

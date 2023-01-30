@@ -205,6 +205,8 @@ mod tests {
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::storage::Epoch;
     use std::collections::HashMap;
+
+    use address::testing::arb_non_internal_address;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;

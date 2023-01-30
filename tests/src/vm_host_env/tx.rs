@@ -186,7 +186,7 @@ impl TestTxEnv {
         &mut self,
         address: &Address,
         public_key: &key::common::PublicKey,
-        index: u64
+        index: u64,
     ) {
         let storage_key = key::pk_key(address, index);
         self.storage
@@ -198,7 +198,7 @@ impl TestTxEnv {
     pub fn write_account_threshold(
         &mut self,
         address: &Address,
-        threshold: u64
+        threshold: u64,
     ) {
         let storage_key = key::threshold_key(address);
         self.storage

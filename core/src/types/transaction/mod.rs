@@ -166,7 +166,7 @@ pub struct InitAccount {
     /// The VP code
     pub vp_code: Vec<u8>,
     /// The multisignature threshold
-    pub threshold: u64
+    pub threshold: u64,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -306,13 +306,17 @@ pub mod tx_types {
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    let sig = tx_data.clone().get_signature_by_index(0).ok_or(TxError::SigError("Unsigned wrappr".to_string()))?;
+                    let sig = tx_data.get_signature_by_index(0).ok_or(
+                        TxError::SigError("Unsigned wrappr".to_string()),
+                    )?;
                     wrapper.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // verify signature and extract signed data
                 TxType::Protocol(protocol) => {
-                    let sig = tx_data.clone().get_signature_by_index(0).ok_or(TxError::SigError("Unsigned protocol".to_string()))?;
+                    let sig = tx_data.get_signature_by_index(0).ok_or(
+                        TxError::SigError("Unsigned protocol".to_string()),
+                    )?;
                     protocol.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Protocol(protocol))
                 }
@@ -525,7 +529,7 @@ pub mod tx_types {
             has_valid_pow: false,
         };
         // Invalid signed data
-        let ed_sig =
+        let _ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
         let signed = SignedTxData {
             data: Some(
@@ -533,8 +537,8 @@ pub mod tx_types {
                     .try_to_vec()
                     .expect("Test failed"),
             ),
-            sigs: vec![]
-            // sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
+            sigs: vec![], /* sig: common::Signature::try_from_sig(&ed_sig).
+                           * unwrap(), */
         };
         // create the tx with signed decrypted data
         let tx =

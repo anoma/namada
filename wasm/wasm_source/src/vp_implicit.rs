@@ -78,12 +78,14 @@ fn validate_tx(
             for sig_data in &signed_tx_data.sigs {
                 let pk = key::get(&ctx, &addr, sig_data.index);
                 if let Ok(Some(public_key)) = pk {
-                    let signature_result = ctx.verify_tx_signature(&public_key, &sig_data.sig).unwrap_or(false);
+                    let signature_result = ctx
+                        .verify_tx_signature(&public_key, &sig_data.sig)
+                        .unwrap_or(false);
                     if signature_result {
                         valid_signatures += 1;
                     }
                     if valid_signatures >= threshold {
-                        return true
+                        return true;
                     }
                 }
             }
@@ -295,9 +297,9 @@ mod tests {
         // vp_host_env::set(vp_env);
 
         // assert!(
-        //     !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
-        //     "Revealing PK that's already revealed should be rejected"
-        // );
+        //     !validate_tx(&CTX, tx_data, addr, keys_changed,
+        // verifiers).unwrap(),     "Revealing PK that's already
+        // revealed should be rejected" );
     }
 
     /// Test that a revealed PK that doesn't correspond to the account's address

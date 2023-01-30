@@ -27,9 +27,6 @@ pub async fn main() -> Result<()> {
                 Sub::TxInitAccount(TxInitAccount(args)) => {
                     tx::submit_init_account(ctx, args).await;
                 }
-                Sub::TxInitAccountMultiSignature(TxInitAccountMultiSignature(args)) => {
-                    tx::submit_init_account_multisignature(ctx, args).await;
-                }
                 Sub::TxInitValidator(TxInitValidator(args)) => {
                     tx::submit_init_validator(ctx, args).await;
                 }

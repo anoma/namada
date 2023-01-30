@@ -280,9 +280,12 @@ where
 }
 
 impl<T> ArgMulti<FromContext<T>> {
-
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true).multiple(true).require_delimiter(true)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .takes_value(true)
+            .multiple(true)
+            .require_delimiter(true)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {

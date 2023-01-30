@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use borsh::BorshSerialize;
-use futures::future::join_all;
+
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
@@ -174,8 +174,8 @@ pub async fn tx_signers(
                     args.ledger_address.clone(),
                 )
                 .await;
-                // Check if the signer is implicit account that needs to reveal its
-                // PK first
+                // Check if the signer is implicit account that needs to reveal
+                // its PK first
                 if matches!(signer, Address::Implicit(_)) {
                     let pk: common::PublicKey = signing_key.ref_to();
                     super::tx::reveal_pk_if_needed(ctx, &pk, args).await;
@@ -190,8 +190,9 @@ pub async fn tx_signers(
             }
             TxSigningKey::None => {
                 panic!(
-                    "All transactions must be signed; please either specify the \
-                        key or the address from which to look up the signing key."
+                    "All transactions must be signed; please either specify \
+                     the key or the address from which to look up the signing \
+                     key."
                 );
             }
         }

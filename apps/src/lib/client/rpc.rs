@@ -1781,15 +1781,19 @@ pub async fn is_delegator_at(
     )
 }
 
-
 pub async fn get_account_pks(
     client: &HttpClient,
-    address: &Address
+    address: &Address,
 ) -> HashMap<common::PublicKey, u64> {
-    let key = key::pk_prefix_key(&address);
-    let pks_iter = query_storage_prefix::<common::PublicKey>(client, &key).await;
-    if let Some(mut pks) = pks_iter {
-        HashMap::from_iter(pks.map(|(key, pk)| pk).zip(0u64..).collect::<HashMap<common::PublicKey, u64>>())
+    let key = key::pk_prefix_key(address);
+    let pks_iter =
+        query_storage_prefix::<common::PublicKey>(client, &key).await;
+    if let Some(pks) = pks_iter {
+        HashMap::from_iter(
+            pks.map(|(_key, pk)| pk)
+                .zip(0u64..)
+                .collect::<HashMap<common::PublicKey, u64>>(),
+        )
     } else {
         HashMap::new()
     }
@@ -2573,17 +2577,16 @@ pub async fn get_delegators_delegation(
 
 pub async fn get_address_pks_map(
     client: &HttpClient,
-    address: &Address
+    address: &Address,
 ) -> HashMap<common::PublicKey, u64> {
     let pk_prefix = pk_prefix_key(address);
     let pk_iter =
         query_storage_prefix::<common::PublicKey>(client, &pk_prefix).await;
-    
+
     if let Some(pks) = pk_iter {
         let mut pks_map = HashMap::new();
-        pks.enumerate().map(|(index, (_, pk))| {
-            pks_map.insert(pk, index as u64)
-        });
+        pks.enumerate()
+            .map(|(index, (_, pk))| pks_map.insert(pk, index as u64));
 
         pks_map
     } else {

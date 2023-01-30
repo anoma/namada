@@ -7,12 +7,12 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
-use itertools::Itertools;
 
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Either::*;
+use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::{BranchId, TestNetwork};
 use masp_primitives::convert::AllowedConversion;
@@ -104,35 +104,24 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
+    let _client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
     let tx_code = ctx.read_wasm(args.code_path);
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
     let tx = Tx::new(tx_code, data);
 
-    let pks_map = rpc::get_account_pks(&client, &addr).await;
-
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
-        pks_map,
+        HashMap::new(),
         vec![TxSigningKey::None],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
     .await;
-
-    let (ctx, initialized_accounts) = process_tx(
-        ctx,
-        &args.tx,
-        tx,
-        TxSigningKey::None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await;
-    save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
 }
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
@@ -184,14 +173,17 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
 
-    let data = UpdateVp { addr: addr.clone(), vp_code };
+    let data = UpdateVp {
+        addr: addr.clone(),
+        vp_code,
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx = Tx::new(tx_code, Some(data));
-    
+
     let pks_map = rpc::get_account_pks(&client, &addr).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
@@ -204,43 +196,6 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 }
 
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
-    // let public_key = ctx.get_cached(&args.public_key);
-    // let vp_code = args
-    //     .vp_code_path
-    //     .map(|path| ctx.read_wasm(path))
-    //     .unwrap_or_else(|| ctx.read_wasm(VP_USER_WASM));
-    // // Validate the VP code
-    // if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-    //     eprintln!("Validity predicate code validation failed with {}", err);
-    //     if !args.tx.force {
-    //         safe_exit(1)
-    //     }
-    // }
-
-    // let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
-    // let data = InitAccount {
-    //     public_key,
-    //     vp_code,
-    // };
-    // let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
-    // let tx = Tx::new(tx_code, Some(data));
-    // let (ctx, initialized_accounts) = process_tx(
-    //     ctx,
-    //     &args.tx,
-    //     tx,
-    //     TxSigningKey::WalletAddress(args.source),
-    //     #[cfg(not(feature = "mainnet"))]
-    //     false,
-    // )
-    // .await;
-    // save_initialized_accounts(ctx, &args.tx, initialized_accounts).await;
-}
-
-pub async fn submit_init_account_multisignature(
-    mut ctx: Context,
-    args: args::TxInitAccountMultiSignature,
-) {
     let public_keys: Vec<common::PublicKey> = args
         .public_keys
         .iter()
@@ -294,7 +249,10 @@ pub async fn submit_init_account_multisignature(
         &args.tx,
         tx,
         pks_map,
-        args.sources.iter().map(|source| TxSigningKey::WalletAddress(source.clone())).collect(),
+        args.sources
+            .iter()
+            .map(|source| TxSigningKey::WalletAddress(source.clone()))
+            .collect(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1769,7 +1727,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
 
     let pks_map = rpc::get_account_pks(&client, &source).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
@@ -1889,7 +1847,6 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
 
     let tx = Tx::new(tx_code, Some(data));
 
-
     let pks_map = rpc::get_account_pks(&client, &source).await;
 
     process_tx_multisignature(
@@ -1900,7 +1857,8 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         vec![TxSigningKey::WalletAddress(args.source)],
         #[cfg(not(feature = "mainnet"))]
         false,
-    ).await;
+    )
+    .await;
 }
 
 pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
@@ -2420,7 +2378,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&ctx.native_token, &bond_source);
+    let balance_key = token::balance_key(&ctx.native_token, bond_source);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
@@ -2457,9 +2415,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
 
-    let pks_map = rpc::get_account_pks(&client, &bond_source).await;
+    let pks_map = rpc::get_account_pks(&client, bond_source).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
@@ -2515,10 +2473,10 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    
+
     let pks_map = rpc::get_account_pks(&client, &bond_source).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
@@ -2578,16 +2536,19 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         println!("Submitting transaction to withdraw them...");
     }
 
-    let data = pos::Withdraw { validator: validator.clone(), source: source.clone() };
+    let data = pos::Withdraw {
+        validator: validator.clone(),
+        source: source.clone(),
+    };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    
+
     let pks_map = rpc::get_account_pks(&client, &bond_source).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
@@ -2674,10 +2635,10 @@ pub async fn submit_validator_commission_change(
 
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator;
-    
+
     let pks_map = rpc::get_account_pks(&client, &validator).await;
 
-    let (ctx, initialized_accounts) = process_tx_multisignature(
+    let (_ctx, _initialized_accounts) = process_tx_multisignature(
         ctx,
         &args.tx,
         tx,
