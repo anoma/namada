@@ -23,6 +23,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
         cmd,
         cli::cmds::Namada::Node(_)
             | cli::cmds::Namada::Client(_)
+            | cli::cmds::Namada::Relayer(_)
             | cli::cmds::Namada::Wallet(_)
     );
 
@@ -53,7 +54,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
             handle_subcommand("namadac", sub_args)
         }
         cli::cmds::Namada::Wallet(_) => handle_subcommand("namadaw", sub_args),
-        cli::cmds::Namada::EthBridgePool(_) => {
+        cli::cmds::Namada::Relayer(_) | cli::cmds::Namada::EthBridgePool(_) => {
             handle_subcommand("namadar", sub_args)
         }
     }

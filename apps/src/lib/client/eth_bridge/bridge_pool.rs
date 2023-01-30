@@ -9,8 +9,8 @@ use namada::types::eth_bridge_pool::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::signing::TxSigningKey;
-use super::tx::process_tx;
+use super::super::signing::TxSigningKey;
+use super::super::tx::process_tx;
 use crate::cli::{args, Context};
 use crate::facade::tendermint_rpc::HttpClient;
 
