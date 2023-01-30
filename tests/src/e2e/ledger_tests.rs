@@ -2776,7 +2776,15 @@ fn eth_governance_proposal() -> Result<()> {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
-    let signing_key = find_keypair(&test, BERTHA)?;
+
+    use namada::types::key::{self, secp256k1, SigScheme};
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+
+    // Generate a signing key to sign the eth message to sign the eth message to sign the eth message
+    let mut rng: ThreadRng = thread_rng();
+    let node_sk = secp256k1::SigScheme::generate(&mut rng);
+    let signing_key = key::common::SecretKey::Secp256k1(node_sk);
     let msg = "0xfd34672ab";
     let vote_arg = format!("{} {}", signing_key, msg);
     let submit_proposal_vote_delagator = vec![
@@ -2798,7 +2806,6 @@ fn eth_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // 3 - Send a yay vote from a validator
-    let signing_key = find_keypair(&test, "validator-0")?;
     let vote_arg = format!("{} {}", signing_key, msg);
 
     let submit_proposal_vote = vec![
