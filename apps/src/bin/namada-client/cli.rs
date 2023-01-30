@@ -3,7 +3,8 @@
 use color_eyre::eyre::Result;
 use namada_apps::cli;
 use namada_apps::cli::cmds::*;
-use namada_apps::client::{eth_bridge_pool, rpc, tx, utils};
+use namada_apps::client::eth_bridge::bridge_pool;
+use namada_apps::client::{rpc, tx, utils};
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
@@ -50,7 +51,7 @@ pub async fn main() -> Result<()> {
                 }
                 // Eth bridge pool
                 Sub::AddToEthBridgePool(args) => {
-                    eth_bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
+                    bridge_pool::add_to_eth_bridge_pool(ctx, args.0).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
