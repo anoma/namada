@@ -273,7 +273,7 @@ impl RocksDB {
         println!("Will write to {} ...", full_path.to_string_lossy());
 
         let mut dump_it = |key: String| {
-            if let Some(raw_val) = self.0.get(key).unwrap() {
+            if let Some(raw_val) = self.0.get(&key).unwrap() {
                 let val = HEXLOWER.encode(&raw_val);
                 let bytes = format!("\"{key}\" = \"{val}\"\n");
                 file.write_all(bytes.as_bytes())
