@@ -11,7 +11,7 @@ pub mod decrypted_tx {
 
     use super::EllipticCurve;
     use crate::proto::Tx;
-    use crate::types::transaction::{hash_tx, Hash, TxType, WrapperTx};
+    use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::types::transaction::encrypted::EncryptedTx;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -64,7 +64,7 @@ pub mod decrypted_tx {
                     tx,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
-                } => hash_tx(&tx.to_bytes()),
+                } => Hash(tx.hash()),
                 DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
             }
         }

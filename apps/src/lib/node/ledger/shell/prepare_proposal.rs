@@ -107,10 +107,17 @@ where
                      has_valid_pow,
                  }| {
                     Tx::from(match inner_tx.clone().and_then(|x| tx.decrypt(privkey, x).ok()) {
-                        Some(tx) => DecryptedTx::Decrypted {
-                            tx,
-                            #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: *has_valid_pow,
+                        Some(mut inner_tx) => {
+                            if let Some(inner_tx_code) = inner_tx_code {
+                                if let Some(inner_tx_code) = inner_tx.decrypt_code(privkey, inner_tx_code.clone()) {
+                                    inner_tx.code.expand(inner_tx_code);
+                                }
+                            }
+                            DecryptedTx::Decrypted {
+                                tx: inner_tx,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow: *has_valid_pow,
+                            }
                         },
                         _ => DecryptedTx::Undecryptable(tx.clone()),
                     })

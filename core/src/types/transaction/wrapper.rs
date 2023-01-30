@@ -231,19 +231,20 @@ pub mod wrapper_tx {
         ) -> Result<Tx, WrapperTxErr> {
             // decrypt the inner tx
             let decrypted = inner_tx.decrypt(privkey);
+            // convert back to Tx type
+            let decrypted_tx = Tx::try_from(decrypted.as_ref())
+                .map_err(|_| WrapperTxErr::InvalidTx)?;
             // check that the hash equals commitment
-            if hash_tx(&decrypted) != self.tx_hash {
+            if decrypted_tx.hash() != self.tx_hash.0 {
                 Err(WrapperTxErr::DecryptedHash)
             } else {
-                // convert back to Tx type
-                Tx::try_from(decrypted.as_ref())
-                    .map_err(|_| WrapperTxErr::InvalidTx)
+                Ok(decrypted_tx)
             }
         }
 
         /// Bind the given transaction to this wrapper by recording its hash
         pub fn bind(mut self, tx: Tx) -> Self {
-            self.tx_hash = hash_tx(&tx.to_bytes());
+            self.tx_hash = Hash(tx.hash());
             self
         }
 
@@ -470,7 +471,7 @@ pub mod wrapper_tx {
             );
 
             // We change the commitment appropriately
-            wrapper.tx_hash = hash_tx(&malicious.to_bytes());
+            wrapper.tx_hash = Hash(malicious.hash());
 
             // we check ciphertext validity still passes
             assert!(WrapperTx::validate_ciphertext(inner_tx.clone()));

@@ -182,7 +182,7 @@ pub async fn sign_wrapper(
     ctx: &Context,
     args: &args::Tx,
     epoch: Epoch,
-    tx: Tx,
+    mut tx: Tx,
     keypair: &common::SecretKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
@@ -236,6 +236,10 @@ pub async fn sign_wrapper(
             None
         }
     };
+    // Get transaction code to later attach to a wrapper transaction
+    let tx_code = tx.code.code();
+    // Contract the transaction's code field to make transaction smaller
+    tx.code.contract();
     // This object governs how the payload will be processed
     let wrapper_tx = {
         WrapperTx::new(
@@ -253,15 +257,23 @@ pub async fn sign_wrapper(
             .bind(tx.clone())
     };
     // Then sign over the bound wrapper
-    let stx = wrapper_tx
+    let mut stx = wrapper_tx
         .sign(keypair)
-        .expect("Wrapper tx signing keypair should be correct")
-    // Then encrypt and attach the payload to the wrapper
-        .attach_inner_tx(
-            &tx,
+        .expect("Wrapper tx signing keypair should be correct");
+    // If we have the transaction code, then attach it to the wrapper
+    if let Some(code) = tx_code {
+        stx = stx.attach_inner_tx_code(
+            &code,
             // TODO: Actually use the fetched encryption key
             Default::default(),
         );
+    }
+    // Then encrypt and attach the payload to the wrapper
+    stx = stx.attach_inner_tx(
+        &tx,
+        // TODO: Actually use the fetched encryption key
+        Default::default(),
+    );
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = hash_tx(&wrapper_tx.try_to_vec().unwrap()).to_string();
     // We use this to determine when the decrypted inner tx makes it

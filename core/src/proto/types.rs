@@ -24,6 +24,10 @@ use crate::types::transaction::TxType;
 use crate::types::transaction::encrypted::EncryptedTx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::EllipticCurve;
+#[cfg(feature = "ferveo-tpke")]
+use ark_ec::PairingEngine;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -196,14 +200,6 @@ pub struct Tx {
     pub inner_tx_code: Option<Vec<u8>>,
 }
 
-impl Hash for Tx {
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
-        self.code.hash(state);
-        self.data.hash(state);
-        self.timestamp.hash(state);
-    }
-}
-
 impl PartialEq for Tx {
     fn eq(&self, other: &Self) -> bool {
         self.code.eq(&other.code) &&
@@ -372,6 +368,28 @@ impl Tx {
         }
     }
 
+    /// Decrypt the wrapped transaction.
+    ///
+    /// Will fail if the inner transaction does match the
+    /// hash commitment or we are unable to recover a
+    /// valid Tx from the decoded byte stream.
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn decrypt_code(
+        &self,
+        privkey: <EllipticCurve as PairingEngine>::G2Affine,
+        inner_tx: EncryptedTx,
+    ) -> Option<Vec<u8>> {
+        // decrypt the inner tx
+        let decrypted = inner_tx.decrypt(privkey);
+        // check that the hash equals commitment
+        if hash_tx(&decrypted).0 != self.code.code_hash() {
+            None
+        } else {
+            // convert back to Tx type
+            Some(decrypted)
+        }
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
         let tx: types::Tx = self.clone().into();
@@ -384,8 +402,8 @@ impl Tx {
         let timestamp = Some(self.timestamp.into());
         let mut bytes = vec![];
         types::Tx {
-            code: self.code.code().unwrap_or(self.code.code_hash().to_vec()),
-            is_literal: self.code.is_literal(),
+            code: self.code.code_hash().to_vec(),
+            is_literal: false,
             data: self.data.clone(),
             timestamp,
             inner_tx: None,
@@ -450,6 +468,17 @@ impl Tx {
     ) -> Self {
         let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
         self.inner_tx = Some(inner_tx);
+        self
+    }
+
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn attach_inner_tx_code(
+        mut self,
+        tx: &[u8],
+        encryption_key: EncryptionKey
+    ) -> Self {
+        let inner_tx_code = EncryptedTx::encrypt(tx, encryption_key);
+        self.inner_tx_code = Some(inner_tx_code);
         self
     }
 }

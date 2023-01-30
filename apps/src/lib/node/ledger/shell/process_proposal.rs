@@ -497,12 +497,11 @@ mod test_process_proposal {
                 None,
             ).bind(tx.clone());
             shell.enqueue_tx(wrapper, Some(encrypted_tx.clone()), None);
-            let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
-            }));
-            txs.push(tx);
+            })));
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
