@@ -9,6 +9,7 @@ use namada_core::ledger::storage::{
 use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
+use namada_core::types::storage::BlockHeight;
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -29,6 +30,11 @@ router! {ETH_BRIDGE,
     // Get the current contents of the Ethereum bridge pool
     ( "pool" / "contents" )
         -> Vec<PendingTransfer> = read_ethereum_bridge_pool,
+
+    // Get the contents of the Ethereum bridge pool covered by
+    // the latest signed Merkle tree root.
+    ( "pool" / "contents" )
+        -> Vec<PendingTransfer> = read_signed_ethereum_bridge_pool,
 
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
@@ -59,14 +65,51 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let stores = ctx
+    Ok(read_ethereum_bridge_pool_at_height(ctx.storage.last_height, ctx))
+}
+
+/// Read the contents of the Ethereum bridge
+/// pool covered by the latest signed root.
+fn read_signed_ethereum_bridge_pool<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<Vec<PendingTransfer>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // get the latest signed merkle root of the Ethereum bridge pool
+    let (_, height) = ctx
         .storage
-        .db
-        .read_merkle_tree_stores(ctx.storage.last_height)
-        .expect("We should always be able to read the database")
-        .expect(
-            "Every signed root should correspond to an existing block height",
-        );
+        .get_signed_bridge_pool_root()
+        .ok_or(storage_api::Error::SimpleMessage(
+            "No signed root for the Ethereum bridge pool exists in \
+                 storage.",
+        ))
+        .into_storage_result()?;
+    Ok(read_ethereum_bridge_pool_at_height(height, ctx))
+}
+
+
+/// Read the Ethereum bridge pool contents at a specified height.
+fn read_ethereum_bridge_pool_at_height<'iter, D, H>(
+    height: BlockHeight,
+    ctx: RequestCtx<'_, D, H>,
+) -> Vec<PendingTransfer>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // get the backing store of the merkle tree corresponding
+    // at the specified height.
+    let stores =
+        ctx.storage
+            .db
+            .read_merkle_tree_stores(height)
+            .expect("We should always be able to read the database")
+            .expect(
+                "Every signed root should correspond to an existing block \
+                     height",
+            );
     let store = match stores.get_store(StoreType::BridgePool) {
         StoreRef::BridgePool(store) => store,
         _ => unreachable!(),
@@ -84,7 +127,7 @@ where
             BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
         })
         .collect();
-    Ok(transfers)
+    transfers
 }
 
 /// Generate a merkle proof for the inclusion of the
