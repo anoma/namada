@@ -272,26 +272,12 @@ impl RocksDB {
 
         println!("Will write to {} ...", full_path.to_string_lossy());
 
-        let mut dump_it = |prefix: String| {
-            for next in self.0.iterator(IteratorMode::From(
-                prefix.as_bytes(),
-                Direction::Forward,
-            )) {
-                match next {
-                    Err(e) => {
-                        eprintln!(
-                            "Something failed in a \"{prefix}\" iterator: {e}"
-                        )
-                    }
-                    Ok((raw_key, raw_val)) => {
-                        let key = std::str::from_utf8(&raw_key)
-                            .expect("All keys should be valid UTF-8 strings");
-                        let val = HEXLOWER.encode(&raw_val);
-                        let bytes = format!("\"{key}\" = \"{val}\"\n");
-                        file.write_all(bytes.as_bytes())
-                            .expect("Unable to write to output file");
-                    }
-                };
+        let mut dump_it = |key: String| {
+            if let Some(raw_val) = self.0.get(key).unwrap() {
+                let val = HEXLOWER.encode(&raw_val);
+                let bytes = format!("\"{key}\" = \"{val}\"\n");
+                file.write_all(bytes.as_bytes())
+                    .expect("Unable to write to output file");
             }
         };
 
