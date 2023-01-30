@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::ledger::eth_bridge;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
@@ -729,6 +730,11 @@ where
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
     /// to signal it to start, using an initial configuration based on
     /// Ethereum bridge parameters in blockchain storage.
+    ///
+    /// This method must be safe to call even before ABCI `InitChain` has been
+    /// called (i.e. when storage is empty), as we may want to do this check
+    /// every time the shell starts up (including the first time ever at which
+    /// time storage will be empty).
     fn start_ethereum_oracle_if_necessary(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
@@ -740,7 +746,27 @@ where
                 tracing::info!("Not starting oracle as it was already started");
                 return;
             }
-            if self.storage.is_bridge_active() {
+            // We *always* expect a value describing the status of the Ethereum
+            // bridge to be present under [`eth_bridge::storage::active_key`],
+            // once a chain has been initialized. We need to explicitly check if
+            // this key is present here because we may be starting up the shell
+            // for the first time ever, in which case the chain hasn't been
+            // initialized yet.
+            let (has_key, _) = self
+                .storage
+                .has_key(&eth_bridge::storage::active_key())
+                .expect(
+                    "We should always be able to check whether a key exists \
+                     in storage or not",
+                );
+            if !has_key {
+                tracing::info!(
+                    "Not starting oracle yet as storage has not been \
+                     initialized"
+                );
+                return;
+            }
+            if !self.storage.is_bridge_active() {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge is disabled"
                 );
@@ -757,7 +783,7 @@ where
                 bridge_contract: config.contracts.bridge.address,
                 governance_contract: config.contracts.governance.address,
             };
-            tracing::debug!(
+            tracing::info!(
                 ?config,
                 "Starting the Ethereum oracle using values from block storage"
             );
