@@ -2785,7 +2785,7 @@ fn eth_governance_proposal() -> Result<()> {
     let mut rng: ThreadRng = thread_rng();
     let node_sk = secp256k1::SigScheme::generate(&mut rng);
     let signing_key = key::common::SecretKey::Secp256k1(node_sk);
-    let msg = "0xfd34672ab";
+    let msg = "fd34672ab5";
     let vote_arg = format!("{} {}", signing_key, msg);
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
