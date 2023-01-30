@@ -1054,7 +1054,7 @@ pub mod cmds {
     pub struct TxInitAccount(pub args::TxInitAccount);
 
     impl SubCmd for TxInitAccount {
-        const CMD: &'static str = "init-account-m";
+        const CMD: &'static str = "init-account";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
