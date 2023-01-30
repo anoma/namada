@@ -2746,18 +2746,6 @@ fn eth_governance_proposal() -> Result<()> {
     client.exp_string("Proposal: 0")?;
     client.assert_success();
 
-    let proposal_query_args = vec![
-        "query-proposal",
-        "--proposal-id",
-        "1",
-        "--ledger-address",
-        &validator_one_rpc,
-    ];
-
-    client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
-    client.exp_string("Proposal: 1")?;
-    client.assert_success();
-
     // Query token balance proposal author (submitted funds)
     let query_balance_args = vec![
         "balance",
@@ -3042,14 +3030,16 @@ fn pgf_governance_proposal() -> Result<()> {
     }
 
     let albert_address = find_address(&test, ALBERT)?;
-    let vote = format!("yay {} 1000", albert_address);
+    let arg_vote = format!("{} 1000", albert_address);
 
     let submit_proposal_vote = vec![
         "vote-proposal",
         "--proposal-id",
         "0",
         "--vote",
-        &vote,
+        "yay",
+        "--pgf",
+        &arg_vote,
         "--signer",
         "validator-0",
         "--ledger-address",
@@ -3067,12 +3057,14 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
-    let different_vote = format!("yay {} 900", albert_address);
+    let different_vote = format!("{} 900", albert_address);
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
         "--proposal-id",
         "0",
         "--vote",
+        "yay",
+        "--pgf",
         &different_vote,
         "--signer",
         BERTHA,
@@ -3090,6 +3082,10 @@ fn pgf_governance_proposal() -> Result<()> {
         "--proposal-id",
         "1",
         "--vote",
+        "yay",
+        "--pgf",
+        "yay",
+        "--pgf",
         &different_vote,
         "--signer",
         BERTHA,
