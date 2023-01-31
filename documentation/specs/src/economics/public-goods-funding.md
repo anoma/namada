@@ -65,6 +65,14 @@ Proposing candidacy as a PGF council is something that is done at any time. This
 
 Candidacy proposals last a default of 31 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
 
+The structure of the candidacy proposal should be 
+
+```rust
+struct Candidacy {
+    candidacy : Map< (council: Address, spending_cap: f32), (epoch: Epoch, attestation: Url)>
+}
+```
+
 ### Initiating the vote
 
 Before a new PGF council can be elected, a governance proposal that suggests a new PGF council must pass. This vote is handled by the governancea proposal type `PgfProposal`.
@@ -226,7 +234,7 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/cPGF_recipients/Address = Amount`
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
-- `/PGFCandidates/Address = bool` (For candidates to see if the key exists)
+- `/PGFCandidates/Address = Candidacy` (For candidates to see if the key exists, and store the struct)
 
 ### Struct
 
