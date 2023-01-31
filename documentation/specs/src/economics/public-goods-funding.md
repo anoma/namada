@@ -69,7 +69,7 @@ The structure of the candidacy proposal should be
 
 ```rust
 struct Candidacy {
-    candidacy : Map< (council: Address, spending_cap: f32), (epoch: Epoch, attestation: Url)>
+    candidacy : Map< council: Council, (epoch: Epoch, attestation: Url)>
 }
 ```
 
@@ -220,11 +220,13 @@ The internal address VP will hold the allowance the 10% inflation of NAM. This w
 
 The council should be able to burn funds (up to their spending cap), but this hopefully should not require additional functionality beyond what currently exists.
 
+Further, the VP should contain the parameter that dictates the number of epochs a candidacy is valid for once it has been broadcasted and before it needs to be renewed.
+
 ### VP checks
 
 The VP must check that the council does not exceed its spending cap.
 
-The VP must also check that the any spending is only done by a the correctly elected PGF council multisig address. 
+The VP must also check that the any spending is only done by a the correctly elected PGF council multisig address.
 
 ## Storage
 
@@ -234,12 +236,18 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/cPGF_recipients/Address = Amount`
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
-- `/PGFCandidates/Address = Candidacy` (For candidates to see if the key exists, and store the struct)
+- `/PGFAddress/candidacy_length = u8`
+- `/pgf/counsil_candidates/epoch = HashSet<Council>` (This is one solution, another would be to use a )
+- `/pgf/candidacy = Candidacy` (Alternate solution: Candidacy defined above)
+
+```admonish note
+Marco: if we cannot delete the candidates, then I think the Map (second solution) is better. If instead we can prune the candidates, then I think the first solution is better. The first solution is faster at pruning (which ideally we’ll perform at every Epoch) and a bit slower at checking a vote (but we can assume votes for pgf will happen a bunch of times a year)
+```
 
 ### Struct
 
 ```rust
-struct PgfCoucil {
+struct Council {
     address: Address,
     spending_cap_amount: u64,
     spent_amount: u64,
