@@ -151,9 +151,9 @@ struct PgfProposal{
 }
 ```
 
-- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1.0`.
+- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1.0`. (They could have done this before the proposal went live as well).
 
-- At epoch 48, Elsa submits a broadcasts a multisig PGF council address which includes herself and her sister.
+- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister.
 
 - At epoch 49, Alice submits the vote:
 
