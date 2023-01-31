@@ -206,12 +206,16 @@ impl<'de> Visitor<'de> for VPVisitor {
         E: de::Error,
     {
         let [numer, denom]: [&str; 2] =
-            value.split('/').collect::<Vec<&str>>().try_into().or(
-                Err(de::Error::custom("Expected a '/' separated pair of numbers")),
-            )?;
-        let numer = numer.trim().parse::<u64>()
+            value.split('/').collect::<Vec<&str>>().try_into().or(Err(
+                de::Error::custom("Expected a '/' separated pair of numbers"),
+            ))?;
+        let numer = numer
+            .trim()
+            .parse::<u64>()
             .map_err(|e| de::Error::custom(e.to_string()))?;
-        let denom = denom.trim().parse::<u64>()
+        let denom = denom
+            .trim()
+            .parse::<u64>()
             .map_err(|e| de::Error::custom(e.to_string()))?;
         FractionalVotingPower::new(numer, denom)
             .map_err(|e| de::Error::custom(e.to_string()))
@@ -230,8 +234,7 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
     where
         D: Deserializer<'de>,
     {
-        deserializer
-            .deserialize_string(VPVisitor)
+        deserializer.deserialize_string(VPVisitor)
     }
 }
 
@@ -276,8 +279,8 @@ mod tests {
         let vp = FractionalVotingPower::new(1, 2).expect("Test failed");
         let serialized = serde_json::to_string(&vp).expect("Test failed");
         assert_eq!(serialized.as_str(), r#""1 / 2""#);
-        let deserialized: FractionalVotingPower = serde_json::from_str(&serialized)
-            .expect("Test failed");
+        let deserialized: FractionalVotingPower =
+            serde_json::from_str(&serialized).expect("Test failed");
         assert_eq!(deserialized, vp);
     }
 }
