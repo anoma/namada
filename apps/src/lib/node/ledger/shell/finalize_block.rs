@@ -436,7 +436,12 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada::ledger::parameters::EpochDuration;
     use namada::types::storage::Epoch;
+    use namada::types::time::DurationSecs;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
@@ -788,5 +793,62 @@ mod test_finalize_block {
             counter += 1;
         }
         assert_eq!(counter, 2);
+    }
+
+    /// Test that the finalize block handler never commits changes directly to
+    /// the DB.
+    #[test]
+    fn test_finalize_doesnt_commit_db() {
+        let (mut shell, _) = setup();
+
+        // Update epoch duration to make sure we go through couple epochs
+        let epoch_duration = EpochDuration {
+            min_num_of_blocks: 5,
+            min_duration: DurationSecs(0),
+        };
+        namada::ledger::parameters::update_epoch_parameter(
+            &mut shell.wl_storage.storage,
+            &epoch_duration,
+        )
+        .unwrap();
+        shell.wl_storage.storage.next_epoch_min_start_height = BlockHeight(5);
+        shell.wl_storage.storage.next_epoch_min_start_time = DateTimeUtc::now();
+        shell.wl_storage.commit_genesis().unwrap();
+        shell.commit();
+
+        // Collect all storage key-vals into a sorted map
+        let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
+            let prefix: Key = FromStr::from_str("").unwrap();
+            shell
+                .wl_storage
+                .storage
+                .db
+                .iter_prefix(&prefix)
+                .map(|(key, val, _gas)| (key, val))
+                .collect()
+        };
+
+        // Store the full state in sorted map
+        let mut last_storage_state: std::collections::BTreeMap<
+            String,
+            Vec<u8>,
+        > = store_block_state(&shell);
+
+        // Keep applying finalize block
+        for _ in 0..20 {
+            let req = FinalizeBlock::default();
+            let _events = shell.finalize_block(req).unwrap();
+            let new_state = store_block_state(&shell);
+            // The new state must be unchanged
+            itertools::assert_equal(
+                last_storage_state.iter(),
+                new_state.iter(),
+            );
+            // Commit the block to move on to the next one
+            shell.wl_storage.commit_block().unwrap();
+
+            // Store the state after commit for the next iteration
+            last_storage_state = store_block_state(&shell);
+        }
     }
 }
