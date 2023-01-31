@@ -148,7 +148,11 @@ impl ErrorCodes {
     }
 =======
     ReplayTx = 7,
+<<<<<<< HEAD
 >>>>>>> c00cb14a6 (Fixes error codes)
+=======
+    InvalidChainId = 8,
+>>>>>>> c6c242600 (Validates tx `ChainId`)
 }
 
 impl From<ErrorCodes> for u32 {
@@ -609,6 +613,7 @@ where
     ///    1: Invalid tx
     ///    2: Tx is invalidly signed
     ///    7: Replay attack
+    ///    8: Invalid chain id in tx
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -626,7 +631,18 @@ where
             }
         };
 
+        // Tx chain id
+        if tx.chain_id != self.chain_id {
+            response.code = ErrorCodes::InvalidChainId.into();
+            response.log = format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                self.chain_id, tx.chain_id
+            );
+            return response;
+        }
+
         // Tx signature check
+        // FIXME: merge this first 3 checks in process_tx?
         let tx_type = match process_tx(tx) {
             Ok(ty) => ty,
             Err(msg) => {

@@ -245,7 +245,7 @@ pub mod tx_types {
             Tx::new(
                 vec![],
                 Some(ty.try_to_vec().unwrap()),
-                ChainId("".to_string()), //FIXME: leave this empty?
+                ChainId("".to_string()), //FIXME: leave this empty? New method to provide a chain id?
             )
         }
     }
