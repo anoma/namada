@@ -270,12 +270,8 @@ fn test_add_to_bridge_pool() {
         "--ledger-address",
         &ledger_addr,
     ];
-    let mut namadar = run!(
-        test,
-        Bin::Relayer,
-        proof_args,
-        Some(QUERY_TIMEOUT_SECONDS),
-    )
-    .unwrap();
+    let mut namadar =
+        run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
+            .unwrap();
     namadar.exp_string("Ethereum ABI-encoded proof:").unwrap();
 }
