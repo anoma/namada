@@ -96,3 +96,44 @@ pub async fn query_bridge_pool(args: args::Query) {
     };
     println!("{}", serde_json::to_string_pretty(&contents).unwrap());
 }
+
+/// Query the contents of the Ethereum bridge pool that
+/// is covered by the latest signed root.
+/// Prints out a json payload.
+pub async fn query_signed_bridge_pool(args: args::Query) {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    let response: Vec<PendingTransfer> = RPC
+        .shell()
+        .eth_bridge()
+        .read_signed_ethereum_bridge_pool(&client)
+        .await
+        .unwrap();
+    let pool_contents: HashMap<String, PendingTransfer> = response
+        .into_iter()
+        .map(|transfer| (transfer.keccak256().to_string(), transfer))
+        .collect();
+    if pool_contents.is_empty() {
+        println!("Bridge pool is empty.");
+        return;
+    }
+    let contents = BridgePoolResponse {
+        bridge_pool_contents: pool_contents,
+    };
+    println!("{}", serde_json::to_string_pretty(&contents).unwrap());
+}
+
+/// Iterates over all ethereum events
+/// and returns the amount of voting power
+/// backing each `TransferToEthereum` event.
+///
+/// Prints a json payload.
+pub async fn query_relay_progress(args: args::Query) {
+    let client = HttpClient::new(args.ledger_address).unwrap();
+    let resp = RPC
+        .shell()
+        .eth_bridge()
+        .transfer_to_ethereum_progress(&client)
+        .await
+        .unwrap();
+    println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+}

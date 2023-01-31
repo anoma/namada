@@ -1574,12 +1574,19 @@ pub mod cmds {
         ConstructProof(args::BridgePoolProof),
         /// Query the contents of the pool.
         QueryPool(args::Query),
+        /// Query to provable contents of the pool.
+        QuerySigned(args::Query),
+        /// Check the confirmation status of `TransferToEthereum`
+        /// events.
+        QueryRelays(args::Query),
     }
 
     impl Cmd for EthBridgePool {
         fn add_sub(app: App) -> App {
             app.subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
+                .subcommand(QuerySignedBridgePool::def().display_order(1))
+                .subcommand(QueryRelayProgress::def().display_order(1))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -1587,7 +1594,14 @@ pub mod cmds {
                 .map(|proof| Self::ConstructProof(proof.0));
             let query_pool = QueryEthBridgePool::parse(matches)
                 .map(|q| Self::QueryPool(q.0));
-            construct_proof.or(query_pool)
+            let query_signed = QuerySignedBridgePool::parse(matches)
+                .map(|q| Self::QuerySigned(q.0));
+            let query_relays = QueryRelayProgress::parse(matches)
+                .map(|q| Self::QueryRelays(q.0));
+            construct_proof
+                .or(query_pool)
+                .or(query_signed)
+                .or(query_relays)
         }
     }
 
@@ -1608,6 +1622,8 @@ pub mod cmds {
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(ConstructProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
+                .subcommand(QuerySignedBridgePool::def().display_order(1))
+                .subcommand(QueryRelayProgress::def().display_order(1))
         }
     }
 
@@ -1669,6 +1685,47 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Get the contents of the Ethereum bridge pool.")
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QuerySignedBridgePool(args::Query);
+
+    impl SubCmd for QuerySignedBridgePool {
+        const CMD: &'static str = "query-signed";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Get the contents of the Ethereum bridge pool with a \
+                     signed Merkle root.",
+                )
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryRelayProgress(args::Query);
+
+    impl SubCmd for QueryRelayProgress {
+        const CMD: &'static str = "query-relayed";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Get the confirmation status of transfers to Ethereum.")
                 .add_args::<args::Query>()
         }
     }

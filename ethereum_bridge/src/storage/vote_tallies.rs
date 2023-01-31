@@ -24,10 +24,10 @@ pub const BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT: &str = "bp_root_and_nonce";
 /// voting power assigned to validator set updates.
 pub const VALSET_UPDS_PREFIX_KEY_SEGMENT: &str = "validator_set_updates";
 
-const BODY_KEY_SEGMENT: &str = "body";
+pub const BODY_KEY_SEGMENT: &str = "body";
 const SEEN_KEY_SEGMENT: &str = "seen";
 const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
-const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
+pub const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
 
 /// Generator for the keys under which details of votes for some piece of data
 /// is stored

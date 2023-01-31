@@ -1,5 +1,6 @@
 //! This module contains types related with validator voting power calculations.
 
+use std::fmt::{Display, Formatter};
 use std::iter::Sum;
 use std::ops::{Add, AddAssign};
 
@@ -7,6 +8,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
 use num_rational::Ratio;
+use serde::de::Visitor;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
 #[derive(
@@ -131,13 +134,19 @@ impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
     }
 }
 
+impl Display for FractionalVotingPower {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} / {}", self.0.numer(), self.0.denom())
+    }
+}
+
 impl BorshSerialize for FractionalVotingPower {
     fn serialize<W: ark_serialize::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
         let (numer, denom): (u64, u64) = self.into();
-        (numer, denom).serialize(writer)
+        BorshSerialize::serialize(&(numer, denom), writer)
     }
 }
 
@@ -166,6 +175,63 @@ impl BorshSchema for FractionalVotingPower {
 
     fn declaration() -> borsh::schema::Declaration {
         "FractionalVotingPower".into()
+    }
+}
+
+impl Serialize for FractionalVotingPower {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+struct VPVisitor;
+
+impl<'de> Visitor<'de> for VPVisitor {
+    type Value = FractionalVotingPower;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str(
+            "A '/' separated pair of numbers, the second of which is non-zero.",
+        )
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        let [numer, denom]: [&str; 2] =
+            value.split('/').collect::<Vec<&str>>().try_into().or(
+                Err(de::Error::custom("Expected a '/' separated pair of numbers")),
+            )?;
+        let numer = numer.trim().parse::<u64>()
+            .map_err(|e| de::Error::custom(e.to_string()))?;
+        let denom = denom.trim().parse::<u64>()
+            .map_err(|e| de::Error::custom(e.to_string()))?;
+        FractionalVotingPower::new(numer, denom)
+            .map_err(|e| de::Error::custom(e.to_string()))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_str(&value)
+    }
+}
+
+impl<'de> Deserialize<'de> for FractionalVotingPower {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer
+            .deserialize_string(VPVisitor)
     }
 }
 
@@ -202,5 +268,16 @@ mod tests {
         assert!(FractionalVotingPower::new(1, 1).is_ok());
         assert!(FractionalVotingPower::new(1, 2).is_ok());
         assert!(FractionalVotingPower::new(3, 2).is_err());
+    }
+
+    /// Test that serde (de)-serializing pretty prints FractionalVotingPowers.
+    #[test]
+    fn test_serialize_fractional_voting_power() {
+        let vp = FractionalVotingPower::new(1, 2).expect("Test failed");
+        let serialized = serde_json::to_string(&vp).expect("Test failed");
+        assert_eq!(serialized.as_str(), r#""1 / 2""#);
+        let deserialized: FractionalVotingPower = serde_json::from_str(&serialized)
+            .expect("Test failed");
+        assert_eq!(deserialized, vp);
     }
 }

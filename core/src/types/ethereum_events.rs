@@ -298,6 +298,8 @@ pub struct TransferToNamada {
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer

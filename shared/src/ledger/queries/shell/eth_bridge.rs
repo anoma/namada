@@ -1,5 +1,8 @@
 //! Ethereum bridge related shell queries.
 
+use std::collections::HashMap;
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
@@ -9,15 +12,20 @@ use namada_core::ledger::storage::{
 use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::ethereum_events::{EthereumEvent, TransferToEthereum};
+use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
+use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{
     tokenize_relay_proof, EthereumProof, RelayProof,
 };
 use namada_ethereum_bridge::storage::vote_tallies;
+use namada_ethereum_bridge::storage::vote_tallies::{
+    eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
+};
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
@@ -33,13 +41,18 @@ router! {ETH_BRIDGE,
 
     // Get the contents of the Ethereum bridge pool covered by
     // the latest signed Merkle tree root.
-    ( "pool" / "contents" )
+    ( "pool" / "signed_contents" )
         -> Vec<PendingTransfer> = read_signed_ethereum_bridge_pool,
 
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
     ( "pool" / "proof" )
         -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
+
+    // Iterates over all ethereum events and returns the amount of
+    // voting power backing each `TransferToEthereum` event.
+    ("pool" / "transfer_to_eth_progress")
+        -> HashMap<TransferToEthereum, FractionalVotingPower> = transfer_to_ethereum_progress,
 
     // Request a proof of a validator set signed off for
     // the given epoch.
@@ -65,7 +78,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    Ok(read_ethereum_bridge_pool_at_height(ctx.storage.last_height, ctx))
+    Ok(read_ethereum_bridge_pool_at_height(
+        ctx.storage.last_height,
+        ctx,
+    ))
 }
 
 /// Read the contents of the Ethereum bridge
@@ -82,16 +98,14 @@ where
         .storage
         .get_signed_bridge_pool_root()
         .ok_or(storage_api::Error::SimpleMessage(
-            "No signed root for the Ethereum bridge pool exists in \
-                 storage.",
+            "No signed root for the Ethereum bridge pool exists in storage.",
         ))
         .into_storage_result()?;
     Ok(read_ethereum_bridge_pool_at_height(height, ctx))
 }
 
-
 /// Read the Ethereum bridge pool contents at a specified height.
-fn read_ethereum_bridge_pool_at_height<'iter, D, H>(
+fn read_ethereum_bridge_pool_at_height<D, H>(
     height: BlockHeight,
     ctx: RequestCtx<'_, D, H>,
 ) -> Vec<PendingTransfer>
@@ -101,15 +115,14 @@ where
 {
     // get the backing store of the merkle tree corresponding
     // at the specified height.
-    let stores =
-        ctx.storage
-            .db
-            .read_merkle_tree_stores(height)
-            .expect("We should always be able to read the database")
-            .expect(
-                "Every signed root should correspond to an existing block \
-                     height",
-            );
+    let stores = ctx
+        .storage
+        .db
+        .read_merkle_tree_stores(height)
+        .expect("We should always be able to read the database")
+        .expect(
+            "Every signed root should correspond to an existing block height",
+        );
     let store = match stores.get_store(StoreType::BridgePool) {
         StoreRef::BridgePool(store) => store,
         _ => unreachable!(),
@@ -220,6 +233,63 @@ where
             "Could not deserialize transfers",
         ))
     }
+}
+
+/// Iterates over all ethereum events
+/// and returns the amount of voting power
+/// backing each `TransferToEthereum` event.
+fn transfer_to_ethereum_progress<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<HashMap<TransferToEthereum, FractionalVotingPower>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut pending_events = HashMap::new();
+    for (mut key, value) in ctx
+        .storage
+        .iter_prefix(&eth_msgs_prefix())
+        .0
+        .filter_map(|(k, v, _)| {
+            let key = Key::from_str(&k).expect(
+                "Iterating over keys from storage shouldn't not yield \
+                 un-parsable keys.",
+            );
+            match key.segments.last() {
+                Some(DbKeySeg::StringSeg(ref seg))
+                    if seg == BODY_KEY_SEGMENT =>
+                {
+                    Some((key, v))
+                }
+                _ => None,
+            }
+        })
+    {
+        if let Ok(EthereumEvent::TransfersToEthereum { transfers, .. }) =
+            EthereumEvent::try_from_slice(&value)
+        {
+            // We checked above that key is not empty
+            *key.segments.last_mut().unwrap() =
+                DbKeySeg::StringSeg(VOTING_POWER_KEY_SEGMENT.into());
+            let voting_power = <(u64, u64)>::try_from_slice(
+                &ctx.storage.read(&key).into_storage_result()?.0.expect(
+                    "Iterating over storage should not yield keys without \
+                     values.",
+                ),
+            )
+            .unwrap();
+            let voting_power =
+                FractionalVotingPower::new(voting_power.0, voting_power.1)
+                    .expect(
+                        "Deserializing voting power from storage shouldn't \
+                         fail.",
+                    );
+            for transfer in transfers {
+                pending_events.insert(transfer, voting_power.clone());
+            }
+        }
+    }
+    Ok(pending_events)
 }
 
 /// Read a validator set update proof from storage.
@@ -703,7 +773,7 @@ mod test_ethbridge_router {
         assert_eq!(proof, resp.data.into_inner());
     }
 
-    /// Test if the no merkle tree including a transfer
+    /// Test if the merkle tree including a transfer
     /// has had its root signed, then we cannot generate
     /// a proof.
     #[tokio::test]
@@ -784,6 +854,165 @@ mod test_ethbridge_router {
             .await;
         // thus proof generation should fail
         assert!(resp.is_err());
+    }
+
+    /// Test that the RPC call for bridge pool transfers
+    /// covered by a signed merkle root behaves correctly.
+    #[tokio::test]
+    async fn test_read_signed_bp_transfers() {
+        let mut client = TestClient::new(RPC);
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: 0.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            },
+        };
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+
+        // write a transfer into the bridge pool
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // create a signed Merkle root for this pool
+        let signed_root = BridgePoolRootProof {
+            signatures: Default::default(),
+            data: (transfer.keccak256(), 0.into()),
+        };
+
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+
+        // update the pool
+        let mut transfer2 = transfer.clone();
+        transfer2.transfer.amount = 1.into();
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // add the signature for the pool at the previous block height
+        client
+            .storage
+            .write(
+                &get_signed_root_key(),
+                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+            )
+            .expect("Test failed");
+
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+        let resp = RPC
+            .shell()
+            .eth_bridge()
+            .read_signed_ethereum_bridge_pool(&client)
+            .await
+            .unwrap();
+        assert_eq!(resp, vec![transfer]);
+    }
+
+    /// Test that we can get the backing voting power for
+    /// each pending TransferToEthereum event.
+    #[tokio::test]
+    async fn test_transfer_to_eth_progress() {
+        let mut client = TestClient::new(RPC);
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: 0.into(),
+            },
+            gas_fee: GasFee {
+                amount: 0.into(),
+                payer: bertha_address(),
+            },
+        };
+        // write validator to storage
+        test_utils::setup_default_storage(&mut client.storage);
+
+        // write a transfer into the bridge pool
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer),
+                transfer.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        let event_transfer =
+            namada_core::types::ethereum_events::TransferToEthereum {
+                asset: transfer.transfer.asset,
+                receiver: transfer.transfer.recipient,
+                amount: transfer.transfer.amount,
+                gas_payer: transfer.gas_fee.payer.clone(),
+                gas_amount: transfer.gas_fee.amount,
+            };
+        let eth_event = EthereumEvent::TransfersToEthereum {
+            nonce: Default::default(),
+            transfers: vec![event_transfer.clone()],
+        };
+        let eth_msg_key = vote_tallies::Keys::from(&eth_event);
+        let voting_power = FractionalVotingPower::new(1, 2).unwrap();
+        client
+            .storage
+            .write(
+                &eth_msg_key.body(),
+                eth_event.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        client
+            .storage
+            .write(
+                &eth_msg_key.voting_power(),
+                voting_power.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+
+        // update the pool
+        let mut transfer2 = transfer.clone();
+        transfer2.transfer.amount = 1.into();
+        client
+            .storage
+            .write(
+                &get_pending_key(&transfer2),
+                transfer2.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // commit the changes and increase block height
+        client.storage.commit().expect("Test failed");
+        client.storage.block.height = client.storage.block.height + 1;
+        let resp = RPC
+            .shell()
+            .eth_bridge()
+            .transfer_to_ethereum_progress(&client)
+            .await
+            .unwrap();
+        let expected: HashMap<
+            namada_core::types::ethereum_events::TransferToEthereum,
+            FractionalVotingPower,
+        > = [(event_transfer, voting_power)].into_iter().collect();
+        assert_eq!(expected, resp);
     }
 
     /// Test if the a transfer has been removed from the
