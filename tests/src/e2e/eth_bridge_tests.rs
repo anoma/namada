@@ -136,6 +136,8 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
 /// In this test, we check the following:
 /// 1. We can successfully add tranfers to the bridge pool.
 /// 2. We can query the bridge pool and it is non-empty.
+/// 3. We request a proof of inclusion of the transfer into the
+///    bridge pool.
 #[test]
 fn test_add_to_bridge_pool() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 40;
@@ -181,7 +183,7 @@ fn test_add_to_bridge_pool() {
     )
     .unwrap();
     namadan_ledger
-        .exp_string("Anoma ledger node started")
+        .exp_string("Namada ledger node started")
         .unwrap();
     namadan_ledger
         .exp_string("Tendermint node started")
@@ -240,5 +242,36 @@ fn test_add_to_bridge_pool() {
         Some(QUERY_TIMEOUT_SECONDS),
     )
     .unwrap();
-    namadar.exp_string(r#""bridge_pool_contents":"#).unwrap();
+    // get the returned hash of the transfer.
+    let regex =
+        expectrl::Regex(r#""bridge_pool_contents":(?s).*(?-s)"[0-9A-F]+":"#);
+    let mut hash = String::from_utf8(
+        namadar
+            .session
+            .expect(regex)
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap()
+    .split_ascii_whitespace()
+    .last()
+    .unwrap()
+    .to_string();
+    hash.remove(0);
+    hash.truncate(hash.len() - 2);
+
+    let proof_args = vec![
+        "ethereum-bridge-pool",
+        "construct-proof",
+        "--hash-list",
+        &hash,
+        "--ledger-address",
+        &ledger_addr,
+    ];
+    let mut namadar =
+        run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
+            .unwrap();
+    namadar.exp_string("Ethereum ABI-encoded proof:").unwrap();
 }

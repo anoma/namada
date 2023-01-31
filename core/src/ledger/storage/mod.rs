@@ -1009,7 +1009,15 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        self.block.tree.update(key, value)?;
+        if is_pending_transfer_key(key) {
+            // The tree of the bright pool stores the current height for the
+            // pending transfer
+            let height =
+                self.block.height.try_to_vec().expect("Encoding failed");
+            self.block.tree.update(key, height)?;
+        } else {
+            self.block.tree.update(key, value)?;
+        }
         self.db
             .batch_write_subspace_val(batch, self.block.height, key, value)
     }

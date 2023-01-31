@@ -1650,7 +1650,7 @@ pub mod cmds {
                      the pool.",
                 )
                 .setting(AppSettings::ArgRequiredElseHelp)
-                .add_args::<args::EthereumBridgePool>()
+                .add_args::<args::BridgePoolProof>()
         }
     }
 
