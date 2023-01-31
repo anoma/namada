@@ -209,7 +209,8 @@ where
                         }
                     }
                     Tally::PGFCouncil(council) => {
-                        // TODO: implement when PGF is in place, update the PGF council in storage
+                        // TODO: implement when PGF is in place, update the PGF
+                        // council in storage
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),
                             TallyResult::Passed(Tally::PGFCouncil(council)),
@@ -234,7 +235,8 @@ where
                             })?
                     }
                     Tally::ETHBridge => {
-                        //TODO: implement when ETH Bridge. Apply the modification requested by the proposal
+                        // TODO: implement when ETH Bridge. Apply the
+                        // modification requested by the proposal
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),
                             TallyResult::Passed(Tally::ETHBridge),

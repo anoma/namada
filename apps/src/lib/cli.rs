@@ -2457,7 +2457,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches); 
+            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
             let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
@@ -2487,21 +2487,33 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                .arg(PROPOSAL_VOTE.def().about(
-                    "The vote for the proposal. Either yay or nay"
-                ))
-                .arg(PROPOSAL_VOTE_PGF_OPT.def().about("The list of proposed councils and spending caps:\n$council1 $cap1 $council2 $cap2 ... (council is bech32m encoded, cap is expressed in microNAM")
-                    .requires(PROPOSAL_ID.name)
-                    .conflicts_with(
-                        
-                    PROPOSAL_VOTE_ETH_OPT.name
-                    )
+                .arg(
+                    PROPOSAL_VOTE
+                        .def()
+                        .about("The vote for the proposal. Either yay or nay"),
                 )
-                .arg(PROPOSAL_VOTE_ETH_OPT.def().about("The signing key and message bytes (hex encoded) to be signed: $signing_key $message")
-                    .requires(PROPOSAL_ID.name)
-                    .conflicts_with(
-                    PROPOSAL_VOTE_PGF_OPT.name
-                ))
+                .arg(
+                    PROPOSAL_VOTE_PGF_OPT
+                        .def()
+                        .about(
+                            "The list of proposed councils and spending \
+                             caps:\n$council1 $cap1 $council2 $cap2 ... \
+                             (council is bech32m encoded, cap is expressed in \
+                             microNAM",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
+                )
+                .arg(
+                    PROPOSAL_VOTE_ETH_OPT
+                        .def()
+                        .about(
+                            "The signing key and message bytes (hex encoded) \
+                             to be signed: $signing_key $message",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
+                )
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
