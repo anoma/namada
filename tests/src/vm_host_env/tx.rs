@@ -16,7 +16,6 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_core::types::hash::Hash;
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
@@ -69,7 +68,7 @@ impl Default for TestTxEnv {
         };
         let chain_id = wl_storage.storage.chain_id.clone();
         Self {
-            wl_storage,
+            wl_storage: wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: BlockGasMeter::default(),
             tx_index: TxIndex::default(),
@@ -79,7 +78,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None, chain_id, None),
+            tx: Tx::new(vec![], None, chain_id),
         }
     }
 }
@@ -120,12 +119,6 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
-    }
-
-    pub fn store_wasm_code(&mut self, code: Vec<u8>) {
-        let hash = Hash::sha256(&code);
-        let key = Key::wasm_code(&hash);
-        self.wl_storage.storage.write(&key, code).unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.
@@ -214,7 +207,7 @@ impl TestTxEnv {
             &mut self.wl_storage.write_log,
             &mut self.gas_meter,
             &self.tx_index,
-            &self.tx.code_or_hash,
+            &self.tx.code,
             self.tx.data.as_ref().unwrap_or(&empty_data),
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,

@@ -71,10 +71,10 @@ impl Default for TestVpEnv {
         let chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
-            wl_storage,
+            wl_storage: wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], None, chain_id, None),
+            tx: Tx::new(vec![], None, chain_id),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

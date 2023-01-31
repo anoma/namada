@@ -7,23 +7,21 @@ pub use types::{Dkg, Error, Signed, SignedTxData, Tx};
 
 #[cfg(test)]
 mod tests {
-    use std::time::SystemTime;
-
     use data_encoding::HEXLOWER;
     use generated::types::Tx;
     use prost::Message;
 
-    use super::*;
     use crate::types::chain::ChainId;
+
+    use super::*;
 
     #[test]
     fn encoding_round_trip() {
         let tx = Tx {
-            code_or_hash: "wasm code".as_bytes().to_owned(),
+            code: "wasm code".as_bytes().to_owned(),
             data: Some("arbitrary data".as_bytes().to_owned()),
-            timestamp: Some(SystemTime::now().into()),
+            timestamp: Some(std::time::SystemTime::now().into()),
             chain_id: ChainId::default().0,
-            expiration: Some(SystemTime::now().into()),
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

@@ -609,9 +609,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx =
-            Tx::new(tx_code, Some(tx_data), storage.chain_id.clone(), None)
-                .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -633,14 +632,9 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -650,9 +644,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx =
-            Tx::new(tx_code, Some(tx_data), storage.chain_id.clone(), None)
-                .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -739,13 +732,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -767,14 +755,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -809,13 +792,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -837,14 +815,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -871,9 +844,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx =
-            Tx::new(tx_code, Some(tx_data), storage.chain_id.clone(), None)
-                .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -963,13 +935,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -991,14 +958,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1068,13 +1030,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1095,14 +1052,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1157,13 +1109,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1184,14 +1131,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1232,13 +1174,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1259,14 +1196,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1326,13 +1258,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1353,14 +1280,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1431,13 +1353,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1458,14 +1375,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1533,13 +1445,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1560,14 +1467,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1579,13 +1481,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1606,14 +1503,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1626,13 +1518,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1655,14 +1542,9 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1723,13 +1605,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1750,14 +1627,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1825,13 +1697,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1852,14 +1719,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1935,13 +1797,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1962,14 +1819,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2036,13 +1888,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2063,14 +1910,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2148,13 +1990,8 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2175,14 +2012,9 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2207,13 +2039,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(
-            tx_code,
-            Some(tx_data),
-            wl_storage.storage.chain_id.clone(),
-            None,
-        )
-        .sign(&keypair_1());
+        let tx = Tx::new(tx_code, Some(tx_data), storage.chain_id.clone())
+            .sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2234,13 +2061,8 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 }

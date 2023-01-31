@@ -512,7 +512,7 @@ mod tests {
     fn test_tx() {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
-        let chain_id = ChainId("This chain".to_string());
+        let chain_id = ChainId::default();
         let tx = Tx::new(code.clone(), Some(data.clone()), chain_id.clone());
 
         let bytes = tx.to_bytes();
@@ -524,7 +524,7 @@ mod tests {
             code,
             data: Some(data),
             timestamp: None,
-            chain_id,
+            chain_id: chain_id.0,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");
