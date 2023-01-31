@@ -100,8 +100,7 @@ pub fn compute_tally(
                     } else {
                         return ProposalResult {
                             result: TallyResult::Failed(format!(
-                                "Unexpected vote type. Expected: {}, Found: \
-                             {}",
+                                "Unexpected vote type. Expected: {}, Found: {}",
                                 proposal_type, validator_vote
                             )),
                             total_voting_power: total_stake,
@@ -112,8 +111,7 @@ pub fn compute_tally(
                 } else {
                     return ProposalResult {
                         result: TallyResult::Failed(format!(
-                            "Unexpected vote type. Expected: {}, Found: \
-                             {}",
+                            "Unexpected vote type. Expected: {}, Found: {}",
                             proposal_type, validator_vote
                         )),
                         total_voting_power: total_stake,
@@ -371,7 +369,8 @@ pub fn compute_tally(
                     total_nay_power: 0,
                 },
                 _ => {
-                    // Select the winner council based on approval voting (majority)
+                    // Select the winner council based on approval voting
+                    // (majority)
                     let council = total_yay_staked_tokens
                         .into_iter()
                         .max_by(|a, b| a.1.cmp(&b.1))

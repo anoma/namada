@@ -1990,7 +1990,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 ProposalVote::Yay(VoteType::PGFCouncil(set))
             } else if let Some(eth) = args.proposal_eth {
                 let mut splits = eth.trim().split_ascii_whitespace();
-                //Sign the message
+                // Sign the message
                 let sigkey = splits
                     .next()
                     .expect("Expected signing key")
