@@ -189,7 +189,7 @@ impl SigningTx {
             code_hash: self.code_hash,
             data,
             timestamp: self.timestamp,
-            chain_id: self.chain_id,
+            chain_id: self.chain_id.clone(),
         };
         let signed_data = tx.hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -389,7 +389,7 @@ impl Tx {
                             code: self.code.clone(),
                             data: signed_data.data,
                             timestamp: self.timestamp,
-                            chain_id: self.chain_id,
+                            chain_id: self.chain_id.clone(),
                         };
                         unsigned_tx.hash()
                     }

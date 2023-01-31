@@ -301,7 +301,7 @@ pub mod tx_types {
                 code: tx.code,
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
-                chain_id: tx.chain_id,
+                chain_id: tx.chain_id.clone(),
             }
             .hash();
             match TxType::try_from(Tx {
