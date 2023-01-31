@@ -17,7 +17,7 @@ use eyre::eyre;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
-use namada_ethereum_bridge::storage;
+use namada_ethereum_bridge::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::wrapped_erc20s;
 
 use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
@@ -27,7 +27,6 @@ use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
-use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
@@ -122,26 +121,6 @@ where
         }
     }
 
-    /// Get the Ethereum address for wNam from storage, if possible
-    fn native_erc20_address(&self) -> Result<EthAddress, Error> {
-        match self.ctx.storage.read(&storage::native_erc20_key()) {
-            Ok((Some(bytes), _)) => {
-                Ok(EthAddress::try_from_slice(bytes.as_slice()).expect(
-                    "Deserializing the Native ERC20 address from storage \
-                     shouldn't fail.",
-                ))
-            }
-            Ok(_) => Err(Error(eyre!(
-                "The Ethereum bridge storage is not initialized"
-            ))),
-            Err(e) => Err(Error(eyre!(
-                "Failed to read storage when fetching the native ERC20 \
-                 address with: {}",
-                e.to_string()
-            ))),
-        }
-    }
-
     /// Deteremine the debit and credit amounts that should be checked.
     fn escrow_check<'trans>(
         &self,
@@ -151,7 +130,8 @@ where
         // are debited from the same address when mint wNam.
         Ok(
             if transfer.gas_fee.payer == transfer.transfer.sender
-                && transfer.transfer.asset == self.native_erc20_address()?
+                && transfer.transfer.asset
+                    == read_native_erc20_address(self.ctx.storage)?
             {
                 let debit = transfer
                     .gas_fee
@@ -313,7 +293,7 @@ where
         }
         // if we are going to mint wNam on Ethereum, the appropriate
         // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
-        let wnam_address = self.native_erc20_address()?;
+        let wnam_address = read_native_erc20_address(self.ctx.storage)?;
         if transfer.transfer.asset == wnam_address {
             // check that correct amount of Nam was put into escrow.
             return if self.check_nam_escrowed(escrow_checks.token_check)? {

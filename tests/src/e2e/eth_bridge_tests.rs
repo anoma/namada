@@ -1,12 +1,21 @@
+mod helpers;
+
+use std::num::NonZeroU64;
+
 use color_eyre::eyre::Result;
 use namada::ledger::eth_bridge::{
-    Contracts, EthereumBridgeConfig, UpgradeableContract,
+    ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+    UpgradeableContract,
 };
 use namada::types::address::wnam;
 use namada::types::ethereum_events::EthAddress;
+use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_core::types::ethereum_events::EthereumEvent;
+use namada_tx_prelude::ethereum_events::TransferToNamada;
 
 use super::setup::set_ethereum_bridge_mode;
+use crate::e2e::eth_bridge_tests::helpers::EventsEndpointClient;
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
@@ -274,4 +283,84 @@ fn test_add_to_bridge_pool() {
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
             .unwrap();
     namadar.exp_string("Ethereum ABI-encoded proof:").unwrap();
+}
+
+/// Tests transfers of wNAM ERC20s from Ethereum are treated differently to
+/// other ERC20 transfers.
+#[tokio::test]
+async fn test_wnam_transfer() -> Result<()> {
+    let ethereum_bridge_params = EthereumBridgeConfig {
+        min_confirmations: MinimumConfirmations::from(unsafe {
+            // SAFETY: The only way the API contract of `NonZeroU64` can
+            // be violated is if we construct values
+            // of this type using 0 as argument.
+            NonZeroU64::new_unchecked(10)
+        }),
+        contracts: Contracts {
+            native_erc20: wnam(),
+            bridge: UpgradeableContract {
+                address: EthAddress([2; 20]),
+                version: ContractVersion::default(),
+            },
+            governance: UpgradeableContract {
+                address: EthAddress([3; 20]),
+                version: ContractVersion::default(),
+            },
+        },
+    };
+
+    // use a network-config.toml with eth bridge parameters in it
+    let test = setup::network(
+        |mut genesis| {
+            genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            genesis
+        },
+        None,
+    )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::EventsEndpoint,
+    );
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    let bg_ledger = ledger.background();
+
+    let wnam_transfer = TransferToNamada {
+        amount: token::Amount::from(100),
+        asset: ethereum_bridge_params.contracts.native_erc20,
+        receiver: address::testing::established_address_1(),
+    };
+    let transfers = EthereumEvent::TransfersToNamada {
+        nonce: 100.into(),
+        transfers: vec![wnam_transfer.clone()],
+    };
+
+    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
+    // address that would only work for e2e tests involving a single
+    // validator node - this should become an attribute of the validator under
+    // test once the linked issue is implemented
+    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
+    let mut client =
+        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    client.send(&transfers).await?;
+
+    let mut ledger = bg_ledger.foreground();
+    let TransferToNamada {
+        receiver, amount, ..
+    } = wnam_transfer;
+    // TODO(namada#989): once implemented, check NAM balance of receiver
+    ledger.exp_string(&format!(
+        "Redemption of the wrapped native token is not yet supported - \
+         (receiver - {receiver}, amount - {amount})"
+    ))?;
+
+    Ok(())
 }

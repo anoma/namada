@@ -16,16 +16,18 @@ use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::ledger::parameters::read_epoch_duration_parameter;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
-use namada_core::types::address::nam;
+use namada_core::types::address::{nam, Address};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
+use namada_core::types::token;
 use namada_core::types::token::{
     balance_key, multitoken_balance_key, multitoken_balance_prefix,
 };
 
+use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
@@ -61,6 +63,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let wrapped_native_erc20 = read_native_erc20_address(storage)?;
     let mut changed_keys = BTreeSet::default();
     for TransferToNamada {
         amount,
@@ -68,39 +71,64 @@ where
         receiver,
     } in transfers
     {
-        let keys: wrapped_erc20s::Keys = asset.into();
-        let balance_key = keys.balance(receiver);
-        update::amount(storage, &balance_key, |balance| {
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "Existing value found",
-            );
-            balance.receive(amount);
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "New value calculated",
-            );
-        })?;
-        _ = changed_keys.insert(balance_key);
-
-        let supply_key = keys.supply();
-        update::amount(storage, &supply_key, |supply| {
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "Existing value found",
-            );
-            supply.receive(amount);
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "New value calculated",
-            );
-        })?;
-        _ = changed_keys.insert(supply_key);
+        if asset != &wrapped_native_erc20 {
+            let mut changed =
+                mint_wrapped_erc20s(storage, asset, receiver, amount)?;
+            changed_keys.append(&mut changed)
+        } else {
+            tracing::warn!(
+                "Redemption of the wrapped native token is not yet supported \
+                 - (receiver - {receiver}, amount - {amount})"
+            )
+        }
     }
+    Ok(changed_keys)
+}
+
+/// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
+fn mint_wrapped_erc20s<D, H>(
+    storage: &mut Storage<D, H>,
+    asset: &EthAddress,
+    receiver: &Address,
+    amount: &token::Amount,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::default();
+    let keys: wrapped_erc20s::Keys = asset.into();
+    let balance_key = keys.balance(receiver);
+    update::amount(storage, &balance_key, |balance| {
+        tracing::debug!(
+            %balance_key,
+            ?balance,
+            "Existing value found",
+        );
+        balance.receive(amount);
+        tracing::debug!(
+            %balance_key,
+            ?balance,
+            "New value calculated",
+        );
+    })?;
+    _ = changed_keys.insert(balance_key);
+
+    let supply_key = keys.supply();
+    update::amount(storage, &supply_key, |supply| {
+        tracing::debug!(
+            %supply_key,
+            ?supply,
+            "Existing value found",
+        );
+        supply.receive(amount);
+        tracing::debug!(
+            %supply_key,
+            ?supply,
+            "New value calculated",
+        );
+    })?;
+    _ = changed_keys.insert(supply_key);
     Ok(changed_keys)
 }
 
@@ -232,8 +260,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use namada_core::ledger::parameters::{
@@ -251,6 +277,7 @@ mod tests {
     use namada_core::types::{address, eth_bridge_pool};
 
     use super::*;
+    use crate::test_utils::{self, stored_keys_count};
 
     fn init_storage(storage: &mut TestStorage) {
         // set the timeout height offset
@@ -365,6 +392,8 @@ mod tests {
     /// events
     fn test_act_on_does_nothing_for_other_events() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
         let events = vec![
             EthereumEvent::NewContract {
                 name: "bridge".to_string(),
@@ -391,10 +420,9 @@ mod tests {
 
         for event in events.iter() {
             act_on(&mut storage, event).unwrap();
-            let root = Key::from_str("").unwrap();
             assert_eq!(
-                storage.iter_prefix(&root).0.count(),
-                0,
+                stored_keys_count(&storage),
+                initial_stored_keys_count,
                 "storage changed unexpectedly while acting on event: {:#?}",
                 event
             );
@@ -406,6 +434,8 @@ mod tests {
     /// TransfersToNamada batch
     fn test_act_on_changes_storage_for_transfers_to_namada() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
@@ -420,14 +450,15 @@ mod tests {
 
         act_on(&mut storage, &event).unwrap();
 
-        let root = Key::from_str("").unwrap();
-        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
+        assert_eq!(stored_keys_count(&storage), initial_stored_keys_count + 2);
     }
 
     #[test]
     /// Test acting on a single transfer and minting the first ever wDAI
     fn test_act_on_transfers_to_namada_mints_wdai() {
         let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let initial_stored_keys_count = stored_keys_count(&storage);
 
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
@@ -443,8 +474,7 @@ mod tests {
         let receiver_balance_key = wdai.balance(&receiver);
         let wdai_supply_key = wdai.supply();
 
-        let root = Key::from_str("").unwrap();
-        assert_eq!(storage.iter_prefix(&root).0.count(), 2);
+        assert_eq!(stored_keys_count(&storage), initial_stored_keys_count + 2);
 
         let expected_amount = amount.try_to_vec().unwrap();
         for key in vec![receiver_balance_key, wdai_supply_key] {
