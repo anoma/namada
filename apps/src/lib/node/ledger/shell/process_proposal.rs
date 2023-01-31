@@ -103,6 +103,7 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
     ) -> TxResult {
+        //FIXME: move these first two checks inside process_tx?
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
             Err(_) => {
@@ -113,6 +114,17 @@ where
                 };
             }
         };
+
+        if tx.chain_id != self.chain_id {
+            return TxResult {
+                code: ErrorCodes::InvalidChainId.into(),
+                info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx.chain_id
+                ),
+            };
+        }
+
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
@@ -557,6 +569,8 @@ mod test_process_proposal {
         }
     }
 
+    // FIXME: add unit tests for chain id both here and in mempool_validate
+
     /// Test that if the expected order of decrypted txs is
     /// validated, [`process_proposal`] rejects it
     #[test]
@@ -584,11 +598,14 @@ mod test_process_proposal {
                 None,
             );
             shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            })));
+            let mut decrypted_tx =
+                Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }));
+            decrypted_tx.chain_id = shell.chain_id.clone();
+            txs.push(decrypted_tx);
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
@@ -656,8 +673,9 @@ mod test_process_proposal {
         );
         shell.enqueue_tx(wrapper.clone());
 
-        let tx =
+        let mut tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -719,10 +737,11 @@ mod test_process_proposal {
         wrapper.tx_hash = Hash([0; 32]);
 
         shell.enqueue_tx(wrapper.clone());
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         )));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -773,10 +792,12 @@ mod test_process_proposal {
         };
 
         shell.enqueue_tx(wrapper.clone());
-        let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-            #[allow(clippy::redundant_clone)]
-            wrapper.clone(),
-        )));
+        let mut signed =
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                #[allow(clippy::redundant_clone)]
+                wrapper.clone(),
+            )));
+        signed.chain_id = shell.chain_id.clone();
         let request = ProcessProposal {
             txs: vec![signed.to_bytes()],
         };
@@ -804,11 +825,12 @@ mod test_process_proposal {
             shell.chain_id.clone(),
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
             tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -841,7 +863,8 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
         );
-        let tx = Tx::from(TxType::Raw(tx));
+        let mut tx = Tx::from(TxType::Raw(tx));
+        tx.chain_id = shell.chain_id.clone();
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
