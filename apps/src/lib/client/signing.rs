@@ -3,11 +3,11 @@
 
 use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
-use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::hash::Hash;
 use namada::types::key::*;
+use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
@@ -310,7 +310,7 @@ pub async fn sign_wrapper(
     let decrypted_hash = tx.tx_hash.to_string();
     TxBroadcastData::Wrapper {
         tx: tx
-            .sign(keypair, ctx.config.ledger.chain_id.clone(), args.expiration)
+            .sign(keypair, ctx.config.ledger.chain_id.clone())
             .expect("Wrapper tx signing keypair should be correct"),
         wrapper_hash,
         decrypted_hash,
