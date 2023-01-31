@@ -50,6 +50,13 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         if new_epoch {
+            if let Err(e) = namada::ledger::storage::update_allowed_conversions(
+                &mut self.wl_storage,
+            ) {
+                tracing::error!(
+                    "Failed to update allowed conversions with {e}"
+                );
+            }
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
         }
