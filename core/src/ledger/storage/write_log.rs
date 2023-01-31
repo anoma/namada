@@ -192,6 +192,34 @@ impl WriteLog {
         Ok((gas as _, size_diff))
     }
 
+    /// Write a key and a value.
+    /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
+    /// validity predicate of a new account that's not yet committed to storage.
+    /// Fails with [`Error::UpdateTemporaryValue`] when attempting to update a
+    /// temporary value.
+    pub fn protocol_write(
+        &mut self,
+        key: &storage::Key,
+        value: Vec<u8>,
+    ) -> Result<()> {
+        if let Some(prev) = self
+            .block_write_log
+            .insert(key.clone(), StorageModification::Write { value })
+        {
+            match prev {
+                StorageModification::InitAccount { .. } => {
+                    return Err(Error::UpdateVpOfNewAccount);
+                }
+                StorageModification::Temp { .. } => {
+                    return Err(Error::UpdateTemporaryValue);
+                }
+                StorageModification::Write { .. }
+                | StorageModification::Delete => {}
+            }
+        }
+        Ok(())
+    }
+
     /// Write a key and a value and return the gas cost and the size difference
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
@@ -255,6 +283,29 @@ impl WriteLog {
         };
         let gas = key.len() + size_diff as usize;
         Ok((gas as _, -size_diff))
+    }
+
+    /// Delete a key and its value.
+    /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
+    /// not possible to delete.
+    pub fn protocol_delete(&mut self, key: &storage::Key) -> Result<()> {
+        if key.is_validity_predicate().is_some() {
+            return Err(Error::DeleteVp);
+        }
+        if let Some(prev) = self
+            .block_write_log
+            .insert(key.clone(), StorageModification::Delete)
+        {
+            match prev {
+                StorageModification::InitAccount { .. } => {
+                    return Err(Error::DeleteVp);
+                }
+                StorageModification::Write { .. }
+                | StorageModification::Delete
+                | StorageModification::Temp { .. } => {}
+            }
+        };
+        Ok(())
     }
 
     /// Initialize a new account and return the gas cost.
@@ -336,53 +387,6 @@ impl WriteLog {
     /// Get the IBC event of the current transaction
     pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
         self.ibc_event.as_ref()
-    }
-
-    /// Commit the current genesis tx's write log to the storage.
-    pub fn commit_genesis<DB, H>(
-        &mut self,
-        storage: &mut Storage<DB, H>,
-    ) -> Result<()>
-    where
-        DB: 'static
-            + ledger::storage::DB
-            + for<'iter> ledger::storage::DBIter<'iter>,
-        H: StorageHasher,
-    {
-        // This whole function is almost the same as `commit_block`, except that
-        // we commit the state directly from `tx_write_log`
-        let mut batch = Storage::<DB, H>::batch();
-        for (key, entry) in self.tx_write_log.iter() {
-            match entry {
-                StorageModification::Write { value } => {
-                    storage
-                        .batch_write_subspace_val(
-                            &mut batch,
-                            key,
-                            value.clone(),
-                        )
-                        .map_err(Error::StorageError)?;
-                }
-                StorageModification::Delete => {
-                    storage
-                        .batch_delete_subspace_val(&mut batch, key)
-                        .map_err(Error::StorageError)?;
-                }
-                StorageModification::InitAccount { vp } => {
-                    storage
-                        .batch_write_subspace_val(&mut batch, key, vp.clone())
-                        .map_err(Error::StorageError)?;
-                }
-                // temporary value isn't persisted
-                StorageModification::Temp { .. } => {}
-            }
-        }
-        storage.exec_batch(batch).map_err(Error::StorageError)?;
-        if let Some(address_gen) = self.address_gen.take() {
-            storage.address_gen = address_gen
-        }
-        self.tx_write_log.clear();
-        Ok(())
     }
 
     /// Commit the current transaction's write log to the block when it's
