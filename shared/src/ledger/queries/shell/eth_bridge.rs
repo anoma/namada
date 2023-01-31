@@ -818,7 +818,7 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![transfer.keccak256()]
+                    vec![(transfer.keccak256(), bertha_address())]
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
