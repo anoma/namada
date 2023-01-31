@@ -2775,7 +2775,6 @@ fn eth_governance_proposal() -> Result<()> {
     client.exp_string("NAM: 500")?;
     client.assert_success();
 
-    //FIXME: try wrong type of vote also in pgf test
     // 2 - Vote with delegator and check failure
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
