@@ -237,11 +237,11 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
 - `/PGFAddress/candidacy_length = u8`
-- `/pgf/counsil_candidates/epoch = HashSet<Council>` (This is one solution, another would be to use a )
+- `/pgf/counsil_candidates/epoch = HashSet<Council>` (This is one solution, another would be to use a map as below)
 - `/pgf/candidacy = Candidacy` (Alternate solution: Candidacy defined above)
 
 ```admonish note
-Marco: if we cannot delete the candidates, then I think the Map (second solution) is better. If instead we can prune the candidates, then I think the first solution is better. The first solution is faster at pruning (which ideally we’ll perform at every Epoch) and a bit slower at checking a vote (but we can assume votes for pgf will happen a bunch of times a year)
+Marco: if we cannot delete the candidates, then I think the Map (second solution) is better. If instead we can prune the candidates, then I think the first solution is better. The first solution is faster at pruning (which ideally we’ll perform at every Epoch) and a bit slower at checking a vote (but we can assume votes for pgf will happen a bunch of times per year)
 ```
 
 ### Struct
