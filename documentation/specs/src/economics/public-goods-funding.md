@@ -36,6 +36,34 @@ Namada also encourages the PGF council to allocate the PGF council members up to
 
 ## Voting for the Council
 
+### Constructing the council
+All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
+
+A new multisignature address will be constructed through the CLI with the following command
+
+```bash!
+namada client init-account \
+--alias my-multisig \
+--publickeys pk1,pk2,pk3... \
+--signers signer1,signer2,signer3... \
+--threshold k
+```
+
+### Proposing Candidacy
+The council will be responsible to publish this address to voters and express their desired `spending_cap`. This will be done directly to the ledger through the following CLI command:
+
+```bash!
+namadac pgf-broadcast \
+--council my-multisig \
+--spending-cap 1.0
+```
+The `--spending-cap` argument is a `float` $0 < x \leq 1$, which indicates the maximum proportion of the total funds available to the PGF council that the PGF council is able to spend during their term.
+
+A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
+
+Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of Governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
+
+Candidacy proposals last a default of 31 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
 
 ### Initiating the vote
 
@@ -59,33 +87,8 @@ The above proposal type exists in order to determine *whether* a new PGF council
 
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
-### Constructing the council
-All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
-
-A new multisignature address will be constructed through the CLI with the following command
-
-```bash!
-namada client init-account \
---alias my-multisig \
---publickeys pk1,pk2,pk3... \
---signers signer1,signer2,signer3... \
---threshold k
-```
-
-The council will be resonsible to publish this address to voters and express their desired `spending_cap`. This will be done directly to the ledger through the following CLI command:
-
-```bash!
-namadac pgf-broadcast \
---council my-multisig \
---spending-cap 1.0
-```
-The `--spending-cap` argument is a `float` $0 < x \leq 1$, which indicates the maximum proportion of the total funds available to the PGF council that the PGF council is able to spend during their term.
-
-A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
-
-
 ### Voting on the council
-Once the council has been constructed and brodcasted, it can be voted on by governance particpants. There will be a window in between which the `PgfProposal` was passed and when the final votes for the new council will be accepted. This is a governance parameter.
+After the `PgfProposal` has been submitted, and once the council has been constructed and brodcasted, the council address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
 The vote for a set of PGF council addresses will be constructed as follows.
 
@@ -104,7 +107,7 @@ In turn, the proposal vote will include the structure:
 HashSet<(address: Address, spending_cap: u64)>
 ```
 
-The structure contains all the counsils voted, where each cousil is specific as a pair `Address` (the enstablished address of the multisig account) and `u64` (spending cap).
+The structure contains all the counsils voted, where each cousil is specified as a pair `Address` (the enstablished address of the multisig account) and `u64` (spending cap).
 
 These votes will then be used in order to vote for various PGF councils. Multiple councils can be voted on through a vector as represented above.
 
@@ -223,8 +226,7 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/cPGF_recipients/Address = Amount`
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
-
-Some storage for PgfCouncils after they are broadcast?
+- `/PGFCandidates/Address = bool` (For candidates to see if the key exists)
 
 ### Struct
 
