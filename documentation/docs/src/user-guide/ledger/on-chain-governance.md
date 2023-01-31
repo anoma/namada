@@ -69,11 +69,10 @@ Only validators and delegators can vote. Assuming you have a validator or a dele
 namada client vote-proposal \
     --proposal-id 0 \
     --vote yay \
-    --memo path \
     --signer validator
 ```
 
-where `--vote` can be either `yay` or `nay`. The optional `memo` field represents the path to a json file econding the data to attach to the vote.
+where `--vote` can be either `yay` or `nay`. An optional `memo` field can be attached to the vote for pgf and eth bridge proposals.
 
 ## Check the result
 
