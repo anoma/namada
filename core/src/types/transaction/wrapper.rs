@@ -367,7 +367,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("This chain id".to_string()),
+                ChainId::default(),
             );
 
             let wrapper = WrapperTx::new(
@@ -396,7 +396,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("This chain id".to_string()),
+                ChainId::default(),
             );
 
             let mut wrapper = WrapperTx::new(
@@ -431,7 +431,7 @@ pub mod wrapper_tx {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainID("This Chain id".to_string()),
+                ChainId::default(),
             );
             // the signed tx
             let mut tx = WrapperTx::new(
@@ -447,7 +447,7 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair, ChainId("This chain id".to_string()))
+            .sign(&keypair, ChainId::default())
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
@@ -468,7 +468,7 @@ pub mod wrapper_tx {
             let malicious = Tx::new(
                 "Give me all the money".as_bytes().to_owned(),
                 None,
-                ChainId("This chain id".to_string()),
+                ChainId::default(),
             );
 
             // We replace the inner tx with a malicious one

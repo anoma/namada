@@ -62,11 +62,13 @@ impl Default for TestTxEnv {
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let wl_storage = WlStorage {
+            storage: TestStorage::default(),
+            write_log: WriteLog::default(),
+        };
+        let chain_id = wl_storage.storage.chain_id.clone();
         Self {
-            wl_storage: WlStorage {
-                storage: TestStorage::default(),
-                write_log: WriteLog::default(),
-            },
+            wl_storage: wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: BlockGasMeter::default(),
             tx_index: TxIndex::default(),
@@ -76,7 +78,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], None, chain_id),
         }
     }
 }

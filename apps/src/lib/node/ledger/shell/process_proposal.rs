@@ -320,6 +320,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -337,6 +338,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             vec![],
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+            shell.chain_id.clone(),
         )
         .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -368,6 +370,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
@@ -383,7 +386,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
@@ -418,6 +421,7 @@ mod test_process_proposal {
                     .expect("Test failed"),
                 ),
                 timestamp,
+                chain_id: shell.chain_id.clone(),
             }
         } else {
             panic!("Test failed");
@@ -454,6 +458,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -468,7 +473,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
@@ -512,6 +517,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -526,7 +532,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
 
         let request = ProcessProposal {
@@ -562,6 +568,7 @@ mod test_process_proposal {
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -632,6 +639,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -693,6 +701,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let mut wrapper = WrapperTx::new(
             Fee {
@@ -792,6 +801,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
 
         let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -829,6 +839,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let tx = Tx::from(TxType::Raw(tx));
         let request = ProcessProposal {
@@ -864,6 +875,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -878,7 +890,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = Hash(signed.unsigned_hash());
@@ -934,6 +948,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -948,7 +963,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Run validation
         let request = ProcessProposal {
@@ -988,6 +1005,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1003,7 +1021,9 @@ mod test_process_proposal {
             None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Write inner hash to storage
         let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
@@ -1070,6 +1090,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1085,7 +1106,9 @@ mod test_process_proposal {
             None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         let new_wrapper = WrapperTx::new(
             Fee {
@@ -1100,7 +1123,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let new_signed = new_wrapper.sign(&keypair).expect("Test failed");
+        let new_signed = new_wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Run validation
         let request = ProcessProposal {

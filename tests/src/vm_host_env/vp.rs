@@ -64,15 +64,17 @@ impl Default for TestVpEnv {
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let wl_storage = WlStorage {
+            storage: TestStorage::default(),
+            write_log: WriteLog::default(),
+        };
+        let chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
-            wl_storage: WlStorage {
-                storage: TestStorage::default(),
-                write_log: WriteLog::default(),
-            },
+            wl_storage: wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], None, chain_id),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

@@ -245,7 +245,7 @@ pub mod tx_types {
             Tx::new(
                 vec![],
                 Some(ty.try_to_vec().unwrap()),
-                ChainId("".to_string()),
+                ChainId("".to_string()), //FIXME: leave this empty?
             )
         }
     }
@@ -365,7 +365,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 None,
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
 
             match process_tx(tx.clone()).expect("Test failed") {
@@ -382,7 +382,7 @@ pub mod tx_types {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
@@ -391,7 +391,7 @@ pub mod tx_types {
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
-                inner.chain_id,
+                inner.chain_id.clone(),
             );
 
             match process_tx(tx).expect("Test failed") {
@@ -407,7 +407,7 @@ pub mod tx_types {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
@@ -416,7 +416,7 @@ pub mod tx_types {
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
-                inner.chain_id,
+                inner.chain_id.clone(),
             )
             .sign(&gen_keypair());
 
@@ -434,7 +434,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
             // the signed tx
             let wrapper = WrapperTx::new(
@@ -450,7 +450,7 @@ pub mod tx_types {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair)
+            .sign(&keypair, tx.chain_id.clone())
             .expect("Test failed");
 
             match process_tx(wrapper).expect("Test failed") {
@@ -472,7 +472,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
             // the signed tx
             let wrapper = WrapperTx::new(
@@ -494,7 +494,7 @@ pub mod tx_types {
                 Some(
                     TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
                 ),
-                ChainId("this chain".to_string()),
+                ChainId::default(),
             );
             let result = process_tx(tx).expect_err("Test failed");
             assert_matches!(result, TxError::Unsigned(_));
@@ -508,7 +508,7 @@ pub mod tx_types {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
-            ChainId("this chain".to_string()),
+            ChainId::default(),
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -536,7 +536,7 @@ pub mod tx_types {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
-            ChainId("this chain".to_string()),
+            ChainId::default(),
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -558,7 +558,7 @@ pub mod tx_types {
         let tx = Tx::new(
             vec![],
             Some(signed.try_to_vec().expect("Test failed")),
-            ChainId("this chain".to_string()),
+            ChainId::default(),
         );
         match process_tx(tx).expect("Test failed") {
             TxType::Decrypted(DecryptedTx::Decrypted {
