@@ -30,9 +30,7 @@ use namada_apps::config::genesis::genesis_config::{
 use serde_json::json;
 use setup::constants::*;
 
-use super::helpers::{
-    find_keypair, get_height, is_debug_mode, wait_for_block_height,
-};
+use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
 use super::setup::get_all_wasms_hashes;
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
@@ -2719,7 +2717,7 @@ fn eth_governance_proposal() -> Result<()> {
     // 1 - Submit proposal
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert.clone(), ProposalType::ETHBridge);
+        prepare_proposal_data(&test, albert, ProposalType::ETHBridge);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2787,7 +2785,8 @@ fn eth_governance_proposal() -> Result<()> {
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 
-    // Generate a signing key to sign the eth message to sign the eth message to sign the eth message
+    // Generate a signing key to sign the eth message to sign the eth message to
+    // sign the eth message
     let mut rng: ThreadRng = thread_rng();
     let node_sk = secp256k1::SigScheme::generate(&mut rng);
     let signing_key = key::common::SecretKey::Secp256k1(node_sk);
