@@ -91,10 +91,11 @@ pub mod decrypted_tx {
                     tx,
                     has_valid_pow: _,
                 } => tx.chain_id.to_owned(),
-                // If undecrytable we cannot extract the ChainId. The ChainId for the
-                // wrapper has already been checked previously and the inner transaction
-                // will fail because undecryptable. Here we simply put an empty string
-                // as a placeholder
+                // If undecrytable we cannot extract the ChainId. The ChainId
+                // for the wrapper has already been checked
+                // previously and the inner transaction
+                // will fail because undecryptable. Here we simply put an empty
+                // string as a placeholder
                 DecryptedTx::Undecryptable(_) => ChainId(String::new()),
             };
 

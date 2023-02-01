@@ -138,17 +138,18 @@ where
                         return TxResult {
                             code: ErrorCodes::InvalidChainId.into(),
                             info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx_chain_id
-                ),
+                                "Tx carries a wrong chain id: expected {}, \
+                                 found {}",
+                                self.chain_id, tx_chain_id
+                            ),
                         };
                     }
                     TxResult {
                         code: ErrorCodes::InvalidTx.into(),
-                        info:
-                            "Protocol transactions are a fun new feature that \
-                           is coming soon to a blockchain near you. Patience."
-                                .into(),
+                        info: "Protocol transactions are a fun new feature \
+                               that is coming soon to a blockchain near you. \
+                               Patience."
+                            .into(),
                     }
                 }
                 TxType::Decrypted(tx) => {
@@ -174,9 +175,10 @@ where
                                             code: ErrorCodes::InvalidChainId
                                                 .into(),
                                             info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx.chain_id
-                ),
+                                                "Tx carries a wrong chain id: \
+                                                 expected {}, found {}",
+                                                self.chain_id, tx.chain_id
+                                            ),
                                         };
                                     }
                                 }
@@ -211,9 +213,10 @@ where
                         return TxResult {
                             code: ErrorCodes::InvalidChainId.into(),
                             info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx_chain_id
-                ),
+                                "Tx carries a wrong chain id: expected {}, \
+                                 found {}",
+                                self.chain_id, tx_chain_id
+                            ),
                         };
                     }
 
@@ -1234,7 +1237,7 @@ mod test_process_proposal {
             .sign(&keypair, wrong_chain_id.clone())
             .expect("Test failed");
 
-        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx.clone()).sign(
+        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx).sign(
             &keypair.ref_to(),
             &keypair,
             wrong_chain_id.clone(),
@@ -1289,9 +1292,10 @@ mod test_process_proposal {
                     assert_eq!(
                         res.result.info,
                         format!(
-                        "Tx carries a wrong chain id: expected {}, found {}",
-                        shell.chain_id, wrong_chain_id
-                    )
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            shell.chain_id, wrong_chain_id
+                        )
                     );
                 }
             }
