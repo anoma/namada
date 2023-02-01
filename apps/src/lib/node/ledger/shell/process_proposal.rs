@@ -172,6 +172,7 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
     ) -> TxResult {
+<<<<<<< HEAD
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {
@@ -197,6 +198,12 @@ where
                      PrepareProposal"
                 );
                 Err(TxResult {
+=======
+        let tx = match Tx::try_from(tx_bytes) {
+            Ok(tx) => tx,
+            Err(_) => {
+                return TxResult {
+>>>>>>> 7e9643feb (Unit tests for tx chain id)
                     code: ErrorCodes::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
                         .into(),
@@ -429,7 +436,12 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
+<<<<<<< HEAD
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+=======
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+>>>>>>> 7e9643feb (Unit tests for tx chain id)
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -700,8 +712,6 @@ mod test_process_proposal {
             }
         }
     }
-
-    // FIXME: add unit tests for chain id both here and in mempool_validate
 
     /// Test that if the expected order of decrypted txs is
     /// validated, [`process_proposal`] rejects it
@@ -1296,6 +1306,100 @@ mod test_process_proposal {
                         inner_unsigned_hash
                     )
                 );
+            }
+        }
+    }
+
+    /// Test that a transaction with a mismatching chain id causes the entire
+    /// block to be rejected
+    #[test]
+    fn test_wong_chain_id() {
+        let (mut shell, _) = TestShell::new();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let signed = wrapper
+            .sign(&keypair, wrong_chain_id.clone())
+            .expect("Test failed");
+
+        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx.clone()).sign(
+            &keypair.ref_to(),
+            &keypair,
+            wrong_chain_id.clone(),
+        );
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![
+                signed.to_bytes(),
+                protocol_tx.to_bytes(),
+                signed_decrypted.to_bytes(),
+            ],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                for res in response {
+                    assert_eq!(
+                        res.result.code,
+                        u32::from(ErrorCodes::InvalidChainId)
+                    );
+                    assert_eq!(
+                        res.result.info,
+                        format!(
+                        "Tx carries a wrong chain id: expected {}, found {}",
+                        shell.chain_id, wrong_chain_id
+                    )
+                    );
+                }
             }
         }
     }

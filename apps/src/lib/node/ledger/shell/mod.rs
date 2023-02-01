@@ -642,7 +642,6 @@ where
         }
 
         // Tx signature check
-        // FIXME: merge this first 3 checks in process_tx?
         let tx_type = match process_tx(tx) {
             Ok(ty) => ty,
             Err(msg) => {
@@ -1453,6 +1452,35 @@ mod test_mempool_validate {
             format!(
                 "Inner transaction hash {} already in storage, replay attempt",
                 tx_type.tx_hash
+            )
+        )
+    }
+
+    /// Check that a transaction with a wrong chain id gets discarded
+    #[test]
+    fn test_wrong_chain_id() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidChainId));
+        assert_eq!(
+            result.log,
+            format!(
+                "Tx carries a wrong chain id: expected {}, found {}",
+                shell.chain_id, wrong_chain_id
             )
         )
     }
