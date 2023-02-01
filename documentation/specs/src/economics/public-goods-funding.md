@@ -67,10 +67,8 @@ Candidacy proposals last a default of 31 epochs. There is no limit to the number
 
 The structure of the candidacy proposal should be 
 
-```rust
-struct Candidacy {
-    candidacy : Map< council: Council, (epoch: Epoch, attestation: Url)>
-}
+```rust 
+  Map< epoch: Epoch, (council: Council, attestation: Url)>
 ```
 
 ### Initiating the vote
@@ -237,12 +235,8 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
 - `/PGFAddress/candidacy_length = u8`
-- `/pgf/counsil_candidates/epoch = HashSet<Council>` (This is one solution, another would be to use a map as below)
-- `/pgf/candidacy = Candidacy` (Alternate solution: Candidacy defined above)
-
-```admonish note
-Marco: if we cannot delete the candidates, then I think the Map (second solution) is better. If instead we can prune the candidates, then I think the first solution is better. The first solution is faster at pruning (which ideally we’ll perform at every Epoch) and a bit slower at checking a vote (but we can assume votes for pgf will happen a bunch of times per year)
-```
+- `/pgf/counsil_candidates/epoch = HashSet<Council>`
+- `/PGFAddress/council/epoch = Council` (The council that was elected at epoch `epoch`)
 
 ### Struct
 
