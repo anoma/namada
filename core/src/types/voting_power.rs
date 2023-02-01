@@ -7,6 +7,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
 use num_rational::Ratio;
+use num_traits::ops::checked::CheckedAdd;
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
 #[derive(
@@ -107,7 +108,11 @@ impl Add<FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: FractionalVotingPower) -> Self::Output {
-        Self(self.0 + rhs.0)
+        Self(
+            self.0
+                .checked_add(&rhs.0)
+                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
+        )
     }
 }
 
@@ -115,19 +120,23 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: &FractionalVotingPower) -> Self::Output {
-        Self(self.0 + rhs.0)
+        Self(
+            self.0
+                .checked_add(&rhs.0)
+                .unwrap_or_else(|| Ratio::new(u64::MAX, 1)),
+        )
     }
 }
 
 impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: FractionalVotingPower) {
-        *self = Self(self.0 + rhs.0)
+        *self = self.clone() + rhs
     }
 }
 
 impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: &FractionalVotingPower) {
-        *self = Self(self.0 + rhs.0)
+        *self = self.clone() + rhs
     }
 }
 

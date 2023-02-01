@@ -2789,6 +2789,7 @@ dependencies = [
  "libsecp256k1",
  "masp_primitives",
  "num-rational",
+ "num-traits",
  "proptest",
  "prost",
  "prost-types",
