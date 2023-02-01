@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod bridge_pool_vp;
 pub mod parameters;
 pub mod protocol;

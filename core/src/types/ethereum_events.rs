@@ -1,6 +1,7 @@
 //! Types representing data intended for Namada via Ethereum events
 
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
+use std::ops::Add;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -44,6 +45,12 @@ impl Uint {
     }
 }
 
+impl Display for Uint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        ethUint::from(self).fmt(f)
+    }
+}
+
 impl Encode<1> for Uint {
     fn tokenize(&self) -> [Token; 1] {
         [Token::Uint(self.into())]
@@ -71,6 +78,14 @@ impl From<&Uint> for ethUint {
 impl From<u64> for Uint {
     fn from(value: u64) -> Self {
         ethUint::from(value).into()
+    }
+}
+
+impl Add<u64> for Uint {
+    type Output = Self;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        (ethUint::from(self) + rhs).into()
     }
 }
 
@@ -196,6 +211,10 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
+        /// The Namada address that receives the gas fees
+        /// for relaying a batch of transfers
+        #[allow(dead_code)]
+        relayer: Address,
     },
     /// Event indication that the validator set has been updated
     /// in the governance contract
@@ -283,6 +302,8 @@ pub struct TransferToNamada {
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer

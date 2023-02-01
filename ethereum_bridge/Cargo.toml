@@ -27,7 +27,8 @@ abciplus = [
 ]
 
 testing = [
-    "rand"
+    "rand",
+    "namada_core/testing",
 ]
 
 [dependencies]
