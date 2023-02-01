@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 #[doc(inline)]
 pub use ethabi::token::Token;
 
-use crate::proto::{Signable, SignableEthBytes};
+use crate::proto::{Signable, SignableEthMessage};
 use crate::types::keccak::{keccak_hash, KeccakHash};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
@@ -103,7 +103,7 @@ pub trait Encode<const N: usize>: Sized {
     /// signature header. This can then be signed.
     fn signable_keccak256(&self) -> KeccakHash {
         let message = self.keccak256();
-        SignableEthBytes::as_signable(&message)
+        SignableEthMessage::as_signable(&message)
     }
 }
 

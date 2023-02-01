@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ethabi::Token;
 use thiserror::Error;
-use tiny_keccak::{Hasher, Keccak};
+pub use tiny_keccak::{Hasher, Keccak};
 
 use crate::types::eth_abi::Encode;
 use crate::types::hash::{Hash, HASH_LENGTH};

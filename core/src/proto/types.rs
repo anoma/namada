@@ -80,7 +80,7 @@ pub struct SerializeWithBorsh;
 /// Tag type that indicates we should use ABI serialization
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignableEthBytes;
+pub struct SignableEthMessage;
 
 impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
@@ -91,17 +91,13 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     }
 }
 
-impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
+impl Signable<KeccakHash> for SignableEthMessage {
     type Output = KeccakHash;
 
-    fn as_signable(data: &T) -> KeccakHash {
+    fn as_signable(hash: &KeccakHash) -> KeccakHash {
         keccak_hash({
-            let message = data.as_ref();
-
-            let mut eth_message =
-                format!("\x19Ethereum Signed Message:\n{}", message.len())
-                    .into_bytes();
-            eth_message.extend_from_slice(message);
+            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
+            eth_message.extend_from_slice(hash.as_ref());
             eth_message
         })
     }

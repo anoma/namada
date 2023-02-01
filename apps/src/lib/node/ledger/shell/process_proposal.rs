@@ -743,7 +743,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use namada::proto::{SignableEthBytes, Signed, SignedTxData};
+    use namada::proto::{SignableEthMessage, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -956,7 +956,7 @@ mod test_process_proposal {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
         let to_sign = get_bp_bytes_to_sign();
-        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+        let sig = Signed::<_, SignableEthMessage>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
@@ -1011,7 +1011,7 @@ mod test_process_proposal {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
         let to_sign = get_bp_bytes_to_sign();
-        let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+        let sig = Signed::<_, SignableEthMessage>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
             to_sign,
         )
