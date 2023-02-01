@@ -430,7 +430,9 @@ impl Encode<1> for Signature {
         let sig_serialized = libsecp256k1::Signature::serialize(&self.0);
         let r = Token::FixedBytes(sig_serialized[..32].to_vec());
         let s = Token::FixedBytes(sig_serialized[32..].to_vec());
-        let v = Token::FixedBytes(vec![self.1.serialize()]);
+        // TODO: we might need to add 27 here, if v is in the
+        // range of values `[0, 1]`
+        let v = Token::Uint(self.1.serialize().into());
         [Token::Tuple(vec![r, s, v])]
     }
 }
@@ -524,13 +526,17 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            use tiny_keccak::{Hasher as KeccakHasher, Keccak};
-            let mut hash = [0; 32];
-            let mut state = Keccak::v256();
-            state.update(data.as_ref());
-            state.finalize(&mut hash);
-            let message = libsecp256k1::Message::parse_slice(hash.as_ref())
-                .expect("Message encoding should not fail");
+            use crate::types::keccak::keccak_hash;
+            let data_ref = data.as_ref();
+            let message = if data_ref.len() != 32 {
+                // only hash the data to sign if it isn't already hashed,
+                // or at least of length 32
+                let hash = keccak_hash(data_ref);
+                libsecp256k1::Message::parse_slice(hash.as_ref())
+            } else {
+                libsecp256k1::Message::parse_slice(data_ref)
+            }
+            .expect("Message encoding should not fail");
             let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
             Signature(sig, recovery_id)
         }
