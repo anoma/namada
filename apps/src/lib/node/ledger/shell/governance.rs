@@ -33,6 +33,7 @@ where
     let mut proposals_result = ProposalsResult::default();
 
     for id in std::mem::take(&mut shell.proposal_data) {
+        println!("Processing proposal {}", id);
         let proposal_funds_key = gov_storage::get_funds_key(id);
         let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
 
@@ -49,8 +50,11 @@ where
                     "Invalid proposal end_epoch.".to_string(),
                 )
             })?;
+        println!("Proposal funds: {}", funds);
+        println!("Proposal end_epoch: {}", proposal_end_epoch);
 
         let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
+        println!("Proposal votes: {:?}", votes);
         let is_accepted = votes.and_then(|votes| {
             compute_tally(&shell.storage, proposal_end_epoch, votes)
         });
@@ -216,13 +220,94 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
 
     use eyre::Result;
+    use namada::core::types::key;
     use namada::ledger::events::EventLevel;
+    use namada::ledger::storage::testing::TestStorage;
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::epoched::Epoched;
+    use namada::proof_of_stake::types::{
+        ValidatorConsensusKeys, ValidatorSet, WeightedValidator,
+    };
+    use rand::rngs::ThreadRng;
+    use rand::thread_rng;
 
     use super::*;
+
+    /// Validator keys used for testing purposes.
+    pub struct TestValidatorKeys {
+        /// Consensus keypair.
+        pub consensus: key::common::SecretKey,
+        /// Protocol keypair.
+        pub protocol: key::common::SecretKey,
+    }
+
+    /// Set up a [`TestStorage`] initialized at genesis with the given
+    /// validators.
+    pub fn setup_storage_with_validators(
+        storage: &mut TestStorage,
+        active_validators: HashMap<Address, token::Amount>,
+    ) -> HashMap<Address, TestValidatorKeys> {
+        // write validator set
+        let validator_set = ValidatorSet {
+            active: active_validators
+                .iter()
+                .map(|(address, bonded_stake)| WeightedValidator {
+                    bonded_stake: u64::from(*bonded_stake),
+                    address: address.clone(),
+                })
+                .collect(),
+            inactive: BTreeSet::default(),
+        };
+        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
+        storage.write_validator_set(&validator_sets);
+
+        // write validator keys
+        let mut all_keys = HashMap::new();
+        for validator in active_validators.into_keys() {
+            let keys = setup_storage_validator(storage, &validator);
+            all_keys.insert(validator, keys);
+        }
+
+        all_keys
+    }
+
+    /// Generate a random [`key::ed25519`] keypair.
+    pub fn gen_ed25519_keypair() -> key::common::SecretKey {
+        let mut rng: ThreadRng = thread_rng();
+        key::ed25519::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// Set up a single validator in [`TestStorage`] with some
+    /// arbitrary keys.
+    pub fn setup_storage_validator(
+        storage: &mut TestStorage,
+        validator: &Address,
+    ) -> TestValidatorKeys {
+        // register protocol key
+        let protocol_key = gen_ed25519_keypair();
+        storage
+            .write(
+                &protocol_pk_key(validator),
+                protocol_key.ref_to().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // register consensus key
+        let consensus_key = gen_ed25519_keypair();
+        storage.write_validator_consensus_key(
+            validator,
+            &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
+        );
+        TestValidatorKeys {
+            consensus: consensus_key,
+            protocol: protocol_key,
+        }
+    }
 
     /// Tests that if no governance proposals are present in
     /// `shell.proposal_data`, then no proposals are executed.
@@ -257,8 +342,24 @@ mod tests {
     fn test_reject_single_governance_proposal() -> Result<()> {
         let (mut shell, _) = test_utils::setup();
 
+        // we don't bother setting up the shell to be at the right epoch for
+        // this test
+        // TODO: maybe commit blocks up here in `TestShell` up until just before
+        // the first block of Epoch(9), to be more realistic? As governance
+        // proposals should only happen at epoch transitions
+
+        // set up validators in storage (no delegations yet)
+        let validator_keys = setup_storage_with_validators(
+            &mut shell.storage,
+            HashMap::from([(
+                address::testing::established_address_1(),
+                token::Amount::from(10_000_000),
+            )]),
+        );
+
         // set up a proposal in storage
-        let proposal_id = 123;
+        // proposals must be in sequence starting from one (or zero?)
+        let proposal_id = 1;
 
         let proposal_funds = token::Amount::from(100_000_000);
         let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
@@ -277,15 +378,9 @@ mod tests {
             proposal_end_epoch,
         )?;
 
-        // TODO: maybe storage needs to be set up properly under
-        // `gov_storage::get_proposal_vote_prefix_key(proposal_id)` as well for
-        // this test to be realistic, currently that's left empty and that
-        // results in a rejection - see `get_proposal_votes` for what is
-        // expected there
+        // TODO: more keys need to be set up in storage for this proposal to
+        // be realistic - see <https://github.com/anoma/namada/blob/main/tx_prelude/src/governance.rs#L13-L66>
 
-        // TODO: maybe commit blocks up here in `TestShell` up until just before
-        // the first block of Epoch(9), to be more realistic? As governance
-        // proposals should only happen at epoch transitions
         shell.proposal_data = HashSet::from([proposal_id]);
 
         let mut resp = shim::response::FinalizeBlock::default();

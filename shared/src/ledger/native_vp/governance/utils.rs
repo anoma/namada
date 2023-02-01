@@ -18,6 +18,7 @@ use crate::types::token;
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
+#[derive(Debug)]
 pub struct Votes {
     /// Map from validators who votes yay to their total stake amount
     pub yay_validators: HashMap<Address, VotePower>,
@@ -84,6 +85,7 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
+    // TODO: this should return `Ok(false)` if `votes` is empty?
     let total_stake: VotePower = storage.total_stake(epoch)?.into();
 
     let Votes {
@@ -129,6 +131,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let validators = storage.validator_addresses(epoch)?;
+    println!("validators: {:#?}", validators);
 
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
