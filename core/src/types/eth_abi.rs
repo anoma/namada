@@ -93,7 +93,7 @@ pub trait Encode<const N: usize>: Sized {
     /// keccak hash of the encoded string appended to an Ethereum
     /// signature header. This can then be signed.
     fn signable_keccak256(&self) -> KeccakHash {
-        let message = keccak_hash(self.encode().into_inner());
+        let message = self.keccak256();
         SignableEthBytes::as_signable(&message)
     }
 }
