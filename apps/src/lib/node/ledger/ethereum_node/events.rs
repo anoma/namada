@@ -1,8 +1,9 @@
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
-    pub const TRANSFER_TO_ETHEREUM_SIG: &str =
-        "TransferToErc(uint256,(address,address,uint256,string,uint256)[])";
+    pub const TRANSFER_TO_ETHEREUM_SIG: &str = "TransferToErc(uint256,\
+                                                (address,address,uint256,\
+                                                string,uint256)[],string)";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
     pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
@@ -144,6 +145,7 @@ pub mod eth_events {
                             event: EthereumEvent::TransfersToEthereum {
                                 nonce: txs.nonce,
                                 transfers: txs.transfers,
+                                relayer: txs.relayer,
                             },
                         }
                     })
@@ -223,8 +225,10 @@ pub mod eth_events {
         /// A list of transfers
         pub transfers: Vec<TransferToEthereum>,
         /// A monotonically increasing nonce
-        #[allow(dead_code)]
         pub nonce: Uint,
+        /// The Namada address that receives the gas fees
+        /// for relaying a batch of transfers
+        pub relayer: Address,
     }
 
     impl RawTransfersToNamada {
@@ -299,7 +303,7 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToEthereum`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, transfers]: [Token; 2] = decode(
+            let [nonce, transfers, relayer]: [Token; 3] = decode(
                 &[
                     ParamType::Uint(256),
                     ParamType::Array(Box::new(ParamType::Tuple(vec![
@@ -309,6 +313,7 @@ pub mod eth_events {
                         ParamType::String,
                         ParamType::Uint(256),
                     ]))),
+                    ParamType::String,
                 ],
                 data,
             )
@@ -325,6 +330,7 @@ pub mod eth_events {
             Ok(Self {
                 transfers,
                 nonce: nonce.parse_uint256()?,
+                relayer: relayer.parse_address()?,
             })
         }
 
@@ -332,7 +338,11 @@ pub mod eth_events {
         /// ABI serialization scheme.
         #[cfg(test)]
         pub fn encode(self) -> Vec<u8> {
-            let RawTransfersToEthereum { transfers, nonce } = self;
+            let RawTransfersToEthereum {
+                transfers,
+                nonce,
+                relayer,
+            } = self;
 
             let transfers = transfers
                 .into_iter()
@@ -350,11 +360,16 @@ pub mod eth_events {
                             Token::Uint(u64::from(amount).into()),
                             Token::String(gas_payer.to_string()),
                             Token::Uint(u64::from(gas_amount).into()),
+                            Token::String(relayer.to_string()),
                         ])
                     },
                 )
                 .collect();
-            encode(&[Token::Uint(nonce.into()), Token::Array(transfers)])
+            encode(&[
+                Token::Uint(nonce.into()),
+                Token::Array(transfers),
+                Token::String(relayer.to_string()),
+            ])
         }
     }
 
@@ -983,11 +998,12 @@ pub mod eth_events {
                         asset: EthAddress([1; 20]),
                         receiver: EthAddress([2; 20]),
                         gas_amount: Default::default(),
-                        gas_payer: address,
+                        gas_payer: address.clone(),
                     };
                     2
                 ],
                 nonce: Uint::from(1),
+                relayer: address,
             };
             let update = ValidatorSetUpdate {
                 nonce: Uint::from(1),

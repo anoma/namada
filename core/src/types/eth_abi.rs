@@ -25,6 +25,12 @@ pub struct EncodeCell<T: ?Sized> {
     _marker: PhantomData<*const T>,
 }
 
+impl<T> AsRef<[u8]> for EncodeCell<T> {
+    fn as_ref(&self) -> &[u8] {
+        &self.encoded_data
+    }
+}
+
 impl<T> ::std::cmp::Eq for EncodeCell<T> {}
 
 impl<T> ::std::cmp::PartialEq for EncodeCell<T> {
@@ -57,6 +63,15 @@ impl<T> EncodeCell<T> {
         };
         Self {
             encoded_data,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Here the type information is not compiler deduced,
+    /// proceed with caution!
+    pub fn new_from<const N: usize>(tokens: [Token; N]) -> Self {
+        Self {
+            encoded_data: ethabi::encode(&tokens),
             _marker: PhantomData,
         }
     }

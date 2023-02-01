@@ -1,6 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::active_key;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::get_nonce_key;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+    get_nonce_key, get_signed_root_key,
+};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{Storage, StoreType};
 use namada_core::types::address::Address;
@@ -16,6 +18,8 @@ use namada_core::types::voting_power::{
 };
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::PosBase;
+
+use crate::storage::proof::BridgePoolRootProof;
 
 /// This enum is used as a parameter to
 /// [`EthBridgeQueries::must_send_valset_upd`].
@@ -65,9 +69,25 @@ pub trait EthBridgeQueries {
     /// pool.
     fn get_bridge_pool_nonce(&self) -> Uint;
 
+    /// Get the nonce at a particular block height.
+    fn get_bridge_pool_nonce_at_height(&self, height: BlockHeight) -> Uint;
+
     /// Get the latest root of the Ethereum bridge
     /// pool Merkle tree.
     fn get_bridge_pool_root(&self) -> KeccakHash;
+
+    /// Get a quorum of validator signatures over
+    /// the concatenation of the latest bridge pool
+    /// root and nonce.
+    ///
+    /// Also returns the block height at which the
+    /// a quorum of signatures was collected.
+    ///
+    /// No value exists when the bridge if first
+    /// started.
+    fn get_signed_bridge_pool_root(
+        &self,
+    ) -> Option<(BridgePoolRootProof, BlockHeight)>;
 
     /// Get the root of the Ethereum bridge
     /// pool Merkle tree at a given height.
@@ -118,7 +138,11 @@ pub trait EthBridgeQueries {
     ) -> Box<dyn Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db>;
 
     /// Query the active [`ValidatorSetArgs`] at the given [`Epoch`].
-    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs;
+    /// Also returns a map of each validator's voting power.
+    fn get_validator_set_args(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap);
 }
 
 impl<D, H> EthBridgeQueries for Storage<D, H>
@@ -183,8 +207,37 @@ where
         .expect("Deserializing the nonce from storage should not fail.")
     }
 
+    fn get_bridge_pool_nonce_at_height(&self, height: BlockHeight) -> Uint {
+        Uint::try_from_slice(
+            &self
+                .db
+                .read_subspace_val_with_height(
+                    &get_nonce_key(),
+                    height,
+                    self.last_height,
+                )
+                .expect("Reading signed Bridge pool nonce shouldn't fail.")
+                .expect("Reading signed Bridge pool nonce shouldn't fail."),
+        )
+        .expect("Deserializing the signed nonce from storage should not fail.")
+    }
+
     fn get_bridge_pool_root(&self) -> KeccakHash {
         self.block.tree.sub_root(&StoreType::BridgePool).into()
+    }
+
+    fn get_signed_bridge_pool_root(
+        &self,
+    ) -> Option<(BridgePoolRootProof, BlockHeight)> {
+        self.read(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.")
+            .0
+            .map(|bytes| {
+                BorshDeserialize::try_from_slice(&bytes).expect(
+                    "Deserializing the signed bridge pool root from storage \
+                     should not fail.",
+                )
+            })
     }
 
     fn get_bridge_pool_root_at_height(
@@ -290,7 +343,10 @@ where
         ))
     }
 
-    fn get_validator_set_args(&self, epoch: Option<Epoch>) -> ValidatorSetArgs {
+    fn get_validator_set_args(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap) {
         let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
 
         let voting_powers_map: VotingPowersMap = self
@@ -311,10 +367,13 @@ where
             })
             .unzip();
 
-        ValidatorSetArgs {
-            epoch,
-            validators,
-            voting_powers,
-        }
+        (
+            ValidatorSetArgs {
+                epoch,
+                validators,
+                voting_powers,
+            },
+            voting_powers_map,
+        )
     }
 }

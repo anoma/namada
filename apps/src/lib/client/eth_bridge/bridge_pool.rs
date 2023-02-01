@@ -9,8 +9,8 @@ use namada::types::eth_bridge_pool::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::signing::TxSigningKey;
-use super::tx::process_tx;
+use super::super::signing::TxSigningKey;
+use super::super::tx::process_tx;
 use crate::cli::{args, Context};
 use crate::facade::tendermint_rpc::HttpClient;
 
@@ -50,9 +50,14 @@ pub async fn add_to_eth_bridge_pool(
 }
 
 /// Construct a proof that a set of transfers are in the bridge pool.
-pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
+pub async fn construct_bridge_pool_proof(
+    ctx: Context,
+    args: args::BridgePoolProof,
+) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let data = args.transfers.try_to_vec().unwrap();
+    let data = (args.transfers, ctx.get(&args.relayer))
+        .try_to_vec()
+        .unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
@@ -61,7 +66,7 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
         .unwrap();
 
     println!(
-        "Ethereum ABI-encoded proof:\n {:#?}",
+        "Ethereum ABI-encoded proof:\n {:?}",
         response.data.into_inner()
     );
 }

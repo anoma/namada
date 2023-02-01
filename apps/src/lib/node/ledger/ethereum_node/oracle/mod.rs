@@ -633,6 +633,7 @@ mod test_oracle {
                 gas_amount: Default::default(),
                 gas_payer: gas_payer.clone(),
             }],
+            relayer: gas_payer.clone(),
             nonce: 1.into(),
         }
         .encode();
@@ -701,7 +702,7 @@ mod test_oracle {
                     asset: EthAddress([0; 20]),
                     receiver: EthAddress([1; 20]),
                     gas_amount: Default::default(),
-                    gas_payer,
+                    gas_payer: gas_payer.clone(),
                 }
             );
         } else {
