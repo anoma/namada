@@ -235,3 +235,98 @@ where
         None => Ok(false),
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Helpers for testing governance.
+pub mod testing {
+    use std::collections::{BTreeSet, HashMap};
+
+    use borsh::BorshSerialize;
+    use namada_core::types::key::{
+        protocol_pk_key, RefTo, SecretKey, SigScheme,
+    };
+    use namada_proof_of_stake::PosBase;
+    use rand::rngs::ThreadRng;
+    use rand::thread_rng;
+
+    use super::*;
+    use crate::core::types::key;
+    use crate::ledger::storage::testing::TestStorage;
+    use crate::proof_of_stake::epoched::Epoched;
+    use crate::proof_of_stake::types::{
+        ValidatorConsensusKeys, ValidatorSet, WeightedValidator,
+    };
+
+    /// Validator keys used for testing purposes.
+    pub struct TestValidatorKeys {
+        /// Consensus keypair.
+        pub consensus: key::common::SecretKey,
+        /// Protocol keypair.
+        pub protocol: key::common::SecretKey,
+    }
+
+    /// Set up a [`TestStorage`] initialized at genesis with the given
+    /// validators.
+    pub fn setup_storage_with_validators(
+        storage: &mut TestStorage,
+        active_validators: HashMap<Address, token::Amount>,
+    ) -> HashMap<Address, TestValidatorKeys> {
+        // write validator set
+        let validator_set = ValidatorSet {
+            active: active_validators
+                .iter()
+                .map(|(address, bonded_stake)| WeightedValidator {
+                    bonded_stake: u64::from(*bonded_stake),
+                    address: address.clone(),
+                })
+                .collect(),
+            inactive: BTreeSet::default(),
+        };
+        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
+        storage.write_validator_set(&validator_sets);
+
+        // write validator keys
+        let mut all_keys = HashMap::new();
+        for validator in active_validators.into_keys() {
+            let keys = setup_storage_validator(storage, &validator);
+            all_keys.insert(validator, keys);
+        }
+
+        all_keys
+    }
+
+    /// Generate a random [`key::ed25519`] keypair.
+    pub fn gen_ed25519_keypair() -> key::common::SecretKey {
+        let mut rng: ThreadRng = thread_rng();
+        key::ed25519::SigScheme::generate(&mut rng)
+            .try_to_sk()
+            .unwrap()
+    }
+
+    /// Set up a single validator in [`TestStorage`] with some
+    /// arbitrary keys.
+    pub fn setup_storage_validator(
+        storage: &mut TestStorage,
+        validator: &Address,
+    ) -> TestValidatorKeys {
+        // register protocol key
+        let protocol_key = gen_ed25519_keypair();
+        storage
+            .write(
+                &protocol_pk_key(validator),
+                protocol_key.ref_to().try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        // register consensus key
+        let consensus_key = gen_ed25519_keypair();
+        storage.write_validator_consensus_key(
+            validator,
+            &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
+        );
+        TestValidatorKeys {
+            consensus: consensus_key,
+            protocol: protocol_key,
+        }
+    }
+}

@@ -220,94 +220,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::HashMap;
 
     use eyre::Result;
-    use namada::core::types::key;
     use namada::ledger::events::EventLevel;
-    use namada::ledger::storage::testing::TestStorage;
+    use namada::ledger::native_vp::governance::utils;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::proof_of_stake::epoched::Epoched;
-    use namada::proof_of_stake::types::{
-        ValidatorConsensusKeys, ValidatorSet, WeightedValidator,
-    };
-    use rand::rngs::ThreadRng;
-    use rand::thread_rng;
 
     use super::*;
-
-    /// Validator keys used for testing purposes.
-    pub struct TestValidatorKeys {
-        /// Consensus keypair.
-        pub consensus: key::common::SecretKey,
-        /// Protocol keypair.
-        pub protocol: key::common::SecretKey,
-    }
-
-    /// Set up a [`TestStorage`] initialized at genesis with the given
-    /// validators.
-    pub fn setup_storage_with_validators(
-        storage: &mut TestStorage,
-        active_validators: HashMap<Address, token::Amount>,
-    ) -> HashMap<Address, TestValidatorKeys> {
-        // write validator set
-        let validator_set = ValidatorSet {
-            active: active_validators
-                .iter()
-                .map(|(address, bonded_stake)| WeightedValidator {
-                    bonded_stake: u64::from(*bonded_stake),
-                    address: address.clone(),
-                })
-                .collect(),
-            inactive: BTreeSet::default(),
-        };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
-        storage.write_validator_set(&validator_sets);
-
-        // write validator keys
-        let mut all_keys = HashMap::new();
-        for validator in active_validators.into_keys() {
-            let keys = setup_storage_validator(storage, &validator);
-            all_keys.insert(validator, keys);
-        }
-
-        all_keys
-    }
-
-    /// Generate a random [`key::ed25519`] keypair.
-    pub fn gen_ed25519_keypair() -> key::common::SecretKey {
-        let mut rng: ThreadRng = thread_rng();
-        key::ed25519::SigScheme::generate(&mut rng)
-            .try_to_sk()
-            .unwrap()
-    }
-
-    /// Set up a single validator in [`TestStorage`] with some
-    /// arbitrary keys.
-    pub fn setup_storage_validator(
-        storage: &mut TestStorage,
-        validator: &Address,
-    ) -> TestValidatorKeys {
-        // register protocol key
-        let protocol_key = gen_ed25519_keypair();
-        storage
-            .write(
-                &protocol_pk_key(validator),
-                protocol_key.ref_to().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
-
-        // register consensus key
-        let consensus_key = gen_ed25519_keypair();
-        storage.write_validator_consensus_key(
-            validator,
-            &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
-        );
-        TestValidatorKeys {
-            consensus: consensus_key,
-            protocol: protocol_key,
-        }
-    }
 
     /// Tests that if no governance proposals are present in
     /// `shell.proposal_data`, then no proposals are executed.
@@ -349,7 +269,7 @@ mod tests {
         // proposals should only happen at epoch transitions
 
         // set up validators in storage (no delegations yet)
-        let validator_keys = setup_storage_with_validators(
+        utils::testing::setup_storage_with_validators(
             &mut shell.storage,
             HashMap::from([(
                 address::testing::established_address_1(),
