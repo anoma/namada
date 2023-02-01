@@ -349,6 +349,9 @@ mod tests {
         let (mut shell, _) = test_utils::setup();
         let validator_addr = address::testing::established_address_1();
         let validator_stake = token::Amount::from(10_000_000);
+        // TODO: this helper fn doesn't seem to work - we want to set up the
+        // active validators to be one validator with 10_000_000 micros of
+        // stake, but it seems this isn't doing this
         utils::testing::setup_storage_with_validators(
             &mut shell.storage,
             HashMap::from([(validator_addr.clone(), validator_stake)]),
