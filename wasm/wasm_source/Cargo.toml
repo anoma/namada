@@ -42,6 +42,7 @@ wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
+ripemd160 = "0.9.1"
 
 [dev-dependencies]
 namada = {path = "../../shared"}

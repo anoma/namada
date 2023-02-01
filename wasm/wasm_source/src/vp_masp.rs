@@ -1,11 +1,13 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::{Amount, TxIn, TxOut};
+use masp_primitives::legacy::TransparentAddress::{PublicKey, Script};
+use masp_primitives::transaction::components::{Amount, TxOut};
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
 use namada_vp_prelude::*;
+use ripemd160::{Digest, Ripemd160};
 
 /// Generates the current asset type given the current epoch and an
 /// unique token address
@@ -98,8 +100,8 @@ fn validate_tx(
         // The following boundary conditions must be satisfied
         // 1. One transparent input
         // 2. Zero transparent output
-        // 3. Asset type must be properly derived
-        // 4. Value from the input must be the same as the transfer
+        // 3. the transparent transaction value pool's amount must equal the
+        // containing wrapper transaction's fee amount
         if transfer.source != masp() {
             // Satisfies 1.
             if shielded_tx.vin.len() != 1 {
@@ -112,7 +114,7 @@ fn validate_tx(
             }
 
             // Satisfies 2.
-            if shielded_tx.vout.len() != 0 {
+            if !shielded_tx.vout.is_empty() {
                 debug_log!(
                     "Transparent output to a transaction from the masp must \
                      be 0 but is {}",
@@ -120,10 +122,6 @@ fn validate_tx(
                 );
                 return reject();
             }
-
-            // Can not Satisfy 3. nor 4. due to TxIn having
-            // insufficient data
-            let _tx_in: &TxIn = &shielded_tx.vin[0];
 
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
@@ -147,7 +145,7 @@ fn validate_tx(
         // 5. Public key must be the hash of the target
         if transfer.target != masp() {
             // Satisfies 1.
-            if shielded_tx.vin.len() != 0 {
+            if !shielded_tx.vin.is_empty() {
                 debug_log!(
                     "Transparent input to a transaction to the masp must be 0 \
                      but is {}",
@@ -192,8 +190,27 @@ fn validate_tx(
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
 
-            // Can not Satisfy 5. as TxOut lacks an accompanying
-            // Public key.
+            // Satisfies 5.
+            match out.script_pubkey.address() {
+                None | Some(Script(_)) => {}
+                Some(PublicKey(pub_bytes)) => {
+                    let target_enc = transfer
+                        .target
+                        .try_to_vec()
+                        .expect("target address encoding");
+
+                    let hash =
+                        Ripemd160::digest(sha256(&target_enc).as_slice());
+
+                    if <[u8; 20]>::from(hash) != pub_bytes {
+                        debug_log!(
+                            "the public key of the output account does not \
+                             match the transfer target"
+                        );
+                        return reject();
+                    }
+                }
+            }
         }
 
         match transparent_tx_pool.partial_cmp(&Amount::zero()) {

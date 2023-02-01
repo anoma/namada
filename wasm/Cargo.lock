@@ -2645,6 +2645,7 @@ dependencies = [
  "namada_vp_prelude",
  "once_cell",
  "proptest",
+ "ripemd160",
  "rust_decimal",
  "tracing",
  "tracing-subscriber",
