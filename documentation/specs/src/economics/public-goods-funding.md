@@ -28,7 +28,7 @@ Namada groups public goods into four categories, with earmarked pools of funding
 
 ### Funding amounts
 
-In Namada, up to 10% inflation per annum of the NAM token is directed to this public goods mechanism. The division of these funds is entirely the discretion of the elected PGF council.
+In Namada, up to 10% inflation per annum of the NAM token is directed to this public goods mechanism. The further division of these funds is entirely up to the discretion of the elected PGF council.
 
 Namada encourages the public goods council to adopt a default social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF). If no qualified recipients are available, funds may be redirected or burnt.
 
