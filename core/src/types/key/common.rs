@@ -16,6 +16,7 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::ledger::storage::DummyHasher;
 use crate::types::ethereum_events::EthAddress;
 
 /// Public key
@@ -296,6 +297,7 @@ impl super::Signature for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
+    type Hasher = DummyHasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -313,7 +315,10 @@ impl super::SigScheme for SigScheme {
         );
     }
 
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
+    fn sign(
+        keypair: &SecretKey,
+        data: impl super::Signable,
+    ) -> Self::Signature {
         match keypair {
             SecretKey::Ed25519(kp) => {
                 Signature::Ed25519(ed25519::SigScheme::sign(kp, data))
@@ -342,7 +347,7 @@ impl super::SigScheme for SigScheme {
 
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: &[u8],
+        data: impl super::Signable,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         match (pk, sig) {

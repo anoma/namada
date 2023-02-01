@@ -19,8 +19,10 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, Signable, VerifySigError,
 };
+#[cfg(any(test, feature = "secp256k1-sign-verify"))]
+use crate::ledger::storage::KeccakHasher;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
 
@@ -501,6 +503,7 @@ impl TryFrom<&[u8; 65]> for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
+    type Hasher = KeccakHasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -516,7 +519,7 @@ impl super::SigScheme for SigScheme {
     }
 
     /// Sign the data with a key
-    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
+    fn sign(keypair: &SecretKey, data: impl Signable) -> Self::Signature {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
@@ -526,16 +529,9 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            use crate::types::keccak::keccak_hash;
-            let data_ref = data.as_ref();
-            let message = if data_ref.len() != 32 {
-                // only hash the data to sign if it isn't already hashed,
-                // or at least of length 32
-                let hash = keccak_hash(data_ref);
-                libsecp256k1::Message::parse_slice(hash.as_ref())
-            } else {
-                libsecp256k1::Message::parse_slice(data_ref)
-            }
+            let message = libsecp256k1::Message::parse_slice(
+                &data.signable_hash::<Self::Hasher>(),
+            )
             .expect("Message encoding should not fail");
             let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
             Signature(sig, recovery_id)
@@ -556,17 +552,14 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            use tiny_keccak::{Hasher as KeccakHasher, Keccak};
             let bytes = &data
                 .try_to_vec()
-                .map_err(VerifySigError::DataEncodingError)?[..];
-            let mut hash = [0; 32];
-            let mut state = Keccak::v256();
-            state.update(bytes);
-            state.finalize(&mut hash);
-            let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-                .expect("Error parsing given data");
-            let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
+                .map_err(VerifySigError::DataEncodingError)?;
+            let message = libsecp256k1::Message::parse_slice(
+                &bytes.signable_hash::<Self::Hasher>(),
+            )
+            .expect("Message encoding should not fail");
+            let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
             if is_valid {
                 Ok(())
             } else {
@@ -580,7 +573,7 @@ impl super::SigScheme for SigScheme {
 
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: &[u8],
+        data: impl Signable,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
@@ -592,14 +585,11 @@ impl super::SigScheme for SigScheme {
 
         #[cfg(any(test, feature = "secp256k1-sign-verify"))]
         {
-            use tiny_keccak::{Hasher as KeccakHasher, Keccak};
-            let mut hash = [0; 32];
-            let mut state = Keccak::v256();
-            state.update(data);
-            state.finalize(&mut hash);
-            let message = &libsecp256k1::Message::parse_slice(hash.as_ref())
-                .expect("Error parsing raw data");
-            let is_valid = libsecp256k1::verify(message, &sig.0, &pk.0);
+            let message = libsecp256k1::Message::parse_slice(
+                &data.signable_hash::<Self::Hasher>(),
+            )
+            .expect("Message encoding should not fail");
+            let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
             if is_valid {
                 Ok(())
             } else {
