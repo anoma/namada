@@ -45,9 +45,9 @@ where
         EthereumEvent::TransfersToNamada { transfers, .. } => {
             act_on_transfers_to_namada(storage, transfers)
         }
-        EthereumEvent::TransfersToEthereum { transfers, .. } => {
-            act_on_transfers_to_eth(storage, transfers)
-        }
+        EthereumEvent::TransfersToEthereum {
+            transfers, relayer, ..
+        } => act_on_transfers_to_eth(storage, transfers, relayer),
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(BTreeSet::default())
@@ -135,6 +135,7 @@ where
 fn act_on_transfers_to_eth<D, H>(
     storage: &mut Storage<D, H>,
     transfers: &[TransferToEthereum],
+    relayer: &Address,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -151,19 +152,31 @@ where
         })
         .filter(is_pending_transfer_key)
         .collect();
-
+    let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+    let relayer_rewards_key = balance_key(&nam(), relayer);
     // Remove the completed transfers from the bridge pool
     for event in transfers {
         let pending_transfer = event.into();
         let key = get_pending_key(&pending_transfer);
         if likely(storage.has_key(&key)?.0) {
+            // give the relayer the gas fee for this transfer.
+            update::amount(storage, &relayer_rewards_key, |balance| {
+                balance.receive(&pending_transfer.gas_fee.amount);
+            })?;
+            // the gas fee is removed from escrow.
+            update::amount(storage, &pool_balance_key, |balance| {
+                balance.spend(&pending_transfer.gas_fee.amount);
+            })?;
             _ = storage.delete(&key)?;
             _ = pending_keys.remove(&key);
         } else {
             unreachable!("The transfer should exist in the bridge pool");
         }
-
         _ = changed_keys.insert(key);
+    }
+    if !transfers.is_empty() {
+        changed_keys.insert(relayer_rewards_key);
+        changed_keys.insert(pool_balance_key);
     }
 
     if pending_keys.is_empty() {
@@ -207,7 +220,6 @@ where
         None => unreachable!(),
     };
 
-    // Refund the gas fee
     let payer_balance_key = balance_key(&nam(), &transfer.gas_fee.payer);
     let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
     update::amount(storage, &payer_balance_key, |balance| {
@@ -267,6 +279,8 @@ mod tests {
     };
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::ledger::storage::types::encode;
+    use namada_core::types::address::gen_established_address;
+    use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
@@ -335,11 +349,6 @@ mod tests {
         _ = storage
             .write(&payer_key, payer_balance.try_to_vec().expect("Test failed"))
             .expect("Test failed");
-        let pool_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        let pool_balance = Amount::from(2);
-        _ = storage
-            .write(&pool_key, pool_balance.try_to_vec().expect("Test failed"))
-            .expect("Test failed");
 
         for transfer in pending_transfers {
             if transfer.transfer.asset == EthAddress([0; 20]) {
@@ -384,6 +393,12 @@ mod tests {
                     )
                     .expect("Test failed");
             };
+            let gas_fee = Amount::from(1);
+            let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+            update::amount(storage, &escrow_key, |balance| {
+                balance.receive(&gas_fee);
+            })
+            .expect("Test failed");
         }
     }
 
@@ -402,6 +417,7 @@ mod tests {
             EthereumEvent::TransfersToEthereum {
                 nonce: arbitrary_nonce(),
                 transfers: vec![],
+                relayer: gen_implicit_address(),
             },
             EthereumEvent::UpdateBridgeWhitelist {
                 nonce: arbitrary_nonce(),
@@ -490,9 +506,10 @@ mod tests {
         let mut storage = TestStorage::default();
         init_storage(&mut storage);
         let pending_transfers = init_bridge_pool(&mut storage);
+        init_balance(&mut storage, &pending_transfers);
         let pending_keys: HashSet<Key> =
             pending_transfers.iter().map(get_pending_key).collect();
-
+        let relayer = gen_established_address("random");
         let mut transfers = vec![];
         for transfer in pending_transfers {
             let transfer_to_eth = TransferToEthereum {
@@ -507,13 +524,45 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers,
+            relayer: relayer.clone(),
         };
+        let payer_balance_key = balance_key(&nam(), &relayer);
+        let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+        let mut bp_balance_pre = Amount::try_from_slice(
+            &storage
+                .read(&pool_balance_key)
+                .expect("Test failed")
+                .0
+                .expect("Test failed"),
+        )
+        .expect("Test failed");
+        let mut changed_keys = act_on(&mut storage, &event).unwrap();
 
-        let changed_keys = act_on(&mut storage, &event).unwrap();
-
+        assert!(changed_keys.remove(&payer_balance_key));
+        assert!(changed_keys.remove(&pool_balance_key));
         assert!(changed_keys.iter().all(|k| pending_keys.contains(k)));
+
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
         assert_eq!(storage.iter_prefix(&prefix).0.count(), 0);
+        let relayer_balance = Amount::try_from_slice(
+            &storage
+                .read(&payer_balance_key)
+                .expect("Test failed")
+                .0
+                .expect("Test failed"),
+        )
+        .expect("Test failed");
+        assert_eq!(relayer_balance, Amount::from(2));
+        let bp_balance_post = Amount::try_from_slice(
+            &storage
+                .read(&pool_balance_key)
+                .expect("Test failed")
+                .0
+                .expect("Test failed"),
+        )
+        .expect("Test failed");
+        bp_balance_pre.spend(&bp_balance_post);
+        assert_eq!(bp_balance_pre, Amount::from(2));
     }
 
     #[test]
@@ -552,6 +601,7 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers: vec![],
+            relayer: gen_implicit_address(),
         };
         let _ = act_on(&mut storage, &event).unwrap();
 

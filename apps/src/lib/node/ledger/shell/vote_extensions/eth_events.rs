@@ -343,6 +343,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
             nonce: 2.into(),
@@ -353,6 +354,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            relayer: gen_established_address(),
         };
         let event_3 = EthereumEvent::NewContract {
             name: "Test".to_string(),
@@ -401,6 +403,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::NewContract {
             name: "Test".to_string(),
@@ -460,6 +463,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                relayer: gen_established_address(),
             }],
             block_height: shell.storage.get_current_decision_height(),
             validator_addr: address.clone(),
@@ -542,6 +546,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                relayer: gen_established_address(),
             }],
             block_height: signed_height,
             validator_addr: address,
@@ -607,6 +612,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                relayer: gen_established_address(),
             }],
             block_height: shell.storage.last_height,
             validator_addr: address.clone(),
@@ -682,6 +688,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                relayer: gen_established_address(),
             }],
             block_height: shell.storage.last_height,
             validator_addr: address.clone(),

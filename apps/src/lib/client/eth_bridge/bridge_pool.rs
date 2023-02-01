@@ -50,9 +50,14 @@ pub async fn add_to_eth_bridge_pool(
 }
 
 /// Construct a proof that a set of transfers are in the bridge pool.
-pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
+pub async fn construct_bridge_pool_proof(
+    ctx: Context,
+    args: args::BridgePoolProof,
+) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let data = args.transfers.try_to_vec().unwrap();
+    let data = (args.transfers, ctx.get(&args.relayer))
+        .try_to_vec()
+        .unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
