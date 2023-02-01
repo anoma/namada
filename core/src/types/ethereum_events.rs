@@ -211,6 +211,10 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
+        /// The Namada address that receives the gas fees
+        /// for relaying a batch of transfers
+        #[allow(dead_code)]
+        relayer: Address,
     },
     /// Event indication that the validator set has been updated
     /// in the governance contract
@@ -298,6 +302,8 @@ pub struct TransferToNamada {
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer
