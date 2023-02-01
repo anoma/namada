@@ -252,6 +252,23 @@ where
                                             .into(),
                                 }
                             } else if verify_decrypted_correctly(&tx, privkey) {
+                                if let DecryptedTx::Decrypted {
+                                    tx,
+                                    has_valid_pow: _,
+                                } = tx
+                                {
+                                    if tx.chain_id != self.chain_id {
+                                        return TxResult {
+                                            code: ErrorCodes::InvalidChainId
+                                                .into(),
+                                            info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx.chain_id
+                ),
+                                        };
+                                    }
+                                }
+
                                 TxResult {
                                     code: ErrorCodes::Ok.into(),
                                     info: "Process Proposal accepted this \
@@ -281,6 +298,7 @@ where
                             .into(),
                     },
                 }
+<<<<<<< HEAD
             }
             TxType::Wrapper(tx) => {
                 // decrypted txs shouldn't show up before wrapper txs
@@ -348,6 +366,22 @@ where
                     let has_valid_pow = false;
 
                     if has_valid_pow || self.get_wrapper_tx_fees() <= balance {
+=======
+                TxType::Wrapper(wrapper) => {
+                    // ChainId check
+                    if tx_chain_id != self.chain_id {
+                        return TxResult {
+                            code: ErrorCodes::InvalidChainId.into(),
+                            info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx_chain_id
+                ),
+                        };
+                    }
+
+                    // validate the ciphertext via Ferveo
+                    if !wrapper.validate_ciphertext() {
+>>>>>>> 5a626c4f1 (Adjusts tx chain id check)
                         TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process proposal accepted this transaction"
