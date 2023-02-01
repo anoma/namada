@@ -333,10 +333,10 @@ where
 mod tests {
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
+    use eyre::Result;
     use namada_core::ledger::parameters::{
         update_epoch_parameter, EpochDuration,
     };
-    use eyre::Result;
     use namada_core::ledger::storage::testing::TestStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::gen_established_address;
