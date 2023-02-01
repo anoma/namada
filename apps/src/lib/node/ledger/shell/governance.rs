@@ -222,9 +222,10 @@ where
 mod tests {
     use std::collections::HashMap;
 
+    use assert_matches::assert_matches;
     use eyre::Result;
     use namada::ledger::events::EventLevel;
-    use namada::ledger::native_vp::governance::utils;
+    use namada::ledger::native_vp::governance::utils::{self, Votes};
     use namada::ledger::storage_api::StorageWrite;
 
     use super::*;
@@ -289,7 +290,7 @@ mod tests {
             proposal_funds,
         )?;
 
-        let proposal_end_epoch = Epoch(9);
+        let proposal_end_epoch = Epoch(0);
         let proposal_end_epoch_key =
             gov_storage::get_voting_end_epoch_key(proposal_id);
         StorageWrite::write(
@@ -305,6 +306,7 @@ mod tests {
 
         let mut resp = shim::response::FinalizeBlock::default();
 
+        // TODO: this is failing because empty votes is accepted?
         let proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
 
@@ -340,5 +342,31 @@ mod tests {
         // TODO: also check expected key changes in `shell.storage`
 
         Ok(())
+    }
+
+    #[test]
+    fn test_compute_tally_rejects_empty_votes() {
+        let (mut shell, _) = test_utils::setup();
+        let validator_addr = address::testing::established_address_1();
+        let validator_stake = token::Amount::from(10_000_000);
+        utils::testing::setup_storage_with_validators(
+            &mut shell.storage,
+            HashMap::from([(validator_addr.clone(), validator_stake)]),
+        );
+        let epoch = Epoch(0);
+        assert_eq!(
+            shell.storage.validator_stake(&validator_addr, epoch),
+            token::Amount::from(10_000_000)
+        );
+
+        let votes = Votes {
+            yay_validators: HashMap::default(),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.storage, epoch, votes);
+
+        assert_matches!(result, Ok(false));
     }
 }

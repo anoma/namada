@@ -85,8 +85,8 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    // TODO: this should return `Ok(false)` if `votes` is empty?
     let total_stake: VotePower = storage.total_stake(epoch)?.into();
+    println!("total_stake: {:#?} for epoch {:?}", total_stake, epoch);
 
     let Votes {
         yay_validators,
@@ -239,13 +239,15 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Helpers for testing governance.
 pub mod testing {
+    // adapted from eth-bridge-integration namada_ethereum_bridge test_utils
+    // module
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::BorshSerialize;
     use namada_core::types::key::{
         protocol_pk_key, RefTo, SecretKey, SigScheme,
     };
-    use namada_proof_of_stake::PosBase;
+    use namada_proof_of_stake::{PosBase, PosParams};
     use rand::rngs::ThreadRng;
     use rand::thread_rng;
 
@@ -265,8 +267,8 @@ pub mod testing {
         pub protocol: key::common::SecretKey,
     }
 
-    /// Set up a [`TestStorage`] initialized at genesis with the given
-    /// validators.
+    /// Set up [`TestStorage`] to have the given validators at epoch 0. Assumes
+    /// storage has already been set up by test shell.
     pub fn setup_storage_with_validators(
         storage: &mut TestStorage,
         active_validators: HashMap<Address, token::Amount>,
@@ -282,7 +284,8 @@ pub mod testing {
                 .collect(),
             inactive: BTreeSet::default(),
         };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
+        let params = PosParams::default();
+        let validator_sets = Epoched::init(validator_set, 0, &params);
         storage.write_validator_set(&validator_sets);
 
         // write validator keys

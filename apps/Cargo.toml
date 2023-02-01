@@ -153,6 +153,7 @@ rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
 bit-set = "0.5.2"
 # A fork with state machime testing
