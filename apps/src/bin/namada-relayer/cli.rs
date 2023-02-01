@@ -15,6 +15,12 @@ pub async fn main() -> Result<()> {
             cmds::EthBridgePool::QueryPool(query) => {
                 bridge_pool::query_bridge_pool(query).await;
             }
+            cmds::EthBridgePool::QuerySigned(query) => {
+                bridge_pool::query_signed_bridge_pool(query).await;
+            }
+            cmds::EthBridgePool::QueryRelays(query) => {
+                bridge_pool::query_relay_progress(query).await;
+            }
         },
         cmds::NamadaRelayer::ValidatorSet(sub) => match sub {
             cmds::ValidatorSet::ActiveValidatorSet(args) => {
