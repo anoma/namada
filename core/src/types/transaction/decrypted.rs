@@ -86,6 +86,18 @@ pub mod decrypted_tx {
 
     impl From<DecryptedTx> for Tx {
         fn from(decrypted: DecryptedTx) -> Self {
+            let chain_id = match &decrypted {
+                DecryptedTx::Decrypted {
+                    tx,
+                    has_valid_pow: _,
+                } => tx.chain_id.to_owned(),
+                // If undecrytable we cannot extract the ChainId. The ChainId for the
+                // wrapper has already been checked previously and the inner transaction
+                // will fail because undecryptable. Here we simply put an empty string
+                // as a placeholder
+                DecryptedTx::Undecryptable(_) => ChainId(String::new()),
+            };
+
             Tx::new(
                 vec![],
                 Some(
@@ -93,7 +105,7 @@ pub mod decrypted_tx {
                         .try_to_vec()
                         .expect("Encrypting transaction should not fail"),
                 ),
-                ChainId("".to_string()),
+                chain_id,
             )
         }
     }

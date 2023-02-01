@@ -115,15 +115,7 @@ where
             }
         };
 
-        if tx.chain_id != self.chain_id {
-            return TxResult {
-                code: ErrorCodes::InvalidChainId.into(),
-                info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx.chain_id
-                ),
-            };
-        }
+        let tx_chain_id = tx.chain_id.clone();
 
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -142,12 +134,24 @@ where
                            are not supported"
                         .into(),
                 },
-                TxType::Protocol(_) => TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
-                    info: "Protocol transactions are a fun new feature that \
+                TxType::Protocol(_) => {
+                    if tx_chain_id != self.chain_id {
+                        return TxResult {
+                            code: ErrorCodes::InvalidChainId.into(),
+                            info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx_chain_id
+                ),
+                        };
+                    }
+                    TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info:
+                            "Protocol transactions are a fun new feature that \
                            is coming soon to a blockchain near you. Patience."
-                        .into(),
-                },
+                                .into(),
+                    }
+                }
                 TxType::Decrypted(tx) => {
                     match tx_queue_iter.next() {
                         Some(wrapper) => {
@@ -161,6 +165,23 @@ where
                                         .into(),
                                 }
                             } else if verify_decrypted_correctly(&tx, privkey) {
+                                if let DecryptedTx::Decrypted {
+                                    tx,
+                                    has_valid_pow: _,
+                                } = tx
+                                {
+                                    if tx.chain_id != self.chain_id {
+                                        return TxResult {
+                                            code: ErrorCodes::InvalidChainId
+                                                .into(),
+                                            info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx.chain_id
+                ),
+                                        };
+                                    }
+                                }
+
                                 TxResult {
                                     code: ErrorCodes::Ok.into(),
                                     info: "Process Proposal accepted this \
@@ -186,6 +207,17 @@ where
                     }
                 }
                 TxType::Wrapper(wrapper) => {
+                    // ChainId check
+                    if tx_chain_id != self.chain_id {
+                        return TxResult {
+                            code: ErrorCodes::InvalidChainId.into(),
+                            info: format!(
+                    "Tx carries a wrong chain id: expected {}, found {}",
+                    self.chain_id, tx_chain_id
+                ),
+                        };
+                    }
+
                     // validate the ciphertext via Ferveo
                     if !wrapper.validate_ciphertext() {
                         TxResult {
