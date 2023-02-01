@@ -267,14 +267,13 @@ mod tests {
     /// An example how to write a VP host environment integration test
     #[test]
     fn test_vp_host_env() {
-        // The environment must be initialized first
-        vp_host_env::init();
-
-        // We can add some data to the environment
-        let key_raw = "key";
-        let key = storage::Key::parse(key_raw).unwrap();
         let value = "test".to_string();
-        vp_host_env::with(|env| env.wl_storage.write(&key, &value).unwrap());
+        let addr = address::testing::established_address_1();
+        let key = storage::Key::from(addr.to_db_key());
+        // We can write some data from a transaction
+        vp_host_env::init_from_tx(addr, TestTxEnv::default(), |_addr| {
+            tx::ctx().write(&key, &value).unwrap();
+        });
 
         let read_pre_value: Option<String> = vp::CTX.read_pre(&key).unwrap();
         assert_eq!(None, read_pre_value);
