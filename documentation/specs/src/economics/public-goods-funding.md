@@ -199,7 +199,7 @@ The PGF council should be able to make both retroactive and continuous public fu
 
 However, for continuous PGF (cPGF), the council should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
 
-The following data is attached to the PGF transaction and will allow the counsil to decide which projects will be continously funded. Each tuple represent the address and the respecting amount of NAM that will receive every epoch. The list of funding recipients will be stored in storage under the PGF internal address substorage space.
+The following data is attached to the cPGF transaction and will allow the counsil to decide which projects will be continously funded. Each tuple represent the address and the respecting amount of NAM that will receive every epoch. The list of funding recipients will be stored in storage under the PGF internal address substorage space.
 
 ```rust
 struct cPgfRecipients {
