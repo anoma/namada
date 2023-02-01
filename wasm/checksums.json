@@ -1,7 +1,7 @@
 {
     "tx_bond.wasm": "tx_bond.c69b0b6b85a8340473dace3e927bc01be12cb5ae82d3367938d0005522a29479.wasm",
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.97b0d6f07c9db41320f1006e12e726098c93aad75eb843a575222c8f305462e7.wasm",
-    "tx_ibc.wasm": "tx_ibc.3637ae4b46f854b288c01e74eccc63b7e45c9c2d1ee3098b698f4039a6010705.wasm",
+    "tx_ibc.wasm": "tx_ibc.fb29789c4591793d7658032ca2c7163a3212f5d71cde83117a1e65970860032d.wasm",
     "tx_init_account.wasm": "tx_init_account.7aa4dbbf0ecad2d079766c47bf6c6d210523d1c4d74d118a02cde6427460a8c8.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.4a977c3d205b68114c6ec8f4ae8d933b768f146759a35de21796395626ca5d43.wasm",
     "tx_init_validator.wasm": "tx_init_validator.34b54635942c83de4e4dc94445753ffe55942ebef8a95393ffb10d487e681822.wasm",
