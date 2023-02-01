@@ -77,6 +77,7 @@ pub fn find_balance(
         .to_string();
     let amount =
         token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
+    bytes.assert_success();
     Ok(amount)
 }
 

@@ -370,6 +370,7 @@ async fn test_wnam_transfer() -> Result<()> {
 
     let mut ledger = bg_ledger.foreground();
     ledger.exp_string("Redeemed native token for wrapped ERC20 token")?;
+    let _bg_ledger = ledger.background();
 
     // check NAM balance of receiver and bridge pool
     let receiver_balance = find_balance(
