@@ -11,9 +11,8 @@ mod tests {
     use generated::types::Tx;
     use prost::Message;
 
-    use crate::types::chain::ChainId;
-
     use super::*;
+    use crate::types::chain::ChainId;
 
     #[test]
     fn encoding_round_trip() {

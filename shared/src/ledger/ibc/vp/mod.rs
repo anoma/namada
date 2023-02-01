@@ -632,9 +632,14 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -755,9 +760,14 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -815,9 +825,14 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -958,9 +973,14 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1052,9 +1072,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1131,9 +1156,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1196,9 +1226,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1280,9 +1315,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1375,9 +1415,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1467,9 +1512,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1503,9 +1553,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1542,9 +1597,14 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1627,9 +1687,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1719,9 +1784,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1819,9 +1889,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1910,9 +1985,14 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2012,9 +2092,14 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2061,8 +2146,13 @@ mod tests {
         );
 
         let ibc = Ibc { ctx };
-        assert!(ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
     }
 }

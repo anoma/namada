@@ -30,16 +30,21 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
     use namada::tendermint_proto::Protobuf;
+    use namada::types::chain::ChainId;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
+<<<<<<< HEAD
 <<<<<<< HEAD
     use namada::types::{address, key};
     use namada_test_utils::TestWasms;
 =======
     use namada::types::{address, chain::ChainId, key};
 >>>>>>> b96dd58e6 (Adds tx `chain_id` in tests)
+=======
+    use namada::types::{address, key};
+>>>>>>> dcc6d4b3c (Clippy + fmt)
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -135,11 +140,13 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("CannotDeleteVp"));
+        assert!(
+            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("CannotDeleteVp")
+        );
     }
 
     #[test]
@@ -462,17 +469,21 @@ mod tests {
                     .expect("decoding signed data we just signed")
             });
             assert_eq!(&signed_tx_data.data, data);
-            assert!(vp::CTX
-                .verify_tx_signature(&pk, &signed_tx_data.sig)
-                .unwrap());
+            assert!(
+                vp::CTX
+                    .verify_tx_signature(&pk, &signed_tx_data.sig)
+                    .unwrap()
+            );
 
             let other_keypair = key::testing::keypair_2();
-            assert!(!vp::CTX
-                .verify_tx_signature(
-                    &other_keypair.ref_to(),
-                    &signed_tx_data.sig
-                )
-                .unwrap());
+            assert!(
+                !vp::CTX
+                    .verify_tx_signature(
+                        &other_keypair.ref_to(),
+                        &signed_tx_data.sig
+                    )
+                    .unwrap()
+            );
         }
     }
 

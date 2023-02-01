@@ -172,7 +172,6 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
     ) -> TxResult {
-<<<<<<< HEAD
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {
@@ -198,12 +197,6 @@ where
                      PrepareProposal"
                 );
                 Err(TxResult {
-=======
-        let tx = match Tx::try_from(tx_bytes) {
-            Ok(tx) => tx,
-            Err(_) => {
-                return TxResult {
->>>>>>> 7e9643feb (Unit tests for tx chain id)
                     code: ErrorCodes::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
                         .into(),
@@ -269,9 +262,10 @@ where
                                             code: ErrorCodes::InvalidChainId
                                                 .into(),
                                             info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx.chain_id
-                ),
+                                                "Tx carries a wrong chain id: \
+                                                 expected {}, found {}",
+                                                self.chain_id, tx.chain_id
+                                            ),
                                         };
                                     }
                                 }
@@ -305,7 +299,6 @@ where
                             .into(),
                     },
                 }
-<<<<<<< HEAD
             }
             TxType::Wrapper(tx) => {
                 // decrypted txs shouldn't show up before wrapper txs
@@ -373,22 +366,6 @@ where
                     let has_valid_pow = false;
 
                     if has_valid_pow || self.get_wrapper_tx_fees() <= balance {
-=======
-                TxType::Wrapper(wrapper) => {
-                    // ChainId check
-                    if tx_chain_id != self.chain_id {
-                        return TxResult {
-                            code: ErrorCodes::InvalidChainId.into(),
-                            info: format!(
-                    "Tx carries a wrong chain id: expected {}, found {}",
-                    self.chain_id, tx_chain_id
-                ),
-                        };
-                    }
-
-                    // validate the ciphertext via Ferveo
-                    if !wrapper.validate_ciphertext() {
->>>>>>> 5a626c4f1 (Adjusts tx chain id check)
                         TxResult {
                             code: ErrorCodes::Ok.into(),
                             info: "Process proposal accepted this transaction"
@@ -436,12 +413,7 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-<<<<<<< HEAD
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
-=======
-    use namada::types::transaction::protocol::ProtocolTxType;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
->>>>>>> 7e9643feb (Unit tests for tx chain id)
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -1340,7 +1312,7 @@ mod test_process_proposal {
             .sign(&keypair, wrong_chain_id.clone())
             .expect("Test failed");
 
-        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx.clone()).sign(
+        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx).sign(
             &keypair.ref_to(),
             &keypair,
             wrong_chain_id.clone(),
@@ -1395,9 +1367,10 @@ mod test_process_proposal {
                     assert_eq!(
                         res.result.info,
                         format!(
-                        "Tx carries a wrong chain id: expected {}, found {}",
-                        shell.chain_id, wrong_chain_id
-                    )
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            shell.chain_id, wrong_chain_id
+                        )
                     );
                 }
             }

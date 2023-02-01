@@ -68,7 +68,7 @@ impl Default for TestTxEnv {
         };
         let chain_id = wl_storage.storage.chain_id.clone();
         Self {
-            wl_storage: wl_storage,
+            wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: BlockGasMeter::default(),
             tx_index: TxIndex::default(),
