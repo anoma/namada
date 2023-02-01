@@ -50,6 +50,8 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use borsh::BorshSerialize;
     use itertools::Itertools;
     use namada::ledger::storage::types;
@@ -132,6 +134,8 @@ mod tests {
         storage
             .write(&key, value_bytes.clone())
             .expect("write failed");
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(100), 1000);
         storage.commit().expect("commit failed");
 
         // save the last state and drop the storage
@@ -247,6 +251,11 @@ mod tests {
         fn test_read_with_height(blocks_write_value in vec(any::<bool>(), 20)) {
             test_read_with_height_aux(blocks_write_value).unwrap()
         }
+
+        #[test]
+        fn test_get_merkle_tree(blocks_write_type in vec(0..3u64, 20)) {
+            test_get_merkle_tree_aux(blocks_write_type).unwrap()
+        }
     }
 
     /// Test reads at arbitrary block heights.
@@ -342,6 +351,98 @@ mod tests {
                 let value: BlockHeight =
                     types::decode(value_bytes.unwrap()).unwrap();
                 panic!("Expected no value at height {height}, got {}", value,);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Test the restore of the merkle tree
+    fn test_get_merkle_tree_aux(
+        blocks_write_type: Vec<u64>,
+    ) -> namada::ledger::storage::Result<()> {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let mut storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+        );
+
+        let num_keys = 3;
+        let blocks_write_type = blocks_write_type.into_iter().enumerate().map(
+            |(index, write_type)| {
+                // try to update some keys at each height
+                let height = BlockHeight::from(index as u64 / num_keys + 1);
+                let key = Key::parse(format!("key{}", index as u64 % num_keys))
+                    .unwrap();
+                (height, key, write_type)
+            },
+        );
+
+        let mut roots = HashMap::new();
+
+        // Update and commit
+        let hash = BlockHash::default();
+        storage.begin_block(hash, BlockHeight(1))?;
+        for (height, key, write_type) in blocks_write_type.clone() {
+            if height != storage.block.height {
+                // to check the root later
+                roots.insert(storage.block.height, storage.merkle_root());
+                if storage.block.height.0 % 5 == 0 {
+                    // new epoch every 5 heights
+                    storage.block.epoch = storage.block.epoch.next();
+                    storage
+                        .block
+                        .pred_epochs
+                        .new_epoch(storage.block.height, 1000);
+                }
+                storage.commit()?;
+                let hash = BlockHash::default();
+                storage
+                    .begin_block(hash, storage.block.height.next_height())?;
+            }
+            match write_type {
+                0 => {
+                    // no update
+                }
+                1 => {
+                    storage.delete(&key)?;
+                }
+                _ => {
+                    let value_bytes = types::encode(&storage.block.height);
+                    storage.write(&key, value_bytes)?;
+                }
+            }
+        }
+        roots.insert(storage.block.height, storage.merkle_root());
+
+        let mut current_state = HashMap::new();
+        for i in 0..num_keys {
+            let key = Key::parse(format!("key{}", i)).unwrap();
+            current_state.insert(key, false);
+        }
+        // Check a Merkle tree
+        for (height, key, write_type) in blocks_write_type {
+            let tree = storage.get_merkle_tree(height)?;
+            assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
+            match write_type {
+                0 => {
+                    if *current_state.get(&key).unwrap() {
+                        assert!(tree.has_key(&key)?);
+                    } else {
+                        assert!(!tree.has_key(&key)?);
+                    }
+                }
+                1 => {
+                    assert!(!tree.has_key(&key)?);
+                    current_state.insert(key, false);
+                }
+                _ => {
+                    assert!(tree.has_key(&key)?);
+                    current_state.insert(key, true);
+                }
             }
         }
 

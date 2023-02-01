@@ -772,7 +772,9 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
+    use namada::types::storage::{
+        BlockHash, BlockResults, Epoch, Epochs, Header,
+    };
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
@@ -1015,24 +1017,28 @@ mod test_utils {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let stores = merkle_tree.stores();
         let hash = BlockHash([0; 32]);
-        let pred_epochs = Default::default();
+        let mut pred_epochs: Epochs = Default::default();
+        pred_epochs.new_epoch(BlockHeight(1), 1000);
         let address_gen = EstablishedAddressGen::new("test");
         shell
             .storage
             .db
-            .write_block(BlockStateWrite {
-                merkle_tree_stores: stores,
-                header: None,
-                hash: &hash,
-                height: BlockHeight(1),
-                epoch: Epoch(0),
-                pred_epochs: &pred_epochs,
-                next_epoch_min_start_height: BlockHeight(3),
-                next_epoch_min_start_time: DateTimeUtc::now(),
-                address_gen: &address_gen,
-                results: &BlockResults::default(),
-                tx_queue: &shell.storage.tx_queue,
-            })
+            .write_block(
+                BlockStateWrite {
+                    merkle_tree_stores: stores,
+                    header: None,
+                    hash: &hash,
+                    height: BlockHeight(1),
+                    epoch: Epoch(1),
+                    pred_epochs: &pred_epochs,
+                    next_epoch_min_start_height: BlockHeight(3),
+                    next_epoch_min_start_time: DateTimeUtc::now(),
+                    address_gen: &address_gen,
+                    results: &BlockResults::default(),
+                    tx_queue: &shell.storage.tx_queue,
+                },
+                true,
+            )
             .expect("Test failed");
 
         // Drop the shell
