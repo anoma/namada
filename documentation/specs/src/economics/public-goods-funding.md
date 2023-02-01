@@ -94,7 +94,7 @@ The above proposal type exists in order to determine *whether* a new PGF council
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
 ### Voting on the council
-After the `PgfProposal` has been submitted, and once the council has been constructed and brodcasted, the council address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+After the `PgfProposal` has been submitted, and once the council has been constructed and broadcast, the council address can be voted on by governance participants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
 The vote for a set of PGF council addresses will be constructed as follows.
 
