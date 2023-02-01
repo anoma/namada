@@ -9,6 +9,7 @@ use std::str::FromStr;
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use bimap::BiHashMap;
+use bip39::Seed;
 use file_lock::{FileLock, FileOptions};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::{Address, ImplicitAddress};
@@ -351,8 +352,13 @@ impl Store {
         scheme: SchemeType,
         alias: Option<String>,
         password: Option<String>,
+        seed: Option<Seed>,
     ) -> (Alias, common::SecretKey) {
-        let sk = gen_sk(scheme);
+        let sk = if let Some(seed) = seed {
+            gen_sk_from_seed(scheme, seed)
+        } else {
+            gen_sk(scheme)
+        };
         let pkh: PublicKeyHash = PublicKeyHash::from(&sk.ref_to());
         let (keypair_to_store, raw_keypair) = StoredKeypair::new(sk, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));
@@ -838,6 +844,19 @@ pub fn gen_sk(scheme: SchemeType) -> common::SecretKey {
         SchemeType::Common => common::SigScheme::generate(&mut csprng)
             .try_to_sk()
             .unwrap(),
+    }
+}
+
+/// Generate a new secret key from the seed.
+pub fn gen_sk_from_seed(scheme: SchemeType, seed: Seed) -> common::SecretKey {
+    match scheme {
+        SchemeType::Ed25519 => {
+            // AK: is that correct? do we need to hash the slice instead?
+            let mut s: [u8; 32] = Default::default();
+            s.copy_from_slice(&seed.as_bytes()[0..32]);
+            ed25519::SigScheme::from_seed(s).try_to_sk().unwrap()
+        }
+        _ => unimplemented!(),
     }
 }
 

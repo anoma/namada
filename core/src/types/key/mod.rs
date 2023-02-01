@@ -267,6 +267,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
+    /// Generate a keypair from the seed.
+    fn from_seed(seed: [u8; 32]) -> Self::SecretKey;
     /// Sign the data with a key.
     fn sign(
         keypair: &Self::SecretKey,

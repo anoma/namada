@@ -287,6 +287,13 @@ impl super::SigScheme for SigScheme {
         );
     }
 
+    fn from_seed(_seed: [u8; 32]) -> Self::SecretKey {
+        panic!(
+            "Cannot generate common signing scheme. Must convert from \
+             alternative scheme."
+        );
+    }
+
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
         match keypair {
             SecretKey::Ed25519(kp) => {

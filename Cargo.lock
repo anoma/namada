@@ -1954,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "ferveo"
 version = "0.1.1"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?branch=bat/fix-thiserror#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -1991,7 +1991,7 @@ dependencies = [
 [[package]]
 name = "ferveo-common"
 version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?branch=bat/fix-thiserror#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",
@@ -2368,7 +2368,7 @@ dependencies = [
 [[package]]
 name = "group-threshold-cryptography"
 version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?branch=bat/fix-thiserror#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -2558,6 +2558,15 @@ checksum = "2a2a2320eb7ec0ebe8da8f744d7812d9fc4cb4d09344ac01898dbcb6a20ae69b"
 dependencies = [
  "crypto-mac 0.11.1",
  "digest 0.9.0",
+]
+
+[[package]]
+name = "hmac"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
+dependencies = [
+ "digest 0.10.5",
 ]
 
 [[package]]
@@ -2876,7 +2885,7 @@ dependencies = [
  "tendermint-proto 0.23.6",
  "tendermint-rpc 0.23.6",
  "thiserror",
- "tiny-bip39",
+ "tiny-bip39 0.8.2",
  "tiny-keccak",
  "tokio",
  "toml",
@@ -3763,6 +3772,7 @@ dependencies = [
  "tendermint-rpc 0.23.6",
  "test-log",
  "thiserror",
+ "tiny-bip39 1.0.0",
  "tokio",
  "tokio-test",
  "toml",
@@ -4473,6 +4483,15 @@ checksum = "f05894bce6a1ba4be299d0c5f29563e08af2bc18bb7d48313113bed71e904739"
 dependencies = [
  "crypto-mac 0.11.1",
  "password-hash",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
+dependencies = [
+ "digest 0.10.5",
 ]
 
 [[package]]
@@ -6042,7 +6061,7 @@ dependencies = [
 [[package]]
 name = "subproductdomain"
 version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?branch=bat/fix-thiserror#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",
@@ -6450,18 +6469,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.30"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "854babe52e4df1653706b98fcfc05843010039b406875930a70e4d9644e5c417"
+checksum = "6a9cd18aa97d5c45c6603caea1da6628790b37f7a34b6ca89522331c5180fed0"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.30"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa32fd3f627f367fe16f893e2597ae3c05020f8bba2666a4e6ea73d377e5714b"
+checksum = "1fb327af4685e4d03fa8cbcf1716380da910eeb2bb8be417e7f9fd3fb164f36f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6530,6 +6549,25 @@ dependencies = [
  "rand 0.7.3",
  "rustc-hash",
  "sha2 0.9.9",
+ "thiserror",
+ "unicode-normalization",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
+name = "tiny-bip39"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62cc94d358b5a1e84a5cb9109f559aa3c4d634d2b1b4de3d0fa4adc7c78e2861"
+dependencies = [
+ "anyhow",
+ "hmac 0.12.1",
+ "once_cell",
+ "pbkdf2 0.11.0",
+ "rand 0.8.5",
+ "rustc-hash",
+ "sha2 0.10.6",
  "thiserror",
  "unicode-normalization",
  "wasm-bindgen",

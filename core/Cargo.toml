@@ -68,9 +68,9 @@ chrono = {version = "0.4.22", default-features = false, features = ["clock", "st
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
-ferveo = {optional = true, git = "https://github.com/anoma/ferveo"}
-ferveo-common = {git = "https://github.com/anoma/ferveo"}
-tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo"}
+ferveo = {optional = true, git = "https://github.com/anoma/ferveo", branch = "bat/fix-thiserror"}
+ferveo-common = {git = "https://github.com/anoma/ferveo", branch = "bat/fix-thiserror"}
+tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", branch = "bat/fix-thiserror"}
 # TODO using the same version of tendermint-rs as we do here.
 ibc = {version = "0.14.0", default-features = false, optional = true}
 ibc-proto = {version = "0.17.1", default-features = false, optional = true}

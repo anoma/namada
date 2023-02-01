@@ -501,11 +501,14 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let (_alias, keypair) = wallet
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    unsafe_dont_encrypt,
+                    false,
+                )
+                .expect("Key generation should not fail.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -520,11 +523,14 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let (_alias, keypair) = wallet
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    unsafe_dont_encrypt,
+                    false,
+                )
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -535,11 +541,14 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let (_alias, keypair) = wallet
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    unsafe_dont_encrypt,
+                    false,
+                )
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -619,11 +628,14 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
-                let (_alias, keypair) = wallet.gen_key(
-                    SchemeType::Ed25519,
-                    Some(name.clone()),
-                    unsafe_dont_encrypt,
-                );
+                let (_alias, keypair) = wallet
+                    .gen_key(
+                        SchemeType::Ed25519,
+                        Some(name.clone()),
+                        unsafe_dont_encrypt,
+                        false,
+                    )
+                    .expect("Key generation should not fail.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -869,11 +881,14 @@ fn init_established_account(
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
-        let (_alias, keypair) = wallet.gen_key(
-            SchemeType::Ed25519,
-            Some(format!("{}-key", name.as_ref())),
-            unsafe_dont_encrypt,
-        );
+        let (_alias, keypair) = wallet
+            .gen_key(
+                SchemeType::Ed25519,
+                Some(format!("{}-key", name.as_ref())),
+                unsafe_dont_encrypt,
+                false,
+            )
+            .expect("Key generation should not fail.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);

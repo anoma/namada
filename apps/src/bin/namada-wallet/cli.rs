@@ -303,15 +303,24 @@ fn key_and_address_gen(
         scheme,
         alias,
         unsafe_dont_encrypt,
+        use_mnemonic,
     }: args::KeyAndAddressGen,
 ) {
     let mut wallet = ctx.wallet;
-    let (alias, _key) = wallet.gen_key(scheme, alias, unsafe_dont_encrypt);
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
-    println!(
-        "Successfully added a key and an address with alias: \"{}\"",
-        alias
-    );
+    let generated_key =
+        wallet.gen_key(scheme, alias, unsafe_dont_encrypt, use_mnemonic);
+    match generated_key {
+        Ok((alias, _key)) => {
+            wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+            println!(
+                "Successfully added a key and an address with alias: \"{}\"",
+                alias
+            );
+        }
+        Err(err) => {
+            eprintln!("{}", err)
+        }
+    }
 }
 
 /// Find a keypair in the wallet store.

@@ -266,7 +266,9 @@ pub async fn submit_init_validator(
                 scheme,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
+                false,
             )
+            .expect("Key generation should not fail.")
             .1
             .ref_to()
     });
@@ -288,7 +290,9 @@ pub async fn submit_init_validator(
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     unsafe_dont_encrypt,
+                    false,
                 )
+                .expect("Key generation should not fail.")
                 .1
         });
 

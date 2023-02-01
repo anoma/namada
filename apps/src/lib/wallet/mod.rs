@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fs};
 
+use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::Address;
@@ -41,6 +42,14 @@ pub enum FindKeyError {
     KeyNotFound,
     #[error("{0}")]
     KeyDecryptionError(keys::DecryptionError),
+}
+
+#[derive(Error, Debug)]
+pub enum GenKeyError {
+    #[error("Mnemonic generation error")]
+    MnemonicGenerationError,
+    #[error("Not supported")]
+    NotImplementedError,
 }
 
 impl Wallet {
@@ -132,18 +141,21 @@ impl Wallet {
     /// lowercase too). If the key is to be encrypted, will prompt for
     /// password from stdin. Stores the key in decrypted key cache and
     /// returns the alias of the key and a reference-counting pointer to the
-    /// key.
+    /// key. Optionally, use a BIP39 mnemonic code for the key generation.
     pub fn gen_key(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
-    ) -> (String, common::SecretKey) {
+        use_mnemonic: bool,
+    ) -> Result<(String, common::SecretKey), GenKeyError> {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
-        let (alias, key) = self.store.gen_key(scheme, alias, password);
+        let mnemonic = generate_mnemonic_code(use_mnemonic)?;
+        let seed = mnemonic.map(|m| Seed::new(&m, ""));
+        let (alias, key) = self.store.gen_key(scheme, alias, password, seed);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
-        (alias.into(), key)
+        Ok((alias.into(), key))
     }
 
     pub fn gen_spending_key(
@@ -531,8 +543,37 @@ impl Wallet {
     }
 }
 
+fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenKeyError> {
+    // generate random mnemonic
+    const BITS_PER_BYTE: usize = 8;
+    let entropy_size = MnemonicType::Words24.entropy_bits() / BITS_PER_BYTE;
+    let mut bytes = vec![0u8; entropy_size];
+    rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut bytes);
+    let mnemonic = Mnemonic::from_entropy(&bytes, Language::English)
+        .expect("Mnemonic creation should not fail");
+
+    // TODO print mnemonic to the user in a different terminal
+    // execute!(std::io::stdout(), EnterAlternateScreen)?;
+    println!("Safely store your 24 words mnemonic.");
+    println!("{}", mnemonic.clone().into_phrase());
+    // get_user_input(format!("{}", "Press enter when you are done."));
+    // execute!(std::io::stdout(), LeaveAlternateScreen)?;
+
+    // TODO check mnemonic by user
+    Ok(mnemonic)
+}
+
+pub fn generate_mnemonic_code(
+    use_mnemonic: bool,
+) -> Result<Option<Mnemonic>, GenKeyError> {
+    use_mnemonic
+        .then(generate_and_confirm_mnemonic_code)
+        .transpose()
+}
+
 /// Read the password for encryption from the file/env/stdin with confirmation.
 pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
+    // AK: use Zeroize?
     let password = if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None

@@ -336,6 +336,10 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(ed25519_consensus::SigningKey::new(csprng)))
     }
 
+    fn from_seed(seed: [u8; 32]) -> SecretKey {
+        SecretKey(Box::new(ed25519_consensus::SigningKey::from(seed)))
+    }
+
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
         Signature(keypair.0.sign(data.as_ref()))
     }

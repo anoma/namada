@@ -1701,6 +1701,7 @@ pub mod args {
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
+    const MNEMONIC: ArgFlag = flag("mnemonic");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -3247,6 +3248,8 @@ pub mod args {
         pub alias: Option<String>,
         /// Don't encrypt the keypair
         pub unsafe_dont_encrypt: bool,
+        /// Use bip39 mnemonic code
+        pub use_mnemonic: bool,
     }
 
     impl Args for KeyAndAddressGen {
@@ -3254,10 +3257,12 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let use_mnemonic = MNEMONIC.parse(matches);
             Self {
                 scheme,
                 alias,
                 unsafe_dont_encrypt,
+                use_mnemonic,
             }
         }
 
@@ -3274,6 +3279,10 @@ pub mod args {
             .arg(UNSAFE_DONT_ENCRYPT.def().about(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
+            ))
+            .arg(MNEMONIC.def().about(
+                "Use mnemonic code for key generation. Only English wordlist \
+                 is supported.",
             ))
         }
     }
