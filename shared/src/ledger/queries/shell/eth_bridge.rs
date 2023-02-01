@@ -12,6 +12,7 @@ use namada_core::ledger::storage::{
 use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
+use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToEthereum};
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::vote_extensions::validator_set_update::{
@@ -969,6 +970,7 @@ mod test_ethbridge_router {
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
             transfers: vec![event_transfer.clone()],
+            relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
         let voting_power = FractionalVotingPower::new(1, 2).unwrap();
