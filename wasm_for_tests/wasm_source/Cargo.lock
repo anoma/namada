@@ -2863,6 +2863,7 @@ dependencies = [
  "ibc-proto",
  "ibc-relayer",
  "namada",
+ "namada_core",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",

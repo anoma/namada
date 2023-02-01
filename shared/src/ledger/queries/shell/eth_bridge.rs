@@ -153,8 +153,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if let Ok(transfer_hashes) =
-        <Vec<KeccakHash>>::try_from_slice(request.data.as_slice())
+    if let Ok((transfer_hashes, relayer)) =
+        <(Vec<KeccakHash>, Address)>::try_from_slice(request.data.as_slice())
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx
@@ -214,6 +214,7 @@ where
                     validator_args,
                     root: signed_root,
                     proof,
+                    relayer,
                 };
                 let data = EncodeCell::<RelayProof>::new_from(
                     tokenize_relay_proof(data, &voting_powers),
@@ -741,7 +742,7 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![transfer.keccak256()]
+                    (vec![transfer.keccak256()], bertha_address())
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
@@ -766,6 +767,7 @@ mod test_ethbridge_router {
                 validator_args,
                 root: signed_root,
                 proof,
+                relayer: bertha_address(),
             },
             &voting_powers,
         ))
@@ -844,7 +846,7 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![transfer2.keccak256()]
+                    (vec![transfer2.keccak256()], bertha_address())
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
@@ -1087,7 +1089,7 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![transfer.keccak256()]
+                    vec![(transfer.keccak256(), bertha_address())]
                         .try_to_vec()
                         .expect("Test failed"),
                 ),
