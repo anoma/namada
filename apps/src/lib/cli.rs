@@ -359,6 +359,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
+        Restore(KeyRestore),
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
@@ -371,10 +372,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let generate = SubCmd::parse(matches).map(Self::Gen);
+                let restore = SubCmd::parse(matches).map(Self::Restore);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                generate.or(lookup).or(list).or(export)
+                generate.or(restore).or(lookup).or(list).or(export)
             })
         }
 
@@ -385,10 +387,35 @@ pub mod cmds {
                      look-up keys.",
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(KeyRestore::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
                 .subcommand(Export::def())
+        }
+    }
+
+    /// Restore a keypair and implicit address from the mnemonic code
+    #[derive(Clone, Debug)]
+    pub struct KeyRestore(pub args::KeyAndAddressRestore);
+
+    impl SubCmd for KeyRestore {
+        const CMD: &'static str = "restore";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::KeyAndAddressRestore::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Restores a keypair from the given mnemonic code and \
+                     derives the implicit address from its public key. Stores \
+                     the keypair and the address with the given alias.",
+                )
+                .add_args::<args::KeyAndAddressRestore>()
         }
     }
 
@@ -640,6 +667,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
+        Restore(AddressRestore),
         Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
@@ -651,10 +679,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
+                let restore = SubCmd::parse(matches).map(Self::Restore);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
-                gen.or(find).or(list).or(add)
+                gen.or(restore).or(find).or(list).or(add)
             })
         }
 
@@ -666,6 +695,7 @@ pub mod cmds {
                 )
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(AddressGen::def())
+                .subcommand(AddressRestore::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
@@ -693,6 +723,30 @@ pub mod cmds {
                      be stored with the same alias.",
                 )
                 .add_args::<args::KeyAndAddressGen>()
+        }
+    }
+
+    /// Restore a keypair and an implicit address from the mnemonic code
+    #[derive(Clone, Debug)]
+    pub struct AddressRestore(pub args::KeyAndAddressRestore);
+
+    impl SubCmd for AddressRestore {
+        const CMD: &'static str = "restore";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                AddressRestore(args::KeyAndAddressRestore::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Restores a keypair from the given mnemonic code and \
+                     derives the implicit address from its public key. Stores \
+                     the keypair and the address with the given alias.",
+                )
+                .add_args::<args::KeyAndAddressRestore>()
         }
     }
 
@@ -3235,6 +3289,46 @@ pub mod args {
             .arg(PIN.def().about(
                 "Require that the single transaction to this address be \
                  pinned.",
+            ))
+        }
+    }
+
+    /// Wallet add key and implicit address arguments
+    #[derive(Clone, Debug)]
+    pub struct KeyAndAddressRestore {
+        /// Scheme type
+        pub scheme: SchemeType,
+        /// Key alias
+        pub alias: Option<String>,
+        /// Don't encrypt the keypair
+        pub unsafe_dont_encrypt: bool,
+    }
+
+    impl Args for KeyAndAddressRestore {
+        fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
+            let alias = ALIAS_OPT.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                scheme,
+                alias,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(SCHEME.def().about(
+                "The type of key that should be added. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
+                "The key and address alias. If none provided, the alias will \
+                 be the public key hash.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().about(
+                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
+                 used in a live network.",
             ))
         }
     }

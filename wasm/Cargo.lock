@@ -1362,7 +1362,7 @@ dependencies = [
 [[package]]
 name = "ferveo-common"
 version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo#1022ab2c7ccc689abcc05e5a08df6fb0c2a3fc65"
+source = "git+https://github.com/anoma/ferveo?branch=bat/fix-thiserror#9e5e91c954158e7cff45c483fd06cd649a81553f"
 dependencies = [
  "anyhow",
  "ark-ec",

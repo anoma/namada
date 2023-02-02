@@ -6,6 +6,7 @@ mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fs};
@@ -45,11 +46,11 @@ pub enum FindKeyError {
 }
 
 #[derive(Error, Debug)]
-pub enum GenKeyError {
+pub enum GenRestoreKeyError {
     #[error("Mnemonic generation error")]
     MnemonicGenerationError,
-    #[error("Not supported")]
-    NotImplementedError,
+    #[error("Mnemonic input error")]
+    MnemonicInputError,
 }
 
 impl Wallet {
@@ -135,6 +136,22 @@ impl Wallet {
         password
     }
 
+    pub fn derive_key_from_user_mnemonic_code(
+        &mut self,
+        scheme: SchemeType,
+        alias: Option<String>,
+        unsafe_dont_encrypt: bool,
+    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+        let mnemonic = read_mnemonic()?;
+        let seed = Seed::new(&mnemonic, "");
+        let (alias, key) =
+            self.store.gen_key(scheme, alias, password, Some(seed));
+        // Cache the newly added key
+        self.decrypted_key_cache.insert(alias.clone(), key.clone());
+        Ok((alias.into(), key))
+    }
+
     /// Generate a new keypair and derive an implicit address from its public
     /// and insert them into the store with the provided alias, converted to
     /// lower case. If none provided, the alias will be the public key hash (in
@@ -148,7 +165,7 @@ impl Wallet {
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
         use_mnemonic: bool,
-    ) -> Result<(String, common::SecretKey), GenKeyError> {
+    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let mnemonic = generate_mnemonic_code(use_mnemonic)?;
         let seed = mnemonic.map(|m| Seed::new(&m, ""));
@@ -543,7 +560,8 @@ impl Wallet {
     }
 }
 
-fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenKeyError> {
+fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>
+{
     // generate random mnemonic
     const BITS_PER_BYTE: usize = 8;
     let entropy_size = MnemonicType::Words24.entropy_bits() / BITS_PER_BYTE;
@@ -563,12 +581,31 @@ fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenKeyError> {
     Ok(mnemonic)
 }
 
-pub fn generate_mnemonic_code(
+fn generate_mnemonic_code(
     use_mnemonic: bool,
-) -> Result<Option<Mnemonic>, GenKeyError> {
+) -> Result<Option<Mnemonic>, GenRestoreKeyError> {
     use_mnemonic
         .then(generate_and_confirm_mnemonic_code)
         .transpose()
+}
+
+/// Get input from the user.
+fn get_user_input<S>(request: S) -> std::io::Result<String>
+where
+    S: std::fmt::Display,
+{
+    print!("{} ", request);
+    std::io::stdout().flush()?;
+    let mut response = String::new();
+    std::io::stdin().read_line(&mut response)?;
+    Ok(response)
+}
+
+fn read_mnemonic() -> Result<Mnemonic, GenRestoreKeyError> {
+    let phrase = get_user_input("Input mnemonic code:")
+        .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
+    Mnemonic::from_phrase(&phrase, Language::English)
+        .map_err(|_| GenRestoreKeyError::MnemonicInputError)
 }
 
 /// Read the password for encryption from the file/env/stdin with confirmation.

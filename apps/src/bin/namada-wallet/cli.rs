@@ -19,6 +19,9 @@ pub fn main() -> Result<()> {
     let (cmd, ctx) = cli::namada_wallet_cli()?;
     match cmd {
         cmds::NamadaWallet::Key(sub) => match sub {
+            cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
+                key_and_address_restore(ctx, args)
+            }
             cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                 key_and_address_gen(ctx, args)
             }
@@ -31,6 +34,9 @@ pub fn main() -> Result<()> {
         cmds::NamadaWallet::Address(sub) => match sub {
             cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                 key_and_address_gen(ctx, args)
+            }
+            cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
+                key_and_address_restore(ctx, args)
             }
             cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                 address_or_alias_find(ctx, args)
@@ -293,6 +299,36 @@ fn address_key_add(
         "Successfully added a {} with the following alias to wallet: {}",
         typ, alias,
     );
+}
+
+/// Restore a keypair and an implicit address from the mnemonic code in the
+/// wallet.
+fn key_and_address_restore(
+    ctx: Context,
+    args::KeyAndAddressRestore {
+        scheme,
+        alias,
+        unsafe_dont_encrypt,
+    }: args::KeyAndAddressRestore,
+) {
+    let mut wallet = ctx.wallet;
+    let derived_key = wallet.derive_key_from_user_mnemonic_code(
+        scheme,
+        alias,
+        unsafe_dont_encrypt,
+    );
+    match derived_key {
+        Ok((alias, _key)) => {
+            wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+            println!(
+                "Successfully added a key and an address with alias: \"{}\"",
+                alias
+            );
+        }
+        Err(err) => {
+            eprintln!("{}", err)
+        }
+    }
 }
 
 /// Generate a new keypair and derive implicit address from it and store them in
