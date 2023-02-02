@@ -560,11 +560,14 @@ impl Wallet {
     }
 }
 
-fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>
-{
-    // generate random mnemonic
+/// Generates a random mnemonic of the given mnemonic type.
+fn generate_and_confirm_mnemonic_code(
+    mnemonic_type: MnemonicType,
+) -> Result<Mnemonic, GenRestoreKeyError> {
     const BITS_PER_BYTE: usize = 8;
-    let entropy_size = MnemonicType::Words24.entropy_bits() / BITS_PER_BYTE;
+
+    // generate random mnemonic
+    let entropy_size = mnemonic_type.entropy_bits() / BITS_PER_BYTE;
     let mut bytes = vec![0u8; entropy_size];
     rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut bytes);
     let mnemonic = Mnemonic::from_entropy(&bytes, Language::English)
@@ -572,7 +575,10 @@ fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>
 
     // TODO print mnemonic to the user in a different terminal
     // execute!(std::io::stdout(), EnterAlternateScreen)?;
-    println!("Safely store your 24 words mnemonic.");
+    println!(
+        "Safely store your {} words mnemonic.",
+        mnemonic_type.word_count()
+    );
     println!("{}", mnemonic.clone().into_phrase());
     // get_user_input(format!("{}", "Press enter when you are done."));
     // execute!(std::io::stdout(), LeaveAlternateScreen)?;
@@ -584,8 +590,10 @@ fn generate_and_confirm_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>
 fn generate_mnemonic_code(
     use_mnemonic: bool,
 ) -> Result<Option<Mnemonic>, GenRestoreKeyError> {
+    const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
+
     use_mnemonic
-        .then(generate_and_confirm_mnemonic_code)
+        .then(|| generate_and_confirm_mnemonic_code(MNEMONIC_TYPE))
         .transpose()
 }
 
