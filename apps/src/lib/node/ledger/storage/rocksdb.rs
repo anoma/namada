@@ -601,9 +601,11 @@ impl DB for RocksDB {
             Some(b) => types::decode(b).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
-        let stored_height = pred_epochs
-            .get_epoch_start_height(height)
-            .ok_or(Error::NoMerkleTree { height })?;
+        // Read the tree at the first height if no epoch update
+        let stored_height = match pred_epochs.get_epoch_start_height(height) {
+            Some(BlockHeight(0)) | None => BlockHeight(1),
+            Some(h) => h,
+        };
 
         let tree_key = Key::from(stored_height.to_db_key())
             .push(&"tree".to_owned())

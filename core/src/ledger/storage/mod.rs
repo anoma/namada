@@ -442,6 +442,7 @@ where
 
     /// Persist the current block's state to the database
     pub fn commit(&mut self) -> Result<()> {
+        // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
         let state = BlockStateWrite {
