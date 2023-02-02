@@ -9,10 +9,10 @@ use namada::ledger::native_vp::governance::utils::{
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage_api::{token, StorageWrite};
 use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
-use namada::types::token;
 
 use super::*;
 
@@ -84,8 +84,7 @@ where
                             gov_storage::get_proposal_execution_key(id);
                         shell
                             .wl_storage
-                            .storage
-                            .write(&pending_execution_key, "")
+                            .write(&pending_execution_key, ())
                             .expect("Should be able to write to storage.");
                         let tx_result = protocol::apply_tx(
                             tx_type,
@@ -101,7 +100,6 @@ where
                         );
                         shell
                             .wl_storage
-                            .storage
                             .delete(&pending_execution_key)
                             .expect("Should be able to delete the storage.");
                         match tx_result {
@@ -206,11 +204,16 @@ where
 
         let native_token = shell.wl_storage.storage.native_token.clone();
         // transfer proposal locked funds
-        shell.wl_storage.transfer(
+        token::transfer(
+            &mut shell.wl_storage,
             &native_token,
-            funds,
             &gov_address,
             &transfer_address,
+            funds,
+        )
+        .expect(
+            "Must be able to transfer governance locked funds after proposal \
+             has been tallied",
         );
     }
 
