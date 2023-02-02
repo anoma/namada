@@ -32,38 +32,24 @@ In Namada, up to 10% inflation per annum of the NAM token is directed to this pu
 
 Namada encourages the public goods council to adopt a default social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF). If no qualified recipients are available, funds may be redirected or burnt.
 
-Namada also encourages the PGF council to allocate the PGF council members up to 5% of these funds (0.5% inflation) as a payment for value added from the council itself.
+The Namada PGF council is also granted a 5% income as a reward for conducting PGF activities (5% * 10% = 0.05% of total inflation). This will be a governance parameter subject to change.
 
 ## Voting for the Council
 
 ### Constructing the council
 All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
 
-A new multisignature address will be constructed through the CLI with the following command
-
-```bash!
-namada client init-account \
---alias my-multisig \
---publickeys pk1,pk2,pk3... \
---signers signer1,signer2,signer3... \
---threshold k
-```
 
 ### Proposing Candidacy
-The council will be responsible to publish this address to voters and express their desired `spending_cap`. This will be done directly to the ledger through the following CLI command:
+The council will be responsible to publish this address to voters and express their desired `spending_cap`.
 
-```bash!
-namadac pgf-broadcast \
---council my-multisig \
---spending-cap 1.0
-```
-The `--spending-cap` argument is a `float` $0 < x \leq 1$, which indicates the maximum proportion of the total funds available to the PGF council that the PGF council is able to spend during their term.
+The `--spending-cap` argument is a `u8` $0 < x \leq 100$, which indicates the maximum percentage of the total funds available to the PGF council that the PGF council is able to spend during their term.
 
 A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
 
 Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of Governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
 
-Candidacy proposals last a default of 31 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
+Candidacy proposals last a default of 30 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
 
 The structure of the candidacy proposal should be 
 
@@ -94,7 +80,7 @@ The above proposal type exists in order to determine *whether* a new PGF council
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
 ### Voting on the council
-After the `PgfProposal` has been submitted, and once the council has been constructed and broadcast, the council address can be voted on by governance participants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+After the `PgfProposal` has been submitted, and once the council has been constructed and broadcast, the council address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
 The vote for a set of PGF council addresses will be constructed as follows.
 
@@ -140,7 +126,7 @@ The current PGF council consits of Dave and Elsa.
 ```rust
 struct PgfProposal{
   id: 2
-  content: Vec<32,54,01,24,13,37>,
+  content: Vec<32,54,01,24,13,37>, // (Just the byte representation of the content (description) of the proposal)
   author: 0xalice,
   r#type: PGFCouncil,
   votingStartEpoch: Epoch(45),
@@ -149,9 +135,9 @@ struct PgfProposal{
 }
 ```
 
-- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1.0`. (They could have done this before the proposal went live as well).
+- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `100`. (They could have done this before the proposal went live as well).
 
-- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister.
+- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister. They set their `spending_cap: 50`, meaning they restrict themselves to spending half of the funds allocated to the next PGF council.
 
 - At epoch 49, Alice submits the vote:
 
@@ -165,16 +151,16 @@ struct OnChainVote {
 
 Whereby the `proposalVote` includes
 ```rust
-HashSet<(address: 0xBobCharlieMultisig, spending_cap: 1.0)>
+HashSet<(address: 0xBobCharlieMultisig, spending_cap: 100)>
 ```
 
-- At epoch 49, Bob and Charlie submit identical transactions. Charlie also 
+- At epoch 49, Bob submits an identical transaction.
 
 - At epoch 50, Dave votes `Nay` on the proposal.
 
-- At epoch 51, Elsa votes `Yay` but on the multisigs `0xElsaAndSisterMultisig` AND `0xBobCharlieMultisig`.
+- At epoch 51, Elsa votes `Yay` but on the Councils `(address: 0xElsaAndSisterMultisig, spending_cap: 100)`  AND `(address: 0xBobCharlieMultisig, spending_cap: 100)`.
 
-- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted `Yay` on this proposal, a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council.
+- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted on this proposal (everyone except Charlie), the intitial condition is passed and the Proposal is active. Further, because out of the total votes, most were `Yay`, (75% > 50% threshold), a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council. The Council `(address: 0xElsaAndSisterMultisig, spending_cap: 50)` actually received 0 votes because Elsa's vote included the wrong spending_cap.
 
 - At epoch 57, Bob and Charlie have the effective power to carry out Public Goods Funding transactions.
 ````
@@ -193,21 +179,25 @@ The PGF council members will be responsible for collecting signatures offline. O
 
 The collecting member of the council will then be responsible for submitting this tx through the multisig. The multisig will only accept the tx if this is true.
 
-Note that there is no cap to $n$ in $k$-out-of-$n$ apart from the limitations of the multisig account.
-
 The PGF council should be able to make both retroactive and continuous public funding transactions. Retroactive public funding transactions should be straightforward and implement no additional logic to a normal transfer.
 
 However, for continuous PGF (cPGF), the council should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
 
-The following data is attached to the cPGF transaction and will allow the counsil to decide which projects will be continously funded. Each tuple represent the address and the respecting amount of NAM that will receive every epoch. The list of funding recipients will be stored in storage under the PGF internal address substorage space.
+The following data is attached to the PGF transaction and will allow the council to decide which projects will be continously funded. Each tuple represent the address and the respective amount of NAM that the recipient will receive every epoch.
 
 ```rust
 struct cPgfRecipients {
     recipients: HashSet<(Address, u64)>
 }
 ```
-
 The mechanism for these transfers will be implemented in `finalize-block.rs`, which will send the addresses their respective amounts each end-of-epoch.
+Further, the following transactions should be added in order to ease the management of cPGF recipients.
+
+```rust
+impl addRecipient for cPgfRecipients
+
+impl remRecipient for cPgfRecipients
+```
 
 ## Addresses
 Governance adds 1 internal address:
@@ -218,7 +208,7 @@ The internal address VP will hold the allowance the 10% inflation of NAM. This w
 
 The council should be able to burn funds (up to their spending cap), but this hopefully should not require additional functionality beyond what currently exists.
 
-Further, the VP should contain the parameter that dictates the number of epochs a candidacy is valid for once it has been broadcasted and before it needs to be renewed.
+Further, the VP should contain the parameter that dictates the number of epochs a candidacy is valid for once it has been broadcast and before it needs to be renewed.
 
 ### VP checks
 
@@ -235,8 +225,9 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/spending_cap = Amount`
 - `/PGFAddress/spent_amount = Amount`
 - `/PGFAddress/candidacy_length = u8`
-- `/pgf/counsil_candidates/epoch = HashSet<Council>`
-- `/PGFAddress/council/epoch = Council` (The council that was elected at epoch `epoch`)
+- `/PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)`
+- `/PGFAddress/active_council/address = Address`
+- `/PGFAddress/active_council/spending_cap_amount = Amount` 
 
 ### Struct
 
@@ -247,18 +238,4 @@ struct Council {
     spent_amount: u64,
 }
 ```
-The spending cap amount here is different from the `spending_cap` float. This is an actual NAM value that is calculated through `spending_cap * PGF_VP.balance`
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+The spending cap amount here is different from the `spending_cap` float. This is an actual NAM value that is calculated through `spending_cap / 100 * PGF_VP.balance`In
