@@ -856,7 +856,18 @@ pub fn gen_sk_from_seed(scheme: SchemeType, seed: Seed) -> common::SecretKey {
             s.copy_from_slice(&seed.as_bytes()[0..ED25519_SEED_BYTES]);
             ed25519::SigScheme::from_seed(s).try_to_sk().unwrap()
         }
-        _ => unimplemented!(),
+        SchemeType::Secp256k1 => {
+            unimplemented!(
+                "Generation of Secp256k1 keys from random seeds is not \
+                 supported."
+            )
+        }
+        SchemeType::Common => {
+            panic!(
+                "Cannot generate common signing scheme. Must convert from \
+                 alternative scheme."
+            )
+        }
     }
 }
 

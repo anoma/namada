@@ -469,7 +469,9 @@ impl super::SigScheme for SigScheme {
     }
 
     fn from_seed(_seed: [u8; 32]) -> SecretKey {
-        unimplemented!()
+        unimplemented!(
+            "Generation of Secp256k1 keys from random seeds is not supported."
+        )
     }
 
     /// Sign the data with a key
