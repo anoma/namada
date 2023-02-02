@@ -74,7 +74,6 @@ fn validate_tx(
                 return false;
             }
             let mut valid_signatures = 0;
-
             for sig_data in &signed_tx_data.sigs {
                 let pk = key::get(&ctx, &addr, sig_data.index);
                 if let Ok(Some(public_key)) = pk {

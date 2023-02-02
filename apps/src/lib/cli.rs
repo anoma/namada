@@ -180,6 +180,8 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(3))
                 .subcommand(QueryProposalResult::def().display_order(3))
                 .subcommand(QueryProtocolParameters::def().display_order(3))
+                // Commands
+                .subcommand(SignTx::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -220,6 +222,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -247,6 +250,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(sign_tx)
                 .or(utils)
         }
     }
@@ -310,6 +314,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        SignTx(SignTx)
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1557,6 +1562,25 @@ pub mod cmds {
                 .add_args::<args::InitGenesisValidator>()
         }
     }
+
+    #[derive(Clone, Debug)]
+    pub struct SignTx(pub args::SignTx);
+
+    impl SubCmd for SignTx {
+        const CMD: &'static str = "sign-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::SignTx::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Sign and dump a transaction signature.")
+                .add_args::<args::SignTx>()
+        }
+    }
 }
 
 pub mod args {
@@ -1639,7 +1663,6 @@ pub mod args {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
-
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
@@ -1673,7 +1696,9 @@ pub mod args {
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNERS: ArgMulti<WalletAddress> = arg_multi("signers");
+    const SIGNING_TX: ArgOpt<String> = arg_opt("signing-tx");
     const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     const SOURCE: Arg<WalletAddress> = arg("source");
     const SOURCE_MULTISIGNATURE: ArgMulti<WalletAddress> = arg_multi("sources");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
@@ -1687,6 +1712,7 @@ pub mod args {
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const THRESHOLD: ArgOpt<u64> = arg_opt("threshold");
     const TX_HASH: Arg<String> = arg("tx-hash");
+    const TX_TIMESTAMP: ArgOpt<DateTimeUtc> = arg_opt("timestamp");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
@@ -1833,6 +1859,10 @@ pub mod args {
         pub code_path: PathBuf,
         /// Path to the data file
         pub data_path: Option<PathBuf>,
+        /// Optional timestamp field
+        pub timestamp: Option<DateTimeUtc>,
+        /// The address
+        pub address: WalletAddress,
     }
 
     impl Args for TxCustom {
@@ -1840,10 +1870,14 @@ pub mod args {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
+            let timestamp = TX_TIMESTAMP.parse(matches);
+            let address = ADDRESS.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
+                timestamp,
+                address,
             }
         }
 
@@ -1859,6 +1893,48 @@ pub mod args {
                      will be passed to the transaction code when it's \
                      executed.",
                 ))
+                .arg(
+                    TX_TIMESTAMP.def().about(
+                        "The timestamp to set be set on the transaction.",
+                    ),
+                )
+                .arg(ADDRESS.def().about("The address to lookup."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignTx {
+        pub tx: Tx,
+        pub data_path: Option<PathBuf>,
+        pub signing_tx: Option<String>,
+    }
+
+    impl Args for SignTx {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let data_path = DATA_PATH_OPT.parse(matches);
+            let signing_tx = SIGNING_TX.parse(matches);
+            Self {
+                tx,
+                data_path,
+                signing_tx,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+            .arg(
+                DATA_PATH_OPT
+                    .def()
+                    .about("Path to hex encoeded signing tx file.")
+                    .conflicts_with(SIGNING_TX.name),
+            )
+            .arg(
+                SIGNING_TX
+                    .def()
+                    .about("The hex encoded transaction to be signed.")
+                    .conflicts_with(DATA_PATH_OPT.name),
+            )
         }
     }
 
@@ -2884,12 +2960,14 @@ pub mod args {
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
+        /// Dump the signing tx to file
+        pub dump_tx: bool,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_keys: Vec<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signers: Vec<WalletAddress>,
-        /// Dump the tx to file
-        pub dump_tx: bool,
+        /// The paths to signatures
+        pub signatures: Vec<PathBuf>
     }
 
     impl Tx {
@@ -2906,6 +2984,7 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
+                dump_tx: self.dump_tx,
                 signing_keys: self
                     .signing_keys
                     .iter()
@@ -2916,7 +2995,7 @@ pub mod args {
                     .iter()
                     .map(|signer| ctx.get(signer))
                     .collect(),
-                dump_tx: self.dump_tx
+                signatures: self.signatures.clone()
             }
         }
     }
@@ -2952,6 +3031,7 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
+            .arg(DUMP_TX.def().about("Dump tx to file."))
             .arg(
                 SIGNING_KEYS
                     .def()
@@ -2960,7 +3040,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNERS.name),
+                    .conflicts_with_all(&[SIGNERS.name, SIGNATURES.name]),
             )
             .arg(
                 SIGNERS
@@ -2969,11 +3049,11 @@ pub mod args {
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
-                    .conflicts_with(SIGNING_KEYS.name),
+                    .conflicts_with_all(&[SIGNATURES.name, SIGNING_KEYS.name]),
             )
-            .arg(
-                DUMP_TX.def().about("Dump tx to file.")
-            )
+            .arg(SIGNATURES.def().about(
+                "The paths to signatures."
+            ).conflicts_with_all(&[SIGNERS.name, SIGNING_KEYS.name]))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -2989,6 +3069,7 @@ pub mod args {
             let dump_tx = DUMP_TX.parse(matches).into();
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signers = SIGNERS.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
@@ -3001,7 +3082,8 @@ pub mod args {
                 gas_limit,
                 signing_keys,
                 signers,
-                dump_tx
+                dump_tx,
+                signatures
             }
         }
     }

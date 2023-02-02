@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
+use data_encoding::HEXLOWER;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -21,7 +22,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
-use crate::cli::{self, args};
+use crate::cli::{self, args, safe_exit};
 use crate::config::genesis::genesis_config::{
     self, HexString, ValidatorPreGenesisConfig,
 };

@@ -1,13 +1,18 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use namada::types::address::Address;
+use namada::types::key::common;
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Epoch;
 use namada::types::transaction::GasLimit;
 use namada::types::{key, token};
+use serde::{Serialize, Deserialize};
 
 use super::rpc;
 use crate::cli::{args, Context};
@@ -35,12 +40,14 @@ pub struct ParsedTxArgs {
     pub fee_token: Address,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
+    /// Dump the signing tx to file
+    pub dump_tx: bool,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<key::common::SecretKey>,
     /// Sign the tx with the keypair of the public key of the given address
     pub signers: Vec<Address>,
-    /// Dump tx to file
-    pub dump_tx: bool
+    /// The path to signatures
+    pub signatures: Vec<PathBuf>
 }
 
 #[derive(Clone, Debug)]

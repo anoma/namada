@@ -204,33 +204,41 @@ impl SigningTx {
         }
     }
 
+    pub fn compute_signature(
+        self,
+        keypair: &common::SecretKey
+    ) -> common::Signature {
+        let to_sign = self.hash();
+        common::SigScheme::sign(keypair, to_sign)
+    }
+
     pub fn sign_multisignature(
         self,
         keypairs: &Vec<common::SecretKey>,
         pks_index_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
         let to_sign = self.hash();
+        let signatures: Vec<SignatureIndex> = keypairs
+            .iter()
+            .filter_map(|key| {
+                let signature = common::SigScheme::sign(key, to_sign);
+                let pk = key.ref_to();
+                let pk_index = pks_index_map.get(&pk);
+                pk_index.map(|index| SignatureIndex {
+                    sig: signature,
+                    index: *index,
+                })
+            })
+            .collect();
+
         let signed = SignedTxData {
             data: self.data,
-            sigs: keypairs
-                .iter()
-                .filter_map(|key| {
-                    let signature = common::SigScheme::sign(key, to_sign);
-                    let pk = key.ref_to();
-                    let pk_index = pks_index_map.get(&pk);
-                    pk_index.map(|index| SignatureIndex {
-                            sig: signature,
-                            index: *index,
-                        })
-                })
-                .collect(),
-        }
-        .try_to_vec()
-        .expect("Encoding transaction data shouldn't fail");
+            sigs: signatures
+        };
 
         SigningTx {
             code_hash: self.code_hash,
-            data: Some(signed),
+            data: signed.try_to_vec().ok(),
             timestamp: self.timestamp,
         }
     }
@@ -413,6 +421,18 @@ impl Tx {
             code,
             data,
             timestamp: DateTimeUtc::now(),
+        }
+    }
+
+    pub fn new_with_timestamp(
+        code: Vec<u8>,
+        data: Option<Vec<u8>>,
+        timestamp: DateTimeUtc,
+    ) -> Self {
+        Tx {
+            code,
+            data,
+            timestamp,
         }
     }
 

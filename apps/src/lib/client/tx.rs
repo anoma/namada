@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::env;
+use std::{env, fs};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -72,9 +72,9 @@ use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
-use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::client::signing::{find_keypair, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
-use crate::client::types::ParsedTxTransferArgs;
+use crate::client::types::{ParsedTxTransferArgs};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
@@ -105,19 +105,22 @@ const ENV_VAR_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
-    let _client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let tx_code = ctx.read_wasm(args.code_path);
-    let data = args.data_path.map(|data_path| {
-        std::fs::read(data_path).expect("Expected a file at given data path")
-    });
-    let tx = Tx::new(tx_code, data);
+    let tx_code = fs::read(args.clone().code_path).expect("Code path file not found.");
+    let tx_data = std::fs::read(args.clone().data_path.unwrap()).expect("Expected a file at given data path");
+    let timestamp = args.timestamp.unwrap_or_default();
+
+    let address = ctx.get(&args.address);
+    let pks_index_map = rpc::get_account_pks(&client, &address).await;
+
+    let tx = Tx::new(tx_code, Some(tx_data));
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
-        HashMap::new(),
+        pks_index_map,
         vec![TxSigningKey::None],
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -1718,6 +1721,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             }
         },
     };
+
     tracing::debug!("Transfer data {:?}", transfer);
     let data = transfer
         .try_to_vec()
@@ -2666,8 +2670,16 @@ async fn process_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
     if args.dump_tx {
-        let serialized_signing_tx = tx.signing_tx().try_to_vec().expect("Tx should be serializable.");
-        println!("{}", HEXLOWER.encode(&serialized_signing_tx));
+        fs::write("code.tx", tx.clone().code);
+        if tx.data.is_some() {
+            fs::write("data.tx", tx.clone().data.unwrap());
+        }
+
+        let signing_tx_blob = tx.clone().signing_tx().try_to_vec().expect("Tx should be serializable.");
+        println!("Transaction code, data and timestamp have been written to files code.tx and data.tx.");
+        println!("You can share the following blob with the other signers:\n{}\n", HEXLOWER.encode(&signing_tx_blob));
+        println!("You can later submit the tx with: namada client tx --code-path code.tx --data-path data.tx --timestamp {}", tx.timestamp.to_rfc3339());
+
         safe_exit(1)
     }
 
@@ -2901,4 +2913,10 @@ pub async fn submit_tx(
     );
 
     parsed
+}
+
+async fn dump_tx(
+
+) {
+
 }

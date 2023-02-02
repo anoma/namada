@@ -249,7 +249,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, public_key);
+        tx_env.write_public_key(&vp_owner, public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -365,7 +365,7 @@ mod tests {
         let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
         let signed_solution = SignedTxData {
             data: Some(solution_bytes),
-            sig,
+            sigs: Vec::new(),
         };
 
         // Initialize VP environment from a transaction
@@ -413,7 +413,7 @@ mod tests {
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, public_key);
+            tx_env.write_public_key(&vp_owner, public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {

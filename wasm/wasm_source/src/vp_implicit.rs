@@ -124,7 +124,7 @@ fn validate_tx(
                         }
                     }
                 }
-                false
+                true
             }
             KeyType::Token(owner) => {
                 if owner == &addr {
@@ -278,28 +278,28 @@ mod tests {
         );
 
         // Commit the transaction and create another tx_env
-        // let vp_env = vp_host_env::take();
-        // tx_host_env::set_from_vp_env(vp_env);
-        // tx_host_env::commit_tx_and_block();
-        // let tx_env = tx_host_env::take();
+        let vp_env = vp_host_env::take();
+        tx_host_env::set_from_vp_env(vp_env);
+        tx_host_env::commit_tx_and_block();
+        let tx_env = tx_host_env::take();
 
-        // // Try to reveal it again
-        // vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
-        //     // Apply reveal_pk in a transaction
-        //     tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
-        // });
+        // Try to reveal it again
+        vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
+            // Apply reveal_pk in a transaction
+            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+        });
 
-        // let vp_env = vp_host_env::take();
-        // let tx_data: Vec<u8> = vec![];
-        // let keys_changed: BTreeSet<storage::Key> =
-        //     vp_env.all_touched_storage_keys();
-        // let verifiers: BTreeSet<Address> = BTreeSet::default();
-        // vp_host_env::set(vp_env);
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
 
-        // assert!(
-        //     !validate_tx(&CTX, tx_data, addr, keys_changed,
-        // verifiers).unwrap(),     "Revealing PK that's already
-        // revealed should be rejected" );
+        assert!(
+            !validate_tx(&CTX, tx_data, addr, keys_changed,
+        verifiers).unwrap(),     "Revealing PK that's already
+        revealed should be rejected" );
     }
 
     /// Test that a revealed PK that doesn't correspond to the account's address
@@ -587,7 +587,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -741,7 +741,7 @@ mod tests {
             tx_env.spawn_accounts(storage_key_addresses);
 
             let public_key = secret_key.ref_to();
-            tx_env.write_public_key(&vp_owner, &public_key);
+            tx_env.write_public_key(&vp_owner, &public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -824,7 +824,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -866,7 +866,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
