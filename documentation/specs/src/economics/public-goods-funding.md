@@ -110,7 +110,7 @@ In the case of equal tiebreaks, the addresses with lower alphabetical order will
 
 ### Electing the council
 
-Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored.
+Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored. The `spending_cap_amount` variable is also stored. This is done through the following equaition `spending_cap_amount = spending_cap / 100 * PGFAddress.balance`. The variable `amount_spent` is also reset from the previous council, which is a variable in storage meant to track the spending of the active PGF council.
 
 ### Example
 
@@ -165,10 +165,6 @@ HashSet<(address: 0xBobCharlieMultisig, spending_cap: 100)>
 - At epoch 57, Bob and Charlie have the effective power to carry out Public Goods Funding transactions.
 ````
 
-### End of Term Summary
-
-At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the primary document on the basis of which governance should decide whether to re-elect the council.
-
 ## Mechanism
 
 Once elected and instantiated, members of the PGF council will then unilaterally be able to propose and sign transactions for this purpose. The PGF council multisig will have an "allowance" to spend up to the `PGF` internal address's balance multiplied by the `spending_cap` variable.  Consensus on these transactions, in addition to motivation behind them will be handled off-chain, and should be recorded for the purposes of the "End of Term Summary".
@@ -191,13 +187,20 @@ struct cPgfRecipients {
 }
 ```
 The mechanism for these transfers will be implemented in `finalize-block.rs`, which will send the addresses their respective amounts each end-of-epoch.
-Further, the following transactions should be added in order to ease the management of cPGF recipients.
+Further, the following transactions:
+- add (recipient, amount) to cPgfRecipients (inserts the pair into the hashset above)
+- remove recipient from cPgfRecipients (removes the address and corresponding amount pair from the hashset above)
+ should be added in order to ease the management of cPGF recipients.
 
 ```rust
 impl addRecipient for cPgfRecipients
 
 impl remRecipient for cPgfRecipients
 ```
+
+### End of Term Summary
+
+At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the primary document on the basis of which governance should decide whether to re-elect the council.
 
 ## Addresses
 Governance adds 1 internal address:
