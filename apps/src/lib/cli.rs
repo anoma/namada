@@ -1621,6 +1621,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const DUMP_TX: ArgFlag = flag("dump-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    const EXPIRATION: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
@@ -2863,6 +2864,8 @@ pub mod args {
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
+        /// The optional expiration of the transaction
+        pub expiration: Option<DateTimeUtc>,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
@@ -2954,6 +2957,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
+            let expiration = EXPIRATION.parse(matches);
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
@@ -2967,6 +2971,7 @@ pub mod args {
                 fee_amount,
                 fee_token,
                 gas_limit,
+                expiration,
                 signing_key,
                 signer,
             }

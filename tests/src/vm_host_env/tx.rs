@@ -78,7 +78,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None, chain_id),
+            tx: Tx::new(vec![], None, chain_id, None),
         }
     }
 }

@@ -10,6 +10,7 @@ mod tests {
     use data_encoding::HEXLOWER;
     use generated::types::Tx;
     use prost::Message;
+    use std::time::SystemTime;
 
     use super::*;
     use crate::types::chain::ChainId;
@@ -19,8 +20,9 @@ mod tests {
         let tx = Tx {
             code: "wasm code".as_bytes().to_owned(),
             data: Some("arbitrary data".as_bytes().to_owned()),
-            timestamp: Some(std::time::SystemTime::now().into()),
+            timestamp: Some(SystemTime::now().into()),
             chain_id: ChainId::default().0,
+            expiration: Some(SystemTime::now().into()),
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

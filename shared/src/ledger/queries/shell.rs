@@ -387,8 +387,12 @@ mod test {
 
         // Request dry run tx
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
-        let tx =
-            Tx::new(tx_no_op, None, client.wl_storage.storage.chain_id.clone());
+        let tx = Tx::new(
+            tx_no_op,
+            None,
+            client.wl_storage.storage.chain_id.clone(),
+            None,
+        );
         let tx_bytes = tx.to_bytes();
         let result = RPC
             .shell()
