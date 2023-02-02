@@ -447,8 +447,13 @@ mod test_finalize_block {
     use std::str::FromStr;
 
     use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::storage_api;
+    use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
+    use namada::types::transaction::governance::{
+        InitProposalData, VoteProposalData,
+    };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
@@ -820,6 +825,41 @@ mod test_finalize_block {
         .unwrap();
         shell.wl_storage.storage.next_epoch_min_start_height = BlockHeight(5);
         shell.wl_storage.storage.next_epoch_min_start_time = DateTimeUtc::now();
+
+        // Add a proposal to be executed on next epoch change.
+        let mut add_proposal = |proposal_id, vote| {
+            let validator = shell.mode.get_validator_address().unwrap().clone();
+            shell.proposal_data.insert(proposal_id);
+            let proposal = InitProposalData {
+                id: Some(proposal_id),
+                content: vec![],
+                author: validator.clone(),
+                voting_start_epoch: Epoch::default(),
+                voting_end_epoch: Epoch::default().next(),
+                grace_epoch: Epoch::default().next(),
+                proposal_code: None,
+            };
+            storage_api::governance::init_proposal(
+                &mut shell.wl_storage,
+                proposal,
+            )
+            .unwrap();
+            let vote = VoteProposalData {
+                id: proposal_id,
+                vote,
+                voter: validator,
+                delegations: vec![],
+            };
+            // Vote to accept the proposal (there's only one validator, so its
+            // vote decides)
+            storage_api::governance::vote_proposal(&mut shell.wl_storage, vote)
+                .unwrap();
+        };
+        // Add a proposal to be accepted and one to be rejected.
+        add_proposal(0, ProposalVote::Yay);
+        add_proposal(1, ProposalVote::Nay);
+
+        // Commit the genesis state
         shell.wl_storage.commit_genesis().unwrap();
         shell.commit();
 
