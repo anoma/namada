@@ -573,15 +573,18 @@ fn generate_and_confirm_mnemonic_code(
     let mnemonic = Mnemonic::from_entropy(&bytes, Language::English)
         .expect("Mnemonic creation should not fail");
 
-    // TODO print mnemonic to the user in a different terminal
-    // execute!(std::io::stdout(), EnterAlternateScreen)?;
-    println!(
-        "Safely store your {} words mnemonic.",
-        mnemonic_type.word_count()
-    );
-    println!("{}", mnemonic.clone().into_phrase());
-    // get_user_input(format!("{}", "Press enter when you are done."));
-    // execute!(std::io::stdout(), LeaveAlternateScreen)?;
+    #[cfg(not(test))]
+    {
+        // TODO print mnemonic to the user in a different terminal
+        // execute!(std::io::stdout(), EnterAlternateScreen)?;
+        println!(
+            "Safely store your {} words mnemonic.",
+            mnemonic_type.word_count()
+        );
+        println!("{}", mnemonic.clone().into_phrase());
+        // get_user_input(format!("{}", "Press enter when you are done."));
+        // execute!(std::io::stdout(), LeaveAlternateScreen)?;
+    }
 
     // TODO check mnemonic by user
     Ok(mnemonic)
@@ -657,4 +660,21 @@ pub fn read_password(prompt_msg: &str) -> String {
         cli::safe_exit(1)
     }
     pwd
+}
+
+#[cfg(test)]
+mod tests {
+    use bip39::MnemonicType;
+
+    use crate::wallet::generate_and_confirm_mnemonic_code;
+
+    #[test]
+    fn test_generate_mnemonic() {
+        const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words12;
+        let mnemonic1 =
+            generate_and_confirm_mnemonic_code(MNEMONIC_TYPE).unwrap();
+        let mnemonic2 =
+            generate_and_confirm_mnemonic_code(MNEMONIC_TYPE).unwrap();
+        assert_ne!(mnemonic1.into_phrase(), mnemonic2.into_phrase());
+    }
 }
