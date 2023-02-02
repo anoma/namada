@@ -140,13 +140,11 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(
-            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-                .err()
-                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-                .unwrap()
-                .contains("CannotDeleteVp")
-        );
+        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("CannotDeleteVp"));
     }
 
     #[test]
@@ -450,6 +448,7 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
+        let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
             Some(vec![1, 2, 3, 4].repeat(10)),
@@ -461,6 +460,7 @@ mod tests {
                     code.clone(),
                     data.clone(),
                     env.wl_storage.storage.chain_id.clone(),
+                    expiration,
                 )
                 .sign(&keypair);
                 let tx_data = env.tx.data.as_ref().expect("data should exist");
@@ -469,21 +469,17 @@ mod tests {
                     .expect("decoding signed data we just signed")
             });
             assert_eq!(&signed_tx_data.data, data);
-            assert!(
-                vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
-                    .unwrap()
-            );
+            assert!(vp::CTX
+                .verify_tx_signature(&pk, &signed_tx_data.sig)
+                .unwrap());
 
             let other_keypair = key::testing::keypair_2();
-            assert!(
-                !vp::CTX
-                    .verify_tx_signature(
-                        &other_keypair.ref_to(),
-                        &signed_tx_data.sig
-                    )
-                    .unwrap()
-            );
+            assert!(!vp::CTX
+                .verify_tx_signature(
+                    &other_keypair.ref_to(),
+                    &signed_tx_data.sig
+                )
+                .unwrap());
         }
     }
 
@@ -570,6 +566,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -608,6 +605,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -646,6 +644,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and update the client without a header
@@ -692,6 +691,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -726,6 +726,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // upgrade the client with the message
@@ -768,6 +769,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -806,6 +808,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -836,6 +839,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -876,6 +880,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -907,6 +912,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -952,6 +958,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // not bind a port
@@ -994,6 +1001,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // bind a port
@@ -1039,6 +1047,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -1064,6 +1073,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -1106,6 +1116,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -1132,6 +1143,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -1176,6 +1188,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -1220,6 +1233,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1269,6 +1283,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1310,6 +1325,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1363,6 +1379,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1432,6 +1449,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1516,6 +1534,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1567,6 +1586,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send a packet with the message
@@ -1597,6 +1617,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1652,6 +1673,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1718,6 +1740,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1794,6 +1817,7 @@ mod tests {
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             chain_id: ChainId::default(),
+            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 

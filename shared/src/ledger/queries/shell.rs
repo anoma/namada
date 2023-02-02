@@ -390,9 +390,18 @@ mod test {
         let tx = Tx::new(tx_no_op, None);
 =======
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
+<<<<<<< HEAD
         let tx =
             Tx::new(tx_no_op, None, client.wl_storage.storage.chain_id.clone());
 >>>>>>> b96dd58e6 (Adds tx `chain_id` in tests)
+=======
+        let tx = Tx::new(
+            tx_no_op,
+            None,
+            client.wl_storage.storage.chain_id.clone(),
+            None,
+        );
+>>>>>>> 13e0fa99a (Adds `expiration` field to `Tx`)
         let tx_bytes = tx.to_bytes();
         let result = RPC
             .shell()
