@@ -408,7 +408,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Generates a keypair with a given alias and derive the \
+                    "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
                      be stored with the same alias.",
                 )
@@ -688,7 +688,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Generates a keypair with a given alias and derive the \
+                    "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
                      be stored with the same alias.",
                 )
