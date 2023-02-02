@@ -1,4 +1,6 @@
-### Motivation
+# PGF specs
+
+## Motivation
 
 **Public goods** are non-excludable non-rivalrous items which provide benefits of some sort to their users. Examples include languages, open-source software, research, designs, Earth's atmosphere, and art (conceptually - a physical painting is excludable and rivalrous, but the painting as-such is not). Namada's software stack, supporting research, and ecosystem tooling are all public goods, as are the information ecosystem and education which provide for the technology to be used safety, the hardware designs and software stacks (e.g. instruction set, OS, programming language) on which it runs, and the atmosphere and biodiverse environment which renders its operation possible. Without these things, Namada could not exist, and without their continued sustenance it will not continue to. Public goods, by their nature as non-excludable and non-rivalrous, are mis-modeled by economic systems (such as payment-for-goods) built upon the assumption of scarcity, and are usually either under-funded (relative to their public benefit) or funded in ways which require artificial scarcity and thus a public loss. For this reason, it is in the interest of Namada to help out, where possible, in funding the public goods upon which its existence depends in ways which do not require the introduction of artificial scarcity, balancing the costs of available resources and operational complexity. 
 
@@ -6,18 +8,6 @@
 
 There is a lot of existing research into public-goods funding to which justice cannot be done here. Most mechanisms fall into two categories: need-based and results-based, where need-based allocation schemes attempt to pay for particular public goods on the basis of cost-of-resources, and results-based allocation schemes attempt to pay (often retroactively) for particular public goods on the basis of expected or assessed benefits to a community and thus create incentives for the production of public goods providing substantial benefits (for a longer exposition on retroactive PGF, see [here](https://medium.com/ethereum-optimism/retroactive-public-goods-funding-33c9b7d00f0c), although the idea is [not new](https://astralcodexten.substack.com/p/lewis-carroll-invented-retroactive)). Additional constraints to consider include the cost-of-time of governance structures (which renders e.g. direct democracy on all funding proposals very inefficient), the necessity of predictable funding in order to make long-term organisational decision-making, the propensity for bike-shedding and damage to the information commons in large-scale public debate (especially without an identity layer or Sybil resistance), and the engineering costs of implementations.
 
-### Mechanism
-
-Namada instantiates a dual proactive/retroactive public-goods funding model, stewarded by a public-goods council elected by limited liquid democracy.
-
-This requires the following protocol components:
-- Limited liquid democracy / targeted delegation: Namada's current voting mechanism is altered to add targeted delegation. By default, each delegator delegates their vote in governance to their validator, but they can set an alternative governance delegate who can instead vote on their behalf (but whose vote can be overridden as usual). Validators can also set governance delegates, in which case those delegates can vote on their behalf, and on the behalf of all delegators to that validator who do not override the vote, unless the validator overrides the vote. This is a limited form of liquid democracy which could be extended in the future. 
-- Funding council: bi-annually (every six months), Namada governance elects a public goods funding council by stake-weighted approval vote (see below). Public goods funding councils run as groups. The public goods funding council decides according to internal decision-making procedures (practically probably limited to a k-of-n multisignature) how to allocate continuous funding and retroactive funding during their term. Namada genesis includes an initial funding council, and the next election will occur six months after launch.
-- Continuous funding: Namada prints an amount of inflation fixed on a percentage basis dedicated to continuous funding. Each quarter, the public goods funding council selects recipients and amounts (which in total must receive all of the funds, although they could burn some) and submits this list to the protocol. Inflation is distributed continuously by the protocol to these recipients during that quarter.
-- Retroactive funding: Namada prints an amount of inflation fixed on a percentage basis dedicated to retroactive funding. Each quarter, the public goods funding council selects recipients and amounts (which in total must receive all of the funds) and submits this list to the protocol. Amounts are distributed immediately as lump sums. The public goods funding council is instructed to use this funding to fund public goods retroactively, proportional to assessed benefit.
-- Privacy of council votes: in order to prevent targeting of individual public goods council members, it is important that council acts only as a group. Whatever internal decision-making structure it uses is up the council; Namada governance should evaluate councils as opaque units. We may need a simple threshold public key to provide this kind of privacy - can we evaluate the implementation difficulty of that?
-- Stake-weighted approval voting: as public goods councils are exclusive, we can use a stake-weighted form of approval voting. Governance voters include all public goods council candidates of which they approve, and the council candidate with the most stake approving it wins. This doesn't have game-theoretic properties as nice as ranked-choice voting (especially when votes are public, as they are at the moment), but it is _much_ simpler ([background](https://en.wikipedia.org/wiki/Condorcet_method)), and in practice I do not think there will be too many public goods council candidates.
-- Interface support: the interface should support limited liquid democracy for delegate selection and approval voting for public goods council candidates. The interface or explorer should display past retroactive PGF winners and past/current continuous funding recipients. Proposal submission for continuous and retroactive funding will happen separately, in whatever manner the public goods council deems fit.
 
 ### Funding categories
 
@@ -38,8 +28,217 @@ Namada groups public goods into four categories, with earmarked pools of funding
 
 ### Funding amounts
 
-In Namada, 10% inflation per annum of the NAM token is directed to this public goods mechanism, 5% to continuous funding and 5% to retroactive funding. This is a genesis default and can be altered by governance.
+In Namada, up to 10% inflation per annum of the NAM token is directed to this public goods mechanism. The further division of these funds is entirely up to the discretion of the elected PGF council.
 
 Namada encourages the public goods council to adopt a default social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF). If no qualified recipients are available, funds may be redirected or burnt.
 
-Namada also pays the public goods council members themselves (in total) a default of 0.1% inflation per annum.
+The Namada PGF council is also granted a 5% income as a reward for conducting PGF activities (5% * 10% = 0.05% of total inflation). This will be a governance parameter subject to change.
+
+## Voting for the Council
+
+### Constructing the council
+All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
+
+
+### Proposing Candidacy
+The council will be responsible to publish this address to voters and express their desired `spending_cap`.
+
+The `--spending-cap` argument is a `u8` $0 < x \leq 100$, which indicates the maximum percentage of the total funds available to the PGF council that the PGF council is able to spend during their term.
+
+A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
+
+Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
+
+Candidacy proposals last a default of 30 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
+
+The structure of the candidacy proposal should be 
+
+```rust 
+  Map< epoch: Epoch, (council: Council, attestation: Url)>
+```
+
+### Initiating the vote
+
+Before a new PGF council can be elected, a governance proposal that suggests a new PGF council must pass. This vote is handled by the governancea proposal type `PgfProposal`.
+
+The the struct of `PgfProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
+
+```rust
+struct PgfProposal{
+  id: u64
+  content: Vec<u8>,
+  author: Address,
+  r#type: PGFCouncil,
+  votingStartEpoch: Epoch,
+  votingEndEpoch: Epoch,
+  graceEpoch: Epoch,
+}
+```
+
+The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal` and more than half of the votes must be in favor. If more than half of the votes are against no council is elected and the previous council's ability to spend funds (if applicable) is revoked. [Approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council, *whilst* the `PgfProposal` is active. In other words, voters may vote for multiple PGF councils, and the council & spending cap pair with the greatest proportion of votes will be elected.
+
+See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
+
+### Voting on the council
+After the `PgfProposal` has been submitted, and once the council has been constructed and broadcast, the council address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+
+The vote for a set of PGF council addresses will be constructed as follows.
+
+Each participant submits a vote through governance:
+```rust
+struct OnChainVote {
+    id: u64,
+    voter: Address,
+    yay: proposalVote,
+}
+```
+
+In turn, the proposal vote will include the structure:
+
+```rust
+HashSet<(address: Address, spending_cap: u64)>
+```
+
+The structure contains all the counsils voted, where each cousil is specified as a pair `Address` (the enstablished address of the multisig account) and `u64` (spending cap).
+
+These votes will then be used in order to vote for various PGF councils. Multiple councils can be voted on through a vector as represented above.
+
+#### Dealing with ties
+In the rare occurance of a tie, the council with the lower spending_cap will win the tiebreak.
+
+In the case of equal tiebreaks, the addresses with lower alphabetical order will be chosen. This is very arbitrary due to the expected low frequency.
+
+### Electing the council
+
+Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored. The `spending_cap_amount` variable is also stored. This is done through the following equaition `spending_cap_amount = spending_cap / 100 * PGFAddress.balance`. The variable `amount_spent` is also reset from the previous council, which is a variable in storage meant to track the spending of the active PGF council.
+
+### Example
+
+The below example hopefully demonstrates the mechanism more clearly.
+
+````admonish note
+The governance set consists of Alice, Bob, Charlie, Dave, and Elsa. Each member has 20% voting power.
+
+The current PGF council consits of Dave and Elsa.
+
+- At epoch 42, Alice proposes the `PgfProposal` with the following struct:
+
+```rust
+struct PgfProposal{
+  id: 2
+  content: Vec<32,54,01,24,13,37>, // (Just the byte representation of the content (description) of the proposal)
+  author: 0xalice,
+  r#type: PGFCouncil,
+  votingStartEpoch: Epoch(45),
+  votingEndEpoch: Epoch(54),
+  graceEpoch: Epoch(57),
+}
+```
+
+- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `100`. (They could have done this before the proposal went live as well).
+
+- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister. They set their `spending_cap: 50`, meaning they restrict themselves to spending half of the funds allocated to the next PGF council.
+
+- At epoch 49, Alice submits the vote:
+
+```rust
+struct OnChainVote {
+    id: 2,
+    voter: 0xalice,
+    yay: proposalVote,
+}
+```
+
+Whereby the `proposalVote` includes
+```rust
+HashSet<(address: 0xBobCharlieMultisig, spending_cap: 100)>
+```
+
+- At epoch 49, Bob submits an identical transaction.
+
+- At epoch 50, Dave votes `Nay` on the proposal.
+
+- At epoch 51, Elsa votes `Yay` but on the Councils `(address: 0xElsaAndSisterMultisig, spending_cap: 100)`  AND `(address: 0xBobCharlieMultisig, spending_cap: 100)`.
+
+- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted on this proposal (everyone except Charlie), the intitial condition is passed and the Proposal is active. Further, because out of the total votes, most were `Yay`, (75% > 50% threshold), a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council. The Council `(address: 0xElsaAndSisterMultisig, spending_cap: 50)` actually received 0 votes because Elsa's vote included the wrong spending_cap.
+
+- At epoch 57, Bob and Charlie have the effective power to carry out Public Goods Funding transactions.
+````
+
+## Mechanism
+
+Once elected and instantiated, members of the PGF council will then unilaterally be able to propose and sign transactions for this purpose. The PGF council multisig will have an "allowance" to spend up to the `PGF` internal address's balance multiplied by the `spending_cap` variable.  Consensus on these transactions, in addition to motivation behind them will be handled off-chain, and should be recorded for the purposes of the "End of Term Summary".
+
+
+### PGF council transactions
+The PGF council members will be responsible for collecting signatures offline. One member will then be responsinble for submitting a transaction containing at least $k $ out of the signatures.
+
+The collecting member of the council will then be responsible for submitting this tx through the multisig. The multisig will only accept the tx if this is true.
+
+The PGF council should be able to make both retroactive and continuous public funding transactions. Retroactive public funding transactions should be straightforward and implement no additional logic to a normal transfer.
+
+However, for continuous PGF (cPGF), the council should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
+
+The following data is attached to the PGF transaction and will allow the council to decide which projects will be continously funded. Each tuple represent the address and the respective amount of NAM that the recipient will receive every epoch.
+
+```rust
+struct cPgfRecipients {
+    recipients: HashSet<(Address, u64)>
+}
+```
+The mechanism for these transfers will be implemented in `finalize-block.rs`, which will send the addresses their respective amounts each end-of-epoch.
+Further, the following transactions:
+- add (recipient, amount) to cPgfRecipients (inserts the pair into the hashset above)
+- remove recipient from cPgfRecipients (removes the address and corresponding amount pair from the hashset above)
+ should be added in order to ease the management of cPGF recipients.
+
+```rust
+impl addRecipient for cPgfRecipients
+
+impl remRecipient for cPgfRecipients
+```
+
+### End of Term Summary
+
+At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the primary document on the basis of which governance should decide whether to re-elect the council.
+
+## Addresses
+Governance adds 1 internal address:
+
+`PGF` internal address
+
+The internal address VP will hold the allowance the 10% inflation of NAM. This will be added in addition to what was unspent by the previous council. It is important to note that it is this internal address which holds the funds, rather than the PGF council multisig.
+
+The council should be able to burn funds (up to their spending cap), but this hopefully should not require additional functionality beyond what currently exists.
+
+Further, the VP should contain the parameter that dictates the number of epochs a candidacy is valid for once it has been broadcast and before it needs to be renewed.
+
+### VP checks
+
+The VP must check that the council does not exceed its spending cap.
+
+The VP must also check that the any spending is only done by a the correctly elected PGF council multisig address.
+
+## Storage
+
+### Storage keys
+
+Each recipient will be listed under this storage space (for cPGF)
+- `/PGFAddress/cPGF_recipients/Address = Amount`
+- `/PGFAddress/spending_cap = Amount`
+- `/PGFAddress/spent_amount = Amount`
+- `/PGFAddress/candidacy_length = u8`
+- `/PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)`
+- `/PGFAddress/active_council/address = Address`
+- `/PGFAddress/active_council/spending_cap_amount = Amount` 
+
+### Struct
+
+```rust
+struct Council {
+    address: Address,
+    spending_cap_amount: u64,
+    spent_amount: u64,
+}
+```
+The spending cap amount here is different from the `spending_cap` float. This is an actual NAM value that is calculated through `spending_cap / 100 * PGF_VP.balance`In
