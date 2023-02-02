@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
+use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
-use namada_ethereum_bridge::oracle::config::Config;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::task::LocalSet;

@@ -1,6 +1,6 @@
 //! The oracle is controlled by sending commands over a channel.
 
-use namada_ethereum_bridge::oracle::config::Config;
+use namada::eth_bridge::oracle::config::Config;
 use tokio::sync::mpsc;
 
 /// Used to send commands to an oracle.

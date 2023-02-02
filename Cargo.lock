@@ -4141,7 +4141,6 @@ dependencies = [
  "masp_proofs",
  "message-io",
  "namada",
- "namada_ethereum_bridge",
  "num-derive",
  "num-rational 0.4.1",
  "num-traits 0.2.15",

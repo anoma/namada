@@ -778,7 +778,7 @@ where
                 );
                 return;
             };
-            let config = namada_ethereum_bridge::oracle::config::Config {
+            let config = namada::eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 governance_contract: config.contracts.governance.address,
