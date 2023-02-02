@@ -378,6 +378,13 @@ mod tests {
 
         let mut roots = HashMap::new();
 
+        // write values at Height 0 like init_storage
+        for i in 0..num_keys {
+            let key = Key::parse(format!("key{}", i)).unwrap();
+            let value_bytes = types::encode(&storage.block.height);
+            storage.write(&key, value_bytes)?;
+        }
+
         // Update and commit
         let hash = BlockHash::default();
         storage.begin_block(hash, BlockHeight(1))?;
@@ -416,7 +423,7 @@ mod tests {
         let mut current_state = HashMap::new();
         for i in 0..num_keys {
             let key = Key::parse(format!("key{}", i)).unwrap();
-            current_state.insert(key, false);
+            current_state.insert(key, true);
         }
         // Check a Merkle tree
         for (height, key, write_type) in blocks_write_type {

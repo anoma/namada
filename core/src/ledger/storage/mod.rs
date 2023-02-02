@@ -438,6 +438,7 @@ where
     pub fn commit_block(&mut self) -> Result<()> {
 =======
     pub fn commit(&mut self) -> Result<()> {
+        // All states are written only when the first height or a new epoch
         let is_full_commit =
             self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
 >>>>>>> dfd135938 (write Merkle tree stores less often)
