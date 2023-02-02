@@ -491,7 +491,7 @@ pub fn init_network(
         config.address = Some(address.to_string());
 
         // Generate the consensus, account and reward keys, unless they're
-        // pre-defined.
+        // pre-defined. Do not use mnemonic codes.
         let mut wallet = Wallet::load_or_new(&chain_dir);
 
         let consensus_pk = try_parse_public_key(
@@ -596,7 +596,8 @@ pub fn init_network(
         wallet.save().unwrap();
     });
 
-    // Create a wallet for all accounts other than validators
+    // Create a wallet for all accounts other than validators. Do not use
+    // mnemonic code.
     let mut wallet =
         Wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
     if let Some(established) = &mut config.established {
@@ -886,7 +887,7 @@ fn init_established_account(
                 SchemeType::Ed25519,
                 Some(format!("{}-key", name.as_ref())),
                 unsafe_dont_encrypt,
-                false,
+                false, // do not use mnemonic code
             )
             .expect("Key generation should not fail.");
         let public_key =
