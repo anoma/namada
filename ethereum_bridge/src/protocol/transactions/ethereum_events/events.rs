@@ -92,26 +92,26 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let bridge_pool_native_token_balance_key =
-        token::balance_key(&storage.native_token, &BRIDGE_POOL_ADDRESS);
+    let eth_bridge_native_token_balance_key =
+        token::balance_key(&storage.native_token, &BRIDGE_ADDRESS);
     let receiver_native_token_balance_key =
         token::balance_key(&storage.native_token, receiver);
 
-    let bridge_pool_native_token_balance_pre: token::Amount =
-        StorageRead::read(storage, &bridge_pool_native_token_balance_key)?
+    let eth_bridge_native_token_balance_pre: token::Amount =
+        StorageRead::read(storage, &eth_bridge_native_token_balance_key)?
             .expect(
-                "Bridge pool must always have an explicit balance of the \
+                "Ethereum bridge must always have an explicit balance of the \
                  native token",
             );
     let receiver_native_token_balance_pre: token::Amount =
         StorageRead::read(storage, &receiver_native_token_balance_key)?
             .unwrap_or_default();
 
-    let bridge_pool_native_token_balance_post =
-        bridge_pool_native_token_balance_pre
+    let eth_bridge_native_token_balance_post =
+        eth_bridge_native_token_balance_pre
             .checked_sub(amount)
             .expect(
-                "Bridge pool should always have enough native tokens to \
+                "Ethereum bridge should always have enough native tokens to \
                  redeem any confirmed transfers",
             );
     let receiver_native_token_balance_post = receiver_native_token_balance_pre
@@ -120,8 +120,8 @@ where
 
     StorageWrite::write(
         storage,
-        &bridge_pool_native_token_balance_key,
-        bridge_pool_native_token_balance_post,
+        &eth_bridge_native_token_balance_key,
+        eth_bridge_native_token_balance_post,
     )?;
     StorageWrite::write(
         storage,
@@ -132,14 +132,14 @@ where
     tracing::info!(
         %amount,
         %receiver,
-        %bridge_pool_native_token_balance_pre,
-        %bridge_pool_native_token_balance_post,
+        %eth_bridge_native_token_balance_pre,
+        %eth_bridge_native_token_balance_post,
         %receiver_native_token_balance_pre,
         %receiver_native_token_balance_post,
         "Redeemed native token for wrapped ERC20 token"
     );
     Ok(BTreeSet::from([
-        bridge_pool_native_token_balance_key,
+        eth_bridge_native_token_balance_key,
         receiver_native_token_balance_key,
     ]))
 }
@@ -737,7 +737,7 @@ mod tests {
 
         let bridge_pool_initial_balance = Amount::from(100_000_000);
         let bridge_pool_native_token_balance_key =
-            token::balance_key(&storage.native_token, &BRIDGE_POOL_ADDRESS);
+            token::balance_key(&storage.native_token, &BRIDGE_ADDRESS);
         StorageWrite::write(
             &mut storage,
             &bridge_pool_native_token_balance_key,

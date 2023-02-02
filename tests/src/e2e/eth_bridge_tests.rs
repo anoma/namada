@@ -3,7 +3,6 @@ mod helpers;
 use std::num::NonZeroU64;
 
 use color_eyre::eyre::Result;
-use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -12,6 +11,7 @@ use namada::types::address::wnam;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
@@ -310,10 +310,10 @@ async fn test_wnam_transfer() -> Result<()> {
             },
         },
     };
-    // TODO: for a more realistic e2e test, the bridge pool shouldn't be
+    // TODO: for a more realistic e2e test, the bridge shouldn't be
     // initialized with a NAM balance - rather we should establish a balance
     // there by making a proper `TransferToEthereum` of NAM
-    const BRIDGE_POOL_INITIAL_NAM_BALANCE: u64 = 100;
+    const BRIDGE_INITIAL_NAM_BALANCE: u64 = 100;
 
     let mut native_token_address = None;
     // use a network-config.toml with eth bridge parameters in it
@@ -323,10 +323,11 @@ async fn test_wnam_transfer() -> Result<()> {
             let native_token = genesis.token.get_mut("NAM").unwrap();
             native_token_address =
                 Some(native_token.address.as_ref().unwrap().clone());
-            native_token.balances.as_mut().unwrap().insert(
-                BRIDGE_POOL_ADDRESS.to_string(),
-                BRIDGE_POOL_INITIAL_NAM_BALANCE,
-            );
+            native_token
+                .balances
+                .as_mut()
+                .unwrap()
+                .insert(BRIDGE_ADDRESS.to_string(), BRIDGE_INITIAL_NAM_BALANCE);
             genesis
         },
         None,
@@ -372,7 +373,7 @@ async fn test_wnam_transfer() -> Result<()> {
     ledger.exp_string("Redeemed native token for wrapped ERC20 token")?;
     let _bg_ledger = ledger.background();
 
-    // check NAM balance of receiver and bridge pool
+    // check NAM balance of receiver and bridge
     let receiver_balance = find_balance(
         &test,
         &Who::Validator(0),
@@ -381,15 +382,15 @@ async fn test_wnam_transfer() -> Result<()> {
     )?;
     assert_eq!(receiver_balance, wnam_transfer.amount);
 
-    let bridge_pool_balance = find_balance(
+    let bridge_balance = find_balance(
         &test,
         &Who::Validator(0),
         &native_token_address,
-        &BRIDGE_POOL_ADDRESS,
+        &BRIDGE_ADDRESS,
     )?;
     assert_eq!(
-        bridge_pool_balance,
-        token::Amount::from(BRIDGE_POOL_INITIAL_NAM_BALANCE * 1_000_000)
+        bridge_balance,
+        token::Amount::from(BRIDGE_INITIAL_NAM_BALANCE * 1_000_000)
             - wnam_transfer.amount
     );
 
