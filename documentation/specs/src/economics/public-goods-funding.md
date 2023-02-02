@@ -47,7 +47,7 @@ The `--spending-cap` argument is a `u8` $0 < x \leq 100$, which indicates the ma
 
 A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
 
-Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of Governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
+Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
 
 Candidacy proposals last a default of 30 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
 
@@ -75,7 +75,7 @@ struct PgfProposal{
 }
 ```
 
-The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal` and more than half of the votes must be in favor. If more than half of the votes are against no council is elected and the previous council's ability to spend funds (if applicable) is revoked. [Approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council, *whilst* the `PgfProposal` is active. In other words, voters may vote for multiple PGF councils, and the council with the greatest proportion of votes will be elected.
+The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal` and more than half of the votes must be in favor. If more than half of the votes are against no council is elected and the previous council's ability to spend funds (if applicable) is revoked. [Approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council, *whilst* the `PgfProposal` is active. In other words, voters may vote for multiple PGF councils, and the council & spending cap pair with the greatest proportion of votes will be elected.
 
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
@@ -167,7 +167,7 @@ HashSet<(address: 0xBobCharlieMultisig, spending_cap: 100)>
 
 ### End of Term Summary
 
-At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the information point for governance to decide whether to re-elect the council.
+At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the primary document on the basis of which governance should decide whether to re-elect the council.
 
 ## Mechanism
 
