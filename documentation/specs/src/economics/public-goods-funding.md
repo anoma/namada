@@ -43,7 +43,7 @@ All valid PGF councils will be established multisignature account addresses. The
 ### Proposing Candidacy
 The council will be responsible to publish this address to voters and express their desired `spending_cap`.
 
-The `--spending-cap` argument is a `u8` $0 < x \leq 100$, which indicates the maximum percentage of the total funds available to the PGF council that the PGF council is able to spend during their term.
+The `--spending-cap` argument is an `Amount`, which indicates the maximum amount of NAM available to the PGF council that the PGF council is able to spend during their term. If the spending cap is greater than the total balance available to the council, the council will be able to spend up to the full amount of NAM allocated to them (i.e the spending cap can not increase their allowance).
 
 A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
 
@@ -96,10 +96,10 @@ struct OnChainVote {
 In turn, the proposal vote will include the structure:
 
 ```rust
-HashSet<(address: Address, spending_cap: u64)>
+HashSet<(address: Address, spending_cap: Amount)>
 ```
 
-The structure contains all the counsils voted, where each cousil is specified as a pair `Address` (the enstablished address of the multisig account) and `u64` (spending cap).
+The structure contains all the counsils voted, where each cousil is specified as a pair `Address` (the enstablished address of the multisig account) and `Amount` (spending cap).
 
 These votes will then be used in order to vote for various PGF councils. Multiple councils can be voted on through a vector as represented above.
 
@@ -110,7 +110,7 @@ In the case of equal tiebreaks, the addresses with lower alphabetical order will
 
 ### Electing the council
 
-Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored. The `spending_cap_amount` variable is also stored. This is done through the following equaition `spending_cap_amount = spending_cap / 100 * PGFAddress.balance`. The variable `amount_spent` is also reset from the previous council, which is a variable in storage meant to track the spending of the active PGF council.
+Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored. The variable `amount_spent` is also reset from the previous council, which is a variable in storage meant to track the spending of the active PGF council.
 
 ### Example
 
@@ -135,9 +135,9 @@ struct PgfProposal{
 }
 ```
 
-- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `100`. (They could have done this before the proposal went live as well).
+- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1_000_000`. (They could have done this before the proposal went live as well).
 
-- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister. They set their `spending_cap: 50`, meaning they restrict themselves to spending half of the funds allocated to the next PGF council.
+- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister. They set their `spending_cap: 500_000`, meaning they restrict themselves to spending 500,000 NAM.
 
 - At epoch 49, Alice submits the vote:
 
@@ -151,14 +151,14 @@ struct OnChainVote {
 
 Whereby the `proposalVote` includes
 ```rust
-HashSet<(address: 0xBobCharlieMultisig, spending_cap: 100)>
+HashSet<(address: 0xBobCharlieMultisig, spending_cap: 1_000_000)>
 ```
 
 - At epoch 49, Bob submits an identical transaction.
 
 - At epoch 50, Dave votes `Nay` on the proposal.
 
-- At epoch 51, Elsa votes `Yay` but on the Councils `(address: 0xElsaAndSisterMultisig, spending_cap: 100)`  AND `(address: 0xBobCharlieMultisig, spending_cap: 100)`.
+- At epoch 51, Elsa votes `Yay` but on the Councils `(address: 0xElsaAndSisterMultisig, spending_cap: 1_000_000)`  AND `(address: 0xBobCharlieMultisig, spending_cap: 1_000_000)`.
 
 - At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted on this proposal (everyone except Charlie), the intitial condition is passed and the Proposal is active. Further, because out of the total votes, most were `Yay`, (75% > 50% threshold), a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council. The Council `(address: 0xElsaAndSisterMultisig, spending_cap: 50)` actually received 0 votes because Elsa's vote included the wrong spending_cap.
 
@@ -230,15 +230,12 @@ Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/candidacy_length = u8`
 - `/PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)`
 - `/PGFAddress/active_council/address = Address`
-- `/PGFAddress/active_council/spending_cap_amount = Amount` 
-
 ### Struct
 
 ```rust
 struct Council {
     address: Address,
-    spending_cap_amount: u64,
-    spent_amount: u64,
+    spending_cap: Amount,
+    spent_amount: Amount,
 }
 ```
-The spending cap amount here is different from the `spending_cap` float. This is an actual NAM value that is calculated through `spending_cap / 100 * PGF_VP.balance`In
