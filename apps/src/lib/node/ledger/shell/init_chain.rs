@@ -337,8 +337,9 @@ where
             &genesis.pos_params,
             genesis
                 .validators
-                .iter()
-                .map(|validator| &validator.pos_data),
+                .clone()
+                .into_iter()
+                .map(|validator| validator.pos_data),
             current_epoch,
         );
         ibc::init_genesis_storage(&mut self.wl_storage.storage);

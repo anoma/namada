@@ -1,5 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
 use namada::ledger::storage_api::StorageRead;
@@ -49,6 +50,8 @@ where
         let (height, new_epoch) =
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
+        let current_epoch = self.wl_storage.storage.block.epoch;
+
         if new_epoch {
             if let Err(e) = namada::ledger::storage::update_allowed_conversions(
                 &mut self.wl_storage,
@@ -59,6 +62,20 @@ where
             }
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
+
+            // Copy the new_epoch + pipeline_len - 1 validator set into
+            // new_epoch + pipeline_len
+            let pos_params =
+                namada_proof_of_stake::read_pos_params(&self.wl_storage)
+                    .unwrap();
+            namada_proof_of_stake::copy_validator_sets_and_positions(
+                &mut self.wl_storage,
+                current_epoch,
+                current_epoch + pos_params.pipeline_len,
+                &namada_proof_of_stake::consensus_validator_set_handle(),
+                &namada_proof_of_stake::below_capacity_validator_set_handle(),
+            )
+            .unwrap();
         }
 
         let wrapper_fees = self.get_wrapper_tx_fees();
@@ -355,6 +372,7 @@ where
             .map_err(|_| Error::GasOverflow)?;
 
         self.event_log_mut().log_events(response.events.clone());
+        tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
 
         Ok(response)
     }
@@ -402,15 +420,18 @@ where
     fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
-        let pos_params = self.wl_storage.read_pos_params();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&self.wl_storage).unwrap();
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
-        self.wl_storage.validator_set_update(
-            current_epoch,
+        // self.wl_storage.validator_set_update(current_epoch, |update| {
+        namada_proof_of_stake::validator_set_update_tendermint(
+            &self.wl_storage,
             &pos_params,
+            current_epoch,
             |update| {
                 let (consensus_key, power) = match update {
-                    ValidatorSetUpdate::Active(ActiveValidator {
+                    ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key,
                         bonded_stake,
                     }) => {
@@ -421,9 +442,9 @@ where
                         (consensus_key, power)
                     }
                     ValidatorSetUpdate::Deactivated(consensus_key) => {
-                        // Any validators that have become inactive must
-                        // have voting power set to 0 to remove them from
-                        // the active set
+                        // Any validators that have been dropped from the
+                        // consensus set must have voting power set to 0 to
+                        // remove them from the conensus set
                         let power = 0_i64;
                         (consensus_key, power)
                     }
