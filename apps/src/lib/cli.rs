@@ -1707,8 +1707,8 @@ pub mod args {
                  RFC3339. A space or a 'T' are accepted as the separator \
                  between the date and time components. Additional spaces are \
                  allowed between each component.\nAll of these examples are \
-                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 12:12:12Z\n2023-  \
-                 01-20T12:  12:12Z",
+                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
+                 12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
         }
     }
