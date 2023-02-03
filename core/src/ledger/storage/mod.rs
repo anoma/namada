@@ -628,12 +628,10 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<MerkleTree<H>> {
-        let (stored_height, stores) =
-            self.db.read_merkle_tree_stores(height)?.unwrap_or((
-                // restore from the first height
-                BlockHeight::default(),
-                MerkleTreeStoresRead::default(),
-            ));
+        let (stored_height, stores) = self
+            .db
+            .read_merkle_tree_stores(height)?
+            .ok_or(Error::NoMerkleTree { height })?;
         // Restore the tree state with diffs
         let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
         let mut target_height = stored_height;

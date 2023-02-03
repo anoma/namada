@@ -253,7 +253,7 @@ mod tests {
         }
 
         #[test]
-        fn test_get_merkle_tree(blocks_write_type in vec(0..3u64, 20)) {
+        fn test_get_merkle_tree(blocks_write_type in vec(0..5_u64, 50)) {
             test_get_merkle_tree_aux(blocks_write_type).unwrap()
         }
     }
@@ -370,7 +370,7 @@ mod tests {
             None,
         );
 
-        let num_keys = 3;
+        let num_keys = 5;
         let blocks_write_type = blocks_write_type.into_iter().enumerate().map(
             |(index, write_type)| {
                 // try to update some keys at each height
@@ -394,6 +394,7 @@ mod tests {
         let hash = BlockHash::default();
         storage.begin_block(hash, BlockHeight(1))?;
         for (height, key, write_type) in blocks_write_type.clone() {
+            let mut batch = PersistentStorage::batch();
             if height != storage.block.height {
                 // to check the root later
                 roots.insert(storage.block.height, storage.merkle_root());
@@ -417,13 +418,26 @@ mod tests {
                 1 => {
                     storage.delete(&key)?;
                 }
-                _ => {
+                2 => {
                     let value_bytes = types::encode(&storage.block.height);
                     storage.write(&key, value_bytes)?;
                 }
+                3 => {
+                    storage.batch_delete_subspace_val(&mut batch, &key)?;
+                }
+                _ => {
+                    let value_bytes = types::encode(&storage.block.height);
+                    storage.batch_write_subspace_val(
+                        &mut batch,
+                        &key,
+                        value_bytes,
+                    )?;
+                }
             }
+            storage.exec_batch(batch)?;
         }
         roots.insert(storage.block.height, storage.merkle_root());
+        storage.commit()?;
 
         let mut current_state = HashMap::new();
         for i in 0..num_keys {
@@ -442,7 +456,7 @@ mod tests {
                         assert!(!tree.has_key(&key)?);
                     }
                 }
-                1 => {
+                1 | 3 => {
                     assert!(!tree.has_key(&key)?);
                     current_state.insert(key, false);
                 }
