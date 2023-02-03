@@ -2,8 +2,9 @@
 //! wallet.
 
 use std::collections::HashMap;
+use std::fs;
 
-use borsh::{BorshSerialize, BorshDeserialize, BorshSchema};
+use borsh::{BorshSerialize};
 
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
@@ -216,68 +217,6 @@ pub async fn tx_signers(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-// pub async fn sign_tx(
-//     mut ctx: Context,
-//     tx: Tx,
-//     args: &args::Tx,
-//     default: TxSigningKey,
-//     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-// ) -> (Context, TxBroadcastData) {
-//     let keypair = tx_signer(&mut ctx, args, default).await;
-//     let tx = tx.sign(&keypair);
-
-//     let epoch = rpc::query_epoch(args::Query {
-//         ledger_address: args.ledger_address.clone(),
-//     })
-//     .await;
-//     let broadcast_data = if args.dry_run {
-//         TxBroadcastData::DryRun(tx)
-//     } else {
-//         sign_wrapper(
-//             &ctx,
-//             args,
-//             epoch,
-//             tx,
-//             &keypair,
-//             #[cfg(not(feature = "mainnet"))]
-//             requires_pow,
-//         )
-//         .await
-//     };
-//     (ctx, broadcast_data)
-// }
-
-pub async fn offline_sign(
-
-) {
-    
-}
-
-pub fn dump_tx_helper(
-    ctx: &Context,
-    tx: &Tx,
-    extension: &str,
-    precomputed_hash: Option<&String>,
-) {
-    let chain_dir = ctx.config.ledger.chain_dir();
-    let hash = match precomputed_hash {
-        Some(hash) => hash.to_owned(),
-        None => {
-            let hash: Hash = tx
-                .hash()
-                .as_ref()
-                .try_into()
-                .expect("expected hash of dumped tx to be a hash");
-            format!("{}", hash)
-        }
-    };
-    let filename = chain_dir.join(hash).with_extension(extension);
-    let tx_bytes = tx.to_bytes();
-
-    std::fs::write(filename, tx_bytes)
-        .expect("expected to be able to write tx dump file");
-}
-
 pub async fn sign_tx_multisignature(
     mut ctx: Context,
     tx: Tx,
@@ -287,7 +226,22 @@ pub async fn sign_tx_multisignature(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
     let keypairs = tx_signers(&mut ctx, args, default).await;
-    let tx = tx.sign_multisignature(&keypairs, pks_index_map);
+    let tx = match args.signatures.is_empty() {
+        true => {
+            tx.sign_multisignature(&keypairs, pks_index_map)
+        },
+        false => {
+            let signatures = args.signatures.iter().map(|signature_path| {
+                let content = fs::read(signature_path).expect("Signature file should exist.");
+                let offline_signature: OfflineSignature = serde_json::from_slice(&content).expect("Signature should be deserializable.");
+                (offline_signature.public_key, offline_signature.sig)
+            }).collect::<Vec<(common::PublicKey, common::Signature)>>();
+            println!("{:?}", signatures);
+            println!("{:?}", pks_index_map);
+            tx.add_signatures(signatures, pks_index_map)
+        },
+    };
+    
 
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),

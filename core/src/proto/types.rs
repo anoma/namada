@@ -214,7 +214,7 @@ impl SigningTx {
 
     pub fn sign_multisignature(
         self,
-        keypairs: &Vec<common::SecretKey>,
+        keypairs: &[common::SecretKey],
         pks_index_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
         let to_sign = self.hash();
@@ -465,9 +465,38 @@ impl Tx {
         SigningTx::from(self)
     }
 
+    pub fn add_signatures(
+        self,
+        signatures: Vec<(common::PublicKey, common::Signature)>,
+        pks_index_map: HashMap<common::PublicKey, u64>
+    ) -> Self {
+        let sigs = signatures.iter().filter_map(|(pk, sig)| {
+            let pk_index = pks_index_map.get(pk);
+            pk_index.map(|index| {
+                SignatureIndex {
+                    sig: sig.clone(),
+                    index: *index,
+                }
+            })
+        }).collect::<Vec<SignatureIndex>>();
+
+        println!("{:?}", sigs);
+
+        let signed_tx_data = SignedTxData {
+            data: self.data.clone(),
+            sigs,
+        };
+
+        SigningTx {
+            code_hash: self.clone().code_hash(),
+            data: signed_tx_data.try_to_vec().ok(),
+            timestamp: self.timestamp,
+        }.expand(self.code).expect("code hashes to unexpected value")
+    }
+
     pub fn sign_multisignature(
         self,
-        keypairs: &Vec<common::SecretKey>,
+        keypairs: &[common::SecretKey],
         pks_index_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
         let code = self.code.clone();

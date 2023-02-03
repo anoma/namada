@@ -985,7 +985,7 @@ mod tests {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
-            let keypairs: Vec<common::SecretKey> = (0..signers_total).map(|_| {
+            let keypairs: Vec<common::SecretKey> = (1..signers_total).map(|_| {
                 common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
             }).collect();
 

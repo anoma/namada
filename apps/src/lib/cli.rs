@@ -3040,7 +3040,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with_all(&[SIGNERS.name, SIGNATURES.name]),
+                    .conflicts_with_all(&[SIGNERS.name]),
             )
             .arg(
                 SIGNERS
@@ -3049,11 +3049,11 @@ pub mod args {
                         "Sign the transaction with the keypair of the public \
                          key of the given address.",
                     )
-                    .conflicts_with_all(&[SIGNATURES.name, SIGNING_KEYS.name]),
+                    .conflicts_with_all(&[SIGNING_KEYS.name]),
             )
             .arg(SIGNATURES.def().about(
                 "The paths to signatures."
-            ).conflicts_with_all(&[SIGNERS.name, SIGNING_KEYS.name]))
+            ))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3066,7 +3066,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-            let dump_tx = DUMP_TX.parse(matches).into();
+            let dump_tx = DUMP_TX.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signers = SIGNERS.parse(matches);
             let signatures = SIGNATURES.parse(matches);

@@ -121,6 +121,7 @@ impl FromStr for DateTimeUtc {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // DateTime<Utc>::parse_from_rfc_3339(s)
         Ok(Self(s.parse::<DateTime<Utc>>()?))
     }
 }
@@ -250,7 +251,7 @@ impl From<DateTimeUtc> for Rfc3339String {
 impl Display for DateTimeUtc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
-            f, "{}", self.0.to_string()
+            f, "{}", self.0
         )
     }
 }

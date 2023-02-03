@@ -67,7 +67,7 @@ use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
 
-use super::signing::{tx_signer, tx_signers, OfflineSignature};
+use super::signing::{tx_signer, OfflineSignature};
 
 /// Query the status of a given transaction.
 ///
@@ -1387,7 +1387,7 @@ pub async fn query_bond(
 pub async fn sign_tx(
     mut ctx: Context,
     args::SignTx {
-        mut tx,
+        tx,
         data_path,
         signing_tx,
     }: args::SignTx,
@@ -1397,10 +1397,7 @@ pub async fn sign_tx(
             .decode(data.as_bytes())
             .expect("SHould be hex decodable."),
         (Some(path), None) => {
-            let data = fs::read(path.clone()).await.expect(
-                format!("File {} should exist.", path.to_string_lossy())
-                    .as_ref(),
-            );
+            let data = fs::read(path.clone()).await.unwrap_or_else(|_| panic!("File {} should exist.", path.to_string_lossy()));
             HEXLOWER.decode(&data).expect("SHould be hex decodable.")
         }
         (_, _) => {
@@ -2629,9 +2626,9 @@ pub async fn get_address_pks_map(
 
     if let Some(pks) = pk_iter {
         let mut pks_map = HashMap::new();
-        pks.enumerate()
-            .map(|(index, (_, pk))| pks_map.insert(pk, index as u64));
-
+        pks.enumerate().for_each(|(index, (_, pk))| {
+            pks_map.insert(pk, index as u64);
+        });
         pks_map
     } else {
         HashMap::new()

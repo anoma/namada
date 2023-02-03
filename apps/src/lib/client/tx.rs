@@ -111,10 +111,12 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let tx_data = std::fs::read(args.clone().data_path.unwrap()).expect("Expected a file at given data path");
     let timestamp = args.timestamp.unwrap_or_default();
 
+    // TODO: check if 1 signer and use the address dervied from that signer
+    // TODO: make args.address optional
     let address = ctx.get(&args.address);
     let pks_index_map = rpc::get_account_pks(&client, &address).await;
 
-    let tx = Tx::new(tx_code, Some(tx_data));
+    let tx = Tx::new_with_timestamp(tx_code, Some(tx_data), timestamp);
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -199,6 +201,9 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     .await;
 }
 
+
+
+
 pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     let public_keys: Vec<common::PublicKey> = args
         .public_keys
@@ -220,6 +225,7 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
             }
         }
     };
+    // TODO: check that threshold should be <= pks len
 
     let vp_code = args
         .vp_code_path
@@ -2670,17 +2676,18 @@ async fn process_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
     if args.dump_tx {
-        fs::write("code.tx", tx.clone().code);
-        if tx.data.is_some() {
-            fs::write("data.tx", tx.clone().data.unwrap());
+        // TODO: use async version of fs
+        tokio::fs::write("code.tx", tx.clone().code).await.expect("Should be able to write a file to disk.");
+        if let Some(ref data) = tx.data {
+            tokio::fs::write("data.tx", data).await.expect("Should be able to write a file to disk.");
         }
 
         let signing_tx_blob = tx.clone().signing_tx().try_to_vec().expect("Tx should be serializable.");
-        println!("Transaction code, data and timestamp have been written to files code.tx and data.tx.");
+        println!("Transaction code, data and timestmamp have been written to files code.tx and data.tx.");
         println!("You can share the following blob with the other signers:\n{}\n", HEXLOWER.encode(&signing_tx_blob));
-        println!("You can later submit the tx with: namada client tx --code-path code.tx --data-path data.tx --timestamp {}", tx.timestamp.to_rfc3339());
+        println!("You can later submit the tx with:\nnamada client tx --code-path code.tx --data-path data.tx --timestamp {}", tx.timestamp.to_rfc3339());
 
-        safe_exit(1)
+        return (ctx, vec![]);
     }
 
     let (ctx, to_broadcast) = sign_tx_multisignature(
@@ -2913,10 +2920,4 @@ pub async fn submit_tx(
     );
 
     parsed
-}
-
-async fn dump_tx(
-
-) {
-
 }
