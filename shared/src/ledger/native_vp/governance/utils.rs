@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use borsh::BorshDeserialize;
-use namada_proof_of_stake::PosReadOnly;
+use namada_proof_of_stake::{
+    bond_amount, read_all_validator_addresses, read_pos_params,
+    read_total_stake, read_validator_stake,
+};
 use thiserror::Error;
 
 use crate::ledger::governance::storage as gov_storage;
@@ -79,9 +82,11 @@ pub fn compute_tally<S>(
     votes: Votes,
 ) -> storage_api::Result<bool>
 where
-    S: storage_api::StorageRead + PosReadOnly,
+    S: storage_api::StorageRead,
 {
-    let total_stake: VotePower = storage.total_stake(epoch)?.into();
+    let params = read_pos_params(storage)?;
+    let total_stake = read_total_stake(storage, &params, epoch)?;
+    let total_stake = VotePower::from(u64::from(total_stake));
 
     let Votes {
         yay_validators,
@@ -122,9 +127,10 @@ pub fn get_proposal_votes<S>(
     proposal_id: u64,
 ) -> storage_api::Result<Votes>
 where
-    S: storage_api::StorageRead + PosReadOnly,
+    S: storage_api::StorageRead,
 {
-    let validators = storage.validator_addresses(epoch)?;
+    let params = read_pos_params(storage)?;
+    let validators = read_all_validator_addresses(storage, epoch)?;
 
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
@@ -143,8 +149,15 @@ where
         match voter_address {
             Some(voter_address) => {
                 if vote.is_yay() && validators.contains(voter_address) {
-                    let amount: VotePower =
-                        storage.validator_stake(voter_address, epoch)?.into();
+                    let amount: VotePower = read_validator_stake(
+                        storage,
+                        &params,
+                        voter_address,
+                        epoch,
+                    )?
+                    .unwrap_or_default()
+                    .into();
+
                     yay_validators.insert(voter_address.clone(), amount);
                 } else if !validators.contains(voter_address) {
                     let validator_address =
@@ -156,7 +169,9 @@ where
                                 validator: validator.clone(),
                             };
                             let amount =
-                                storage.bond_amount(&bond_id, epoch)?;
+                                bond_amount(storage, &params, &bond_id, epoch)?
+                                    .1;
+
                             if amount != token::Amount::default() {
                                 if vote.is_yay() {
                                     let entry = yay_delegators
