@@ -38,7 +38,7 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
-use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
+use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -58,7 +58,7 @@ use namada::types::transaction::governance::{
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
-use namada::{ledger, vm};
+use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
 use sha2::Digest;
@@ -1818,7 +1818,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
     let governance_parameters = rpc::get_governance_parameters(&client).await;
-    let current_epoch = rpc::query_epoch(args::Query {
+    let current_epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.tx.ledger_address.clone(),
     })
     .await;
@@ -2015,7 +2015,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-        let current_epoch = rpc::query_epoch(args::Query {
+        let current_epoch = rpc::query_and_print_epoch(args::Query {
             ledger_address: args.tx.ledger_address.clone(),
         })
         .await;
@@ -2166,7 +2166,7 @@ pub async fn submit_reveal_pk_aux(
     } else {
         find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
     };
-    let epoch = rpc::query_epoch(args::Query {
+    let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;
@@ -2233,7 +2233,8 @@ async fn is_safe_voting_window(
     proposal_id: u64,
     proposal_start_epoch: Epoch,
 ) -> bool {
-    let current_epoch = rpc::query_epoch(args::Query { ledger_address }).await;
+    let current_epoch =
+        rpc::query_and_print_epoch(args::Query { ledger_address }).await;
 
     let proposal_end_epoch_key =
         gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -2295,9 +2296,10 @@ async fn filter_delegations(
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
+
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let is_validator = rpc::is_validator(&client, &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -2323,10 +2325,10 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&ctx.native_token, bond_source);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
+            println!("Found source balance {}", balance);
             if balance < args.amount {
                 eprintln!(
                     "The balance of the source {} is lower than the amount to \
@@ -2347,6 +2349,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
         }
     }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
+    println!("Wasm tx bond code bytes length = {}\n", tx_code.len());
     let bond = pos::Bond {
         validator,
         amount: args.amount,
@@ -2369,9 +2372,11 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
+
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let is_validator = rpc::is_validator(&client, &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -2382,56 +2387,34 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         }
     }
 
-    let source = ctx.get_opt(&args.source);
-    let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
-
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-    let bond_id = BondId {
-        source: bond_source.clone(),
-        validator: validator.clone(),
-    };
-    let bond_key = ledger::pos::bond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let bonds = rpc::query_storage_value::<Bonds>(&client, &bond_key).await;
-    match bonds {
-        Some(bonds) => {
-            let mut bond_amount: token::Amount = 0.into();
-            for bond in bonds.iter() {
-                for delta in bond.pos_deltas.values() {
-                    bond_amount += *delta;
-                }
-            }
-            if args.amount > bond_amount {
-                eprintln!(
-                    "The total bonds of the source {} is lower than the \
-                     amount to be unbonded. Amount to unbond is {} and the \
-                     total bonds is {}.",
-                    bond_source, args.amount, bond_amount
-                );
-                if !args.tx.force {
-                    safe_exit(1)
-                }
-            }
-        }
-        None => {
-            eprintln!("No bonds found");
-            if !args.tx.force {
-                safe_exit(1)
-            }
+    let bond_amount =
+        rpc::query_bond(&client, &bond_source, &validator, None).await;
+    println!("BOND AMOUNT REMAINING IS {}", bond_amount);
+
+    if args.amount > bond_amount {
+        eprintln!(
+            "The total bonds of the source {} is lower than the amount to be \
+             unbonded. Amount to unbond is {} and the total bonds is {}.",
+            bond_source, args.amount, bond_amount
+        );
+        if !args.tx.force {
+            safe_exit(1)
         }
     }
 
     let data = pos::Unbond {
-        validator,
+        validator: validator.clone(),
         amount: args.amount,
         source,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
+    let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
-    process_tx(
+    let (_ctx, _) = process_tx(
         ctx,
         &args.tx,
         tx,
@@ -2440,18 +2423,22 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         false,
     )
     .await;
+
+    rpc::query_and_print_unbonds(&client, &bond_source, &validator).await;
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
-    let epoch = rpc::query_epoch(args::Query {
+    let validator = ctx.get(&args.validator);
+    let source = ctx.get_opt(&args.source);
+
+    let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.tx.ledger_address.clone(),
     })
     .await;
 
-    let validator = ctx.get(&args.validator);
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let is_validator = rpc::is_validator(&client, &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -2462,48 +2449,34 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         }
     }
 
-    let source = ctx.get_opt(&args.source);
-    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
-
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-    let bond_id = BondId {
-        source: bond_source.clone(),
-        validator: validator.clone(),
-    };
-    let bond_key = ledger::pos::unbond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let unbonds = rpc::query_storage_value::<Unbonds>(&client, &bond_key).await;
-    match unbonds {
-        Some(unbonds) => {
-            let mut unbonded_amount: token::Amount = 0.into();
-            if let Some(unbond) = unbonds.get(epoch) {
-                for delta in unbond.deltas.values() {
-                    unbonded_amount += *delta;
-                }
-            }
-            if unbonded_amount == 0.into() {
-                eprintln!(
-                    "There are no unbonded bonds ready to withdraw in the \
-                     current epoch {}.",
-                    epoch
-                );
-                if !args.tx.force {
-                    safe_exit(1)
-                }
-            }
+    let tokens = rpc::query_withdrawable_tokens(
+        &client,
+        &bond_source,
+        &validator,
+        Some(epoch),
+    )
+    .await;
+    if tokens == 0.into() {
+        eprintln!(
+            "There are no unbonded bonds ready to withdraw in the current \
+             epoch {}.",
+            epoch
+        );
+        rpc::query_and_print_unbonds(&client, &bond_source, &validator).await;
+        if !args.tx.force {
+            safe_exit(1)
         }
-        None => {
-            eprintln!("No unbonded bonds found");
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
+    } else {
+        println!("Found {tokens} tokens that can be withdrawn.");
+        println!("Submitting transaction to withdraw them...");
     }
 
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
+    let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
@@ -2521,7 +2494,7 @@ pub async fn submit_validator_commission_change(
     ctx: Context,
     args: args::TxCommissionRateChange,
 ) {
-    let epoch = rpc::query_epoch(args::Query {
+    let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.tx.ledger_address.clone(),
     })
     .await;
@@ -2529,8 +2502,14 @@ pub async fn submit_validator_commission_change(
     let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
+    // TODO: put following two let statements in its own function
+    let params_key = namada::ledger::pos::params_key();
+    let params = query_storage_value::<PosParams>(&client, &params_key)
+        .await
+        .expect("Parameter should be defined.");
+
     let validator = ctx.get(&args.validator);
-    if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
+    if rpc::is_validator(&client, &validator).await {
         if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
             eprintln!("Invalid new commission rate, received {}", args.rate);
             if !args.tx.force {
@@ -2538,26 +2517,22 @@ pub async fn submit_validator_commission_change(
             }
         }
 
-        let commission_rate_key =
-            ledger::pos::validator_commission_rate_key(&validator);
-        let max_commission_rate_change_key =
-            ledger::pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = rpc::query_storage_value::<CommissionRates>(
-            &client,
-            &commission_rate_key,
-        )
-        .await;
-        let max_change = rpc::query_storage_value::<Decimal>(
-            &client,
-            &max_commission_rate_change_key,
-        )
-        .await;
+        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
-        match (commission_rates, max_change) {
-            (Some(rates), Some(max_change)) => {
-                // Assuming that pipeline length = 2
-                let rate_next_epoch = rates.get(epoch.next()).unwrap();
-                if (args.rate - rate_next_epoch).abs() > max_change {
+        match rpc::query_commission_rate(
+            &client,
+            &validator,
+            Some(pipeline_epoch_minus_one),
+        )
+        .await
+        {
+            Some(CommissionPair {
+                commission_rate,
+                max_commission_change_per_epoch,
+            }) => {
+                if (args.rate - commission_rate).abs()
+                    > max_commission_change_per_epoch
+                {
                     eprintln!(
                         "New rate is too large of a change with respect to \
                          the predecessor epoch in which the rate will take \
@@ -2568,7 +2543,7 @@ pub async fn submit_validator_commission_change(
                     }
                 }
             }
-            _ => {
+            None => {
                 eprintln!("Error retrieving from storage");
                 if !args.tx.force {
                     safe_exit(1)

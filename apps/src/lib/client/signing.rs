@@ -154,7 +154,7 @@ pub async fn sign_tx(
     let keypair = tx_signer(&mut ctx, args, default).await;
     let tx = tx.sign(&keypair);
 
-    let epoch = rpc::query_epoch(args::Query {
+    let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;
