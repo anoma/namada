@@ -47,12 +47,12 @@ fn main() {
     let signable = SerializeWithAbiEncode::as_signable(&vext);
     println!(
         "Raw bytes as lossy UTF-8: {}",
-        String::from_utf8_lossy(&signable)
+        String::from_utf8_lossy(&signable.0)
     );
     println!("Raw bytes: {:?}", &signable);
     println!(
         "Raw bytes (hex-encoded): {}",
-        data_encoding::HEXLOWER.encode(&signable)
+        data_encoding::HEXLOWER.encode(&signable.0)
     );
 
     let common::SecretKey::Secp256k1(secp256k1_key) = signing_key.clone() else { unreachable!() };
