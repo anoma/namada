@@ -21,8 +21,6 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
-#[cfg(any(test, feature = "secp256k1-sign-verify"))]
-use crate::ledger::storage::KeccakHasher;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
 
@@ -503,7 +501,10 @@ impl TryFrom<&[u8; 65]> for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    type Hasher = KeccakHasher;
+    #[cfg(any(test, feature = "secp256k1-sign-verify"))]
+    type Hasher = crate::ledger::storage::KeccakHasher;
+    #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
+    type Hasher = crate::ledger::storage::DummyHasher;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
