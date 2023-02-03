@@ -651,7 +651,8 @@ where
                             .expect("the key should be parsable");
                         let new_key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
-                        match old_key.cmp(&new_key) {
+                        // compare keys as String
+                        match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
                                 tree.update(&new_key, new.1.clone())?;
