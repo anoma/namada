@@ -446,6 +446,12 @@ impl Store {
         keypair: StoredKeypair<common::SecretKey>,
         pkh: PublicKeyHash,
     ) -> Option<Alias> {
+        // abort if the key already exists
+        if self.pkhs.contains_key(&pkh) {
+            println!("The key already exists.");
+            return None;
+        }
+
         if alias.is_empty() {
             println!(
                 "Empty alias given, defaulting to {}.",
