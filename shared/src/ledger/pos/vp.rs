@@ -304,22 +304,6 @@ where
     }
 }
 
-impl_pos_read_only! {
-    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPreStorageRead<'view, 'a, DB, H, CA>
-        where
-            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
-            H: StorageHasher +'static,
-            CA: WasmCacheAccess +'static
-}
-
-impl_pos_read_only! {
-    impl<'view, 'a: 'view, DB, H, CA> PosReadOnly for CtxPostStorageRead<'view, 'a, DB, H, CA>
-        where
-            DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter> +'static,
-            H: StorageHasher +'static,
-            CA: WasmCacheAccess +'static
-}
-
 impl From<native_vp::Error> for Error {
     fn from(err: native_vp::Error) -> Self {
         Self::NativeVpError(err)
