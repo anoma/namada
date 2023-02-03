@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXLOWER;
+use ethabi::ethereum_types::U256;
 use ethabi::Token;
 use libsecp256k1::RecoveryId;
 #[cfg(feature = "rand")]
@@ -21,6 +22,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::hints;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
 
@@ -425,14 +427,62 @@ impl BorshSchema for Signature {
     }
 }
 
+impl Signature {
+    const S_MALLEABILITY_FIX: U256 = U256([
+        13822214165235122497,
+        13451932020343611451,
+        18446744073709551614,
+        18446744073709551615,
+    ]);
+    // these constants are pulled from OpenZeppelin's ECDSA code
+    const S_MALLEABILITY_THRESHOLD: U256 = U256([
+        16134479119472337056,
+        6725966010171805725,
+        18446744073709551615,
+        9223372036854775807,
+    ]);
+    const V_FIX: u8 = 27;
+
+    /// Returns the `r`, `s` and `v` parameters of this [`Signature`],
+    /// destroying the original value in the process.
+    ///
+    /// The returned signature is unique (i.e. non-malleable). This
+    /// ensures OpenZeppelin considers the signature valid.
+    pub fn into_eth_rsv(self) -> ([u8; 32], [u8; 32], u8) {
+        // assuming the value of v is either 0 or 1,
+        // the output is essentially the negated input
+        #[inline(always)]
+        fn flip_v(v: u8) -> u8 {
+            v ^ 1
+        }
+
+        let (v, s) = {
+            let s1: U256 = self.0.s.b32().into();
+            let v = self.1.serialize();
+            let (v, non_malleable_s) =
+                if hints::unlikely(s1 > Self::S_MALLEABILITY_THRESHOLD) {
+                    // this code path seems quite rare. we often
+                    // get non-malleable signatures, which is good
+                    (flip_v(v) + Self::V_FIX, Self::S_MALLEABILITY_FIX - s1)
+                } else {
+                    (v + Self::V_FIX, s1)
+                };
+            let mut non_malleable_s: [u8; 32] = non_malleable_s.into();
+            self.0.s.fill_b32(&mut non_malleable_s);
+            (v, self.0.s.b32())
+        };
+        let r = self.0.r.b32();
+
+        (r, s, v)
+    }
+}
+
 impl Encode<1> for Signature {
     fn tokenize(&self) -> [Token; 1] {
-        let sig_serialized = libsecp256k1::Signature::serialize(&self.0);
-        let r = Token::FixedBytes(sig_serialized[..32].to_vec());
-        let s = Token::FixedBytes(sig_serialized[32..].to_vec());
-        // TODO: we might need to add 27 here, if v is in the
-        // range of values `[0, 1]`
-        let v = Token::Uint(self.1.serialize().into());
+        let (r, s, v) = self.clone().into_eth_rsv();
+        let r = Token::FixedBytes(r.to_vec());
+        let s = Token::FixedBytes(s.to_vec());
+        let v = Token::Uint(v.into());
         [Token::Tuple(vec![r, s, v])]
     }
 }
@@ -659,5 +709,23 @@ mod test {
         let sig = Signature::try_from_slice(sig_bytes.as_slice())
             .expect("Test failed");
         assert_eq!(sig, signature);
+    }
+
+    /// Ensures we are using the right malleability consts.
+    #[test]
+    fn test_signature_malleability_consts() {
+        let s_threshold = U256::from_str_radix(
+            "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0",
+            16,
+        )
+        .unwrap();
+        assert_eq!(Signature::S_MALLEABILITY_THRESHOLD, s_threshold);
+
+        let malleable_const = U256::from_str_radix(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+            16,
+        )
+        .unwrap();
+        assert_eq!(Signature::S_MALLEABILITY_FIX, malleable_const);
     }
 }
