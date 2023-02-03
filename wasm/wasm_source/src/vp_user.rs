@@ -123,7 +123,11 @@ fn validate_tx(
             KeyType::PoS => {
                 // Allow the account to be used in PoS
                 let bond_id = proof_of_stake::is_bond_key(key)
-                    .or_else(|| proof_of_stake::is_unbond_key(key));
+                    .map(|(bond_id, _)| bond_id)
+                    .or_else(|| {
+                        proof_of_stake::is_unbond_key(key)
+                            .map(|(bond_id, _, _)| bond_id)
+                    });
                 let valid = match bond_id {
                     Some(bond_id) => {
                         // Bonds and unbonds changes for this address
@@ -187,8 +191,11 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::types::storage::Epoch;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
+    use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
@@ -351,6 +358,139 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let tx = vp_env.tx.clone();
         let signed_tx = tx.sign(&keypair);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a PoS action that must be authorized is rejected without a
+    /// valid signature.
+    #[test]
+    fn test_unsigned_pos_action_rejected() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from(10_098_123);
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let commission_rate = rust_decimal::Decimal::new(5, 2);
+        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+
+        let genesis_validators = [GenesisValidator {
+            address: validator.clone(),
+            tokens: initial_stake,
+            consensus_key,
+            commission_rate,
+            max_commission_rate_change,
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let _public_key = secret_key.ref_to();
+        let vp_owner: Address = address::testing::established_address_2();
+        let target = address::testing::established_address_3();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
+        let bond_amount = token::Amount::from(5_098_123);
+        let unbond_amount = token::Amount::from(3_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&target, &token]);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+            // Bond the tokens, then unbond some of them
+            tx::ctx()
+                .bond_tokens(Some(&vp_owner), &validator, bond_amount)
+                .unwrap();
+            tx::ctx()
+                .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
+                .unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a PoS action that must be authorized is accepted with a valid
+    /// signature.
+    #[test]
+    fn test_signed_pos_action_accepted() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from(10_098_123);
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let commission_rate = rust_decimal::Decimal::new(5, 2);
+        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+
+        let genesis_validators = [GenesisValidator {
+            address: validator.clone(),
+            tokens: initial_stake,
+            consensus_key,
+            commission_rate,
+            max_commission_rate_change,
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = address::testing::established_address_2();
+        let target = address::testing::established_address_3();
+        let token = address::nam();
+        let amount = token::Amount::from(10_098_123);
+        let bond_amount = token::Amount::from(5_098_123);
+        let unbond_amount = token::Amount::from(3_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&target, &token]);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+
+        tx_env.write_public_key(&vp_owner, &public_key);
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+            // Bond the tokens, then unbond some of them
+            tx::ctx()
+                .bond_tokens(Some(&vp_owner), &validator, bond_amount)
+                .unwrap();
+            tx::ctx()
+                .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
+                .unwrap();
+        });
+
+        let mut vp_env = vp_host_env::take();
+        let tx = vp_env.tx.clone();
+        let signed_tx = tx.sign(&secret_key);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;
         let keys_changed: BTreeSet<storage::Key> =
