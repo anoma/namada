@@ -306,17 +306,19 @@ pub mod tx_types {
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    let sig = tx_data.get_signature_by_index(0).ok_or_else(||
-                        TxError::SigError("Unsigned wrappr".to_string()),
-                    )?;
+                    let sig =
+                        tx_data.get_signature_by_index(0).ok_or_else(|| {
+                            TxError::SigError("Unsigned wrappr".to_string())
+                        })?;
                     wrapper.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // verify signature and extract signed data
                 TxType::Protocol(protocol) => {
-                    let sig = tx_data.get_signature_by_index(0).ok_or_else(||
-                        TxError::SigError("Unsigned protocol".to_string()),
-                    )?;
+                    let sig =
+                        tx_data.get_signature_by_index(0).ok_or_else(|| {
+                            TxError::SigError("Unsigned protocol".to_string())
+                        })?;
                     protocol.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Protocol(protocol))
                 }

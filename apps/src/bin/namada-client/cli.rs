@@ -95,9 +95,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
-                Sub::SignTx(SignTx(args)) => {
-                    rpc::sign_tx(ctx, args).await
-                }
+                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

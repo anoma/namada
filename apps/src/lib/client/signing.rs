@@ -4,8 +4,7 @@
 use std::collections::HashMap;
 use std::fs;
 
-use borsh::{BorshSerialize};
-
+use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
@@ -15,7 +14,7 @@ use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -28,7 +27,7 @@ use crate::wallet::Wallet;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OfflineSignature {
     pub sig: common::Signature,
-    pub public_key: common::PublicKey
+    pub public_key: common::PublicKey,
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -227,21 +226,25 @@ pub async fn sign_tx_multisignature(
 ) -> (Context, TxBroadcastData) {
     let keypairs = tx_signers(&mut ctx, args, default).await;
     let tx = match args.signatures.is_empty() {
-        true => {
-            tx.sign_multisignature(&keypairs, pks_index_map)
-        },
+        true => tx.sign_multisignature(&keypairs, pks_index_map),
         false => {
-            let signatures = args.signatures.iter().map(|signature_path| {
-                let content = fs::read(signature_path).expect("Signature file should exist.");
-                let offline_signature: OfflineSignature = serde_json::from_slice(&content).expect("Signature should be deserializable.");
-                (offline_signature.public_key, offline_signature.sig)
-            }).collect::<Vec<(common::PublicKey, common::Signature)>>();
+            let signatures = args
+                .signatures
+                .iter()
+                .map(|signature_path| {
+                    let content = fs::read(signature_path)
+                        .expect("Signature file should exist.");
+                    let offline_signature: OfflineSignature =
+                        serde_json::from_slice(&content)
+                            .expect("Signature should be deserializable.");
+                    (offline_signature.public_key, offline_signature.sig)
+                })
+                .collect::<Vec<(common::PublicKey, common::Signature)>>();
             println!("{:?}", signatures);
             println!("{:?}", pks_index_map);
             tx.add_signatures(signatures, pks_index_map)
-        },
+        }
     };
-    
 
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),

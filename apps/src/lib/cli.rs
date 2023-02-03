@@ -314,7 +314,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
-        SignTx(SignTx)
+        SignTx(SignTx),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1612,6 +1612,7 @@ pub mod args {
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
     const ADDRESS: Arg<WalletAddress> = arg("address");
+    const ADDRESS_OPT: ArgOpt<WalletAddress> = ADDRESS.opt();
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     const ALIAS: Arg<String> = arg("alias");
     const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
@@ -1862,7 +1863,7 @@ pub mod args {
         /// Optional timestamp field
         pub timestamp: Option<DateTimeUtc>,
         /// The address
-        pub address: WalletAddress,
+        pub address: Option<WalletAddress>,
     }
 
     impl Args for TxCustom {
@@ -1871,7 +1872,7 @@ pub mod args {
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
             let timestamp = TX_TIMESTAMP.parse(matches);
-            let address = ADDRESS.parse(matches);
+            let address = ADDRESS_OPT.parse(matches);
             Self {
                 tx,
                 code_path,
@@ -1898,7 +1899,7 @@ pub mod args {
                         "The timestamp to set be set on the transaction.",
                     ),
                 )
-                .arg(ADDRESS.def().about("The address to lookup."))
+                .arg(ADDRESS_OPT.def().about("The address to lookup."))
         }
     }
 
@@ -1923,18 +1924,18 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
-            .arg(
-                DATA_PATH_OPT
-                    .def()
-                    .about("Path to hex encoeded signing tx file.")
-                    .conflicts_with(SIGNING_TX.name),
-            )
-            .arg(
-                SIGNING_TX
-                    .def()
-                    .about("The hex encoded transaction to be signed.")
-                    .conflicts_with(DATA_PATH_OPT.name),
-            )
+                .arg(
+                    DATA_PATH_OPT
+                        .def()
+                        .about("Path to hex encoeded signing tx file.")
+                        .conflicts_with(SIGNING_TX.name),
+                )
+                .arg(
+                    SIGNING_TX
+                        .def()
+                        .about("The hex encoded transaction to be signed.")
+                        .conflicts_with(DATA_PATH_OPT.name),
+                )
         }
     }
 
@@ -2967,7 +2968,7 @@ pub mod args {
         /// Sign the tx with the keypair of the public key of the given address
         pub signers: Vec<WalletAddress>,
         /// The paths to signatures
-        pub signatures: Vec<PathBuf>
+        pub signatures: Vec<PathBuf>,
     }
 
     impl Tx {
@@ -2995,7 +2996,7 @@ pub mod args {
                     .iter()
                     .map(|signer| ctx.get(signer))
                     .collect(),
-                signatures: self.signatures.clone()
+                signatures: self.signatures.clone(),
             }
         }
     }
@@ -3051,9 +3052,7 @@ pub mod args {
                     )
                     .conflicts_with_all(&[SIGNING_KEYS.name]),
             )
-            .arg(SIGNATURES.def().about(
-                "The paths to signatures."
-            ))
+            .arg(SIGNATURES.def().about("The paths to signatures."))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3083,7 +3082,7 @@ pub mod args {
                 signing_keys,
                 signers,
                 dump_tx,
-                signatures
+                signatures,
             }
         }
     }

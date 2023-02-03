@@ -1,4 +1,3 @@
-
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -7,12 +6,10 @@ use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use namada::types::address::Address;
-
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Epoch;
 use namada::types::transaction::GasLimit;
 use namada::types::{key, token};
-
 
 use super::rpc;
 use crate::cli::{args, Context};
@@ -47,7 +44,7 @@ pub struct ParsedTxArgs {
     /// Sign the tx with the keypair of the public key of the given address
     pub signers: Vec<Address>,
     /// The path to signatures
-    pub signatures: Vec<PathBuf>
+    pub signatures: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug)]

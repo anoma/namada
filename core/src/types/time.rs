@@ -250,9 +250,7 @@ impl From<DateTimeUtc> for Rfc3339String {
 
 impl Display for DateTimeUtc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f, "{}", self.0
-        )
+        write!(f, "{}", self.0)
     }
 }
 

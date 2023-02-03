@@ -297,9 +297,10 @@ mod tests {
         vp_host_env::set(vp_env);
 
         assert!(
-            !validate_tx(&CTX, tx_data, addr, keys_changed,
-        verifiers).unwrap(),     "Revealing PK that's already
-        revealed should be rejected" );
+            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+            "Revealing PK that's already
+        revealed should be rejected"
+        );
     }
 
     /// Test that a revealed PK that doesn't correspond to the account's address

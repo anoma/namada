@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
-
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
