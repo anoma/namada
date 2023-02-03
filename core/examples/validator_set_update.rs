@@ -44,14 +44,11 @@ fn main() {
         validator_addr,
         signing_epoch,
     };
+    println!("Vext: {:#?}", vext);
     let signable = SerializeWithAbiEncode::as_signable(&vext);
+    println!("Keccak hash to be signed: {:?}", &signable);
     println!(
-        "Raw bytes as lossy UTF-8: {}",
-        String::from_utf8_lossy(&signable.0)
-    );
-    println!("Raw bytes: {:?}", &signable);
-    println!(
-        "Raw bytes (hex-encoded): {}",
+        "Keccak hash to be signed(hex-encoded): {}",
         data_encoding::HEXLOWER.encode(&signable.0)
     );
 
@@ -60,7 +57,10 @@ fn main() {
 
     let signed = vext.sign(&signing_key);
     let common::Signature::Secp256k1(secp256k1_sig) = signed.sig else { unreachable!() };
-    println!("secp256k1 signature: {:#?}", secp256k1_sig);
+    println!(
+        "secp256k1 signature over the Keccak hash: {:#?}",
+        secp256k1_sig
+    );
 }
 
 fn gen_secp256k1_keypair() -> common::SecretKey {
