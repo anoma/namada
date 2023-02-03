@@ -13,6 +13,7 @@ use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::key;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -59,9 +60,11 @@ pub struct SignedTxData {
 
 /// A serialization method to provide to [`Signed`], such
 /// that we may sign serialized data.
+///
+/// This is a higher level version of [`key::Signable`].
 pub trait Signable<T> {
     /// A byte vector containing the serialized data.
-    type Output: AsRef<[u8]>;
+    type Output: key::Signable;
 
     /// Encodes `data` as a byte vector, with some arbitrary serialization
     /// method.
@@ -175,7 +178,7 @@ impl<T, S: Signable<T>> Signed<T, S> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = S::as_signable(&data);
-        let sig = common::SigScheme::sign(keypair, to_sign.as_ref());
+        let sig = common::SigScheme::sign(keypair, to_sign);
         Self::new_from(data, sig)
     }
 
@@ -185,8 +188,8 @@ impl<T, S: Signable<T>> Signed<T, S> {
         &self,
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
-        let bytes = S::as_signable(&self.data);
-        common::SigScheme::verify_signature_raw(pk, bytes.as_ref(), &self.sig)
+        let signed_bytes = S::as_signable(&self.data);
+        common::SigScheme::verify_signature_raw(pk, signed_bytes, &self.sig)
     }
 }
 
