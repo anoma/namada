@@ -400,14 +400,10 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
-<<<<<<< HEAD
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.get_merkle_tree(height))?;
             if self.last_epoch.0 > 1 {
-=======
-            if self.last_epoch.0 > 0 {
->>>>>>> 4f5310542 (Now load conversions from storage even for epoch 1.)
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
@@ -446,14 +442,7 @@ where
     }
 
     /// Persist the current block's state to the database
-<<<<<<< HEAD
     pub fn commit_block(&mut self) -> Result<()> {
-=======
-    pub fn commit(&mut self) -> Result<()> {
-        // All states are written only when the first height or a new epoch
-        let is_full_commit =
-            self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
->>>>>>> dfd135938 (write Merkle tree stores less often)
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),

@@ -353,7 +353,6 @@ pub mod tx_types {
     mod test_process_tx {
         use super::*;
         use crate::types::address::nam;
-        use crate::types::storage::Epoch;
         use crate::types::time::DateTimeUtc;
 
         fn gen_keypair() -> common::SecretKey {

@@ -156,7 +156,11 @@ impl ErrorCodes {
 >>>>>>> c6c242600 (Validates tx `ChainId`)
 =======
     InvalidDecryptedChainId = 9,
+<<<<<<< HEAD
 >>>>>>> 976497c7a (Manages invalid chain id for decrypted txs)
+=======
+    ExpiredTx = 10,
+>>>>>>> 0744c11e5 (Tx expiration validation)
 }
 
 impl From<ErrorCodes> for u32 {
@@ -643,6 +647,24 @@ where
                 self.chain_id, tx.chain_id
             );
             return response;
+        }
+
+        // Tx expiration
+        if let Some(exp) = tx.expiration {
+            let last_block_timestamp = self
+                .wl_storage
+                .storage
+                .get_block_timestamp()
+                .expect("Failed to retrieve last block timestamp");
+
+            if exp > last_block_timestamp {
+                response.code = ErrorCodes::ExpiredTx.into();
+                response.log = format!(
+                    "Tx expired at {:#?}, last committed block time: {:#?}",
+                    exp, last_block_timestamp
+                );
+                return response;
+            }
         }
 
         // Tx signature check
@@ -1191,7 +1213,6 @@ mod test_utils {
 #[cfg(test)]
 mod test_mempool_validate {
     use namada::proto::SignedTxData;
-    use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::test_utils::TestShell;
