@@ -298,6 +298,8 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::ethereum_events::Uint;
     #[cfg(feature = "abcipp")]
+    use namada::types::keccak::keccak_hash;
+    #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::RefTo;
     #[cfg(feature = "abcipp")]
@@ -359,11 +361,13 @@ mod test_vote_extensions {
             )
             .sign(protocol_key);
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
+                let to_sign = keccak_hash(
+                    [
+                        KeccakHash([0; 32]).encode().into_inner(),
+                        Uint::from(0).encode().into_inner(),
+                    ]
+                    .concat(),
+                );
                 let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
@@ -439,11 +443,13 @@ mod test_vote_extensions {
             )
             .sign(&_protocol_key);
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
+                let to_sign = keccak_hash(
+                    [
+                        KeccakHash([0; 32]).encode().into_inner(),
+                        Uint::from(0).encode().into_inner(),
+                    ]
+                    .concat(),
+                );
                 let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
@@ -601,11 +607,13 @@ mod test_vote_extensions {
             )
             .sign(protocol_key);
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
+                let to_sign = keccak_hash(
+                    [
+                        KeccakHash([0; 32]).encode().into_inner(),
+                        Uint::from(0).encode().into_inner(),
+                    ]
+                    .concat(),
+                );
                 let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,

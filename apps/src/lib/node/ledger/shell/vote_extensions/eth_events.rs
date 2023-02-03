@@ -309,6 +309,8 @@ mod test_vote_extensions {
         EthAddress, EthereumEvent, TransferToEthereum,
     };
     #[cfg(feature = "abcipp")]
+    use namada::types::keccak::keccak_hash;
+    #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHeight, Epoch};
@@ -481,11 +483,13 @@ mod test_vote_extensions {
             vote_extension: VoteExtension {
                 ethereum_events: Some(ethereum_events.clone()),
                 bridge_pool_root: {
-                    let to_sign = [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat();
+                    let to_sign = keccak_hash(
+                        [
+                            KeccakHash([0; 32]).encode().into_inner(),
+                            Uint::from(0).encode().into_inner(),
+                        ]
+                        .concat(),
+                    );
                     let sig = Signed::<_, SignableEthMessage>::new(
                         shell
                             .mode
@@ -624,11 +628,13 @@ mod test_vote_extensions {
                 .clone()
                 .sign(shell.mode.get_protocol_key().expect("Test failed"));
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
+                let to_sign = keccak_hash(
+                    [
+                        KeccakHash([0; 32]).encode().into_inner(),
+                        Uint::from(0).encode().into_inner(),
+                    ]
+                    .concat(),
+                );
                 let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
