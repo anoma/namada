@@ -526,7 +526,7 @@ mod test_ethbridge_router {
             .unwrap();
         let expected = {
             let mut proof =
-                EthereumProof::new((0.into(), vext.data.voting_powers));
+                EthereumProof::new((1.into(), vext.data.voting_powers));
             proof.attach_signature(
                 client
                     .storage
