@@ -147,7 +147,7 @@ where
             Some(sender) => sender,
             None => return Ok(false),
         };
-        let authed = authorize::is_authorized(&self.ctx, tx_data, &sender)?;
+        let authed = authorize::is_authorized(verifiers, &sender);
         Ok(authed)
     }
 }
