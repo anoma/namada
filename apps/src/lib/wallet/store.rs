@@ -312,7 +312,7 @@ impl Store {
         keys
     }
 
-    /// Get all known addresses by their alias, paired with PKH, if known.
+    /// Get all known addresses by their alias.
     pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
         &self.addresses
     }
