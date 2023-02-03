@@ -9,6 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
+use tiny_keccak::Hasher as KHasher;
 
 use super::ics23_specs;
 use super::merkle_tree::{Amt, Error, MerkleRoot, Smt};
@@ -350,5 +351,66 @@ impl StorageHasher for Sha256Hasher {
 impl fmt::Debug for Sha256Hasher {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Sha256Hasher")
+    }
+}
+
+/// A Keccak hasher algorithm.
+pub struct KeccakHasher(tiny_keccak::Keccak);
+
+impl Default for KeccakHasher {
+    fn default() -> Self {
+        Self(tiny_keccak::Keccak::v256())
+    }
+}
+
+impl StorageHasher for KeccakHasher {
+    fn hash(value: impl AsRef<[u8]>) -> H256 {
+        use tiny_keccak::Keccak;
+        let mut output = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(value.as_ref());
+        hasher.finalize(&mut output);
+        output.into()
+    }
+}
+
+impl Hasher for KeccakHasher {
+    fn write_bytes(&mut self, h: &[u8]) {
+        self.0.update(h);
+    }
+
+    fn finish(self) -> H256 {
+        let mut output = [0; 32];
+        self.0.finalize(&mut output);
+        output.into()
+    }
+}
+
+/// A [`StorageHasher`] which can never be called.
+pub enum DummyHasher {}
+
+const DUMMY_HASHER_PANIC_MSG: &str = "A storage hasher was called, which \
+                                      should never have been reachable from \
+                                      any code path";
+
+impl Default for DummyHasher {
+    fn default() -> Self {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+}
+
+impl StorageHasher for DummyHasher {
+    fn hash(_: impl AsRef<[u8]>) -> H256 {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+}
+
+impl Hasher for DummyHasher {
+    fn write_bytes(&mut self, _: &[u8]) {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+
+    fn finish(self) -> H256 {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
     }
 }

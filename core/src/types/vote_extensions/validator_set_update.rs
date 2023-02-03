@@ -352,7 +352,7 @@ mod tag {
     pub struct SerializeWithAbiEncode;
 
     impl Signable<Vext> for SerializeWithAbiEncode {
-        type Output = Vec<u8>;
+        type Output = KeccakHash;
 
         fn as_signable(ext: &Vext) -> Self::Output {
             let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
@@ -363,7 +363,9 @@ mod tag {
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
-                epoch_to_token(ext.signing_epoch),
+                // NOTE: the smart contract expects us to sign
+                // against the next nonce (i.e. the new epoch)
+                epoch_to_token(ext.signing_epoch.next()),
             ])
         }
     }

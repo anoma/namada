@@ -308,8 +308,8 @@ where
 {
     if epoch.0 == 0 {
         return Err(storage_api::Error::Custom(CustomError(
-            "Validator set update proofs should only be requested from
-             epoch 1 onwards"
+            "Validator set update proofs should only be requested from epoch \
+             1 onwards"
                 .into(),
         )));
     }
@@ -343,8 +343,8 @@ where
             "EthereumProof is seen in storage, therefore it must exist",
         );
 
-    // NOTE: `epoch - 1` is the epoch where we signed the proof
-    Ok(proof.map(|set| (epoch - 1, set)).encode())
+    // NOTE: we pass the epoch of the new set of validators
+    Ok(proof.map(|set| (epoch, set)).encode())
 }
 
 /// Read the active set of validators at the given [`Epoch`].
@@ -526,7 +526,7 @@ mod test_ethbridge_router {
             .unwrap();
         let expected = {
             let mut proof =
-                EthereumProof::new((0.into(), vext.data.voting_powers));
+                EthereumProof::new((1.into(), vext.data.voting_powers));
             proof.attach_signature(
                 client
                     .storage

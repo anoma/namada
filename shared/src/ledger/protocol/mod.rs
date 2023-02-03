@@ -572,11 +572,12 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::proto::{SignableEthBytes, Signed};
+    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
+    use namada_core::types::keccak::keccak_hash;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
@@ -662,12 +663,11 @@ mod tests {
             &root,
             100.into(),
         );
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let signing_key = key::testing::keypair_1();
         let hot_key =
             &keys[&address::testing::established_address_2()].eth_bridge;
-        let sig =
-            Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig;
+        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
         let vext = BridgePoolRootVext {
             block_height: BlockHeight(100),
             validator_addr: address::testing::established_address_2(),

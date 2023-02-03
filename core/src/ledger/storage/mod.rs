@@ -26,7 +26,7 @@ use rayon::iter::{
 #[cfg(feature = "wasm-runtime")]
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
-pub use traits::{Sha256Hasher, StorageHasher};
+pub use traits::{DummyHasher, KeccakHasher, Sha256Hasher, StorageHasher};
 
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::MIN_STORAGE_GAS;
