@@ -710,6 +710,17 @@ where
         }
     }
 
+    /// Get the timestamp of the last committed block, or the current timestamp
+    /// if no blocks have been produced yet
+    pub fn get_block_timestamp(&self) -> Result<DateTimeUtc> {
+        let last_block_height = self.get_block_height().0;
+
+        Ok(self
+            .db
+            .read_block_header(last_block_height)?
+            .map_or_else(|| DateTimeUtc::now(), |header| header.time))
+    }
+
     /// Initialize a new epoch when the current epoch is finished. Returns
     /// `true` on a new epoch.
     pub fn update_epoch(
