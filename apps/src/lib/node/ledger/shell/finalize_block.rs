@@ -53,29 +53,24 @@ where
         let current_epoch = self.wl_storage.storage.block.epoch;
 
         if new_epoch {
-            if let Err(e) = namada::ledger::storage::update_allowed_conversions(
+            namada::ledger::storage::update_allowed_conversions(
                 &mut self.wl_storage,
-            ) {
-                tracing::error!(
-                    "Failed to update allowed conversions with {e}"
-                );
-            }
+            )?;
+
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
             let pos_params =
-                namada_proof_of_stake::read_pos_params(&self.wl_storage)
-                    .unwrap();
+                namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
             namada_proof_of_stake::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
                 &namada_proof_of_stake::consensus_validator_set_handle(),
                 &namada_proof_of_stake::below_capacity_validator_set_handle(),
-            )
-            .unwrap();
+            )?;
         }
 
         let wrapper_fees = self.get_wrapper_tx_fees();
@@ -421,7 +416,8 @@ where
         // Apply validator set update
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
-            namada_proof_of_stake::read_pos_params(&self.wl_storage).unwrap();
+            namada_proof_of_stake::read_pos_params(&self.wl_storage)
+                .expect("Could not find the PoS parameters");
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
         // self.wl_storage.validator_set_update(current_epoch, |update| {

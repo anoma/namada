@@ -31,7 +31,7 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
@@ -104,6 +104,8 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[error("Error reading from or writing to storage: {0}")]
+    StorageApi(#[from] storage_api::Error),
 }
 
 impl From<Error> for TxResult {
