@@ -317,7 +317,7 @@ impl super::SigScheme for SigScheme {
 
     fn sign(
         keypair: &SecretKey,
-        data: impl super::Signable,
+        data: impl super::SignableBytes,
     ) -> Self::Signature {
         match keypair {
             SecretKey::Ed25519(kp) => {
@@ -347,7 +347,7 @@ impl super::SigScheme for SigScheme {
 
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: impl super::Signable,
+        data: impl super::SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         match (pk, sig) {

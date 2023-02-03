@@ -14,7 +14,7 @@ use zeroize::Zeroize;
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, Signable, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
 use crate::ledger::storage::Sha256Hasher;
 
@@ -338,7 +338,7 @@ impl super::SigScheme for SigScheme {
         SecretKey(Box::new(ed25519_consensus::SigningKey::new(csprng)))
     }
 
-    fn sign(keypair: &SecretKey, data: impl Signable) -> Self::Signature {
+    fn sign(keypair: &SecretKey, data: impl SignableBytes) -> Self::Signature {
         Signature(keypair.0.sign(&data.signable_hash::<Self::Hasher>()))
     }
 
@@ -356,7 +356,7 @@ impl super::SigScheme for SigScheme {
 
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: impl Signable,
+        data: impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         pk.0.verify(&sig.0, &data.signable_hash::<Self::Hasher>())

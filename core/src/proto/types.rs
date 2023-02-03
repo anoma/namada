@@ -61,10 +61,10 @@ pub struct SignedTxData {
 /// A serialization method to provide to [`Signed`], such
 /// that we may sign serialized data.
 ///
-/// This is a higher level version of [`key::Signable`].
+/// This is a higher level version of [`key::SignableBytes`].
 pub trait Signable<T> {
     /// A byte vector containing the serialized data.
-    type Output: key::Signable;
+    type Output: key::SignableBytes;
 
     /// Encodes `data` as a byte vector, with some arbitrary serialization
     /// method.

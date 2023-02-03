@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
-    SchemeType, SigScheme as SigSchemeTrait, Signable, VerifySigError,
+    SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
 #[cfg(any(test, feature = "secp256k1-sign-verify"))]
 use crate::ledger::storage::KeccakHasher;
@@ -519,7 +519,7 @@ impl super::SigScheme for SigScheme {
     }
 
     /// Sign the data with a key
-    fn sign(keypair: &SecretKey, data: impl Signable) -> Self::Signature {
+    fn sign(keypair: &SecretKey, data: impl SignableBytes) -> Self::Signature {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
         {
             // to avoid `unused-variables` warn
@@ -573,7 +573,7 @@ impl super::SigScheme for SigScheme {
 
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: impl Signable,
+        data: impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]

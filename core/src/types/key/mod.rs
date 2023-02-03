@@ -271,7 +271,10 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     where
         R: CryptoRng + RngCore;
     /// Sign the data with a key.
-    fn sign(keypair: &Self::SecretKey, data: impl Signable) -> Self::Signature;
+    fn sign(
+        keypair: &Self::SecretKey,
+        data: impl SignableBytes,
+    ) -> Self::Signature;
     /// Check that the public key matches the signature on the given data.
     fn verify_signature<T: BorshSerialize + BorshDeserialize>(
         pk: &Self::PublicKey,
@@ -281,7 +284,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     /// Check that the public key matches the signature on the given raw data.
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: impl Signable,
+        data: impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError>;
 }
@@ -386,26 +389,26 @@ pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
 
 /// Helper trait to compress arbitrary bytes to a hash value,
 /// which can be signed over.
-pub trait Signable: Sized + AsRef<[u8]> {
+pub trait SignableBytes: Sized + AsRef<[u8]> {
     /// Calculate a hash value to sign over.
     fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
         H::hash(self.as_ref()).into()
     }
 }
 
-impl Signable for Vec<u8> {}
-impl Signable for &Vec<u8> {}
-impl Signable for &[u8] {}
-impl<const N: usize> Signable for [u8; N] {}
-impl<const N: usize> Signable for &[u8; N] {}
+impl SignableBytes for Vec<u8> {}
+impl SignableBytes for &Vec<u8> {}
+impl SignableBytes for &[u8] {}
+impl<const N: usize> SignableBytes for [u8; N] {}
+impl<const N: usize> SignableBytes for &[u8; N] {}
 
-impl Signable for crate::types::hash::Hash {
+impl SignableBytes for crate::types::hash::Hash {
     fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
         self.0
     }
 }
 
-impl Signable for crate::types::keccak::KeccakHash {
+impl SignableBytes for crate::types::keccak::KeccakHash {
     fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
         self.0
     }
