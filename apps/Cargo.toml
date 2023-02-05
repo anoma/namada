@@ -116,6 +116,7 @@ reqwest = "0.11.4"
 rlimit = "0.5.4"
 rocksdb = {version = "0.20.1", features = ['zstd', 'jemalloc'], default-features = false}
 rpassword = "5.0.1"
+secstr = "0.5.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = {version = "1.0.62", features = ["raw_value"]}

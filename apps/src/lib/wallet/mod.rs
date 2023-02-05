@@ -19,6 +19,7 @@ use namada::types::key::*;
 use namada::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+use secstr::SecStr;
 pub use store::wallet_file;
 use thiserror::Error;
 
@@ -600,23 +601,27 @@ fn generate_mnemonic_code(
         .transpose()
 }
 
-/// Get input from the user.
-fn get_user_input<S>(request: S) -> std::io::Result<String>
+fn get_secure_user_input<S>(request: S) -> std::io::Result<SecStr>
 where
     S: std::fmt::Display,
 {
     print!("{} ", request);
     std::io::stdout().flush()?;
+
     let mut response = String::new();
     std::io::stdin().read_line(&mut response)?;
-    Ok(response)
+    Ok(SecStr::from(response))
 }
 
 fn read_mnemonic() -> Result<Mnemonic, GenRestoreKeyError> {
-    let phrase = get_user_input("Input mnemonic code:")
+    let phrase = get_secure_user_input("Input mnemonic code:")
         .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
-    Mnemonic::from_phrase(&phrase, Language::English)
-        .map_err(|_| GenRestoreKeyError::MnemonicInputError)
+
+    Mnemonic::from_phrase(
+        unsafe { std::str::from_utf8_unchecked(phrase.unsecure()) },
+        Language::English,
+    )
+    .map_err(|_| GenRestoreKeyError::MnemonicInputError)
 }
 
 /// Read the password for encryption from the file/env/stdin with confirmation.

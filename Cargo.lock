@@ -3753,6 +3753,7 @@ dependencies = [
  "rpassword",
  "rust_decimal",
  "rust_decimal_macros",
+ "secstr",
  "serde 1.0.145",
  "serde_bytes",
  "serde_json",
@@ -5643,6 +5644,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "secstr"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e04f657244f605c4cf38f6de5993e8bd050c8a303f86aeabff142d5c7c113e12"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
