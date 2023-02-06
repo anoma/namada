@@ -54,7 +54,7 @@ use namada::types::transaction::{
 use namada::types::{address, storage, token};
 use tokio::time::{Duration, Instant};
 
-use super::signing::{tx_signer, OfflineSignature};
+use super::signing::{tx_signers, OfflineSignature};
 use crate::cli::{self, args, safe_exit, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
@@ -1409,10 +1409,12 @@ pub async fn sign_tx(
 
     let signing_tx =
         SigningTx::try_from_slice(&data).expect("Tx should be deserialiable.");
-    let keypair =
-        tx_signer(&mut ctx, &tx, super::signing::TxSigningKey::None).await;
+    let keypairs =
+        tx_signers(&mut ctx, &tx, vec![super::signing::TxSigningKey::None])
+            .await;
+    let keypair = keypairs.get(0).expect("One signer should be provided.");
 
-    let signature = signing_tx.compute_signature(&keypair);
+    let signature = signing_tx.compute_signature(keypair);
     let public_key = keypair.ref_to();
 
     let offline_signature = OfflineSignature {
@@ -1823,7 +1825,7 @@ pub async fn is_delegator_at(
     )
 }
 
-pub async fn get_account_pks(
+pub async fn get_address_pks_map(
     client: &HttpClient,
     address: &Address,
 ) -> HashMap<common::PublicKey, u64> {
@@ -2615,25 +2617,6 @@ pub async fn get_delegators_delegation(
     unwrap_client_response(
         RPC.vp().pos().delegation_validators(client, address).await,
     )
-}
-
-pub async fn get_address_pks_map(
-    client: &HttpClient,
-    address: &Address,
-) -> HashMap<common::PublicKey, u64> {
-    let pk_prefix = pk_prefix_key(address);
-    let pk_iter =
-        query_storage_prefix::<common::PublicKey>(client, &pk_prefix).await;
-
-    if let Some(pks) = pk_iter {
-        let mut pks_map = HashMap::new();
-        pks.enumerate().for_each(|(index, (_, pk))| {
-            pks_map.insert(pk, index as u64);
-        });
-        pks_map
-    } else {
-        HashMap::new()
-    }
 }
 
 pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {

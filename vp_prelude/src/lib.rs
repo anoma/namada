@@ -40,6 +40,36 @@ use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
 
+pub fn verify_signatures(
+    ctx: &Ctx,
+    signed_tx_data: &SignedTxData,
+    addr: &Address,
+) -> bool {
+    let threshold = match key::threshold(ctx, addr) {
+        Ok(Some(threshold)) => threshold,
+        _ => 1,
+    };
+    if signed_tx_data.total_signatures() < threshold {
+        return false;
+    }
+    let mut valid_signatures = 0;
+    for sig_data in &signed_tx_data.sigs {
+        let pk = key::get(ctx, addr, sig_data.index);
+        if let Ok(Some(public_key)) = pk {
+            let signature_result = ctx
+                .verify_tx_signature(&public_key, &sig_data.sig)
+                .unwrap_or(false);
+            if signature_result {
+                valid_signatures += 1;
+            }
+            if valid_signatures >= threshold {
+                return true;
+            }
+        }
+    }
+    valid_signatures >= threshold
+}
+
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
     Hash(*digest.as_ref())

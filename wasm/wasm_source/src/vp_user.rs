@@ -68,31 +68,7 @@ fn validate_tx(
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            let threshold = match key::threshold(ctx, &addr) {
-                Ok(Some(threshold)) => threshold,
-                _ => 1,
-            };
-            if signed_tx_data.total_signatures() < threshold {
-                return false;
-            }
-            let mut valid_signatures = 0;
-            for sig_data in &signed_tx_data.sigs {
-                let pk = key::get(&ctx, &addr, sig_data.index);
-                if let Ok(Some(public_key)) = pk {
-                    let signature_result = ctx
-                        .verify_tx_signature(&public_key, &sig_data.sig)
-                        .unwrap_or(false);
-                    if signature_result {
-                        valid_signatures += 1;
-                    }
-                    if valid_signatures >= threshold {
-                        return true;
-                    }
-                }
-            }
-            return valid_signatures >= threshold;
-        }
+        Ok(signed_tx_data) => verify_signatures(ctx, signed_tx_data, &addr),
         _ => false,
     });
 
@@ -944,7 +920,7 @@ mod tests {
 
             let mut pks_index_map = HashMap::new();
             for (pk, index) in public_keys.iter().zip(0u64..) {
-                tx_env.write_public_key(&vp_owner, &pk, index);
+                tx_env.write_public_key(&vp_owner, pk, index);
                 pks_index_map.insert(pk.to_owned(), index);
             }
 
@@ -1003,7 +979,7 @@ mod tests {
 
             let mut pks_index_map = HashMap::new();
             for (pk, index) in public_keys.iter().zip(0u64..) {
-                tx_env.write_public_key(&vp_owner, &pk, index);
+                tx_env.write_public_key(&vp_owner, pk, index);
                 pks_index_map.insert(pk.to_owned(), index);
             }
 

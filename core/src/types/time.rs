@@ -121,7 +121,6 @@ impl FromStr for DateTimeUtc {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // DateTime<Utc>::parse_from_rfc_3339(s)
         Ok(Self(s.parse::<DateTime<Utc>>()?))
     }
 }

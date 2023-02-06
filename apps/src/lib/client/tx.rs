@@ -129,7 +129,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     };
 
     // let address = ctx.get(&args.address);
-    let pks_index_map = rpc::get_account_pks(&client, &address).await;
+    let pks_index_map = rpc::get_address_pks_map(&client, &address).await;
 
     let tx = Tx::new_with_timestamp(tx_code, Some(tx_data), timestamp);
 
@@ -202,7 +202,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let tx = Tx::new(tx_code, Some(data));
 
-    let pks_map = rpc::get_account_pks(&client, &addr).await;
+    let pks_map = rpc::get_address_pks_map(&client, &addr).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -1755,7 +1755,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    let pks_map = rpc::get_account_pks(&client, &source).await;
+    let pks_map = rpc::get_address_pks_map(&client, &source).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -1877,7 +1877,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
 
     let tx = Tx::new(tx_code, Some(data));
 
-    let pks_map = rpc::get_account_pks(&client, &source).await;
+    let pks_map = rpc::get_address_pks_map(&client, &source).await;
 
     process_tx(
         ctx,
@@ -2450,7 +2450,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
 
-    let pks_map = rpc::get_account_pks(&client, bond_source).await;
+    let pks_map = rpc::get_address_pks_map(&client, bond_source).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -2509,7 +2509,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
 
-    let pks_map = rpc::get_account_pks(&client, &bond_source).await;
+    let pks_map = rpc::get_address_pks_map(&client, &bond_source).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -2581,7 +2581,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.source.unwrap_or(args.validator);
 
-    let pks_map = rpc::get_account_pks(&client, &bond_source).await;
+    let pks_map = rpc::get_address_pks_map(&client, &bond_source).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -2671,7 +2671,7 @@ pub async fn submit_validator_commission_change(
     let tx = Tx::new(tx_code, Some(data));
     let default_signer = args.validator;
 
-    let pks_map = rpc::get_account_pks(&client, &validator).await;
+    let pks_map = rpc::get_address_pks_map(&client, &validator).await;
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,

@@ -29,28 +29,7 @@ fn validate_tx(
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            let threshold = key::threshold(ctx, &addr).unwrap().unwrap_or(1);
-            if signed_tx_data.total_signatures() < threshold {
-                return false;
-            }
-            let mut valid_signatures = 0;
-            for sig_data in &signed_tx_data.sigs {
-                let pk = key::get(&ctx, &addr, sig_data.index);
-                if let Ok(Some(public_key)) = pk {
-                    let signature_result = ctx
-                        .verify_tx_signature(&public_key, &sig_data.sig)
-                        .unwrap_or(false);
-                    if signature_result {
-                        valid_signatures += 1;
-                    }
-                    if valid_signatures >= threshold {
-                        return true;
-                    }
-                }
-            }
-            return valid_signatures >= threshold;
-        }
+        Ok(signed_tx_data) => verify_signatures(ctx, signed_tx_data, &addr),
         _ => false,
     });
 
@@ -363,10 +342,7 @@ mod tests {
         // The signature itself doesn't matter and is not being checked in this
         // test, it's just used to construct `SignedTxData`
         let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
-        let signed_solution = SignedTxData {
-            data: Some(solution_bytes),
-            sigs: Vec::new(),
-        };
+        let signed_solution = SignedTxData::from_single_signature(Some(solution_bytes), sig);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
