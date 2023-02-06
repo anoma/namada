@@ -76,7 +76,7 @@ fn validate_tx(
             }
             let mut valid_signatures = 0;
             for sig_data in &signed_tx_data.sigs {
-                let pk = key::get(&ctx, &addr, sig_data.index);
+                let pk = key::get(ctx, &addr, sig_data.index);
                 if let Ok(Some(public_key)) = pk {
                     let signature_result = ctx
                         .verify_tx_signature(&public_key, &sig_data.sig)
@@ -89,7 +89,7 @@ fn validate_tx(
                     }
                 }
             }
-            return valid_signatures >= threshold;
+            valid_signatures >= threshold
         }
         _ => false,
     });

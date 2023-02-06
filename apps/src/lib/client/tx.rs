@@ -1657,33 +1657,28 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) = 
-        if args.tx.dump_tx {
-            (
-                TxSigningKey::None,
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        } else if source == masp_addr && target == masp_addr {
-            // TODO Refactor me, we shouldn't rely on any specific token here.
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                0.into(),
-                ctx.native_token.clone(),
-            )
-        } else if source == masp_addr {
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        } else {
-            (
-                TxSigningKey::WalletAddress(args.source.to_address()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        };
+    let (default_signer, amount, token) = if args.tx.dump_tx {
+        (TxSigningKey::None, args.amount, parsed_args.token.clone())
+    } else if source == masp_addr && target == masp_addr {
+        // TODO Refactor me, we shouldn't rely on any specific token here.
+        (
+            TxSigningKey::SecretKey(masp_tx_key()),
+            0.into(),
+            ctx.native_token.clone(),
+        )
+    } else if source == masp_addr {
+        (
+            TxSigningKey::SecretKey(masp_tx_key()),
+            args.amount,
+            parsed_args.token.clone(),
+        )
+    } else {
+        (
+            TxSigningKey::WalletAddress(args.source.to_address()),
+            args.amount,
+            parsed_args.token.clone(),
+        )
+    };
     // If our chosen signer is the MASP sentinel key, then our shielded inputs
     // will need to cover the gas fees.
     let chosen_signer = tx_signer(&mut ctx, &args.tx, default_signer.clone())

@@ -69,7 +69,10 @@ fn validate_tx(
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
         Ok(signed_tx_data) => {
-            let threshold = key::threshold(ctx, &addr).unwrap().unwrap_or(1);
+            let threshold = match key::threshold(ctx, &addr) {
+                Ok(Some(threshold)) => threshold,
+                _ => 1,
+            };
             if signed_tx_data.total_signatures() < threshold {
                 return false;
             }
@@ -926,7 +929,7 @@ mod tests {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
-            let keypairs: Vec<common::SecretKey> = (0..signers_total).map(|_| {
+            let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
                 common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
             }).collect();
 
@@ -961,7 +964,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let tx = vp_env.tx.clone();
 
-            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, threshold as usize).cloned().collect(), pks_index_map);
+            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, threshold as usize).cloned().collect::<Vec<common::SecretKey>>(), pks_index_map);
             let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
             vp_env.tx = signed_tx;
             let keys_changed: BTreeSet<storage::Key> = vp_env.all_touched_storage_keys();
@@ -979,13 +982,13 @@ mod tests {
             (vp_owner, storage_key) in arb_account_storage_subspace_key(),
             // Generate bytes to write. If `None`, delete from the key instead
             storage_value in any::<Option<Vec<u8>>>(),
-            signers_total in (1u64..15)
+            signers_total in (0u64..15)
         ) {
             let mut random = rand::thread_rng();
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
 
-            let keypairs: Vec<common::SecretKey> = (1..signers_total).map(|_| {
+            let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
                 common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
             }).collect();
 
@@ -1004,7 +1007,11 @@ mod tests {
                 pks_index_map.insert(pk.to_owned(), index);
             }
 
-            let threshold: u64 = random.gen_range(1..=signers_total);
+            let threshold: u64 = if signers_total == 0 {
+                1
+            } else {
+                random.gen_range(1..=signers_total)
+            };
             tx_env.write_account_threshold(&vp_owner, threshold);
 
             // Initialize VP environment from a transaction
@@ -1020,7 +1027,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let tx = vp_env.tx.clone();
 
-            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, (threshold - 1) as usize).cloned().collect(), pks_index_map);
+            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, (threshold - 1) as usize).cloned().collect::<Vec<common::SecretKey>>(), pks_index_map);
             let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
             vp_env.tx = signed_tx;
             let keys_changed: BTreeSet<storage::Key> = vp_env.all_touched_storage_keys();
