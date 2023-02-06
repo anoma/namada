@@ -427,7 +427,7 @@ fn start_abci_broadcaster_shell(
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
+    let genesis = genesis::genesis(1);
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,

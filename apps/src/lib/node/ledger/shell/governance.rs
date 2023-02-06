@@ -347,30 +347,8 @@ mod tests {
 
     #[test]
     fn test_compute_tally_rejects_empty_votes() {
-        let (mut shell, _) = test_utils::setup();
-        let validator_addr = address::testing::established_address_1();
-        let validator_stake = token::Amount::from(10_000_000);
-        // TODO: this helper fn doesn't seem to work - we want to set up the
-        // active validators to be one validator with 10_000_000 micros of
-        // stake, but it seems this isn't doing this
-
-        let mut validator_set = shell
-            .storage
-            .read_validator_set()
-            .get(Epoch::default())
-            .unwrap()
-            .to_owned()
-            .active;
-
-        let val1 = validator_set.pop_first_shim().unwrap();
-        let val2 = validator_set.pop_first_shim().unwrap();
-        let val3 = validator_set.pop_first_shim().unwrap();
-
+        let (shell, _) = test_utils::setup();
         let epoch = Epoch::default();
-        assert_eq!(
-            shell.storage.validator_stake(&validator_addr, epoch),
-            token::Amount::from(10_000_000)
-        );
 
         let votes = Votes {
             yay_validators: HashMap::default(),
@@ -381,5 +359,35 @@ mod tests {
         let result = compute_tally(&shell.storage, epoch, votes);
 
         assert_matches!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_compute_tally_accepts_one_yay_vote() {
+        let (shell, _) = test_utils::setup();
+        let epoch = Epoch::default();
+
+        let mut validator_set = shell
+            .storage
+            .read_validator_set()
+            .get(epoch)
+            .unwrap()
+            .to_owned()
+            .active;
+        println!("active validators = {:#?}", validator_set);
+
+        let val1 = validator_set.pop_first_shim().unwrap();
+
+        let votes = Votes {
+            yay_validators: HashMap::from([(
+                val1.address,
+                val1.bonded_stake.into(),
+            )]),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.storage, epoch, votes);
+
+        assert_matches!(result, Ok(true));
     }
 }
