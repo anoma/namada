@@ -233,6 +233,18 @@ pub enum SlashType {
     LightClientAttack,
 }
 
+/// VoteInfo inspired from tendermint
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct VoteInfo {
+    /// the first 20 bytes of the validator public key hash (SHA-256) taken
+    /// from tendermint
+    pub validator_address: Vec<u8>,
+    /// validator voting power
+    pub validator_vp: u64,
+    /// was the validator signature was included in the last block?
+    pub signed_last_block: bool,
+}
+
 impl Display for BondId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

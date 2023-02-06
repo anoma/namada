@@ -227,6 +227,7 @@ mod tests {
     use namada::ledger::events::EventLevel;
     use namada::ledger::native_vp::governance::utils::{self, Votes};
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::btree_set::BTreeSetShims;
 
     use super::*;
 
@@ -352,11 +353,20 @@ mod tests {
         // TODO: this helper fn doesn't seem to work - we want to set up the
         // active validators to be one validator with 10_000_000 micros of
         // stake, but it seems this isn't doing this
-        utils::testing::setup_storage_with_validators(
-            &mut shell.storage,
-            HashMap::from([(validator_addr.clone(), validator_stake)]),
-        );
-        let epoch = Epoch(0);
+
+        let mut validator_set = shell
+            .storage
+            .read_validator_set()
+            .get(Epoch::default())
+            .unwrap()
+            .to_owned()
+            .active;
+
+        let val1 = validator_set.pop_first_shim().unwrap();
+        let val2 = validator_set.pop_first_shim().unwrap();
+        let val3 = validator_set.pop_first_shim().unwrap();
+
+        let epoch = Epoch::default();
         assert_eq!(
             shell.storage.validator_stake(&validator_addr, epoch),
             token::Amount::from(10_000_000)
