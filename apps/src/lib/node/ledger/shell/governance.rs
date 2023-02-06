@@ -362,7 +362,38 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_tally_accepts_one_yay_vote() {
+    fn test_compute_tally_accepts_enough_yay_votes() {
+        let (shell, _) = test_utils::setup();
+        let epoch = Epoch::default();
+
+        let mut validator_set = shell
+            .storage
+            .read_validator_set()
+            .get(epoch)
+            .unwrap()
+            .to_owned()
+            .active;
+        println!("active validators = {:#?}", validator_set);
+
+        let val1 = validator_set.pop_first_shim().unwrap();
+        let val2 = validator_set.pop_first_shim().unwrap();
+
+        let votes = Votes {
+            yay_validators: HashMap::from([
+                (val1.address, val1.bonded_stake.into()),
+                (val2.address, val2.bonded_stake.into()),
+            ]),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.storage, epoch, votes);
+
+        assert_matches!(result, Ok(true));
+    }
+
+    #[test]
+    fn test_compute_tally_rejects_not_enough_yay_votes() {
         let (shell, _) = test_utils::setup();
         let epoch = Epoch::default();
 
@@ -388,6 +419,6 @@ mod tests {
 
         let result = compute_tally(&shell.storage, epoch, votes);
 
-        assert_matches!(result, Ok(true));
+        assert_matches!(result, Ok(false));
     }
 }
