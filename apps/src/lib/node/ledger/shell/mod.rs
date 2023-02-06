@@ -131,6 +131,7 @@ pub enum ErrorCodes {
     Undecryptable = 6,
     ReplayTx = 7,
     InvalidChainId = 8,
+    InvalidDecryptedChainId = 9,
 }
 
 impl From<ErrorCodes> for u32 {
