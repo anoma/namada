@@ -653,7 +653,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     String::from(
-                        "The address given does not have sufficient balance \
+                        "The given address does not have a sufficient balance \
                          to pay fee"
                     )
                 );

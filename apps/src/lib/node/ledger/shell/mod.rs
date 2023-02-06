@@ -695,9 +695,9 @@ where
             let has_valid_pow = false;
 
             if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = String::from(
-                    "The address given does not have sufficient balance to \
+                    "The given address does not have a sufficient balance to \
                      pay fee",
                 );
                 return response;
