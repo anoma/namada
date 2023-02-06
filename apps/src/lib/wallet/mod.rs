@@ -137,6 +137,27 @@ impl Wallet {
         password
     }
 
+    fn gen_and_store_key(
+        &mut self,
+        scheme: SchemeType,
+        alias: Option<String>,
+        password: Option<String>,
+        seed: Option<Seed>,
+    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+        let (alias, key) = self.store.gen_key(scheme, alias, password, seed);
+        // Cache the newly added key
+        self.decrypted_key_cache.insert(alias.clone(), key.clone());
+        Ok((alias.into(), key))
+    }
+
+    /// Restore a keypair from the user mnemonic code (read from stdin) and
+    /// derive an implicit address from its public part
+    /// and insert them into the store with the provided alias, converted to
+    /// lower case. If none provided, the alias will be the public key hash (in
+    /// lowercase too). If the key is to be encrypted, will prompt for
+    /// password from stdin. Stores the key in decrypted key cache and
+    /// returns the alias of the key and a reference-counting pointer to the
+    /// key.
     pub fn derive_key_from_user_mnemonic_code(
         &mut self,
         scheme: SchemeType,
@@ -146,11 +167,7 @@ impl Wallet {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let mnemonic = read_mnemonic()?;
         let seed = Seed::new(&mnemonic, "");
-        let (alias, key) =
-            self.store.gen_key(scheme, alias, password, Some(seed));
-        // Cache the newly added key
-        self.decrypted_key_cache.insert(alias.clone(), key.clone());
-        Ok((alias.into(), key))
+        self.gen_and_store_key(scheme, alias, password, Some(seed))
     }
 
     /// Generate a new keypair and derive an implicit address from its public
@@ -170,10 +187,7 @@ impl Wallet {
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let mnemonic = generate_mnemonic_code(use_mnemonic)?;
         let seed = mnemonic.map(|m| Seed::new(&m, ""));
-        let (alias, key) = self.store.gen_key(scheme, alias, password, seed);
-        // Cache the newly added key
-        self.decrypted_key_cache.insert(alias.clone(), key.clone());
-        Ok((alias.into(), key))
+        self.gen_and_store_key(scheme, alias, password, seed)
     }
 
     pub fn gen_spending_key(
