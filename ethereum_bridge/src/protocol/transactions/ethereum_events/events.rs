@@ -73,7 +73,13 @@ where
     } in transfers
     {
         let mut changed = if asset != &wrapped_native_erc20 {
-            mint_wrapped_erc20s(storage, asset, receiver, amount)?
+            let changed =
+                mint_wrapped_erc20s(storage, asset, receiver, amount)?;
+            tracing::info!(
+                "Minted wrapped ERC20s - (receiver - {receiver}, amount - \
+                 {amount})",
+            );
+            changed
         } else {
             redeem_native_token(storage, receiver, amount)?
         };
