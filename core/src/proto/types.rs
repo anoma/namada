@@ -481,8 +481,6 @@ impl Tx {
             })
             .collect::<Vec<SignatureIndex>>();
 
-        println!("{:?}", sigs);
-
         let signed_tx_data = SignedTxData {
             data: self.data.clone(),
             sigs,

@@ -240,8 +240,6 @@ pub async fn sign_tx_multisignature(
                     (offline_signature.public_key, offline_signature.sig)
                 })
                 .collect::<Vec<(common::PublicKey, common::Signature)>>();
-            println!("{:?}", signatures);
-            println!("{:?}", pks_index_map);
             tx.add_signatures(signatures, pks_index_map)
         }
     };

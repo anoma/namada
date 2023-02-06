@@ -265,7 +265,6 @@ where
             .values_of(self.name)
             .unwrap_or_default()
             .map(|raw| {
-                println!("a: {}", raw);
                 raw.parse().unwrap_or_else(|e| {
                     eprintln!(
                         "Failed to parse the {} argument. Raw value: {}, \
