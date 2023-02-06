@@ -326,7 +326,8 @@ fn key_and_address_restore(
             );
         }
         Err(err) => {
-            eprintln!("{}", err)
+            eprintln!("{}", err);
+            cli::safe_exit(1);
         }
     }
 }
@@ -354,7 +355,8 @@ fn key_and_address_gen(
             );
         }
         Err(err) => {
-            eprintln!("{}", err)
+            eprintln!("{}", err);
+            cli::safe_exit(1);
         }
     }
 }
