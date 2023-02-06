@@ -22,22 +22,28 @@ If you find a bug, please submit an issue with the `bug` [issue template](https:
 ## Latest Testnet
 The Namada public testnet is permissionless, anyone can join without the authorisation of a centralised party. Expect frequent upgrades (every two weeks).
 
-- Most recent upgrade:
+- Namada public testnet 3:
+  - From date: 9th of February 2023  
+  - Namada protocol version: `v0.13.3` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `TBD`
+
+## Testnet History Timeline
+
+- Namada public testnet 2.1.2 hotfix:
   - From date: 25th of January 2023  
   - Namada protocol version: `v0.13.3` 
   - Tendermint version: `v0.1.4-abciplus`
   - CHAIN_ID: `public-testnet-2.1.4014f207f6d`
 
-  Due to a bug, we released a [hotfix](https://github.com/anoma/namada/releases/tag/v0.13.3). 
-  This must be installed and applied before `18:00:00 UTC`. In order to apply it, follow [these steps](./upgrades.md).
+  Due to a bug,  a [hotfix](https://github.com/anoma/namada/releases/tag/v0.13.3) was released. 
+  This needed to be installed and applied before `18:00:00 UTC` on `2023-01-25`.
 
-- Most recent testnet:
+- Namada public testnet 2.1.2:
   - From date: 24th of January 2023  
   - Namada protocol version: `v0.13.2` 
   - Tendermint version: `v0.1.4-abciplus`
   - CHAIN_ID: `public-testnet-2.1.4014f207f6d`
-
-## Testnet History Timeline
 
 - Namada public testnet 2.1:
   - From date: 17th of January 2023  
