@@ -534,11 +534,10 @@ pub mod tx_types {
         let data = TxType::Decrypted(decrypted)
             .try_to_vec()
             .expect("Test failed");
-        let ed_sig = ed25519::Signature::try_from_slice(&data).unwrap();
-        let signed = SignedTxData::from_single_signature(
-            Some(data),
-            common::Signature::try_from_sig(&ed_sig).unwrap(),
-        );
+        let ed_sig =
+            ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
+        let signature = common::Signature::try_from_sig(&ed_sig).unwrap();
+        let signed = SignedTxData::from_single_signature(Some(data), signature);
         // create the tx with signed decrypted data
         let tx =
             Tx::new(vec![], Some(signed.try_to_vec().expect("Test failed")));
