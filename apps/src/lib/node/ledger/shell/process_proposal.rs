@@ -118,7 +118,23 @@ where
         };
 
         ProcessProposal {
+<<<<<<< HEAD
             status: status as i32,
+=======
+            status: if tx_results.iter().all(|res| {
+                matches!(
+                    ErrorCodes::from_u32(res.code).unwrap(),
+                    ErrorCodes::Ok
+                        | ErrorCodes::Undecryptable
+                        | ErrorCodes::InvalidDecryptedChainId
+                )
+            }) {
+                ProposalStatus::Accept as i32
+            } else {
+                ProposalStatus::Reject as i32
+            },
+
+>>>>>>> 976497c7a (Manages invalid chain id for decrypted txs)
             tx_results,
         }
     }
@@ -259,10 +275,10 @@ where
                                 {
                                     if tx.chain_id != self.chain_id {
                                         return TxResult {
-                                            code: ErrorCodes::InvalidChainId
+                                            code: ErrorCodes::InvalidDecryptedChainId
                                                 .into(),
                                             info: format!(
-                                                "Tx carries a wrong chain id: \
+                                                "Decrypted tx carries a wrong chain id: \
                                                  expected {}, found {}",
                                                 self.chain_id, tx.chain_id
                                             ),
@@ -1282,8 +1298,8 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that a transaction with a mismatching chain id causes the entire
-    /// block to be rejected
+    /// Test that a wrapper or protocol transaction with a mismatching chain id
+    /// causes the entire block to be rejected
     #[test]
     fn test_wong_chain_id() {
         let (mut shell, _) = TestShell::new();
@@ -1318,6 +1334,39 @@ mod test_process_proposal {
             wrong_chain_id.clone(),
         );
 
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(), protocol_tx.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                for res in response {
+                    assert_eq!(
+                        res.result.code,
+                        u32::from(ErrorCodes::InvalidChainId)
+                    );
+                    assert_eq!(
+                        res.result.info,
+                        format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            shell.chain_id, wrong_chain_id
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /// Test that a decrypted transaction with a mismatching chain id gets
+    /// rejected without rejecting the entire block
+    #[test]
+    fn test_decrypted_wong_chain_id() {
+        let (mut shell, _) = TestShell::new();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("new transaction data".as_bytes().to_owned()),
@@ -1350,30 +1399,25 @@ mod test_process_proposal {
 
         // Run validation
         let request = ProcessProposal {
-            txs: vec![
-                signed.to_bytes(),
-                protocol_tx.to_bytes(),
-                signed_decrypted.to_bytes(),
-            ],
+            txs: vec![signed_decrypted.to_bytes()],
         };
+
         match shell.process_proposal(request) {
-            Ok(_) => panic!("Test failed"),
-            Err(TestError::RejectProposal(response)) => {
-                for res in response {
-                    assert_eq!(
-                        res.result.code,
-                        u32::from(ErrorCodes::InvalidChainId)
-                    );
-                    assert_eq!(
-                        res.result.info,
-                        format!(
-                            "Tx carries a wrong chain id: expected {}, found \
-                             {}",
-                            shell.chain_id, wrong_chain_id
-                        )
-                    );
-                }
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidDecryptedChainId)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    format!(
+                        "Decrypted tx carries a wrong chain id: expected {}, \
+                         found {}",
+                        shell.chain_id, wrong_chain_id
+                    )
+                )
             }
+            Err(_) => panic!("Test failed"),
         }
     }
 }

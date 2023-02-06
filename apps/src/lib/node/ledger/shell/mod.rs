@@ -152,7 +152,11 @@ impl ErrorCodes {
 >>>>>>> c00cb14a6 (Fixes error codes)
 =======
     InvalidChainId = 8,
+<<<<<<< HEAD
 >>>>>>> c6c242600 (Validates tx `ChainId`)
+=======
+    InvalidDecryptedChainId = 9,
+>>>>>>> 976497c7a (Manages invalid chain id for decrypted txs)
 }
 
 impl From<ErrorCodes> for u32 {
