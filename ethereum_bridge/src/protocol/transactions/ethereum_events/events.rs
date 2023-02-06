@@ -16,6 +16,7 @@ use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::ledger::parameters::read_epoch_duration_parameter;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{nam, Address};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
@@ -71,18 +72,76 @@ where
         receiver,
     } in transfers
     {
-        if asset != &wrapped_native_erc20 {
-            let mut changed =
-                mint_wrapped_erc20s(storage, asset, receiver, amount)?;
-            changed_keys.append(&mut changed)
+        let mut changed = if asset != &wrapped_native_erc20 {
+            mint_wrapped_erc20s(storage, asset, receiver, amount)?
         } else {
-            tracing::warn!(
-                "Redemption of the wrapped native token is not yet supported \
-                 - (receiver - {receiver}, amount - {amount})"
-            )
-        }
+            redeem_native_token(storage, receiver, amount)?
+        };
+        changed_keys.append(&mut changed)
     }
     Ok(changed_keys)
+}
+
+/// Redeems `amount` of the native token for `receiver` from escrow.
+fn redeem_native_token<D, H>(
+    storage: &mut Storage<D, H>,
+    receiver: &Address,
+    amount: &token::Amount,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let eth_bridge_native_token_balance_key =
+        token::balance_key(&storage.native_token, &BRIDGE_ADDRESS);
+    let receiver_native_token_balance_key =
+        token::balance_key(&storage.native_token, receiver);
+
+    let eth_bridge_native_token_balance_pre: token::Amount =
+        StorageRead::read(storage, &eth_bridge_native_token_balance_key)?
+            .expect(
+                "Ethereum bridge must always have an explicit balance of the \
+                 native token",
+            );
+    let receiver_native_token_balance_pre: token::Amount =
+        StorageRead::read(storage, &receiver_native_token_balance_key)?
+            .unwrap_or_default();
+
+    let eth_bridge_native_token_balance_post =
+        eth_bridge_native_token_balance_pre
+            .checked_sub(amount)
+            .expect(
+                "Ethereum bridge should always have enough native tokens to \
+                 redeem any confirmed transfers",
+            );
+    let receiver_native_token_balance_post = receiver_native_token_balance_pre
+        .checked_add(amount)
+        .expect("Receiver's balance is full");
+
+    StorageWrite::write(
+        storage,
+        &eth_bridge_native_token_balance_key,
+        eth_bridge_native_token_balance_post,
+    )?;
+    StorageWrite::write(
+        storage,
+        &receiver_native_token_balance_key,
+        receiver_native_token_balance_post,
+    )?;
+
+    tracing::info!(
+        %amount,
+        %receiver,
+        %eth_bridge_native_token_balance_pre,
+        %eth_bridge_native_token_balance_post,
+        %receiver_native_token_balance_pre,
+        %receiver_native_token_balance_post,
+        "Redeemed native token for wrapped ERC20 token"
+    );
+    Ok(BTreeSet::from([
+        eth_bridge_native_token_balance_key,
+        receiver_native_token_balance_key,
+    ]))
 }
 
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
@@ -274,6 +333,7 @@ where
 mod tests {
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
+    use eyre::Result;
     use namada_core::ledger::parameters::{
         update_epoch_parameter, EpochDuration,
     };
@@ -666,5 +726,45 @@ mod tests {
                 assert_eq!(escrow_balance, Amount::from(0));
             }
         }
+    }
+
+    #[test]
+    fn test_redeem_native_token() -> Result<()> {
+        let mut storage = TestStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let receiver = address::testing::established_address_1();
+        let amount = Amount::from(100);
+
+        let bridge_pool_initial_balance = Amount::from(100_000_000);
+        let bridge_pool_native_token_balance_key =
+            token::balance_key(&storage.native_token, &BRIDGE_ADDRESS);
+        StorageWrite::write(
+            &mut storage,
+            &bridge_pool_native_token_balance_key,
+            bridge_pool_initial_balance,
+        )?;
+        let receiver_native_token_balance_key =
+            token::balance_key(&storage.native_token, &receiver);
+
+        let changed_keys =
+            redeem_native_token(&mut storage, &receiver, &amount)?;
+
+        assert_eq!(
+            changed_keys,
+            BTreeSet::from([
+                bridge_pool_native_token_balance_key.clone(),
+                receiver_native_token_balance_key.clone()
+            ])
+        );
+        assert_eq!(
+            StorageRead::read(&storage, &bridge_pool_native_token_balance_key)?,
+            Some(bridge_pool_initial_balance - amount)
+        );
+        assert_eq!(
+            StorageRead::read(&storage, &receiver_native_token_balance_key)?,
+            Some(amount)
+        );
+
+        Ok(())
     }
 }
