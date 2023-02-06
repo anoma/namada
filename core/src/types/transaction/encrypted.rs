@@ -66,6 +66,15 @@ pub mod encrypted_tx {
         }
     }
 
+    impl PartialEq for EncryptedTx {
+        fn eq(&self, other: &EncryptedTx) -> bool {
+            self.try_to_vec().expect("Unable to serialize encrypted transaction") ==
+                other.try_to_vec().expect("Unable to serialize encrypted transaction")
+        }
+    }
+
+    impl Eq for EncryptedTx {}
+
     impl borsh::ser::BorshSerialize for EncryptedTx {
         fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
             let Ciphertext {
@@ -130,7 +139,7 @@ pub mod encrypted_tx {
 
     /// A helper struct for serializing EncryptedTx structs
     /// as an opaque blob
-    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
     #[serde(transparent)]
     struct SerializedCiphertext {
         payload: Vec<u8>,

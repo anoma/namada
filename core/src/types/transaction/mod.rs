@@ -299,7 +299,7 @@ pub mod tx_types {
                 inner_tx: tx.inner_tx.clone(),
                 inner_tx_code: tx.inner_tx_code.clone(),
             }
-            .hash();
+            .partial_hash();
             match TxType::try_from(Tx {
                 code: tx.code,
                 data: Some(data),

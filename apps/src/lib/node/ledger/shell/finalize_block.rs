@@ -239,7 +239,7 @@ where
                                     .to_string(),
                             );
                         }
-                        DecryptedTx::Undecryptable(_) => {
+                        DecryptedTx::Undecryptable(_) | DecryptedTx::UndecryptableCode(_) => {
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();

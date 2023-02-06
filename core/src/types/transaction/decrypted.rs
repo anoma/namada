@@ -39,6 +39,8 @@ pub mod decrypted_tx {
         },
         /// The wrapper whose payload could not be decrypted
         Undecryptable(WrapperTx),
+        /// The tx whose could not be decrypted
+        UndecryptableCode(Tx),
     }
 
     impl DecryptedTx {
@@ -52,7 +54,10 @@ pub mod decrypted_tx {
                 } => tx.to_bytes(),
                 DecryptedTx::Undecryptable(wrapper) => {
                     wrapper.try_to_vec().unwrap()
-                }
+                },
+                DecryptedTx::UndecryptableCode(tx) => {
+                    tx.to_bytes()
+                },
             }
         }
 
@@ -64,8 +69,9 @@ pub mod decrypted_tx {
                     tx,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
-                } => Hash(tx.hash()),
+                } => Hash(tx.partial_hash()),
                 DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
+                DecryptedTx::UndecryptableCode(tx) => Hash(tx.partial_hash()),
             }
         }
     }
@@ -76,11 +82,23 @@ pub mod decrypted_tx {
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        inner_tx: EncryptedTx,
+        inner_tx: Option<EncryptedTx>,
+        inner_tx_code: Option<EncryptedTx>,
     ) -> bool {
         match decrypted {
-            DecryptedTx::Decrypted { .. } => true,
-            DecryptedTx::Undecryptable(tx) => tx.decrypt(privkey, inner_tx).is_err(),
+            // A tx is decryptable if it contains the literal code inside it
+            DecryptedTx::Decrypted { tx, .. } => tx.code.is_literal(),
+            // A tx is undecryptable if its inner_tx decrypts incorrectly
+            DecryptedTx::Undecryptable(tx) if inner_tx.is_some() =>
+                tx.decrypt(privkey, inner_tx.unwrap()).is_err(),
+            // A tx is undecryptable if the inner_tx is not present
+            DecryptedTx::Undecryptable(_) => true,
+            // A code is undecryptable if its inner_tx_code decrypts incorrectly
+            DecryptedTx::UndecryptableCode(tx) if inner_tx_code.is_some() =>
+                tx.decrypt_code(privkey, inner_tx_code.unwrap()).is_none(),
+            // A code is undecryptable if the literal code is not present
+            DecryptedTx::UndecryptableCode(tx) =>
+                !tx.code.is_literal(),
         }
     }
 

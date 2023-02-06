@@ -28,11 +28,15 @@ use crate::types::transaction::EncryptionKey;
 use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::PairingEngine;
+#[cfg(feature = "ferveo-tpke")]
+use ark_ec::AffineCurve;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
+    #[error("Error deserializing transaction field bytes: {0}")]
+    TxDeserializingError(std::io::Error),
     #[error("Error decoding an DkgGossipMessage from bytes: {0}")]
     DkgDecodingError(prost::DecodeError),
     #[error("Dkg is empty")]
@@ -132,22 +136,33 @@ where
     }
 }
 
-/// Represents either the literal code of a transaction or its hash.
+/// Failed expansion due to hash of supplied code not matching contained hash
+#[derive(Debug)]
+pub struct InvalidCodeError;
+
+/// Represents either the literal code of a transaction or its hash. Useful for
+/// supporting both wallets that need the full transaction code, and those that
+/// only need the hash. Also useful for cases when passing full transaction code
+/// around separately from their transactions is cumbersome.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Hash, PartialEq, Eq,
 )]
 pub enum TxCode {
+    /// A hash of transaction code
     Hash([u8; 32]),
+    /// The full transaction code
     Literal(Vec<u8>),
 }
 
 impl TxCode {
+    /// Get the literal transaction code if available
     pub fn code(&self) -> Option<Vec<u8>> {
         match self {
             Self::Hash(_hash) => None,
             Self::Literal(lit) => Some(lit.clone()),
         }
     }
+    /// Return the transaction code hash
     pub fn code_hash(&self) -> [u8; 32] {
         match self {
             Self::Hash(hash) => hash.clone(),
@@ -156,20 +171,26 @@ impl TxCode {
     }
     /// Expand this reduced Tx using the supplied code only if the the code
     /// hashes to the stored code hash
-    pub fn expand(&mut self, code: Vec<u8>) {
-        if TxCode::Hash(hash_tx(&code).0) == *self {
+    pub fn expand(&mut self, code: Vec<u8>) -> std::result::Result<(), InvalidCodeError> {
+        if hash_tx(&code).0 == self.code_hash() {
             *self = TxCode::Literal(code);
+            Ok(())
+        } else {
+            Err(InvalidCodeError)
         }
     }
+    /// Replace a literal code with its hash
     pub fn contract(&mut self) {
         *self = TxCode::Hash(self.code_hash());
     }
+    /// Indicates that this object contains the full code
     pub fn is_literal(&self) -> bool {
         match self {
             Self::Literal(_) => true,
             _ => false,
         }
     }
+    /// Indicates that this object only contains the hash of the code
     pub fn is_hash(&self) -> bool {
         match self {
             Self::Hash(_) => true,
@@ -182,30 +203,22 @@ impl TxCode {
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
 )]
 pub struct Tx {
     pub code: TxCode,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
-    /// the encrypted payload
+    /// the encrypted inner transaction if data contains a WrapperTx
     #[cfg(feature = "ferveo-tpke")]
     pub inner_tx: Option<EncryptedTx>,
     #[cfg(not(feature = "ferveo-tpke"))]
     pub inner_tx: Option<Vec<u8>>,
-    /// the encrypted payload
+    /// the encrypted inner transaction code if data contains a WrapperTx
     #[cfg(feature = "ferveo-tpke")]
     pub inner_tx_code: Option<EncryptedTx>,
     #[cfg(not(feature = "ferveo-tpke"))]
     pub inner_tx_code: Option<Vec<u8>>,
-}
-
-impl PartialEq for Tx {
-    fn eq(&self, other: &Self) -> bool {
-        self.code.eq(&other.code) &&
-            self.data.eq(&other.data) &&
-            self.timestamp.eq(&other.timestamp)
-    }
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -217,24 +230,18 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
-        let inner_tx = match tx.inner_tx {
-            Some(x) => Some(
-                BorshDeserialize::try_from_slice(&x)
-                    .expect("Unable to deserialize encrypted transactions")
-            ),
-            None => None,
-        };
-        let inner_tx_code = match tx.inner_tx_code {
-            Some(x) => Some(
-                BorshDeserialize::try_from_slice(&x)
-                    .expect("Unable to deserialize encrypted transactions")
-            ),
-            None => None,
-        };
-        let code = if tx.is_literal {
-            TxCode::Literal(tx.code)
-        } else {
+        let inner_tx = tx.inner_tx.map(
+            |x| BorshDeserialize::try_from_slice(&x)
+                .map_err(Error::TxDeserializingError)
+        ).transpose()?;
+        let inner_tx_code = tx.inner_tx_code.map(
+            |x| BorshDeserialize::try_from_slice(&x)
+                .map_err(Error::TxDeserializingError)
+        ).transpose()?;
+        let code = if tx.is_code_hash {
             TxCode::Hash(tx.code.try_into().expect("Unable to deserialize code hash"))
+        } else {
+            TxCode::Literal(tx.code)
         };
         Ok(Tx {
             code,
@@ -249,20 +256,13 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
-        let inner_tx = if let Some(inner_tx) = tx.inner_tx {
-            Some(inner_tx.try_to_vec().expect("Unable to serialize encrypted transaction"))
-        } else {
-            None
-        };
-        let inner_tx_code = if let Some(inner_tx_code) = tx.inner_tx_code {
-            Some(inner_tx_code.try_to_vec().expect("Unable to serialize encrypted transaction"))
-        } else {
-            None
-        };
-        
+        let inner_tx = tx.inner_tx
+            .map(|x| x.try_to_vec().expect("Unable to serialize encrypted transaction"));
+        let inner_tx_code = tx.inner_tx_code
+            .map(|x| x.try_to_vec().expect("Unable to serialize encrypted transaction code"));
         types::Tx {
             code: tx.code.code().unwrap_or(tx.code.code_hash().to_vec()),
-            is_literal: tx.code.is_literal(),
+            is_code_hash: tx.code.is_hash(),
             data: tx.data,
             timestamp,
             inner_tx,
@@ -398,12 +398,14 @@ impl Tx {
         bytes
     }
 
-    pub fn hash(&self) -> [u8; 32] {
+    /// Hash this transaction leaving out the inner tx and its code, but instead
+    /// of including the transaction code in the hash, include its hash instead
+    pub fn partial_hash(&self) -> [u8; 32] {
         let timestamp = Some(self.timestamp.into());
         let mut bytes = vec![];
         types::Tx {
             code: self.code.code_hash().to_vec(),
-            is_literal: false,
+            is_code_hash: true,
             data: self.data.clone(),
             timestamp,
             inner_tx: None,
@@ -414,13 +416,14 @@ impl Tx {
         hash_tx(&bytes).0
     }
 
+    /// Get the hash of this transaction's code
     pub fn code_hash(&self) -> [u8; 32] {
         self.code.code_hash()
     }
 
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
-        let to_sign = self.hash();
+        let to_sign = self.partial_hash();
         let sig = common::SigScheme::sign(keypair, to_sign);
         let signed = SignedTxData {
             data: self.data,
@@ -456,10 +459,12 @@ impl Tx {
             inner_tx: self.inner_tx.clone(),
             inner_tx_code: self.inner_tx_code.clone(),
         };
-        let signed_data = tx.hash();
+        let signed_data = tx.partial_hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
     }
 
+    /// Attach the given transaction to this one. Useful when the data field
+    /// contains a WrapperTx and its tx_hash field needs a witness.
     #[cfg(feature = "ferveo-tpke")]
     pub fn attach_inner_tx(
         mut self,
@@ -471,6 +476,8 @@ impl Tx {
         self
     }
 
+    /// Attach the given transaction code to this one. Useful when the inner_tx
+    /// field contains a Tx and its code field needs a witness.
     #[cfg(feature = "ferveo-tpke")]
     pub fn attach_inner_tx_code(
         mut self,
@@ -480,6 +487,27 @@ impl Tx {
         let inner_tx_code = EncryptedTx::encrypt(tx, encryption_key);
         self.inner_tx_code = Some(inner_tx_code);
         self
+    }
+
+    /// A validity check on the ciphertext.
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn validate_ciphertext(&self) -> bool {
+        let mut valid = true;
+        // Check the inner_tx ciphertext if it is there
+        if let Some(inner_tx) = &self.inner_tx {
+            valid = valid &&
+                inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
+                    -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
+                ));
+        }
+        // Check the inner_tx_code ciphertext if it is there
+        if let Some(inner_tx_code) = &self.inner_tx_code {
+            valid = valid &&
+                inner_tx_code.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
+                    -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
+                ));
+        }
+        valid
     }
 }
 
@@ -574,7 +602,7 @@ mod tests {
 
         let types_tx = types::Tx {
             code: code.clone(),
-            is_literal: true,
+            is_code_hash: false,
             data: Some(data),
             timestamp: None,
             inner_tx: None,

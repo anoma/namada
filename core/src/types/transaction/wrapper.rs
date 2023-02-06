@@ -18,7 +18,7 @@ pub mod wrapper_tx {
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{
-        hash_tx, Hash, TxError, TxType,
+        Hash, TxError, TxType,
     };
 
     /// Minimum fee amount in micro NAMs
@@ -212,13 +212,6 @@ pub mod wrapper_tx {
             Address::from(&self.pk)
         }
 
-        /// A validity check on the ciphertext.
-        pub fn validate_ciphertext(inner_tx: EncryptedTx) -> bool {
-            inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
-                -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-            ))
-        }
-
         /// Decrypt the wrapped transaction.
         ///
         /// Will fail if the inner transaction does match the
@@ -235,7 +228,7 @@ pub mod wrapper_tx {
             let decrypted_tx = Tx::try_from(decrypted.as_ref())
                 .map_err(|_| WrapperTxErr::InvalidTx)?;
             // check that the hash equals commitment
-            if decrypted_tx.hash() != self.tx_hash.0 {
+            if decrypted_tx.partial_hash() != self.tx_hash.0 {
                 Err(WrapperTxErr::DecryptedHash)
             } else {
                 Ok(decrypted_tx)
@@ -244,7 +237,7 @@ pub mod wrapper_tx {
 
         /// Bind the given transaction to this wrapper by recording its hash
         pub fn bind(mut self, tx: Tx) -> Self {
-            self.tx_hash = Hash(tx.hash());
+            self.tx_hash = Hash(tx.partial_hash());
             self
         }
 
@@ -369,7 +362,6 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
-            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
 
             let wrapper = WrapperTx::new(
                 Fee {
@@ -382,8 +374,12 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             ).bind(tx.clone());
-            assert!(WrapperTx::validate_ciphertext(encrypted_tx.clone()));
+            let stx = wrapper.sign(&keypair)
+                .expect("unable to sign wrapper")
+                .attach_inner_tx(&tx, Default::default());
+            assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
             let decrypted = wrapper.decrypt(privkey, encrypted_tx).expect("Test failed");
             assert_eq!(tx, decrypted);
         }
@@ -392,18 +388,18 @@ pub mod wrapper_tx {
         /// does not match the commitment, an error is returned
         #[test]
         fn test_decryption_invalid_hash() {
+            let keypair = gen_keypair();
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
-            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
 
             let mut wrapper = WrapperTx::new(
                 Fee {
                     amount: 10.into(),
                     token: nam(),
                 },
-                &gen_keypair(),
+                &keypair,
                 Epoch(0),
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
@@ -411,8 +407,12 @@ pub mod wrapper_tx {
             );
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.tx_hash = Hash([0u8; 32]);
-            assert!(WrapperTx::validate_ciphertext(encrypted_tx.clone()));
+            let stx = wrapper.sign(&keypair)
+                .expect("unable to sign wrapper")
+                .attach_inner_tx(&tx, Default::default());
+            assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
             let err = wrapper.decrypt(privkey, encrypted_tx).expect_err("Test failed");
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
@@ -457,7 +457,7 @@ pub mod wrapper_tx {
             };
 
             let mut signed_tx_data =
-                SignedTxData::try_from_slice(&tx.data.unwrap()[..])
+                SignedTxData::try_from_slice(&tx.data.as_ref().unwrap()[..])
                     .expect("Test failed");
 
             // malicious transaction
@@ -471,10 +471,10 @@ pub mod wrapper_tx {
             );
 
             // We change the commitment appropriately
-            wrapper.tx_hash = Hash(malicious.hash());
+            wrapper.tx_hash = Hash(malicious.partial_hash());
 
             // we check ciphertext validity still passes
-            assert!(WrapperTx::validate_ciphertext(inner_tx.clone()));
+            assert!(tx.validate_ciphertext());
             // we check that decryption still succeeds
             let decrypted = wrapper.decrypt(
                 <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(),

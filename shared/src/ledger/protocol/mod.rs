@@ -161,8 +161,10 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    // prepare_proposal ensures that the code field is populated
+    let tx_code = tx.code.code().expect("tx code not present");
     gas_meter
-        .add_compiling_fee(tx.code.code().expect("tx code not present").len())
+        .add_compiling_fee(tx_code.len())
         .map_err(Error::GasError)?;
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
@@ -171,7 +173,7 @@ where
         write_log,
         gas_meter,
         tx_index,
-        &tx.code.code().expect("tx code not present"),
+        &tx_code,
         tx_data,
         vp_wasm_cache,
         tx_wasm_cache,

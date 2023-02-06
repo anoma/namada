@@ -7,7 +7,6 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
-use namada::types::transaction::WrapperTx;
 
 impl<D, H> Shell<D, H>
 where
@@ -87,9 +86,8 @@ where
         };
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        let inner_tx = tx.inner_tx.clone();
 
-        match process_tx(tx) {
+        match process_tx(tx.clone()) {
             // This occurs if the wrapper / protocol tx signature is invalid
             Err(err) => TxResult {
                 code: ErrorCodes::InvalidSig.into(),
@@ -125,8 +123,12 @@ where
                                        determined in the previous block"
                                     .into(),
                             }
-                        } else if inner_tx.is_some() &&
-                            verify_decrypted_correctly(&tx, privkey, inner_tx.clone().unwrap()) {
+                        } else if verify_decrypted_correctly(
+                                &tx,
+                                privkey,
+                                inner_tx.clone(),
+                                inner_tx_code.clone(),
+                            ) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -148,9 +150,9 @@ where
                             .into(),
                     },
                 },
-                TxType::Wrapper(tx) => {
+                TxType::Wrapper(wtx) => {
                     // validate the ciphertext via Ferveo
-                    if inner_tx.is_none() || !WrapperTx::validate_ciphertext(inner_tx.unwrap()) {
+                    if tx.inner_tx.is_none() || !tx.validate_ciphertext() {
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: format!(
@@ -164,19 +166,19 @@ where
                         // transaction key, then the fee payer is effectively
                         // the MASP, otherwise derive
                         // they payer from public key.
-                        let fee_payer = if tx.pk != masp_tx_key().ref_to() {
-                            tx.fee_payer()
+                        let fee_payer = if wtx.pk != masp_tx_key().ref_to() {
+                            wtx.fee_payer()
                         } else {
                             masp()
                         };
                         // check that the fee payer has sufficient balance
                         let balance =
-                            self.get_balance(&tx.fee.token, &fee_payer);
+                            self.get_balance(&wtx.fee.token, &fee_payer);
 
                         // In testnets, tx is allowed to skip fees if it
                         // includes a valid PoW
                         #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow = self.has_valid_pow_solution(&tx);
+                        let has_valid_pow = self.has_valid_pow_solution(&wtx);
                         #[cfg(feature = "mainnet")]
                         let has_valid_pow = false;
 

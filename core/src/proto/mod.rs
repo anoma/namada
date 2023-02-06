@@ -15,13 +15,15 @@ mod tests {
 
     #[test]
     fn encoding_round_trip() {
+        let code = "wasm code".as_bytes().to_owned();
+        let inner_tx = "arbitrary data".as_bytes().to_owned();
         let tx = Tx {
-            code: "wasm code".as_bytes().to_owned(),
-            is_literal: true,
+            code: code.clone(),
+            is_code_hash: false,
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
-            inner_tx: None,
-            inner_tx_code: None,
+            inner_tx: Some(inner_tx),
+            inner_tx_code: Some(code),
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();
