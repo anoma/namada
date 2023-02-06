@@ -408,6 +408,7 @@ pub async fn submit_init_validator(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
     let tx = Tx::new(tx_code, Some(data));
+
     let (mut ctx, initialized_accounts) = process_tx(
         ctx,
         &tx_args,
@@ -2026,11 +2027,13 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
         let tx = Tx::new(tx_code, Some(data));
 
+        let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+
         process_tx(
             ctx,
             &args.tx,
             tx,
-            HashMap::new(),
+            pks_map,
             vec![TxSigningKey::WalletAddress(signer)],
             #[cfg(not(feature = "mainnet"))]
             false,
@@ -2040,16 +2043,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 }
 
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
-    // TODO: fix me
-    let signer = if let Some(addr) = args.tx.signers.get(0) {
-        addr
-    } else {
-        eprintln!("Missing mandatory argument --signer.");
-        safe_exit(1)
-    };
-
     if args.offline {
-        let signer = ctx.get(signer);
+        let signer = ctx.get(&args.address);
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
         let file = File::open(&proposal_file_path).expect("File must exist.");
@@ -2105,7 +2100,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         })
         .await;
 
-        let voter_address = ctx.get(signer);
+        let voter_address = ctx.get(&args.address);
         let proposal_id = args.proposal_id.unwrap();
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
@@ -2177,7 +2172,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     &args.tx,
                     tx,
                     pks_map,
-                    vec![TxSigningKey::WalletAddress(signer.clone())],
+                    vec![TxSigningKey::WalletAddress(args.address)],
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )

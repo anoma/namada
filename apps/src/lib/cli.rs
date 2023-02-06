@@ -2395,6 +2395,8 @@ pub mod args {
         pub offline: bool,
         /// The proposal file path
         pub proposal_data: Option<PathBuf>,
+        /// The address that will send the vote
+        pub address: WalletAddress,
     }
 
     impl Args for VoteProposal {
@@ -2404,6 +2406,7 @@ pub mod args {
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
+            let address = ADDRESS.parse(matches);
 
             Self {
                 tx,
@@ -2411,6 +2414,7 @@ pub mod args {
                 vote,
                 offline,
                 proposal_data,
+                address,
             }
         }
 
@@ -2445,6 +2449,7 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+                .arg(ADDRESS.def().about("The address to vote with."))
         }
     }
 
