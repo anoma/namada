@@ -272,7 +272,7 @@ where
                         } else {
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
-                                info: "The address given does not have \
+                                info: "The given address does not have a \
                                        sufficient balance to pay fee"
                                     .into(),
                             }
@@ -483,7 +483,7 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "The address given does not have sufficient balance to \
+                    "The given address does not have a sufficient balance to \
                      pay fee"
                         .to_string(),
                 );
@@ -543,7 +543,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     String::from(
-                        "The address given does not have sufficient balance \
+                        "The given address does not have a sufficient balance \
                          to pay fee"
                     )
                 );
