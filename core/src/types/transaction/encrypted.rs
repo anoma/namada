@@ -68,8 +68,11 @@ pub mod encrypted_tx {
 
     impl PartialEq for EncryptedTx {
         fn eq(&self, other: &EncryptedTx) -> bool {
-            self.try_to_vec().expect("Unable to serialize encrypted transaction") ==
-                other.try_to_vec().expect("Unable to serialize encrypted transaction")
+            self.try_to_vec()
+                .expect("Unable to serialize encrypted transaction")
+                == other
+                    .try_to_vec()
+                    .expect("Unable to serialize encrypted transaction")
         }
     }
 

@@ -1,6 +1,10 @@
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
+#[cfg(feature = "ferveo-tpke")]
+use ark_ec::AffineCurve;
+#[cfg(feature = "ferveo-tpke")]
+use ark_ec::PairingEngine;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -13,23 +17,19 @@ use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
+#[cfg(feature = "ferveo-tpke")]
+use crate::types::transaction::encrypted::EncryptedTx;
 use crate::types::transaction::hash_tx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::process_tx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::DecryptedTx;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::TxType;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::encrypted::EncryptedTx;
+use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
 #[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::EllipticCurve;
-#[cfg(feature = "ferveo-tpke")]
-use ark_ec::PairingEngine;
-#[cfg(feature = "ferveo-tpke")]
-use ark_ec::AffineCurve;
+use crate::types::transaction::TxType;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -145,7 +145,14 @@ pub struct InvalidCodeError;
 /// only need the hash. Also useful for cases when passing full transaction code
 /// around separately from their transactions is cumbersome.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Hash, PartialEq, Eq,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    PartialEq,
+    Eq,
 )]
 pub enum TxCode {
     /// A hash of transaction code
@@ -162,16 +169,21 @@ impl TxCode {
             Self::Literal(lit) => Some(lit.clone()),
         }
     }
+
     /// Return the transaction code hash
     pub fn code_hash(&self) -> [u8; 32] {
         match self {
-            Self::Hash(hash) => hash.clone(),
+            Self::Hash(hash) => *hash,
             Self::Literal(lit) => hash_tx(lit).0,
         }
     }
+
     /// Expand this reduced Tx using the supplied code only if the the code
     /// hashes to the stored code hash
-    pub fn expand(&mut self, code: Vec<u8>) -> std::result::Result<(), InvalidCodeError> {
+    pub fn expand(
+        &mut self,
+        code: Vec<u8>,
+    ) -> std::result::Result<(), InvalidCodeError> {
         if hash_tx(&code).0 == self.code_hash() {
             *self = TxCode::Literal(code);
             Ok(())
@@ -179,23 +191,20 @@ impl TxCode {
             Err(InvalidCodeError)
         }
     }
+
     /// Replace a literal code with its hash
     pub fn contract(&mut self) {
         *self = TxCode::Hash(self.code_hash());
     }
+
     /// Indicates that this object contains the full code
     pub fn is_literal(&self) -> bool {
-        match self {
-            Self::Literal(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Literal(_))
     }
+
     /// Indicates that this object only contains the hash of the code
     pub fn is_hash(&self) -> bool {
-        match self {
-            Self::Hash(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Hash(_))
     }
 }
 
@@ -230,16 +239,24 @@ impl TryFrom<&[u8]> for Tx {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
-        let inner_tx = tx.inner_tx.map(
-            |x| BorshDeserialize::try_from_slice(&x)
-                .map_err(Error::TxDeserializingError)
-        ).transpose()?;
-        let inner_tx_code = tx.inner_tx_code.map(
-            |x| BorshDeserialize::try_from_slice(&x)
-                .map_err(Error::TxDeserializingError)
-        ).transpose()?;
+        let inner_tx = tx
+            .inner_tx
+            .map(|x| {
+                BorshDeserialize::try_from_slice(&x)
+                    .map_err(Error::TxDeserializingError)
+            })
+            .transpose()?;
+        let inner_tx_code = tx
+            .inner_tx_code
+            .map(|x| {
+                BorshDeserialize::try_from_slice(&x)
+                    .map_err(Error::TxDeserializingError)
+            })
+            .transpose()?;
         let code = if tx.is_code_hash {
-            TxCode::Hash(tx.code.try_into().expect("Unable to deserialize code hash"))
+            TxCode::Hash(
+                tx.code.try_into().expect("Unable to deserialize code hash"),
+            )
         } else {
             TxCode::Literal(tx.code)
         };
@@ -256,12 +273,19 @@ impl TryFrom<&[u8]> for Tx {
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
         let timestamp = Some(tx.timestamp.into());
-        let inner_tx = tx.inner_tx
-            .map(|x| x.try_to_vec().expect("Unable to serialize encrypted transaction"));
-        let inner_tx_code = tx.inner_tx_code
-            .map(|x| x.try_to_vec().expect("Unable to serialize encrypted transaction code"));
+        let inner_tx = tx.inner_tx.map(|x| {
+            x.try_to_vec()
+                .expect("Unable to serialize encrypted transaction")
+        });
+        let inner_tx_code = tx.inner_tx_code.map(|x| {
+            x.try_to_vec()
+                .expect("Unable to serialize encrypted transaction code")
+        });
         types::Tx {
-            code: tx.code.code().unwrap_or(tx.code.code_hash().to_vec()),
+            code: tx
+                .code
+                .code()
+                .unwrap_or_else(|| tx.code.code_hash().to_vec()),
             is_code_hash: tx.code.is_hash(),
             data: tx.data,
             timestamp,
@@ -469,7 +493,7 @@ impl Tx {
     pub fn attach_inner_tx(
         mut self,
         tx: &Tx,
-        encryption_key: EncryptionKey
+        encryption_key: EncryptionKey,
     ) -> Self {
         let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
         self.inner_tx = Some(inner_tx);
@@ -482,7 +506,7 @@ impl Tx {
     pub fn attach_inner_tx_code(
         mut self,
         tx: &[u8],
-        encryption_key: EncryptionKey
+        encryption_key: EncryptionKey,
     ) -> Self {
         let inner_tx_code = EncryptedTx::encrypt(tx, encryption_key);
         self.inner_tx_code = Some(inner_tx_code);
@@ -601,7 +625,7 @@ mod tests {
         assert_eq!(tx_from_bytes, tx);
 
         let types_tx = types::Tx {
-            code: code.clone(),
+            code,
             is_code_hash: false,
             data: Some(data),
             timestamp: None,

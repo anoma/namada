@@ -773,8 +773,8 @@ mod test_utils {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::transaction::encrypted::EncryptedTx;
+    use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -1000,7 +1000,8 @@ mod test_utils {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
-        let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
+        let encrypted_tx =
+            EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
@@ -1011,7 +1012,8 @@ mod test_utils {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        ).bind(tx);
+        )
+        .bind(tx);
         shell.storage.tx_queue.push(WrapperTxInQueue {
             tx: wrapper,
             inner_tx: Some(encrypted_tx),

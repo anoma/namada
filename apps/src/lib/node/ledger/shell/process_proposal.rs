@@ -124,11 +124,11 @@ where
                                     .into(),
                             }
                         } else if verify_decrypted_correctly(
-                                &tx,
-                                privkey,
-                                inner_tx.clone(),
-                                inner_tx_code.clone(),
-                            ) {
+                            &tx,
+                            privkey,
+                            inner_tx.clone(),
+                            inner_tx_code.clone(),
+                        ) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -218,14 +218,13 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::proto::SignedTxData;
+    use namada::proto::{SignedTxData, TxCode};
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
-    use namada::proto::TxCode;
 
     use super::*;
     use crate::facade::tendermint_proto::abci::RequestInitChain;
@@ -254,13 +253,14 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        ).bind(tx.clone());
+        )
+        .bind(tx.clone());
         let tx = Tx::new(
             vec![],
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
         )
-            .attach_inner_tx(&tx, Default::default())
-            .to_bytes();
+        .attach_inner_tx(&tx, Default::default())
+        .to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone()],
@@ -304,11 +304,12 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-            .bind(tx.clone())
-            .sign(&keypair)
-            .expect("Test failed");
+        .bind(tx.clone())
+        .sign(&keypair)
+        .expect("Test failed");
         let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
-        let inner_tx_code = EncryptedTx::encrypt(&inner_tx_code, Default::default());
+        let inner_tx_code =
+            EncryptedTx::encrypt(&inner_tx_code, Default::default());
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
             sig,
@@ -391,10 +392,10 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-            .bind(tx.clone())
-            .sign(&keypair)
-            .expect("Test failed")
-            .attach_inner_tx(&tx, Default::default());
+        .bind(tx.clone())
+        .sign(&keypair)
+        .expect("Test failed")
+        .attach_inner_tx(&tx, Default::default());
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
         };
@@ -447,10 +448,10 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-            .bind(tx.clone())
-            .sign(&keypair)
-            .expect("Test failed")
-            .attach_inner_tx(&tx, Default::default());
+        .bind(tx.clone())
+        .sign(&keypair)
+        .expect("Test failed")
+        .attach_inner_tx(&tx, Default::default());
 
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
@@ -486,7 +487,8 @@ mod test_process_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            let encrypted_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
+            let encrypted_tx =
+                EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
@@ -497,7 +499,8 @@ mod test_process_proposal {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            ).bind(tx.clone());
+            )
+            .bind(tx.clone());
             shell.enqueue_tx(wrapper, Some(encrypted_tx.clone()), None);
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
@@ -565,13 +568,19 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        ).bind(tx.clone());
+        )
+        .bind(tx.clone());
 
-        let tx =
-            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone())))
-            .attach_inner_tx(&tx, Default::default());
+        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+            wrapper.clone(),
+        )))
+        .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper.clone(), tx.inner_tx.clone(), tx.inner_tx_code.clone());
+        shell.enqueue_tx(
+            wrapper,
+            tx.inner_tx.clone(),
+            tx.inner_tx_code.clone(),
+        );
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -632,9 +641,14 @@ mod test_process_proposal {
         let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
-        ))).attach_inner_tx(&tx, Default::default());
+        )))
+        .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper.clone(), tx.inner_tx.clone(), tx.inner_tx_code.clone());
+        shell.enqueue_tx(
+            wrapper,
+            tx.inner_tx.clone(),
+            tx.inner_tx_code.clone(),
+        );
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],

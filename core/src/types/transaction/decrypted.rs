@@ -11,8 +11,8 @@ pub mod decrypted_tx {
 
     use super::EllipticCurve;
     use crate::proto::Tx;
-    use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::types::transaction::encrypted::EncryptedTx;
+    use crate::types::transaction::{Hash, TxType, WrapperTx};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -54,10 +54,8 @@ pub mod decrypted_tx {
                 } => tx.to_bytes(),
                 DecryptedTx::Undecryptable(wrapper) => {
                     wrapper.try_to_vec().unwrap()
-                },
-                DecryptedTx::UndecryptableCode(tx) => {
-                    tx.to_bytes()
-                },
+                }
+                DecryptedTx::UndecryptableCode(tx) => tx.to_bytes(),
             }
         }
 
@@ -89,16 +87,17 @@ pub mod decrypted_tx {
             // A tx is decryptable if it contains the literal code inside it
             DecryptedTx::Decrypted { tx, .. } => tx.code.is_literal(),
             // A tx is undecryptable if its inner_tx decrypts incorrectly
-            DecryptedTx::Undecryptable(tx) if inner_tx.is_some() =>
-                tx.decrypt(privkey, inner_tx.unwrap()).is_err(),
+            DecryptedTx::Undecryptable(tx) if inner_tx.is_some() => {
+                tx.decrypt(privkey, inner_tx.unwrap()).is_err()
+            }
             // A tx is undecryptable if the inner_tx is not present
             DecryptedTx::Undecryptable(_) => true,
             // A code is undecryptable if its inner_tx_code decrypts incorrectly
-            DecryptedTx::UndecryptableCode(tx) if inner_tx_code.is_some() =>
-                tx.decrypt_code(privkey, inner_tx_code.unwrap()).is_none(),
+            DecryptedTx::UndecryptableCode(tx) if inner_tx_code.is_some() => {
+                tx.decrypt_code(privkey, inner_tx_code.unwrap()).is_none()
+            }
             // A code is undecryptable if the literal code is not present
-            DecryptedTx::UndecryptableCode(tx) =>
-                !tx.code.is_literal(),
+            DecryptedTx::UndecryptableCode(tx) => !tx.code.is_literal(),
         }
     }
 

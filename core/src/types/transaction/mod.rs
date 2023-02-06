@@ -436,10 +436,10 @@ pub mod tx_types {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-                .bind(tx.clone())
-                .sign(&keypair)
-                .expect("Test failed")
-                .attach_inner_tx(&tx, Default::default());
+            .bind(tx.clone())
+            .sign(&keypair)
+            .expect("Test failed")
+            .attach_inner_tx(&tx, Default::default());
 
             match process_tx(wrapper_tx.clone()).expect("Test failed") {
                 TxType::Wrapper(wrapper) => {
@@ -479,7 +479,8 @@ pub mod tx_types {
                 Some(
                     TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
                 ),
-            ).attach_inner_tx(&inner_tx, Default::default());
+            )
+            .attach_inner_tx(&inner_tx, Default::default());
             let result = process_tx(tx).expect_err("Test failed");
             assert_matches!(result, TxError::Unsigned(_));
         }

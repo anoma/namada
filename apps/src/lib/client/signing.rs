@@ -253,8 +253,8 @@ pub async fn sign_wrapper(
             #[cfg(not(feature = "mainnet"))]
             pow_solution,
         )
-            // Bind the inner transaction to the wrapper
-            .bind(tx.clone())
+        // Bind the inner transaction to the wrapper
+        .bind(tx.clone())
     };
     // Then sign over the bound wrapper
     let mut stx = wrapper_tx

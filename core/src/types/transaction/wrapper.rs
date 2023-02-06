@@ -17,9 +17,7 @@ pub mod wrapper_tx {
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::types::transaction::{
-        Hash, TxError, TxType,
-    };
+    use crate::types::transaction::{Hash, TxError, TxType};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -373,14 +371,17 @@ pub mod wrapper_tx {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            ).bind(tx.clone());
-            let stx = wrapper.sign(&keypair)
+            )
+            .bind(tx.clone());
+            let stx = wrapper
+                .sign(&keypair)
                 .expect("unable to sign wrapper")
                 .attach_inner_tx(&tx, Default::default());
             assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
-            let decrypted = wrapper.decrypt(privkey, encrypted_tx).expect("Test failed");
+            let decrypted =
+                wrapper.decrypt(privkey, encrypted_tx).expect("Test failed");
             assert_eq!(tx, decrypted);
         }
 
@@ -407,13 +408,16 @@ pub mod wrapper_tx {
             );
             // give a incorrect commitment to the decrypted contents of the tx
             wrapper.tx_hash = Hash([0u8; 32]);
-            let stx = wrapper.sign(&keypair)
+            let stx = wrapper
+                .sign(&keypair)
                 .expect("unable to sign wrapper")
                 .attach_inner_tx(&tx, Default::default());
             assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
-            let err = wrapper.decrypt(privkey, encrypted_tx).expect_err("Test failed");
+            let err = wrapper
+                .decrypt(privkey, encrypted_tx)
+                .expect_err("Test failed");
             assert_matches!(err, WrapperTxErr::DecryptedHash);
         }
 
@@ -441,10 +445,10 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-                .bind(tx.clone())
-                .sign(&keypair)
-                .expect("Test failed")
-                .attach_inner_tx(&tx, Default::default());
+            .bind(tx.clone())
+            .sign(&keypair)
+            .expect("Test failed")
+            .attach_inner_tx(&tx, Default::default());
 
             // we now try to alter the inner tx maliciously
             let mut wrapper = if let TxType::Wrapper(wrapper) =

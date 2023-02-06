@@ -239,7 +239,8 @@ where
                                     .to_string(),
                             );
                         }
-                        DecryptedTx::Undecryptable(_) | DecryptedTx::UndecryptableCode(_) => {
+                        DecryptedTx::Undecryptable(_)
+                        | DecryptedTx::UndecryptableCode(_) => {
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
@@ -455,8 +456,8 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use namada::types::storage::Epoch;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::types::transaction::encrypted::EncryptedTx;
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -500,7 +501,8 @@ mod test_finalize_block {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            ).bind(raw_tx.clone());
+            )
+            .bind(raw_tx.clone());
             let tx = wrapper
                 .sign(&keypair)
                 .expect("Test failed")
@@ -515,7 +517,11 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(wrapper.clone(), tx.inner_tx, tx.inner_tx_code);
+                shell.enqueue_tx(
+                    wrapper.clone(),
+                    tx.inner_tx,
+                    tx.inner_tx_code,
+                );
             }
 
             if i != 3 {
@@ -564,7 +570,8 @@ mod test_finalize_block {
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
         );
-        let encrypted_raw_tx = EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
+        let encrypted_raw_tx =
+            EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
@@ -575,7 +582,8 @@ mod test_finalize_block {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        ).bind(raw_tx.clone());
+        )
+        .bind(raw_tx.clone());
 
         let processed_tx = ProcessedTx {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -698,7 +706,8 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
             );
-            let encrypted_raw_tx = EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
+            let encrypted_raw_tx =
+                EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),
@@ -709,7 +718,8 @@ mod test_finalize_block {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            ).bind(raw_tx.clone());
+            )
+            .bind(raw_tx.clone());
             shell.enqueue_tx(wrapper_tx, Some(encrypted_raw_tx), None);
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -744,7 +754,8 @@ mod test_finalize_block {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            ).bind(raw_tx.clone());
+            )
+            .bind(raw_tx.clone());
             let wrapper = wrapper_tx
                 .sign(&keypair)
                 .expect("Test failed")
