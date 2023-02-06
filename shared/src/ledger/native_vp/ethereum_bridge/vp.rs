@@ -147,8 +147,21 @@ where
             Some(sender) => sender,
             None => return Ok(false),
         };
-        let authed = authorize::is_authorized(verifiers, &sender);
-        Ok(authed)
+        if authorize::is_authorized(verifiers, &sender) {
+            tracing::info!(
+                ?verifiers,
+                ?sender,
+                "Ethereum Bridge VP authorized transfer"
+            );
+            Ok(true)
+        } else {
+            tracing::info!(
+                ?verifiers,
+                ?sender,
+                "Ethereum Bridge VP rejected unauthorized transfer"
+            );
+            Ok(false)
+        }
     }
 }
 
