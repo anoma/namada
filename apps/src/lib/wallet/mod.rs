@@ -562,7 +562,7 @@ impl Wallet {
 }
 
 /// Generates a random mnemonic of the given mnemonic type.
-fn generate_and_confirm_mnemonic_code(
+fn generate_and_print_mnemonic_code(
     mnemonic_type: MnemonicType,
 ) -> Result<Mnemonic, GenRestoreKeyError> {
     const BITS_PER_BYTE: usize = 8;
@@ -576,18 +576,13 @@ fn generate_and_confirm_mnemonic_code(
 
     #[cfg(not(test))]
     {
-        // TODO print mnemonic to the user in a different terminal
-        // execute!(std::io::stdout(), EnterAlternateScreen)?;
         println!(
             "Safely store your {} words mnemonic.",
             mnemonic_type.word_count()
         );
         println!("{}", mnemonic.clone().into_phrase());
-        // get_user_input(format!("{}", "Press enter when you are done."));
-        // execute!(std::io::stdout(), LeaveAlternateScreen)?;
     }
 
-    // TODO check mnemonic by user
     Ok(mnemonic)
 }
 
@@ -597,7 +592,7 @@ fn generate_mnemonic_code(
     const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
 
     use_mnemonic
-        .then(|| generate_and_confirm_mnemonic_code(MNEMONIC_TYPE))
+        .then(|| generate_and_print_mnemonic_code(MNEMONIC_TYPE))
         .transpose()
 }
 
@@ -626,7 +621,6 @@ fn read_mnemonic() -> Result<Mnemonic, GenRestoreKeyError> {
 
 /// Read the password for encryption from the file/env/stdin with confirmation.
 pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
-    // AK: use Zeroize?
     let password = if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None
@@ -671,15 +665,15 @@ pub fn read_password(prompt_msg: &str) -> String {
 mod tests {
     use bip39::MnemonicType;
 
-    use crate::wallet::generate_and_confirm_mnemonic_code;
+    use crate::wallet::generate_and_print_mnemonic_code;
 
     #[test]
     fn test_generate_mnemonic() {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words12;
         let mnemonic1 =
-            generate_and_confirm_mnemonic_code(MNEMONIC_TYPE).unwrap();
+            generate_and_print_mnemonic_code(MNEMONIC_TYPE).unwrap();
         let mnemonic2 =
-            generate_and_confirm_mnemonic_code(MNEMONIC_TYPE).unwrap();
+            generate_and_print_mnemonic_code(MNEMONIC_TYPE).unwrap();
         assert_ne!(mnemonic1.into_phrase(), mnemonic2.into_phrase());
     }
 }
