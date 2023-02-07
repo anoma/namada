@@ -8,7 +8,7 @@ use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
-use namada::types::hash::Hash;
+
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -244,7 +244,7 @@ pub async fn sign_tx_multisignature(
         }
     };
 
-    let epoch = rpc::query_epoch(args::Query {
+    let epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;

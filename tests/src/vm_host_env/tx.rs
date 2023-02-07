@@ -189,7 +189,8 @@ impl TestTxEnv {
         index: u64,
     ) {
         let storage_key = key::pk_key(address, index);
-        self.storage
+        self.wl_storage
+            .storage
             .write(&storage_key, public_key.try_to_vec().unwrap())
             .unwrap();
     }
@@ -201,7 +202,8 @@ impl TestTxEnv {
         threshold: u64,
     ) {
         let storage_key = key::threshold_key(address);
-        self.storage
+        self.wl_storage
+            .storage
             .write(&storage_key, threshold.try_to_vec().unwrap())
             .unwrap();
     }

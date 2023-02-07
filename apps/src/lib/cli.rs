@@ -1643,6 +1643,7 @@ pub mod args {
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
+    const DUMP_TX: ArgFlag = flag("dump-tx");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const OFFLINE_TX: ArgFlag = flag("offline-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");

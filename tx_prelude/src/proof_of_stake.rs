@@ -1,6 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
-use namada_core::types::key::common;
+
 use namada_core::types::transaction::{InitAccount, InitValidator};
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
