@@ -26,6 +26,7 @@ use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
 
@@ -295,7 +296,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
     let vp_user = vp_user.to_string_lossy();
-    let tx_no_op = wasm_abs_path(TX_NO_OP_WASM);
+    let tx_no_op = TestWasms::TxNoOp.path();
     let tx_no_op = tx_no_op.to_string_lossy();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -1680,7 +1681,7 @@ fn invalid_transactions() -> Result<()> {
     let data = transfer
         .try_to_vec()
         .expect("Encoding unsigned transfer shouldn't fail");
-    let tx_wasm_path = wasm_abs_path(TX_MINT_TOKENS_WASM);
+    let tx_wasm_path = TestWasms::TxMintTokens.path();
     std::fs::write(&tx_data_path, data).unwrap();
     let tx_wasm_path = tx_wasm_path.to_string_lossy();
     let tx_data_path = tx_data_path.to_string_lossy();

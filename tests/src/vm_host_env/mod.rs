@@ -30,8 +30,6 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
     use namada::tendermint_proto::Protobuf;
-    use namada::types::chain::ChainId;
-    use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
@@ -220,13 +218,7 @@ mod tests {
         tx_host_env::init();
 
         let code = TestWasms::VpAlwaysTrue.read_bytes();
-        let code_hash = Hash::sha256(&code);
-        tx_host_env::with(|env| {
-            // store wasm code
-            let key = Key::wasm_code(&code_hash);
-            env.wl_storage.storage.write(&key, code.clone()).unwrap();
-        });
-        tx::ctx().init_account(code_hash).unwrap();
+        tx::ctx().init_account(code).unwrap();
     }
 
     #[test]
@@ -449,7 +441,6 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
-        let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
             Some(vec![1, 2, 3, 4].repeat(10)),
@@ -457,13 +448,7 @@ mod tests {
             None,
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(
-                    code.clone(),
-                    data.clone(),
-                    env.wl_storage.storage.chain_id.clone(),
-                    expiration,
-                )
-                .sign(&keypair);
+                env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
                 let tx_data = env.tx.data.as_ref().expect("data should exist");
 
                 SignedTxData::try_from_slice(&tx_data[..])
@@ -533,34 +518,22 @@ mod tests {
         vp_host_env::init();
 
         // evaluating without any code should fail
-        let empty_code = Hash::zero();
+        let empty_code = vec![];
         let input_data = vec![];
         let result = vp::CTX.eval(empty_code, input_data).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
-        let code_hash = Hash::sha256(&code);
-        vp_host_env::with(|env| {
-            // store wasm codes
-            let key = Key::wasm_code(&code_hash);
-            env.wl_storage.storage.write(&key, code.clone()).unwrap();
-        });
         let input_data = vec![];
-        let result = vp::CTX.eval(code_hash, input_data).unwrap();
+        let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
-        let code_hash = Hash::sha256(&code);
-        vp_host_env::with(|env| {
-            // store wasm codes
-            let key = Key::wasm_code(&code_hash);
-            env.wl_storage.storage.write(&key, code.clone()).unwrap();
-        });
         let input_data = vec![];
-        let result = vp::CTX.eval(code_hash, input_data).unwrap();
+        let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(!result);
     }
 
@@ -579,11 +552,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -618,11 +589,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -657,11 +626,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and update the client without a header
@@ -704,11 +671,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -739,11 +704,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // upgrade the client with the message
@@ -782,11 +745,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -821,11 +782,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -852,11 +811,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -893,11 +850,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -925,11 +880,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -971,11 +924,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // not bind a port
@@ -1014,11 +965,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // bind a port
@@ -1060,11 +1009,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -1086,11 +1033,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -1129,11 +1074,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -1156,11 +1099,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -1201,11 +1142,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -1246,11 +1185,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1296,11 +1233,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1338,11 +1273,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1392,11 +1325,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1462,11 +1393,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1547,11 +1476,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1599,11 +1526,9 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // send a packet with the message
@@ -1630,11 +1555,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1686,11 +1609,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1753,11 +1674,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1830,11 +1749,9 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code_or_hash: vec![],
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
-            chain_id: ChainId::default(),
-            expiration: None,
         }
         .sign(&key::testing::keypair_1());
 
