@@ -272,18 +272,9 @@ where
 
                                     // Tx expiration
                                     if let Some(exp) = tx.expiration {
-                                        let last_block_timestamp = self
-                            .wl_storage
-                            .storage
-                            .get_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp");
-                                        if exp > last_block_timestamp {
                                             return TxResult {
-                                                code: ErrorCodes::ExpiredTx
                                                     .into(),
                                                 info: format!(
-                    "Tx expired at {:#?}, last committed block time: {:#?}",
-                    exp, last_block_timestamp
                 ),
                                             };
                                         }
