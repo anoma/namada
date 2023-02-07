@@ -50,6 +50,13 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         if new_epoch {
+            if let Err(e) = namada::ledger::storage::update_allowed_conversions(
+                &mut self.wl_storage,
+            ) {
+                tracing::error!(
+                    "Failed to update allowed conversions with {e}"
+                );
+            }
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
         }
@@ -436,7 +443,17 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::storage_api;
+    use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
+    use namada::types::time::DurationSecs;
+    use namada::types::transaction::governance::{
+        InitProposalData, VoteProposalData,
+    };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
@@ -788,5 +805,97 @@ mod test_finalize_block {
             counter += 1;
         }
         assert_eq!(counter, 2);
+    }
+
+    /// Test that the finalize block handler never commits changes directly to
+    /// the DB.
+    #[test]
+    fn test_finalize_doesnt_commit_db() {
+        let (mut shell, _) = setup();
+
+        // Update epoch duration to make sure we go through couple epochs
+        let epoch_duration = EpochDuration {
+            min_num_of_blocks: 5,
+            min_duration: DurationSecs(0),
+        };
+        namada::ledger::parameters::update_epoch_parameter(
+            &mut shell.wl_storage.storage,
+            &epoch_duration,
+        )
+        .unwrap();
+        shell.wl_storage.storage.next_epoch_min_start_height = BlockHeight(5);
+        shell.wl_storage.storage.next_epoch_min_start_time = DateTimeUtc::now();
+
+        // Add a proposal to be executed on next epoch change.
+        let mut add_proposal = |proposal_id, vote| {
+            let validator = shell.mode.get_validator_address().unwrap().clone();
+            shell.proposal_data.insert(proposal_id);
+            let proposal = InitProposalData {
+                id: Some(proposal_id),
+                content: vec![],
+                author: validator.clone(),
+                voting_start_epoch: Epoch::default(),
+                voting_end_epoch: Epoch::default().next(),
+                grace_epoch: Epoch::default().next(),
+                proposal_code: None,
+            };
+            storage_api::governance::init_proposal(
+                &mut shell.wl_storage,
+                proposal,
+            )
+            .unwrap();
+            let vote = VoteProposalData {
+                id: proposal_id,
+                vote,
+                voter: validator,
+                delegations: vec![],
+            };
+            // Vote to accept the proposal (there's only one validator, so its
+            // vote decides)
+            storage_api::governance::vote_proposal(&mut shell.wl_storage, vote)
+                .unwrap();
+        };
+        // Add a proposal to be accepted and one to be rejected.
+        add_proposal(0, ProposalVote::Yay);
+        add_proposal(1, ProposalVote::Nay);
+
+        // Commit the genesis state
+        shell.wl_storage.commit_genesis().unwrap();
+        shell.commit();
+
+        // Collect all storage key-vals into a sorted map
+        let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
+            let prefix: Key = FromStr::from_str("").unwrap();
+            shell
+                .wl_storage
+                .storage
+                .db
+                .iter_prefix(&prefix)
+                .map(|(key, val, _gas)| (key, val))
+                .collect()
+        };
+
+        // Store the full state in sorted map
+        let mut last_storage_state: std::collections::BTreeMap<
+            String,
+            Vec<u8>,
+        > = store_block_state(&shell);
+
+        // Keep applying finalize block
+        for _ in 0..20 {
+            let req = FinalizeBlock::default();
+            let _events = shell.finalize_block(req).unwrap();
+            let new_state = store_block_state(&shell);
+            // The new state must be unchanged
+            itertools::assert_equal(
+                last_storage_state.iter(),
+                new_state.iter(),
+            );
+            // Commit the block to move on to the next one
+            shell.wl_storage.commit_block().unwrap();
+
+            // Store the state after commit for the next iteration
+            last_storage_state = store_block_state(&shell);
+        }
     }
 }

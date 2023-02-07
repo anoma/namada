@@ -6,7 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod governance;
 pub mod ibc;
 pub mod key;
 pub mod proof_of_stake;
@@ -21,8 +20,8 @@ pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada_core::ledger::storage::types::encode;
 pub use namada_core::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
-    StorageRead, StorageWrite,
+    self, governance, iter_prefix, iter_prefix_bytes, Error, OptionExt,
+    ResultExt, StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::proto::{Signed, SignedTxData};

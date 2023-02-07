@@ -4,10 +4,10 @@ use borsh::BorshSerialize;
 use ferveo_common::TendermintValidator;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api;
+use namada::ledger::storage_api::token;
 use namada::types::address::Address;
+use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::{key, token};
 
 use super::*;
 use crate::node::ledger::response;
@@ -69,15 +69,10 @@ where
         token: &Address,
         owner: &Address,
     ) -> token::Amount {
-        let balance = storage_api::StorageRead::read(
-            &self.wl_storage,
-            &token::balance_key(token, owner),
-        );
         // Storage read must not fail, but there might be no value, in which
         // case default (0) is returned
-        balance
-            .expect("Storage read in the protocol must not fail")
-            .unwrap_or_default()
+        token::read_balance(&self.wl_storage, token, owner)
+            .expect("Token balance read in the protocol must not fail")
     }
 
     /// Lookup data about a validator from their protocol signing key

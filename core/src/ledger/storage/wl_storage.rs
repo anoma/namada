@@ -36,8 +36,11 @@ where
     /// Commit the genesis state to DB. This should only be used before any
     /// blocks are produced.
     pub fn commit_genesis(&mut self) -> storage_api::Result<()> {
+        // Because the `impl StorageWrite for WlStorage` writes into block-level
+        // write log, we just commit the `block_write_log`, but without
+        // committing an actual block in storage
         self.write_log
-            .commit_genesis(&mut self.storage)
+            .commit_block(&mut self.storage)
             .into_storage_result()
     }
 
@@ -310,15 +313,12 @@ where
         key: &storage::Key,
         val: impl AsRef<[u8]>,
     ) -> storage_api::Result<()> {
-        let _ = self
-            .write_log
-            .write(key, val.as_ref().to_vec())
-            .into_storage_result();
-        Ok(())
+        self.write_log
+            .protocol_write(key, val.as_ref().to_vec())
+            .into_storage_result()
     }
 
     fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
-        let _ = self.write_log.delete(key).into_storage_result();
-        Ok(())
+        self.write_log.protocol_delete(key).into_storage_result()
     }
 }
