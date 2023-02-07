@@ -2588,6 +2588,7 @@ dependencies = [
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",
+ "regex",
  "rust_decimal",
  "rust_decimal_macros",
  "serde_json",
