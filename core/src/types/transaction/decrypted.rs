@@ -93,9 +93,10 @@ pub mod decrypted_tx {
                         .try_to_vec()
                         .expect("Encrypting transaction should not fail"),
                 ),
-                // If undecrytable we cannot extract the ChainId and expiration.
-                // If instead the tx gets decrypted successfully, the correct
-                // chain id and expiration are serialized inside the data field
+                // If undecrytable we cannot extract the ChainId and
+                // expiration. If instead the tx gets decrypted
+                // successfully, the correct chain id and
+                // expiration are serialized inside the data field
                 // of the Tx, while the ones available
                 // in the chain_id and expiration field are just placeholders
                 ChainId(String::new()),

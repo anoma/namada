@@ -1620,7 +1620,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const DUMP_TX: ArgFlag = flag("dump-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
-    const EXPIRATION: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
@@ -2965,6 +2965,12 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
+            .arg(EXPIRATION_OPT.def().about(
+                "The expiration datetime of the transaction, after which the \
+                 tx won't be accepted anymore. All of these examples are \
+                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                 12:12:12Z\n2012-  12-12T12:  12:12Z",
+            ))
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -2996,7 +3002,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-            let expiration = EXPIRATION.parse(matches);
+            let expiration = EXPIRATION_OPT.parse(matches);
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);

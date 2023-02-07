@@ -792,6 +792,54 @@ where
         }
     }
 
+<<<<<<< HEAD
+=======
+    /// Get the timestamp of the last committed block, or the current timestamp
+    /// if no blocks have been produced yet
+    pub fn get_last_block_timestamp(&self) -> Result<DateTimeUtc> {
+        let last_block_height = self.get_block_height().0;
+
+        Ok(self
+            .db
+            .read_block_header(last_block_height)?
+            .map_or_else(DateTimeUtc::now, |header| header.time))
+    }
+
+    /// Initialize a new epoch when the current epoch is finished. Returns
+    /// `true` on a new epoch.
+    pub fn update_epoch(
+        &mut self,
+        height: BlockHeight,
+        time: DateTimeUtc,
+    ) -> Result<bool> {
+        let (parameters, _gas) =
+            parameters::read(self).expect("Couldn't read protocol parameters");
+
+        // Check if the current epoch is over
+        let new_epoch = height >= self.next_epoch_min_start_height
+            && time >= self.next_epoch_min_start_time;
+        if new_epoch {
+            // Begin a new epoch
+            self.block.epoch = self.block.epoch.next();
+            let EpochDuration {
+                min_num_of_blocks,
+                min_duration,
+            } = parameters.epoch_duration;
+            self.next_epoch_min_start_height = height + min_num_of_blocks;
+            self.next_epoch_min_start_time = time + min_duration;
+            // TODO put this into PoS parameters and pass it to tendermint
+            // `consensus_params` on `InitChain` and `EndBlock`
+            let evidence_max_age_num_blocks: u64 = 100000;
+            self.block
+                .pred_epochs
+                .new_epoch(height, evidence_max_age_num_blocks);
+            tracing::info!("Began a new epoch {}", self.block.epoch);
+        }
+        self.update_epoch_in_merkle_tree()?;
+        Ok(new_epoch)
+    }
+
+>>>>>>> 2fdfbfc0e (Clippy + fmt)
     /// Get the current conversions
     pub fn get_conversion_state(&self) -> &ConversionState {
         &self.conversion_state

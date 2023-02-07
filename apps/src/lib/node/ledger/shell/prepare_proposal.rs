@@ -405,54 +405,53 @@ mod test_prepare_proposal {
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
-        
-let (shell, _) = TestShell::new();
+        let (shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let tx_time = DateTimeUtc::now();
-let tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                shell.chain_id.clone(),
-                None,
-            );
-                        let wrapper_tx = WrapperTx::new(
-                Fee {
-                    amount: 0.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                0.into(),
-                tx,
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
-                .expect("Test failed");
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper = wrapper_tx
+            .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
+            .expect("Test failed");
 
-let time = DateTimeUtc::now();
-let mut block_time = namada::core::tendermint_proto::google::protobuf::Timestamp::default();
-        block_time.seconds = 
-time.0.timestamp();
-                block_time.nanos = 
-time.0.timestamp_subsec_nanos() as i32;
-                let req = RequestPrepareProposal {
+        let time = DateTimeUtc::now();
+        let block_time =
+            namada::core::tendermint_proto::google::protobuf::Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            };
+        let req = RequestPrepareProposal {
             txs: vec![wrapper.to_bytes()],
             max_tx_bytes: 0,
-            time: Some(block_time)     ,
-                   ..Default::default()
+            time: Some(block_time),
+            ..Default::default()
         };
         #[cfg(feature = "abcipp")]
         assert_eq!(
             shell.prepare_proposal(req).tx_records,
-            vec![record::remove(tx.to_bytes())]
+            vec![record::remove(wrapper.to_bytes())]
         );
-        #[cfg(not(feature = "abcipp"))] 
+        #[cfg(not(feature = "abcipp"))]
         {
             let result = shell.prepare_proposal(req);
             eprintln!("Proposal: {:?}", result.txs);
-        assert!(result.txs.is_empty());
+            assert!(result.txs.is_empty());
         }
     }
 }

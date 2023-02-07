@@ -7,10 +7,11 @@ pub use types::{Dkg, Error, Signed, SignedTxData, Tx};
 
 #[cfg(test)]
 mod tests {
+    use std::time::SystemTime;
+
     use data_encoding::HEXLOWER;
     use generated::types::Tx;
     use prost::Message;
-    use std::time::SystemTime;
 
     use super::*;
     use crate::types::chain::ChainId;

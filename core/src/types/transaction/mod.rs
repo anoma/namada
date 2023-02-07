@@ -246,7 +246,8 @@ pub mod tx_types {
                 vec![],
                 Some(ty.try_to_vec().unwrap()),
                 ChainId(String::new()), /* No need to provide a valid
-                                         * ChainId or expiration when casting back from
+                                         * ChainId or expiration when
+                                         * casting back from
                                          * TxType */
                 None,
             )
