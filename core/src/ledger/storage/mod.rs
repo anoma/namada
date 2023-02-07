@@ -6,6 +6,8 @@ pub mod merkle_tree;
 pub mod mockdb;
 pub mod traits;
 pub mod types;
+mod wl_storage;
+pub mod write_log;
 
 use core::fmt::Debug;
 use std::collections::BTreeMap;
@@ -28,14 +30,15 @@ use rayon::iter::{
 use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 pub use traits::{Sha256Hasher, StorageHasher};
+pub use wl_storage::{
+    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage,
+};
 
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-use crate::ledger::storage_api;
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
@@ -301,6 +304,10 @@ pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
@@ -429,7 +436,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self) -> Result<()> {
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
@@ -503,7 +510,11 @@ where
         }
     }
 
-    /// Returns a prefix iterator, ordered by storage keys, and the gas cost
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Returns a prefix iterator, ordered by storage keys, and the gas cost.
     pub fn iter_prefix(
         &self,
         prefix: &Key,
@@ -992,116 +1003,6 @@ where
     }
 }
 
-impl<D, H> StorageRead for Storage<D, H>
-where
-    D: DB + for<'iter_> DBIter<'iter_>,
-    H: StorageHasher,
-{
-    type PrefixIter<'iter> = <D as DBIter<'iter>>::PrefixIter
-where
-        Self: 'iter
-    ;
-
-    fn read_bytes(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
-        self.db.read_subspace_val(key).into_storage_result()
-    }
-
-    fn has_key(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<bool, storage_api::Error> {
-        self.block.tree.has_key(key).into_storage_result()
-    }
-
-    fn iter_prefix<'iter>(
-        &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        Ok(self.db.iter_prefix(prefix))
-    }
-
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
-    {
-        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
-    }
-
-    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.chain_id.to_string())
-    }
-
-    fn get_block_height(
-        &self,
-    ) -> std::result::Result<BlockHeight, storage_api::Error> {
-        Ok(self.block.height)
-    }
-
-    fn get_block_hash(
-        &self,
-    ) -> std::result::Result<BlockHash, storage_api::Error> {
-        Ok(self.block.hash.clone())
-    }
-
-    fn get_block_epoch(
-        &self,
-    ) -> std::result::Result<Epoch, storage_api::Error> {
-        Ok(self.block.epoch)
-    }
-
-    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
-        Ok(self.tx_index)
-    }
-
-    fn get_native_token(
-        &self,
-    ) -> std::result::Result<Address, storage_api::Error> {
-        Ok(self.native_token.clone())
-    }
-}
-
-impl<D, H> StorageWrite for Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    fn write_bytes(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::write`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        let val = val.as_ref();
-        self.block.tree.update(key, val).into_storage_result()?;
-        let _ = self
-            .db
-            .write_subspace_val(self.block.height, key, val)
-            .into_storage_result()?;
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &crate::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::delete`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        self.block.tree.delete(key).into_storage_result()?;
-        let _ = self
-            .db
-            .delete_subspace_val(self.block.height, key)
-            .into_storage_result()?;
-        Ok(())
-    }
-}
-
 impl From<MerkleTreeError> for Error {
     fn from(error: MerkleTreeError) -> Self {
         Self::MerkleTreeError(error)
@@ -1115,7 +1016,15 @@ pub mod testing {
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::types::address;
-    /// Storage with a mock DB for testing
+
+    /// `WlStorage` with a mock DB for testing
+    pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
+
+    /// Storage with a mock DB for testing.
+    ///
+    /// Prefer to use [`TestWlStorage`], which implements
+    /// `storage_api::StorageRead + StorageWrite` with properly working
+    /// `prefix_iter`.
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
     impl Default for TestStorage {
@@ -1147,6 +1056,16 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+            }
+        }
+    }
+
+    #[allow(clippy::derivable_impls)]
+    impl Default for TestWlStorage {
+        fn default() -> Self {
+            Self {
+                write_log: Default::default(),
+                storage: Default::default(),
             }
         }
     }

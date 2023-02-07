@@ -2,7 +2,6 @@
 
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
-use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
@@ -59,7 +58,7 @@ where
         let mut stats = InternalStats::default();
 
         // Tracks the accepted transactions
-        self.storage.block.results = BlockResults::default();
+        self.wl_storage.storage.block.results = BlockResults::default();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
@@ -129,7 +128,7 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &tx_type {
-                    self.storage.tx_queue.pop();
+                    self.wl_storage.storage.tx_queue.pop();
                 }
                 continue;
             }
@@ -152,39 +151,16 @@ where
 
                     let balance_key =
                         token::balance_key(&wrapper.fee.token, &fee_payer);
-                    let balance: Amount =
-                        match self.write_log.read(&balance_key).0 {
-                            Some(wal_mod) => {
-                                // Read from WAL
-                                if let StorageModification::Write { value } =
-                                    wal_mod
-                                {
-                                    Amount::try_from_slice(value).unwrap()
-                                } else {
-                                    Amount::default()
-                                }
-                            }
-                            None => {
-                                // Read from storage
-                                let balance = StorageRead::read(
-                                    &self.storage,
-                                    &balance_key,
-                                );
-                                // Storage read must not fail, but there might
-                                // be no value, in which
-                                // case default (0) is returned
-                                balance
-                                    .expect(
-                                        "Storage read in the protocol must \
-                                         not fail",
-                                    )
-                                    .unwrap_or_default()
-                            }
-                        };
+                    let balance: token::Amount = self
+                        .wl_storage
+                        .read(&balance_key)
+                        .expect("must be able to read")
+                        .unwrap_or_default();
 
                     match balance.checked_sub(wrapper_fees) {
                         Some(amount) => {
-                            self.write_log
+                            self.wl_storage
+                                .storage
                                 .write(
                                     &balance_key,
                                     amount.try_to_vec().unwrap(),
@@ -198,7 +174,8 @@ where
                             let reject = true;
                             if reject {
                                 // Burn remaining funds
-                                self.write_log
+                                self.wl_storage
+                                    .storage
                                     .write(
                                         &balance_key,
                                         Amount::from(0).try_to_vec().unwrap(),
@@ -215,7 +192,7 @@ where
                         }
                     }
 
-                    self.storage.tx_queue.push(WrapperTxInQueue {
+                    self.wl_storage.storage.tx_queue.push(WrapperTxInQueue {
                         tx: wrapper.clone(),
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
@@ -224,7 +201,7 @@ where
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    self.storage.tx_queue.pop();
+                    self.wl_storage.storage.tx_queue.pop();
                     let mut event = Event::new_tx_event(&tx_type, height.0);
 
                     match inner {
@@ -271,8 +248,8 @@ where
                         .expect("transaction index out of bounds"),
                 ),
                 &mut self.gas_meter,
-                &mut self.write_log,
-                &self.storage,
+                &mut self.wl_storage.write_log,
+                &self.wl_storage.storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
             )
@@ -287,10 +264,14 @@ where
                             result
                         );
                         stats.increment_successful_txs();
-                        self.write_log.commit_tx();
+                        self.wl_storage.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();
-                            self.storage.block.results.accept(tx_index);
+                            self.wl_storage
+                                .storage
+                                .block
+                                .results
+                                .accept(tx_index);
                         }
                         if let Some(ibc_event) = &result.ibc_event {
                             // Add the IBC event besides the tx_event
@@ -320,7 +301,7 @@ where
                             result.vps_result.rejected_vps
                         );
                         stats.increment_rejected_txs();
-                        self.write_log.drop_tx();
+                        self.wl_storage.drop_tx();
                         tx_event["code"] = ErrorCodes::InvalidTx.into();
                     }
                     tx_event["gas_used"] = result.gas_used.to_string();
@@ -333,7 +314,7 @@ where
                         msg
                     );
                     stats.increment_errored_txs();
-                    self.write_log.drop_tx();
+                    self.wl_storage.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter
                         .get_current_transaction_gas()
@@ -382,22 +363,25 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
-        let height = self.storage.last_height + 1;
+        let height = self.wl_storage.storage.last_height + 1;
 
         self.gas_meter.reset();
 
-        self.storage
+        self.wl_storage
+            .storage
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
         let header_time = header.time;
-        self.storage
+        self.wl_storage
+            .storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
 
         self.byzantine_validators = byzantine_validators;
 
         let new_epoch = self
+            .wl_storage
             .storage
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
@@ -410,11 +394,11 @@ where
     /// changes to the validator sets and consensus parameters
     fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
-        let pos_params = self.storage.read_pos_params();
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let pos_params = self.wl_storage.read_pos_params();
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
-        self.storage.validator_set_update(
+        self.wl_storage.validator_set_update(
             current_epoch,
             &pos_params,
             |update| {
@@ -473,10 +457,11 @@ mod test_finalize_block {
 
         // Add unshielded balance for fee paymenty
         let balance_key = token::balance_key(
-            &shell.storage.native_token,
+            &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
+            .wl_storage
             .storage
             .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
@@ -490,7 +475,7 @@ mod test_finalize_block {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -563,7 +548,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -601,7 +586,7 @@ mod test_finalize_block {
             assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.storage.tx_queue.is_empty());
+        assert!(shell.wl_storage.storage.tx_queue.is_empty());
     }
 
     /// Test that if a tx is undecryptable, it is applied
@@ -621,7 +606,7 @@ mod test_finalize_block {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -659,7 +644,7 @@ mod test_finalize_block {
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.storage.tx_queue.is_empty());
+        assert!(shell.wl_storage.storage.tx_queue.is_empty());
     }
 
     /// Test that the wrapper txs are queued in the order they
@@ -674,10 +659,11 @@ mod test_finalize_block {
 
         // Add unshielded balance for fee paymenty
         let balance_key = token::balance_key(
-            &shell.storage.native_token,
+            &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
+            .wl_storage
             .storage
             .write(&balance_key, Amount::whole(1000).try_to_vec().unwrap())
             .unwrap();
@@ -699,7 +685,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -736,7 +722,7 @@ mod test_finalize_block {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),

@@ -43,7 +43,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    ctx.storage.is_validator(&addr)
+    ctx.wl_storage.is_validator(&addr)
 }
 
 /// Get all the validator known addresses. These validators may be in any state,
@@ -56,8 +56,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.storage.last_epoch);
-    ctx.storage.validator_addresses(epoch)
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    ctx.wl_storage.validator_addresses(epoch)
 }
 
 /// Get the total stake of a validator at the given epoch or current when
@@ -72,8 +72,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.storage.last_epoch);
-    ctx.storage.validator_stake(&validator, epoch)
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    ctx.wl_storage.validator_stake(&validator, epoch)
 }
 
 /// Get the total stake in PoS system at the given epoch or current when `None`.
@@ -85,8 +85,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.storage.last_epoch);
-    ctx.storage.total_stake(epoch)
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    ctx.wl_storage.total_stake(epoch)
 }
 
 /// Get the total bond amount for the given bond ID (this may be delegation or
@@ -102,13 +102,13 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.storage.last_epoch);
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
 
     let bond_id = BondId {
         source: owner,
         validator,
     };
-    ctx.storage.bond_amount(&bond_id, epoch)
+    ctx.wl_storage.bond_amount(&bond_id, epoch)
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
@@ -125,7 +125,7 @@ where
 
     let mut delegations: HashSet<Address> = HashSet::new();
     for iter_result in
-        storage_api::iter_prefix_bytes(ctx.storage, &bonds_prefix)?
+        storage_api::iter_prefix_bytes(ctx.wl_storage, &bonds_prefix)?
     {
         let (key, _bonds_bytes) = iter_result?;
         let validator_address = pos::get_validator_address_from_bond(&key)

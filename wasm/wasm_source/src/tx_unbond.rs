@@ -83,7 +83,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
-            let native_token = tx_env.storage.native_token.clone();
+            let native_token = tx_env.wl_storage.storage.native_token.clone();
             if is_delegation {
                 let source = unbond.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);

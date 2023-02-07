@@ -98,7 +98,7 @@ where
                 .collect();
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.storage.tx_queue.iter().map(
+            let decrypted_txs = self.wl_storage.storage.tx_queue.iter().map(
                 |WrapperTxInQueue {
                      tx,
                      #[cfg(not(feature = "mainnet"))]
@@ -225,7 +225,7 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: shell.storage.native_token.clone(),
+                        token: shell.wl_storage.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
@@ -285,7 +285,7 @@ mod test_prepare_proposal {
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
