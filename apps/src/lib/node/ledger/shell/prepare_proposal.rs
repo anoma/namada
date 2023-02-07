@@ -44,6 +44,8 @@ where
             // TODO: This should not be hardcoded
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
+            //FIXME: check expiration of wrapper txs if I check the time against the one in the block header of the request, otherwise
+            //FIXME: there's no need to do anything here sicne the check is identiacal to the mempool_one which has already run
             // TODO: Craft the Ethereum state update tx
             // filter in half of the new txs from Tendermint, only keeping
             // wrappers

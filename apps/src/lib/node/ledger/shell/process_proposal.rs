@@ -36,7 +36,29 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-        let tx_results = self.process_txs(&req.txs);
+        let block_time = match req.time {
+            Some(t) => {
+                match t.try_into() {
+                    Ok(t) => t,
+                    Err(_) => {
+                        // Default to last committed block time
+                        self.wl_storage
+                            .storage
+                            .get_last_block_timestamp()
+                            .expect("Failed to retrieve last block timestamp")
+                    }
+                }
+            }
+            None => {
+                // Default to last committed block time
+                self.wl_storage
+                    .storage
+                    .get_last_block_timestamp()
+                    .expect("Failed to retrieve last block timestamp")
+            }
+        };
+
+        let tx_results = self.process_txs(&req.txs, block_time);
 
         ProcessProposal {
             status: if tx_results.iter().all(|res| {
@@ -45,6 +67,7 @@ where
                     ErrorCodes::Ok
                         | ErrorCodes::Undecryptable
                         | ErrorCodes::InvalidDecryptedChainId
+                        | ErrorCodes::ExpiredDecryptedTx
                 )
             }) {
                 ProposalStatus::Accept as i32
@@ -57,7 +80,11 @@ where
     }
 
     /// Check all the given txs.
-    pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
+    pub fn process_txs(
+        &self,
+        txs: &[Vec<u8>],
+        block_time: DateTimeUtc,
+    ) -> Vec<TxResult> {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         txs.iter()
@@ -66,6 +93,7 @@ where
                     tx_bytes,
                     &mut tx_queue_iter,
                     &mut temp_wl_storage,
+                    block_time,
                 );
                 if let ErrorCodes::Ok =
                     ErrorCodes::from_u32(result.code).unwrap()
@@ -104,6 +132,7 @@ where
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
+        block_time: DateTimeUtc,
     ) -> TxResult {
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
@@ -151,18 +180,13 @@ where
 
                     // Tx expiration
                     if let Some(exp) = tx_expiration {
-                        let last_block_timestamp = self
-                            .wl_storage
-                            .storage
-                            .get_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp");
-                        if exp > last_block_timestamp {
+                        if block_time > exp {
                             return TxResult {
                                 code: ErrorCodes::ExpiredTx.into(),
                                 info: format!(
-                    "Tx expired at {:#?}, last committed block time: {:#?}",
-                    exp, last_block_timestamp
-                ),
+                                    "Tx expired at {:#?}, block time: {:#?}",
+                                    exp, block_time
+                                ),
                             };
                         }
                     }
@@ -207,18 +231,13 @@ where
 
                                     // Tx expiration
                                     if let Some(exp) = tx.expiration {
-                                        let last_block_timestamp = self
-                            .wl_storage
-                            .storage
-                            .get_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp");
-                                        if exp > last_block_timestamp {
+                                        if block_time > exp {
                                             return TxResult {
-                                                code: ErrorCodes::ExpiredTx
+                                                code: ErrorCodes::ExpiredDecryptedTx
                                                     .into(),
                                                 info: format!(
-                    "Tx expired at {:#?}, last committed block time: {:#?}",
-                    exp, last_block_timestamp
+                    "Dercrypted tx expired at {:#?}, block time: {:#?}",
+                    exp, block_time
                 ),
                                             };
                                         }
@@ -264,18 +283,13 @@ where
 
                     // Tx expiration
                     if let Some(exp) = tx_expiration {
-                        let last_block_timestamp = self
-                            .wl_storage
-                            .storage
-                            .get_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp");
-                        if exp > last_block_timestamp {
+                        if block_time > exp {
                             return TxResult {
                                 code: ErrorCodes::ExpiredTx.into(),
                                 info: format!(
-                    "Tx expired at {:#?}, last committed block time: {:#?}",
-                    exp, last_block_timestamp
-                ),
+                                    "Tx expired at {:#?}, block time: {:#?}",
+                                    exp, block_time
+                                ),
                             };
                         }
                     }
@@ -1402,6 +1416,101 @@ mod test_process_proposal {
                         shell.chain_id, wrong_chain_id
                     )
                 )
+            }
+            Err(_) => panic!("Test failed"),
+        }
+    }
+
+    /// Test that an expired wrapper transaction causes a block rejection
+    #[test]
+    fn test_expired_wrapper() {
+        let (mut shell, _) = TestShell::new();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone(), Some(DateTimeUtc::now()))
+            .expect("Test failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ExpiredTx)
+                );
+            }
+        }
+    }
+
+    /// Test that an expired decrypted transaction is correctlye marked as so
+    /// without rejecting the entire block
+    #[test]
+    fn test_expired_decrypted() {
+        let (mut shell, _) = TestShell::new();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::now()),
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed_decrypted.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::ExpiredDecryptedTx)
+                );
             }
             Err(_) => panic!("Test failed"),
         }

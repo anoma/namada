@@ -712,7 +712,7 @@ where
 
     /// Get the timestamp of the last committed block, or the current timestamp
     /// if no blocks have been produced yet
-    pub fn get_block_timestamp(&self) -> Result<DateTimeUtc> {
+    pub fn get_last_block_timestamp(&self) -> Result<DateTimeUtc> {
         let last_block_height = self.get_block_height().0;
 
         Ok(self

@@ -44,7 +44,7 @@ use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, MIN_FEE,
+    EllipticCurve, PairingEngine, TxError, TxType, MIN_FEE,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -133,6 +133,7 @@ pub enum ErrorCodes {
     InvalidChainId = 8,
     InvalidDecryptedChainId = 9,
     ExpiredTx = 10,
+    ExpiredDecryptedTx = 11,
 }
 
 impl From<ErrorCodes> for u32 {
@@ -621,10 +622,10 @@ where
             let last_block_timestamp = self
                 .wl_storage
                 .storage
-                .get_block_timestamp()
+                .get_last_block_timestamp()
                 .expect("Failed to retrieve last block timestamp");
 
-            if exp > last_block_timestamp {
+            if last_block_timestamp > exp {
                 response.code = ErrorCodes::ExpiredTx.into();
                 response.log = format!(
                     "Tx expired at {:#?}, last committed block time: {:#?}",
@@ -637,9 +638,12 @@ where
         // Tx signature check
         let tx_type = match process_tx(tx) {
             Ok(ty) => ty,
-            Err(msg) => {
-                response.code = ErrorCodes::InvalidSig.into();
-                response.log = msg.to_string();
+            Err(e) => {
+                response.code = match e {
+                    TxError::Deserialization(_) => ErrorCodes::InvalidTx.into(),
+                    _ => ErrorCodes::InvalidSig.into(),
+                };
+                response.log = e.to_string();
                 return response;
             }
         };
@@ -1470,5 +1474,27 @@ mod test_mempool_validate {
                 shell.chain_id, wrong_chain_id
             )
         )
+    }
+
+    /// Check that an expired transaction gets rejected
+    #[test]
+    fn test_expired_tx() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::now()),
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
     }
 }

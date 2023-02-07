@@ -137,8 +137,42 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    let processing_results =
-                        self.service.process_txs(&self.delivered_txs);
+                    let begin_block_request =
+                        self.begin_block_request.take().unwrap();
+                    let block_time = match &begin_block_request.header {
+                        Some(header) => match &header.time {
+                            Some(time) => match time.to_owned().try_into() {
+                                Ok(t) => t,
+                                Err(_) => {
+                                    // Default to last committed block time
+                                    self.service.wl_storage
+                            .storage
+                            .get_last_block_timestamp()
+                            .expect("Failed to retrieve last block timestamp")
+                                }
+                            },
+                            None => {
+                                // Default to last committed block time
+                                self.service.wl_storage
+                            .storage
+                            .get_last_block_timestamp()
+                            .expect("Failed to retrieve last block timestamp")
+                            }
+                        },
+                        None => {
+                            // Default to last committed block time
+                            self.service
+                                .wl_storage
+                                .storage
+                                .get_last_block_timestamp()
+                                .expect(
+                                    "Failed to retrieve last block timestamp",
+                                )
+                        }
+                    };
+                    let processing_results = self
+                        .service
+                        .process_txs(&self.delivered_txs, block_time);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];
                     std::mem::swap(&mut self.delivered_txs, &mut delivered);
@@ -149,7 +183,7 @@ impl AbcippShim {
                         txs.push(ProcessedTx { tx, result });
                     }
                     let mut end_block_request: FinalizeBlock =
-                        self.begin_block_request.take().unwrap().into();
+                        begin_block_request.into();
                     let hash = self.get_hash();
                     end_block_request.hash = BlockHash::from(hash.clone());
                     end_block_request.txs = txs;
