@@ -2926,7 +2926,12 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
-                .arg(EXPIRATION_OPT.def().about("The expiration datetime of the transaction, after which the tx won't be accepted anymore. All of these examples are equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 12:12:12Z\n2012-  12-12T12:  12:12Z"))
+            .arg(EXPIRATION_OPT.def().about(
+                "The expiration datetime of the transaction, after which the \
+                 tx won't be accepted anymore. All of these examples are \
+                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                 12:12:12Z\n2012-  12-12T12:  12:12Z",
+            ))
             .arg(
                 SIGNING_KEY_OPT
                     .def()

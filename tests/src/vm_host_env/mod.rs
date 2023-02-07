@@ -135,11 +135,13 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("CannotDeleteVp"));
+        assert!(
+            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("CannotDeleteVp")
+        );
     }
 
     #[test]
@@ -465,17 +467,21 @@ mod tests {
                     .expect("decoding signed data we just signed")
             });
             assert_eq!(&signed_tx_data.data, data);
-            assert!(vp::CTX
-                .verify_tx_signature(&pk, &signed_tx_data.sig)
-                .unwrap());
+            assert!(
+                vp::CTX
+                    .verify_tx_signature(&pk, &signed_tx_data.sig)
+                    .unwrap()
+            );
 
             let other_keypair = key::testing::keypair_2();
-            assert!(!vp::CTX
-                .verify_tx_signature(
-                    &other_keypair.ref_to(),
-                    &signed_tx_data.sig
-                )
-                .unwrap());
+            assert!(
+                !vp::CTX
+                    .verify_tx_signature(
+                        &other_keypair.ref_to(),
+                        &signed_tx_data.sig
+                    )
+                    .unwrap()
+            );
         }
     }
 

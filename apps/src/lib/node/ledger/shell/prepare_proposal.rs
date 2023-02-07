@@ -55,50 +55,41 @@ where
                 .into_iter()
                 .map(|tx_bytes| {
                     match Tx::try_from(tx_bytes.as_slice()) {
- Ok(tx) => {
+                         Ok(tx) => {
                             let tx_expiration = tx.expiration;
                             if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
                                 // Check tx expiration against proposed block
                                 match tx_expiration {
                                     Some(exp) => {
-                                        match req.time {
-                                            Some(&block_time) => {
+                                        match &req.time {
+                                            Some(block_time) => {
                                                 match TryInto::<DateTimeUtc>::try_into(block_time.to_owned()) {
                                                     Ok(datetime) => {
-                                                        
-if datetime > exp {
-                                                    record::remove(tx_bytes)
-                                                } else {
-                                                    record::keep(tx_bytes)
-                                                }
+                                                        if datetime > exp {
+                                                            record::remove(tx_bytes)
+                                                        } else {
+                                                            record::keep(tx_bytes)
+                                                        }
                                                     },
                                                     Err(_) => {
-                                                        
-                                                // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                                record::keep(tx_bytes)
+                                                        // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
+                                                        record::keep(tx_bytes)
                                                     }
                                                 }
                                             },
                                             None => {
-                                                
-                                            // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                            record::keep(tx_bytes)
+                                                // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
+                                                record::keep(tx_bytes)
                                             }
                                         }
                                     },
                                     None => record::keep(tx_bytes)
                                 }
-
-
-                                                       } else {
+                           } else {
                                 record::remove(tx_bytes)
                             }
                         }
                         Err(_) => record::remove(tx_bytes),
-
-
-
-                        
                                         }
                 })
                 .take_while(|tx_record| {
@@ -129,21 +120,19 @@ if datetime > exp {
                                             Some(block_time) => {
                                                 match TryInto::<DateTimeUtc>::try_into(block_time.to_owned()) {
                                                     Ok(datetime) => {
-                                                        
-if datetime > exp {                                                    None
-                                                } else {
-                                                    Some(tx_bytes)
-                                                }
+                                                        if datetime > exp {
+                                                             None
+                                                        } else {
+                                                            Some(tx_bytes)
+                                                        }
                                                     },
                                                     Err(_) => {
-                                                        
                                                 // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
                                                 Some(tx_bytes)
                                                     }
                                                 }
                                             },
                                             None => {
-                                                
                                             // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
                                             Some(tx_bytes)
                                             }
@@ -151,9 +140,7 @@ if datetime > exp {                                                    None
                                     },
                                     None => Some(tx_bytes)
                                 }
-
-
-                                                       } else {
+                           } else {
                                 None
                             }
                         }
@@ -445,54 +432,53 @@ mod test_prepare_proposal {
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
-        
-let (shell, _) = TestShell::new();
+        let (shell, _) = TestShell::new();
         let keypair = gen_keypair();
         let tx_time = DateTimeUtc::now();
-let tx = Tx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
-                shell.chain_id.clone(),
-                None,
-            );
-                        let wrapper_tx = WrapperTx::new(
-                Fee {
-                    amount: 0.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                &keypair,
-                0.into(),
-                tx,
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            );
-            let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
-                .expect("Test failed");
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper = wrapper_tx
+            .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
+            .expect("Test failed");
 
-let time = DateTimeUtc::now();
-let mut block_time = namada::core::tendermint_proto::google::protobuf::Timestamp::default();
-        block_time.seconds = 
-time.0.timestamp();
-                block_time.nanos = 
-time.0.timestamp_subsec_nanos() as i32;
-                let req = RequestPrepareProposal {
+        let time = DateTimeUtc::now();
+        let block_time =
+            namada::core::tendermint_proto::google::protobuf::Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            };
+        let req = RequestPrepareProposal {
             txs: vec![wrapper.to_bytes()],
             max_tx_bytes: 0,
-            time: Some(block_time)     ,
-                   ..Default::default()
+            time: Some(block_time),
+            ..Default::default()
         };
         #[cfg(feature = "abcipp")]
         assert_eq!(
             shell.prepare_proposal(req).tx_records,
-            vec![record::remove(tx.to_bytes())]
+            vec![record::remove(wrapper.to_bytes())]
         );
-        #[cfg(not(feature = "abcipp"))] 
+        #[cfg(not(feature = "abcipp"))]
         {
             let result = shell.prepare_proposal(req);
             eprintln!("Proposal: {:?}", result.txs);
-        assert!(result.txs.is_empty());
+            assert!(result.txs.is_empty());
         }
     }
 }

@@ -718,7 +718,7 @@ where
         Ok(self
             .db
             .read_block_header(last_block_height)?
-            .map_or_else(|| DateTimeUtc::now(), |header| header.time))
+            .map_or_else(DateTimeUtc::now, |header| header.time))
     }
 
     /// Initialize a new epoch when the current epoch is finished. Returns
