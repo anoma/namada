@@ -3714,6 +3714,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada",
+ "namada_test_utils",
  "num-derive",
  "num-traits 0.2.15",
  "num_cpus",
