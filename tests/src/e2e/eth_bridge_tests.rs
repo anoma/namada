@@ -3,10 +3,11 @@ use namada::ledger::eth_bridge;
 use namada_core::types::storage;
 use namada_core::types::storage::KeySeg;
 use namada_test_utils::tx_data::TxWriteData;
+use namada_test_utils::TestWasms;
 
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
-use crate::e2e::setup::constants::{wasm_abs_path, ALBERT, TX_WRITE_WASM};
+use crate::e2e::setup::constants::ALBERT;
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
@@ -49,7 +50,7 @@ fn everything() {
     )
     .unwrap();
 
-    let tx_code_path = wasm_abs_path(TX_WRITE_WASM);
+    let tx_code_path = TestWasms::TxWriteStorageKey.path();
 
     let tx_data_path = tx_data_path.to_string_lossy().to_string();
     let tx_code_path = tx_code_path.to_string_lossy().to_string();
