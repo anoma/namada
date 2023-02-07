@@ -10,3 +10,4 @@ version = "0.14.0"
 borsh = "0.9.0"
 git2 = "0.13.25"
 namada_core = { path = "../core" }
+strum = {version = "0.24", features = ["derive"]}

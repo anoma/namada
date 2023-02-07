@@ -6,6 +6,7 @@ use std::env;
 use std::path::PathBuf;
 
 use git2::Repository;
+use strum::EnumIter;
 
 /// Path from the root of the Git repo to the directory under which built test
 /// wasms can be found.
@@ -15,7 +16,7 @@ pub const WASM_FOR_TESTS_DIR: &str = "wasm_for_tests";
 /// See the `wasm_for_tests/wasm_source` crate for documentation on what these
 /// wasms do.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, EnumIter)]
 pub enum TestWasms {
     TxMemoryLimit,
     TxMintTokens,
@@ -83,11 +84,16 @@ impl TestWasms {
 
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
+
     use super::*;
 
     #[test]
+    /// Tests that all expected test wasms are present on disk.
     fn test_wasms_path() {
-        let path = TestWasms::TxNoOp.path();
-        assert!(path.exists());
+        for test_wasm in TestWasms::iter() {
+            let path = test_wasm.path();
+            assert!(path.exists());
+        }
     }
 }
