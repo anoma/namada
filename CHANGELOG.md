@@ -1,5 +1,71 @@
 # CHANGELOG
 
+## v0.14.0
+
+Namada 0.14.0 is a scheduled minor release with various protocol
+stability improvements.
+
+### BUG
+
+- Add validation for balances with IBC sub prefix
+  ([#354](https://github.com/anoma/namada/issues/354))
+
+### BUG FIXES
+
+- Fixed the prefix iterator method to respect modifications in the write log.
+  ([#913](https://github.com/anoma/namada/pull/913))
+
+### DOCS
+
+- Update specs for Ethereum bridge and block allocator
+  ([#1058](https://github.com/anoma/namada/pull/1058))
+
+### IMPROVEMENTS
+
+- Refactored PoS storage using lazy data collections, that allow to implement
+  PoS state changes for collections with variable size with a bounded gas cost.
+  ([#16](https://github.com/anoma/namada/issues/16))
+- The unbonding action has been updated to affect validator voting power at
+  `pipeline` offset and become withdrawable starting from `pipeline + unbonding`
+  offset. ([#366](https://github.com/anoma/namada/issues/366))
+- The PoS `client bonds` query has been improved to show all delegations to a
+  validator, when only the `--validator` argument is specified.
+  ([#43](https://github.com/anoma/namada/issues/43))
+- Removed PoS validator `Pending` state.
+  ([#157](https://github.com/anoma/namada/issues/157))
+- Renamed PoS `active` and `inactive` validator sub-sets to `consensus` and
+  `below_capacity` sets.
+  ([#787](https://github.com/anoma/namada/issues/787))
+- Renamed PoS variables that look-up a sum of delta values from `total_deltas`
+  to `total_stake`.  ([#158](https://github.com/anoma/namada/issues/158))
+- Added PoS validator sets tests.
+  ([#15](https://github.com/anoma/namada/issues/15))
+- Added PoS genesis initialization tests.
+  ([#13](https://github.com/anoma/namada/issues/13))
+- Complete checked arithmetic for Amount type
+  ([#748](https://github.com/anoma/namada/issues/748))
+- Allow to dump a last committed block's state with `namada node dump-db`
+  command. ([#1095](https://github.com/anoma/namada/pull/1095))
+- Improved the `WlStorage` to write protocol changes via block-level write log.
+  This is then used to make sure that no storage changes are committed in ABCI
+  `FinalizeBlock` request handler and only in the `Commit` handler.
+  ([#1108](https://github.com/anoma/namada/pull/1108))
+
+### MISCELLANEOUS
+
+- Add command line option to dump transactions while signing them.
+  ([#1054](https://github.com/anoma/namada/pull/1054))
+
+### TESTING
+
+- Add e2e tests for multitoken transfers
+  ([#886](https://github.com/anoma/namada/pull/886))
+- Modify tx_write_storage_key test wasm to be able to modify any arbitrary value
+  ([#894](https://github.com/anoma/namada/pull/894))
+- Avoid lowercase inputs in tests, so they test whether
+  lowercasing is properly performed on those inputs.
+  ([#1065](https://github.com/anoma/namada/pull/1065))
+
 ## v0.13.3
 
 Namada 0.13.3 is a bugfix release addressing issues with voting power
