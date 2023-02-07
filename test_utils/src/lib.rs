@@ -5,7 +5,7 @@ pub mod tx_data;
 use std::env;
 use std::path::PathBuf;
 
-use git2::Repository;
+use strum::EnumIter;
 
 /// Path from the root of the Git repo to the directory under which built test
 /// wasms can be found.
@@ -15,7 +15,7 @@ pub const WASM_FOR_TESTS_DIR: &str = "wasm_for_tests";
 /// See the `wasm_for_tests/wasm_source` crate for documentation on what these
 /// wasms do.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, EnumIter)]
 pub enum TestWasms {
     TxMemoryLimit,
     TxMintTokens,
@@ -49,22 +49,20 @@ impl TestWasms {
         };
         let cwd =
             env::current_dir().expect("Couldn't get current working directory");
-        let repo_root = Repository::discover(&cwd).unwrap_or_else(|err| {
-            panic!(
-                "Couldn't discover a Git repository for the current working \
-                 directory {}: {:?}",
-                cwd.to_string_lossy(),
-                err
-            )
-        });
-        repo_root
-            .workdir()
-            .expect(
-                "Couldn't get the path to working directory for the Git \
-                 repository",
-            )
-            .join(WASM_FOR_TESTS_DIR)
-            .join(filename)
+        // crudely find the root of the repo, we can't rely on the `.git`
+        // directory being present, so look instead for the presence of a
+        // CHANGELOG.md file
+        let repo_root = cwd
+            .ancestors()
+            .find(|path| path.join("CHANGELOG.md").exists())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Couldn't find the root of the repository for the current \
+                     working directory {}",
+                    cwd.to_string_lossy()
+                )
+            });
+        repo_root.join(WASM_FOR_TESTS_DIR).join(filename)
     }
 
     /// Attempts to read the contents of this test wasm. Panics if it is not
@@ -83,11 +81,16 @@ impl TestWasms {
 
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
+
     use super::*;
 
     #[test]
+    /// Tests that all expected test wasms are present on disk.
     fn test_wasms_path() {
-        let path = TestWasms::TxNoOp.path();
-        assert!(path.exists());
+        for test_wasm in TestWasms::iter() {
+            let path = test_wasm.path();
+            assert!(path.exists());
+        }
     }
 }
