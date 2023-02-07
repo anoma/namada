@@ -2720,6 +2720,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
