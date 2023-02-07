@@ -25,7 +25,9 @@ use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, VoteInfo,
+};
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::shell::stats::InternalStats;
 
@@ -566,7 +568,9 @@ where
             .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&total_supply_key(&staking_token_address()))
+            .read_storage_key(&total_supply_key(&staking_token_address(
+                &self.wl_storage,
+            )))
             .expect("Total NAM balance should exist in storage");
         let pos_locked_supply =
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
@@ -611,17 +615,11 @@ where
         };
 
         // Run the rewards controllers
-        let new_pos_vals = RewardsController::run(&pos_controller);
-        // let new_masp_vals = RewardsController::run(&_masp_controller);
-
-        // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_minted_tokens = new_pos_vals.inflation;
-        inflation::mint_tokens(
-            &mut self.wl_storage,
-            &POS_ADDRESS,
-            &staking_token_address(),
-            Amount::from(pos_minted_tokens),
-        )?;
+        let inflation::ValsToUpdate {
+            locked_ratio,
+            inflation,
+        } = pos_controller.run();
+        // let new_masp_vals = _masp_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
@@ -848,9 +846,15 @@ mod test_finalize_block {
         InitProposalData, ProposalType, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+<<<<<<< HEAD
     use rust_decimal_macros::dec;
+    use test_log::test;
+=======
+    use namada_test_utils::TestWasms;
+>>>>>>> da1152e8c (Update namada_apps to use test wasm utility code)
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -1080,10 +1084,7 @@ mod test_finalize_block {
             .unwrap();
 
         // create two decrypted txs
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
+        let tx_code = TestWasms::TxNoOp.read_bytes();
         for i in 0..2 {
             let raw_tx = Tx::new(
                 tx_code.clone(),
@@ -1283,8 +1284,42 @@ mod test_finalize_block {
         > = store_block_state(&shell);
 
         // Keep applying finalize block
+        let validator = shell.mode.get_validator_address().unwrap();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+        let consensus_key =
+            namada_proof_of_stake::validator_consensus_key_handle(validator)
+                .get(&shell.wl_storage, Epoch::default(), &pos_params)
+                .unwrap()
+                .unwrap();
+        let proposer_address = HEXUPPER
+            .decode(consensus_key.tm_raw_hash().as_bytes())
+            .unwrap();
+        let val_stake = read_validator_stake(
+            &shell.wl_storage,
+            &pos_params,
+            validator,
+            Epoch::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        let votes = vec![VoteInfo {
+            validator: Some(Validator {
+                address: proposer_address.clone(),
+                power: u64::from(val_stake) as i64,
+            }),
+            signed_last_block: true,
+        }];
+
+        // Need to supply a proposer address and votes to flow through the
+        // inflation code
         for _ in 0..20 {
-            let req = FinalizeBlock::default();
+            let req = FinalizeBlock {
+                proposer_address: proposer_address.clone(),
+                votes: votes.clone(),
+                ..Default::default()
+            };
             let _events = shell.finalize_block(req).unwrap();
             let new_state = store_block_state(&shell);
             // The new state must be unchanged
