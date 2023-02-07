@@ -18,6 +18,8 @@ use crate::facade::tendermint_config::net::Address as TendermintAddress;
 pub struct ParsedTxArgs {
     /// Simulate applying the transaction
     pub dry_run: bool,
+    /// Dump the transaction bytes
+    pub dump_tx: bool,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
     /// Do not wait for the transaction to be added to the blockchain
