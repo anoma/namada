@@ -1,22 +1,16 @@
+use borsh::BorshSerialize;
+use namada::ledger::eth_bridge;
+use namada_core::types::storage;
+use namada_core::types::storage::KeySeg;
+use namada_test_utils::tx_data::TxWriteData;
+
 use crate::e2e::helpers::get_actor_rpc;
 use crate::e2e::setup;
-use crate::e2e::setup::constants::{
-    wasm_abs_path, ALBERT, TX_WRITE_STORAGE_KEY_WASM,
-};
+use crate::e2e::setup::constants::{wasm_abs_path, ALBERT, TX_WRITE_WASM};
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
 const ETH_BRIDGE_ADDRESS: &str = "atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew";
-
-/// # Examples
-///
-/// ```
-/// let storage_key = storage_key("queue");
-/// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
-/// ```
-fn storage_key(path: &str) -> String {
-    format!("#{ETH_BRIDGE_ADDRESS}/{}", path)
-}
 
 #[test]
 fn everything() {
@@ -44,9 +38,18 @@ fn everything() {
     let _bg_ledger = namadan_ledger.background();
 
     let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
-    std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
+    std::fs::write(
+        &tx_data_path,
+        TxWriteData {
+            key: storage::Key::from(eth_bridge::vp::ADDRESS.to_db_key()),
+            value: b"arbitrary value".to_vec(),
+        }
+        .try_to_vec()
+        .unwrap(),
+    )
+    .unwrap();
 
-    let tx_code_path = wasm_abs_path(TX_WRITE_STORAGE_KEY_WASM);
+    let tx_code_path = wasm_abs_path(TX_WRITE_WASM);
 
     let tx_data_path = tx_data_path.to_string_lossy().to_string();
     let tx_code_path = tx_code_path.to_string_lossy().to_string();

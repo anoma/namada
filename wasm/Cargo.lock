@@ -2565,6 +2565,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_test_utils"
+version = "0.12.2"
+dependencies = [
+ "borsh",
+ "namada_core",
+]
+
+[[package]]
 name = "namada_tests"
 version = "0.13.3"
 dependencies = [
@@ -2575,6 +2583,8 @@ dependencies = [
  "ibc-proto",
  "ibc-relayer",
  "namada",
+ "namada_core",
+ "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",

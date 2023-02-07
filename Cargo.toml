@@ -6,6 +6,7 @@ members = [
   "core",
   "proof_of_stake",
   "shared",
+  "test_utils",
   "tests",
   "tx_prelude",
   "vm_env",
