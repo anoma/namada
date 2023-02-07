@@ -11,6 +11,7 @@ use namada::types::address::wnam;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_apps::wallet::defaults::bertha_address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
 
@@ -278,6 +279,8 @@ fn test_add_to_bridge_pool() {
         &hash,
         "--ledger-address",
         &ledger_addr,
+        "--relayer",
+        bertha_address(),
     ];
     let mut namadar =
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)

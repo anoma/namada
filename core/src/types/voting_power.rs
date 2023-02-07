@@ -28,6 +28,12 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 )]
 pub struct EthBridgeVotingPower(u64);
 
+impl From<u64> for EthBridgeVotingPower {
+    fn from(val: u64) -> Self {
+        Self(val)
+    }
+}
+
 impl From<&FractionalVotingPower> for EthBridgeVotingPower {
     fn from(ratio: &FractionalVotingPower) -> Self {
         // normalize the voting power

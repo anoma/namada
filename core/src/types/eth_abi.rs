@@ -127,12 +127,17 @@ impl<const N: usize> Encode<N> for AbiEncode<N> {
 #[cfg(test)]
 mod tests {
     use std::convert::TryInto;
+    use std::str::FromStr;
 
     use data_encoding::HEXLOWER;
     use ethabi::ethereum_types::U256;
     use tiny_keccak::{Hasher, Keccak};
+    use crate::types::address::Address;
+    use crate::types::eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 
     use super::*;
+    use crate::types::ethereum_events::EthAddress;
+    use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 
     /// Checks if we get the same result as `abi.encode`, for some given
     /// input data.
@@ -176,5 +181,61 @@ mod tests {
             "1C8AFF950685C2ED4BC3174F3472287B56D9517B9C948127319A09A7A36DEAC8";
         let keccak_hash: KeccakHash = original.try_into().expect("Test failed");
         assert_eq!(keccak_hash.to_string().as_str(), original);
+    }
+
+    #[test]
+    fn test_abi_encode_address() {
+        let address =
+            EthAddress::from_str("0xF0457e703bf0B9dEb1a6003FFD71C77E44575f95")
+                .expect("Test failed");
+        let expected = "0x000000000000000000000000f0457e703bf0b9deb1a6003ffd71c77e44575f95";
+        let expected = HEXLOWER
+            .decode(&expected.as_bytes()[2..])
+            .expect("Test failed");
+        let encoded = ethabi::encode(&[Token::Address(address.0.into())]);
+        assert_eq!(expected, encoded);
+    }
+
+    #[test]
+    fn test_abi_encode_valset_args() {
+        let valset_update = ValidatorSetArgs {
+            validators: vec![
+                EthAddress::from_str(
+                    "0x241D37B7Cf5233b3b0b204321420A86e8f7bfdb5",
+                )
+                    .expect("Test failed"),
+            ],
+            voting_powers: vec![8828299.into()],
+            epoch: 0.into(),
+        };
+        let encoded = valset_update.encode().into_inner();
+        let encoded = HEXLOWER.encode(&encoded);
+        let expected = "00000000000000000000000000000000000000000000000000000000000000200000\
+        00000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000\
+        000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000\
+        00000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000\
+        241d37b7cf5233b3b0b204321420a86e8f7bfdb50000000000000000000000000000000000000000000000000000\
+        000000000001000000000000000000000000000000000000000000000000000000000086b58b";
+        assert_eq!(expected, encoded);
+    }
+
+    #[test]
+    fn test_abi_encode_pending_transfer() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset: EthAddress::from_str("0x3949c97925e5Aa13e34ddb18EAbf0B70ABB0C7d4")
+                    .expect("Test failed"),
+                recipient: EthAddress::from_str("0x3949c97925e5Aa13e34ddb18EAbf0B70ABB0C7d4")
+                    .expect("Test failed"),
+                sender: Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+                    .expect("Test failed"),
+                amount: 76.into(),
+            },
+            gas_fee: GasFee {
+                amount: Default::default(),
+                payer: Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+                    .expect("Test failed")
+            },
+        };
     }
 }

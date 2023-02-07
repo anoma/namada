@@ -191,7 +191,10 @@ pub fn tokenize_relay_proof(
 mod test_ethbridge_proofs {
     //! Test ethereum bridge proofs.
 
+    use std::str::FromStr;
+
     use assert_matches::assert_matches;
+    use data_encoding::HEXLOWER;
     use namada_core::proto::Signed;
     use namada_core::types::ethereum_events::EthAddress;
     use namada_core::types::key;
@@ -207,6 +210,7 @@ mod test_ethbridge_proofs {
         let key = key::testing::keypair_1();
         assert_matches!(&key, common::SecretKey::Ed25519(_));
         let signed = Signed::<&'static str>::new(&key, ":)))))))");
+
         proof.attach_signature(
             EthAddrBook {
                 hot_key_addr: EthAddress([0; 20]),

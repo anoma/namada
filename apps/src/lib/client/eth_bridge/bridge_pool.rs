@@ -51,24 +51,26 @@ pub async fn add_to_eth_bridge_pool(
 
 /// Construct a proof that a set of transfers are in the bridge pool.
 pub async fn construct_bridge_pool_proof(
-    ctx: Context,
     args: args::BridgePoolProof,
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let data = (args.transfers, ctx.get(&args.relayer))
+    let data = (args.transfers, args.relayer)
         .try_to_vec()
         .unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
         .generate_bridge_pool_proof(&client, Some(data), None, false)
-        .await
-        .unwrap();
+        .await;
 
-    println!(
-        "Ethereum ABI-encoded proof:\n {:?}",
-        response.data.into_inner()
-    );
+    match response {
+        Ok(response) => println!(
+            "Ethereum ABI-encoded proof:\n {:?}",
+            response.data.into_inner()
+        ),
+        Err(e) => println!("Encountered error: {}", e.to_string())
+    }
+
 }
 
 /// A json serializable representation of the Ethereum
