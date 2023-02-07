@@ -378,7 +378,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "init-account",
             "--source",
             BERTHA,
-            "--public-key",
+            "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
             "--code-path",

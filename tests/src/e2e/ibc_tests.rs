@@ -1057,7 +1057,7 @@ fn submit_ibc_tx(
             &code_path,
             "--data-path",
             &data_path,
-            "--signerss",
+            "--signers",
             signer,
             "--gas-amount",
             "0",
