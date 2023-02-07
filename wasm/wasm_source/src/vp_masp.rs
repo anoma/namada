@@ -96,33 +96,8 @@ fn validate_tx(
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.value_balance.clone();
 
-        // Handle shielding/transparent input
-        // The following boundary conditions must be satisfied
-        // 1. One transparent input
-        // 2. Zero transparent output
-        // 3. the transparent transaction value pool's amount must equal the
-        // containing wrapper transaction's fee amount
         if transfer.source != masp() {
-            // Satisfies 1.
-            if shielded_tx.vin.len() != 1 {
-                debug_log!(
-                    "Transparent input to a transaction from the masp must be \
-                     1 but is {}",
-                    shielded_tx.vin.len()
-                );
-                return reject();
-            }
-
-            // Satisfies 2.
-            if !shielded_tx.vout.is_empty() {
-                debug_log!(
-                    "Transparent output to a transaction from the masp must \
-                     be 0 but is {}",
-                    shielded_tx.vin.len()
-                );
-                return reject();
-            }
-
+            // Handle transparent input
             // Note that the asset type is timestamped so shields
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
@@ -134,27 +109,31 @@ fn validate_tx(
 
             // Non-masp sources add to transparent tx pool
             transparent_tx_pool += transp_amt;
-        }
-
-        // Handle unshielding/transparent output
-        // The following boundary conditions must be satisfied
-        // 1. Zero transparent inupt
-        // 2. One transparent output
-        // 3. Asset type must be properly derived
-        // 4. Value from the output must be the same as the containing transfer
-        // 5. Public key must be the hash of the target
-        if transfer.target != masp() {
+        } else {
+            // Handle shielded input
+            // The following boundary conditions must be satisfied
+            // 1. Zero transparent inupt
+            // 2. the transparent transaction value pool's amount must equal the
+            // containing wrapper transaction's fee amount
             // Satisfies 1.
-            if !shielded_tx.vin.is_empty() {
+            if shielded_tx.vin.len() != 0 {
                 debug_log!(
-                    "Transparent input to a transaction to the masp must be 0 \
-                     but is {}",
+                    "Transparent input to a transaction from the masp must be \
+                     0 but is {}",
                     shielded_tx.vin.len()
                 );
                 return reject();
             }
+        }
 
-            // Satisfies 2.
+        if transfer.target != masp() {
+            // Handle transparent output
+            // The following boundary conditions must be satisfied
+            // 1. One transparent output
+            // 2. Asset type must be properly derived
+            // 3. Value from the output must be the same as the containing transfer
+            // 4. Public key must be the hash of the target
+            // Satisfies 1.
             if shielded_tx.vout.len() != 1 {
                 debug_log!(
                     "Transparent output to a transaction to the masp must be \
@@ -172,25 +151,23 @@ fn validate_tx(
                     &transfer.token,
                 );
 
-            // Satisfies 3. and 4.
+            // Satisfies 2. and 3.
             if !(valid_asset_type(&expected_asset_type, &out.asset_type)
                 && valid_transfer_amount(out.value, u64::from(transfer.amount)))
             {
                 return reject();
             }
 
-            // Timestamp is derived to allow unshields for older tokens
-            let atype: &AssetType =
-                shielded_tx.value_balance.components().next().unwrap().0;
-
-            let transp_amt =
-                Amount::from_nonnegative(*atype, u64::from(transfer.amount))
-                    .expect("invalid value or asset type for amount");
+            let (_transp_asset, transp_amt) = convert_amount(
+                ctx.get_block_epoch().unwrap(),
+                &transfer.token,
+                transfer.amount,
+            );
 
             // Non-masp destinations subtract from transparent tx pool
             transparent_tx_pool -= transp_amt;
 
-            // Satisfies 5.
+            // Satisfies 4.
             match out.script_pubkey.address() {
                 None | Some(Script(_)) => {}
                 Some(PublicKey(pub_bytes)) => {
@@ -210,6 +187,19 @@ fn validate_tx(
                         return reject();
                     }
                 }
+            }
+        } else {
+            // Handle shielded output
+            // The following boundary conditions must be satisfied
+            // 1. Zero transparent output
+            // Satisfies 1.
+            if !shielded_tx.vout.is_empty() {
+                debug_log!(
+                    "Transparent output to a transaction from the masp must \
+                     be 0 but is {}",
+                    shielded_tx.vin.len()
+                );
+                return reject();
             }
         }
 
