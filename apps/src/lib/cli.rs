@@ -1644,7 +1644,7 @@ pub mod args {
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
-    const DUMP_TX: ArgFlag = flag("dump-tx");
+    const OFFLINE_TX: ArgFlag = flag("offline-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
@@ -2971,7 +2971,7 @@ pub mod args {
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
         /// Dump the signing tx to file
-        pub dump_tx: bool,
+        pub offline_tx: bool,
         /// Sign the tx with the key for the given alias from your wallet
         pub signing_keys: Vec<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
@@ -2994,7 +2994,7 @@ pub mod args {
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token),
                 gas_limit: self.gas_limit.clone(),
-                dump_tx: self.dump_tx,
+                offline_tx: self.offline_tx,
                 signing_keys: self
                     .signing_keys
                     .iter()
@@ -3041,7 +3041,7 @@ pub mod args {
                     "The maximum amount of gas needed to run transaction",
                 ),
             )
-            .arg(DUMP_TX.def().about("Dump tx to file."))
+            .arg(OFFLINE_TX.def().about("Dump tx to file."))
             .arg(
                 SIGNING_KEYS
                     .def()
@@ -3074,7 +3074,7 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-            let dump_tx = DUMP_TX.parse(matches);
+            let offline_tx = OFFLINE_TX.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signers = SIGNERS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
@@ -3090,7 +3090,7 @@ pub mod args {
                 gas_limit,
                 signing_keys,
                 signers,
-                dump_tx,
+                offline_tx,
                 signatures,
             }
         }

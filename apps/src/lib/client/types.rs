@@ -38,7 +38,7 @@ pub struct ParsedTxArgs {
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// Dump the signing tx to file
-    pub dump_tx: bool,
+    pub offline_tx: bool,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<key::common::SecretKey>,
     /// Sign the tx with the keypair of the public key of the given address

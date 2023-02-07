@@ -1691,7 +1691,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) = if args.tx.dump_tx {
+    let (default_signer, amount, token) = if args.tx.offline_tx {
         (TxSigningKey::None, args.amount, parsed_args.token.clone())
     } else if source == masp_addr && target == masp_addr {
         // TODO Refactor me, we shouldn't rely on any specific token here.
@@ -2723,7 +2723,7 @@ async fn process_tx(
     default_signers: Vec<TxSigningKey>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
-    if args.dump_tx {
+    if args.offline_tx {
         // TODO: use async version of fs
         tokio::fs::write("code.tx", tx.clone().code)
             .await
