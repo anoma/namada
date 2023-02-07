@@ -1,6 +1,6 @@
 //! IBC token transfer validation as a native validity predicate
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
@@ -86,7 +86,7 @@ where
         let tx_data = &signed.data.ok_or(Error::NoTxData)?;
 
         // Check the non-onwer balance updates
-        let keys_changed: HashSet<Key> = keys_changed
+        let ibc_keys_changed: HashSet<Key> = keys_changed
             .iter()
             .filter(|k| {
                 matches!(
@@ -103,12 +103,36 @@ where
             })
             .cloned()
             .collect();
-        if keys_changed.is_empty() {
-            // no account is checked by this VP
-            return Ok(true);
-        } else if keys_changed.len() > 1 {
+        if ibc_keys_changed.is_empty() {
+            // some multitoken balances are changed
+            let mut changes = HashMap::new();
+            for key in keys_changed {
+                if let Some((sub_prefix, _)) =
+                    token::is_any_multitoken_balance_key(key)
+                {
+                    if !ibc_storage::is_ibc_sub_prefix(&sub_prefix) {
+                        continue;
+                    }
+                    let pre: token::Amount =
+                        self.ctx.read_pre(key)?.unwrap_or_default();
+                    let post: token::Amount =
+                        self.ctx.read_post(key)?.unwrap_or_default();
+                    let this_change = post.change() - pre.change();
+                    let change: token::Change =
+                        changes.get(&sub_prefix).cloned().unwrap_or_default();
+                    changes.insert(sub_prefix, change + this_change);
+                }
+            }
+            if changes.iter().all(|(_, c)| *c == 0) {
+                return Ok(true);
+            } else {
+                return Err(Error::TokenTransfer(
+                    "Invalid transfer between different origin accounts"
+                        .to_owned(),
+                ));
+            }
+        } else if ibc_keys_changed.len() > 1 {
             // a transaction can update at most 1 special IBC account for now
-            // a transaction can update at most 1 non-owner balance for now
             return Err(Error::TokenTransfer(
                 "Invalid transfer for multiple non-owner balances".to_owned(),
             ));
