@@ -1685,8 +1685,7 @@ pub mod args {
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    const PUBLIC_KEY_MULTISIGNATURE: ArgMulti<WalletPublicKey> =
-        arg_multi("public-keys");
+    const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
@@ -1701,7 +1700,6 @@ pub mod args {
     const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
     const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     const SOURCE: Arg<WalletAddress> = arg("source");
-    const SOURCE_MULTISIGNATURE: ArgMulti<WalletAddress> = arg_multi("sources");
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
@@ -2085,7 +2083,7 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// Address of the source account
-        pub sources: Vec<WalletAddress>,
+        pub source: Option<WalletAddress>,
         /// Path to the VP WASM code file for the new account
         pub vp_code_path: Option<PathBuf>,
         /// Public key for the new account
@@ -2097,13 +2095,13 @@ pub mod args {
     impl Args for TxInitAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let sources = SOURCE_MULTISIGNATURE.parse(matches);
+            let source = SOURCE_OPT.parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
-            let public_keys = PUBLIC_KEY_MULTISIGNATURE.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
-                sources,
+                source,
                 vp_code_path,
                 public_keys,
                 threshold,
@@ -2113,7 +2111,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(
-                    SOURCE_MULTISIGNATURE
+                    SOURCE_OPT
                         .def()
                         .about(
                             "The source account's address that signs the \
@@ -2128,7 +2126,7 @@ pub mod args {
                      specified.",
                 ))
                 .arg(
-                    PUBLIC_KEY_MULTISIGNATURE
+                    PUBLIC_KEYS
                         .def()
                         .about(
                             "A public key to be used for the new account in \
@@ -2222,6 +2220,9 @@ pub mod args {
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
                      if none specified.",
+                ))
+                .arg(THRESHOLD.def().about(
+                    "Specifiy the treshold if a multisignature account.",
                 ))
                 .arg(UNSAFE_DONT_ENCRYPT.def().about(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \

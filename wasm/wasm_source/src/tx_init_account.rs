@@ -14,7 +14,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
     match account::init_account(ctx, tx_data) {
         Ok(account_address) => {
-            debug_log!("Created account {}", account_address.encode(),)
+            debug_log!("Created account {}", account_address.encode())
         }
         Err(err) => {
             debug_log!("Account creation failed with: {}", err);
