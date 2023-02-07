@@ -3653,6 +3653,7 @@ dependencies = [
  "masp_proofs",
  "namada_core",
  "namada_proof_of_stake",
+ "namada_test_utils",
  "parity-wasm",
  "paste",
  "pretty_assertions",
