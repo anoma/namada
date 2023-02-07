@@ -10,8 +10,9 @@ use namada_core::types::address::Address;
 pub(super) fn is_authorized(
     verifiers: &BTreeSet<Address>,
     sender: &Address,
+    receiver: &Address,
 ) -> bool {
-    verifiers.contains(sender)
+    verifiers.contains(sender) && verifiers.contains(receiver)
 }
 
 #[cfg(test)]
@@ -21,22 +22,34 @@ mod tests {
 
     #[test]
     fn test_is_authorized_passes() {
-        let owner = address::testing::established_address_1();
-        let verifiers = BTreeSet::from([owner.clone()]);
-        assert!(verifiers.contains(&owner));
+        let sender = address::testing::established_address_1();
+        let receiver = address::testing::established_address_2();
+        let verifiers = BTreeSet::from([sender.clone(), receiver.clone()]);
 
-        let authorized = is_authorized(&verifiers, &owner);
+        let authorized = is_authorized(&verifiers, &sender, &receiver);
 
         assert!(authorized);
     }
 
     #[test]
     fn test_is_authorized_fails() {
-        let owner = address::testing::established_address_1();
+        let sender = address::testing::established_address_1();
+        let receiver = address::testing::established_address_2();
         let verifiers = BTreeSet::default();
-        assert!(!verifiers.contains(&owner));
 
-        let authorized = is_authorized(&verifiers, &owner);
+        let authorized = is_authorized(&verifiers, &sender, &receiver);
+
+        assert!(!authorized);
+
+        let verifiers = BTreeSet::from([sender.clone()]);
+
+        let authorized = is_authorized(&verifiers, &sender, &receiver);
+
+        assert!(!authorized);
+
+        let verifiers = BTreeSet::from([receiver.clone()]);
+
+        let authorized = is_authorized(&verifiers, &sender, &receiver);
 
         assert!(!authorized);
     }

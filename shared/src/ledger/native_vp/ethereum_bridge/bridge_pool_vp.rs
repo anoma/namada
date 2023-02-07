@@ -182,8 +182,12 @@ where
 }
 
 /// Check if a delta matches the delta given by a transfer
-fn check_delta(delta: &(Address, Amount), transfer: &PendingTransfer) -> bool {
-    delta.0 == transfer.transfer.sender && delta.1 == transfer.transfer.amount
+fn check_delta(
+    sender: &Address,
+    amount: &Amount,
+    transfer: &PendingTransfer,
+) -> bool {
+    *sender == transfer.transfer.sender && *amount == transfer.transfer.amount
 }
 
 /// Helper struct for handling the different escrow
@@ -319,7 +323,8 @@ where
                 (&escrow_key).try_into().expect("This should not fail"),
                 (&owner_key).try_into().expect("This should not fail"),
             ) {
-                Ok(Some(delta)) if check_delta(&delta, &transfer) => {}
+                Ok(Some((sender, _, amount)))
+                    if check_delta(&sender, &amount, &transfer) => {}
                 other => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
