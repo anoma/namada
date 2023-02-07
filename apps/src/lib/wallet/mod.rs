@@ -160,10 +160,10 @@ impl Wallet {
     /// key.
     pub fn derive_key_from_user_mnemonic_code(
         &mut self,
-        scheme: SchemeType,
         alias: Option<String>,
         unsafe_dont_encrypt: bool,
     ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+        let scheme = SchemeType::Ed25519;
         let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let mnemonic = read_mnemonic()?;
         let seed = Seed::new(&mnemonic, "");

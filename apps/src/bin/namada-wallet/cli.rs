@@ -306,17 +306,13 @@ fn address_key_add(
 fn key_and_address_restore(
     ctx: Context,
     args::KeyAndAddressRestore {
-        scheme,
         alias,
         unsafe_dont_encrypt,
     }: args::KeyAndAddressRestore,
 ) {
     let mut wallet = ctx.wallet;
-    let derived_key = wallet.derive_key_from_user_mnemonic_code(
-        scheme,
-        alias,
-        unsafe_dont_encrypt,
-    );
+    let derived_key =
+        wallet.derive_key_from_user_mnemonic_code(alias, unsafe_dont_encrypt);
     match derived_key {
         Ok((alias, _key)) => {
             wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
@@ -343,6 +339,17 @@ fn key_and_address_gen(
         use_mnemonic,
     }: args::KeyAndAddressGen,
 ) {
+    if use_mnemonic {
+        match scheme {
+            SchemeType::Ed25519 => {}
+            _ => {
+                println!(
+                    "Mnemonic codes are supported only for ed25519 scheme. Exiting."
+                );
+                cli::safe_exit(0);
+            }
+        }
+    }
     let mut wallet = ctx.wallet;
     let generated_key =
         wallet.gen_key(scheme, alias, unsafe_dont_encrypt, use_mnemonic);
