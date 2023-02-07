@@ -20,9 +20,6 @@ be updated with a standard governance proposal. All fees collected are paid
 directly to the block proposer (incentive-compatible, so that side payments are
 no more profitable).
 
-Fees are distributed among the delegators with the mechanism explained in the
-[proof-of-stake reward distribution specs](./proof-of-stake/reward-distribution.md).
-
 Fees are only meant for `InnerTx` transactions: `WrapperTx`s carry information
 about fees for the relative inner tx but are not subject to fees themselves.
 
@@ -49,15 +46,15 @@ the Ferveo [documentation](https://eprint.iacr.org/2022/898.pdf)).
 Fees are not distributed among the validators who actively participate in the
 block validation process. This is because a tx submitter could be side-paying
 the block proposer for tx inclusion which would prevent the correct distribution
-of fees among validators. The fair distribution of fees is enforced by the block
-proposer rotation policy of Tendermint.
+of fees among validators. The fair distribution of fees is enforced by the
+stake-proportional block proposer rotation policy of Tendermint.
 
 By requesting an upfront payment, fees also serve as prevention against DOS
 attacks since the signer needs to pay for all the submitted transactions. More
 specifically, to serve as a denial-of-service and spam prevention mechanism, the
 fee system needs to enforce:
 
-1. **Succesful** payment at block inclusion time (implying the ability to check
+1. **Successful** payment at block inclusion time (implying the ability to check
    the good outcome at block creation time)
 2. Minimal payment overhead in terms of computation/memory requirements
    (otherwise fee payment itself could be exploited as a DOS vector)
@@ -218,7 +215,7 @@ The first condition can be tested statically and requires that:
 
 1. The tx encodes a `Transfer`
 2. The `shielded` field must be set to `Some`
-3. The `source` address must be the masp4. The `target` address matches that of
+3. The `source` address must be the masp. The `target` address matches that of
    the wrapper signer
 4. The `token` match the one specified in the `Fee` struct
 5. The `amount`, added to the already available unshielded balance for that
@@ -229,14 +226,11 @@ The first condition can be tested statically and requires that:
 The spending key associated with this operation could be relative to any address
 as long as the signature of the transfer itself is valid.
 
-If checks 1 to 5 fail, the transaction can be safely discarded, while if the
-check fails at point 6 the transaction could be kept in mempool for future
-usage, until the expiration time of the transaction is reached.
-
-Once these controls have been performed, the block proposer should run the
-actual transfer against the current state of the application to check whether
-the transaction is valid or not: if this succeeds the transaction can be
-included in the block, otherwise it should be discarded.
+If any of the checks fail, the transaction must be discarded. Once these
+controls have been performed, the block proposer should run the actual transfer
+against the current state of the application to check whether the transaction is
+valid or not: if this succeeds the transaction can be included in the block,
+otherwise it should be discarded.
 
 These same checks are done by the validators in `process_proposal`: if any of
 them fail, the entire block is rejected. The balance key must be searched in the
