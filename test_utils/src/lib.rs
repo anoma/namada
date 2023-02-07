@@ -5,7 +5,6 @@ pub mod tx_data;
 use std::env;
 use std::path::PathBuf;
 
-use git2::Repository;
 use strum::EnumIter;
 
 /// Path from the root of the Git repo to the directory under which built test
@@ -50,22 +49,20 @@ impl TestWasms {
         };
         let cwd =
             env::current_dir().expect("Couldn't get current working directory");
-        let repo_root = Repository::discover(&cwd).unwrap_or_else(|err| {
-            panic!(
-                "Couldn't discover a Git repository for the current working \
-                 directory {}: {:?}",
-                cwd.to_string_lossy(),
-                err
-            )
-        });
-        repo_root
-            .workdir()
-            .expect(
-                "Couldn't get the path to working directory for the Git \
-                 repository",
-            )
-            .join(WASM_FOR_TESTS_DIR)
-            .join(filename)
+        // crudely find the root of the repo, we can't rely on the `.git`
+        // directory being present, so look instead for the presence of a
+        // CHANGELOG.md file
+        let repo_root = cwd
+            .ancestors()
+            .find(|path| path.join("CHANGELOG.md").exists())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Couldn't find the root of the repository for the current \
+                     working directory {}",
+                    cwd.to_string_lossy()
+                )
+            });
+        repo_root.join(WASM_FOR_TESTS_DIR).join(filename)
     }
 
     /// Attempts to read the contents of this test wasm. Panics if it is not

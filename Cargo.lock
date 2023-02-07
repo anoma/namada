@@ -3868,7 +3868,6 @@ name = "namada_test_utils"
 version = "0.14.0"
 dependencies = [
  "borsh",
- "git2",
  "namada_core",
  "strum",
 ]
