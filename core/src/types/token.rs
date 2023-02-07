@@ -38,6 +38,9 @@ pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000;
 
+/// The largest value that can be represented by this integer type
+pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
+
 /// A change in tokens amount
 pub type Change = i128;
 
@@ -210,6 +213,24 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.micro -= rhs.micro
+    }
+}
+
+impl KeySeg for Amount {
+    fn parse(string: String) -> super::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let micro = u64::parse(string)?;
+        Ok(Self { micro })
+    }
+
+    fn raw(&self) -> String {
+        self.micro.raw()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.micro.to_db_key()
     }
 }
 

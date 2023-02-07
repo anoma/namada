@@ -89,6 +89,6 @@ impl ShieldedTransferContext for Context {
     }
 
     async fn query_epoch(&self, ledger_address: TendermintAddress) -> Epoch {
-        rpc::query_epoch(args::Query { ledger_address }).await
+        rpc::query_and_print_epoch(args::Query { ledger_address }).await
     }
 }

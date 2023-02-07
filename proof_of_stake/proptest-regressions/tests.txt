@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b18600cd21cdcbb0ff9ecf81f0479a1181586b37e4bd584457b5a19f4d87c060 # shrinks to pos_params = PosParams { max_validator_slots: 1, pipeline_len: 4, unbonding_len: 5, tm_votes_per_token: 0.2304, block_proposer_reward: 0.125, block_vote_reward: 0.1, max_inflation_rate: 0.1, target_staked_ratio: 0.6667, duplicate_vote_min_slash_rate: 0.001, light_client_attack_min_slash_rate: 0.001 }, genesis_validators = [GenesisValidator { address: Established: atest1v4ehgw36g4pyxdjrg5e5gsfexaq5vsfegvurvv69xqenqdp3xdrr2dzzg5engdfjgeqnzdf3ql3mlz, tokens: Amount { micro: 990878946896 }, consensus_key: Ed25519(PublicKey(VerificationKey("ee1aa49a4459dfe813a3cf6eb882041230c7b2558469de81f87c9bf23bf10a03"))), commission_rate: 0.05, max_commission_rate_change: 0.001 }]

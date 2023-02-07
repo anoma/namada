@@ -50,7 +50,7 @@ pub async fn main() -> Result<()> {
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
-                    rpc::query_epoch(args).await;
+                    rpc::query_and_print_epoch(args).await;
                 }
                 Sub::QueryTransfers(QueryTransfers(args)) => {
                     rpc::query_transfers(ctx, args).await;
@@ -71,10 +71,13 @@ pub async fn main() -> Result<()> {
                     rpc::query_bonded_stake(ctx, args).await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
-                    rpc::query_commission_rate(ctx, args).await;
+                    rpc::query_and_print_commission_rate(ctx, args).await;
                 }
                 Sub::QuerySlashes(QuerySlashes(args)) => {
                     rpc::query_slashes(ctx, args).await;
+                }
+                Sub::QueryDelegations(QueryDelegations(args)) => {
+                    rpc::query_delegations(ctx, args).await;
                 }
                 Sub::QueryResult(QueryResult(args)) => {
                     rpc::query_result(ctx, args).await;

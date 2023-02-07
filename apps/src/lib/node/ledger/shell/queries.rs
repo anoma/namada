@@ -5,6 +5,9 @@ use ferveo_common::TendermintValidator;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
 use namada::ledger::storage_api::token;
+use namada::proof_of_stake::{
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
+};
 use namada::types::address::Address;
 use namada::types::key;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -86,14 +89,19 @@ where
             .expect("Serializing public key should not fail");
         // get the current epoch
         let (current_epoch, _) = self.wl_storage.storage.get_current_epoch();
+
+        // TODO: resolve both unwrap() instances better below
+
         // get the PoS params
-        let pos_params = self.wl_storage.read_pos_params();
-        // get the active validator set
-        self.wl_storage
-            .read_validator_set()
-            .get(current_epoch)
-            .expect("Validators for the next epoch should be known")
-            .active
+        let pos_params = read_pos_params(&self.wl_storage).unwrap();
+        // get the consensus validator set
+        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch,
+        )
+        .unwrap();
+
+        consensus_vals
             .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);

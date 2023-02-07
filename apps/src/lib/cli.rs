@@ -174,6 +174,7 @@ pub mod cmds {
                 .subcommand(QueryBonds::def().display_order(3))
                 .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
+                .subcommand(QueryDelegations::def().display_order(3))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
@@ -210,6 +211,8 @@ pub mod cmds {
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
+            let query_delegations =
+                Self::parse_with_ctx(matches, QueryDelegations);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
@@ -238,6 +241,7 @@ pub mod cmds {
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
+                .or(query_delegations)
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
@@ -301,6 +305,7 @@ pub mod cmds {
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
+        QueryDelegations(QueryDelegations),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
@@ -1298,6 +1303,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryDelegations(pub args::QueryDelegations);
+
+    impl SubCmd for QueryDelegations {
+        const CMD: &'static str = "delegations";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryDelegations(args::QueryDelegations::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Find PoS delegations from the given owner address.")
+                .add_args::<args::QueryDelegations>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryRawBytes(pub args::QueryRawBytes);
 
     impl SubCmd for QueryRawBytes {
@@ -1597,7 +1624,8 @@ pub mod args {
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
-    const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
+    const OWNER: Arg<WalletAddress> = arg("owner");
+    const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     const PIN: ArgFlag = flag("pin");
     const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
@@ -2554,7 +2582,7 @@ pub mod args {
     impl Args for QueryBonds {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = OWNER_OPT.parse(matches);
             let validator = VALIDATOR_OPT.parse(matches);
             Self {
                 query,
@@ -2566,7 +2594,7 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query>()
                 .arg(
-                    OWNER.def().about(
+                    OWNER_OPT.def().about(
                         "The owner account address whose bonds to query.",
                     ),
                 )
@@ -2708,6 +2736,32 @@ pub mod args {
             )
         }
     }
+
+    /// Query PoS delegations
+    #[derive(Clone, Debug)]
+    pub struct QueryDelegations {
+        /// Common query args
+        pub query: Query,
+        /// Address of an owner
+        pub owner: WalletAddress,
+    }
+
+    impl Args for QueryDelegations {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = OWNER.parse(matches);
+            Self { query, owner }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                OWNER.def().about(
+                    "The address of the owner of the delegations to find.",
+                ),
+            )
+        }
+    }
+
     /// Query the raw bytes of given storage key
     #[derive(Clone, Debug)]
     pub struct QueryRawBytes {

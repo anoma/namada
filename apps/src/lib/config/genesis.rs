@@ -274,7 +274,7 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PosParamsConfig {
-        // Maximum number of active validators.
+        // Maximum number of consensus validators.
         // XXX: u64 doesn't work with toml-rs!
         pub max_validator_slots: u64,
         // Pipeline length (in epochs).

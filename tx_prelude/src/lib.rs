@@ -39,7 +39,6 @@ use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 
 pub use crate::ibc::IbcActions;
-pub use crate::proof_of_stake::{PosRead, PosWrite};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {

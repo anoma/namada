@@ -25,15 +25,15 @@ use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
-    ActiveValidator, ValidatorSetUpdate,
+    ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol};
+use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -104,6 +104,8 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[error("Error reading from or writing to storage: {0}")]
+    StorageApi(#[from] storage_api::Error),
 }
 
 impl From<Error> for TxResult {
@@ -420,7 +422,8 @@ where
         if !self.byzantine_validators.is_empty() {
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
-            let pos_params = self.wl_storage.read_pos_params();
+            // TODO: resolve this unwrap() better
+            let pos_params = read_pos_params(&self.wl_storage).unwrap();
             let current_epoch = self.wl_storage.storage.block.epoch;
             for evidence in byzantine_validators {
                 tracing::info!("Processing evidence {evidence:?}.");
@@ -491,19 +494,23 @@ where
                         continue;
                     }
                 };
-                let validator = match self
-                    .wl_storage
-                    .read_validator_address_raw_hash(&validator_raw_hash)
-                {
-                    Some(validator) => validator,
-                    None => {
-                        tracing::error!(
-                            "Cannot find validator's address from raw hash {}",
-                            validator_raw_hash
-                        );
-                        continue;
-                    }
-                };
+                let validator =
+                    match proof_of_stake::find_validator_by_raw_hash(
+                        &self.wl_storage,
+                        &validator_raw_hash,
+                    )
+                    .expect("Must be able to read storage")
+                    {
+                        Some(validator) => validator,
+                        None => {
+                            tracing::error!(
+                                "Cannot find validator's address from raw \
+                                 hash {}",
+                                validator_raw_hash
+                            );
+                            continue;
+                        }
+                    };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
                     validator,
@@ -511,7 +518,8 @@ where
                     evidence_epoch,
                     evidence_height
                 );
-                if let Err(err) = self.wl_storage.slash(
+                if let Err(err) = slash(
+                    &mut self.wl_storage,
                     &pos_params,
                     current_epoch,
                     evidence_epoch,
@@ -549,12 +557,7 @@ where
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
         let mut response = response::Commit::default();
-        // commit changes from the write-log to storage
-        self.wl_storage
-            .write_log
-            .commit_block(&mut self.wl_storage.storage)
-            .expect("Expected committing block write log success");
-        // store the block's data in DB
+        // commit block's data from write log and store the in DB
         self.wl_storage.commit_block().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
