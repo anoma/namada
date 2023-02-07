@@ -184,7 +184,7 @@ pub struct InitValidator {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub account_key: common::PublicKey,
+    pub account_keys: Vec<common::PublicKey>,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
     /// Public key used to sign protocol transactions
@@ -196,6 +196,8 @@ pub struct InitValidator {
     /// The maximum change allowed per epoch to the commission rate. This is
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
+    /// The multisignature threshold
+    pub threshold: u64,
     /// The VP code for validator account
     pub validator_vp_code: Vec<u8>,
 }

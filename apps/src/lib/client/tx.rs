@@ -293,12 +293,13 @@ pub async fn submit_init_validator(
         tx: tx_args,
         source,
         scheme,
-        account_key,
+        account_keys,
         consensus_key,
         protocol_key,
         commission_rate,
         max_commission_rate_change,
         validator_vp_code_path,
+        threshold,
         unsafe_dont_encrypt,
     }: args::TxInitValidator,
 ) {
@@ -310,17 +311,47 @@ pub async fn submit_init_validator(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
-    let account_key = ctx.get_opt_cached(&account_key).unwrap_or_else(|| {
+
+    let account_keys = if !account_keys.is_empty() {
+        account_keys
+            .iter()
+            .map(|account_key| ctx.get_cached(account_key))
+            .collect()
+    } else {
         println!("Generating validator account key...");
-        ctx.wallet
+        let public_key = ctx
+            .wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
                 unsafe_dont_encrypt,
             )
             .1
-            .ref_to()
-    });
+            .ref_to();
+        vec![public_key]
+    };
+
+    let threshold = match threshold {
+        Some(threshold) => {
+            if threshold > account_keys.len() as u64 {
+                eprintln!(
+                    "Threshold must be less or equal to the number of public \
+                     keys."
+                );
+                safe_exit(1);
+            } else {
+                threshold
+            }
+        }
+        None => {
+            if account_keys.len() as u64 == 1 {
+                1u64
+            } else {
+                eprintln!("Missing threshold for multisignature account.");
+                safe_exit(1);
+            }
+        }
+    };
 
     let consensus_key = ctx
         .get_opt_cached(&consensus_key)
@@ -398,12 +429,13 @@ pub async fn submit_init_validator(
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
     let data = InitValidator {
-        account_key,
+        account_keys,
         consensus_key: consensus_key.ref_to(),
         protocol_key,
         dkg_key,
         commission_rate,
         max_commission_rate_change,
+        threshold,
         validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");

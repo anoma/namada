@@ -3,7 +3,7 @@ use namada_core::types::transaction::InitAccount;
 
 use super::*;
 
-pub fn init_account(ctx: &mut Ctx, data: InitAccount) -> TxResult {
+pub fn init_account(ctx: &mut Ctx, data: InitAccount) -> EnvResult<Address> {
     let address = ctx.init_account(&data.vp_code)?;
 
     let pk_threshold = key::threshold_key(&address);
@@ -14,5 +14,5 @@ pub fn init_account(ctx: &mut Ctx, data: InitAccount) -> TxResult {
         ctx.write(&pk_key, pk)?;
     }
 
-    Ok(())
+    Ok(address)
 }

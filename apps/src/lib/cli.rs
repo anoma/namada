@@ -1718,8 +1718,8 @@ pub mod args {
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
     const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
-    const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
-        arg_opt("account-key");
+    const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("account-keys");
     const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
@@ -2147,12 +2147,13 @@ pub mod args {
         pub tx: Tx,
         pub source: WalletAddress,
         pub scheme: SchemeType,
-        pub account_key: Option<WalletPublicKey>,
+        pub account_keys: Vec<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
         pub protocol_key: Option<WalletPublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
         pub validator_vp_code_path: Option<PathBuf>,
+        pub threshold: Option<u64>,
         pub unsafe_dont_encrypt: bool,
     }
 
@@ -2161,24 +2162,26 @@ pub mod args {
             let tx = Tx::parse(matches);
             let source = SOURCE.parse(matches);
             let scheme = SCHEME.parse(matches);
-            let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
+            let account_keys = VALIDATOR_ACCOUNT_KEYS.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 tx,
                 source,
                 scheme,
-                account_key,
+                account_keys,
                 consensus_key,
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
                 validator_vp_code_path,
+                threshold,
                 unsafe_dont_encrypt,
             }
         }
@@ -2192,7 +2195,7 @@ pub mod args {
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEY.def().about(
+                .arg(VALIDATOR_ACCOUNT_KEYS.def().about(
                     "A public key for the validator account. A new one will \
                      be generated if none given.",
                 ))
