@@ -8,7 +8,6 @@ use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
-
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
