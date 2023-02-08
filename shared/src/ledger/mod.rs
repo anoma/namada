@@ -3,6 +3,7 @@
 pub mod eth_bridge;
 pub mod events;
 pub mod ibc;
+pub mod inflation;
 pub mod masp;
 pub mod native_vp;
 pub mod pos;
