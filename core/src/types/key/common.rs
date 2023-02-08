@@ -383,3 +383,21 @@ impl super::SigScheme for SigScheme {
         }
     }
 }
+
+mod tests {
+    use super::*;
+    use crate::types::key::ed25519;
+
+    /// Run `cargo test gen_ed25519_keypair -- --nocapture` to generate a
+    /// new ed25519 keypair wrapped in `common` key types.
+    #[test]
+    fn gen_ed25519_keypair() {
+        let secret_key =
+            SecretKey::Ed25519(crate::types::key::testing::gen_keypair::<
+                ed25519::SigScheme,
+            >());
+        let public_key = secret_key.to_public();
+        println!("Public key: {}", public_key);
+        println!("Secret key: {}", secret_key);
+    }
+}
