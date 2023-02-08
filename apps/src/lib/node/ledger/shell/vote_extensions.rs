@@ -9,7 +9,8 @@ use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
-use namada::proto::{SignableEthBytes, Signed};
+use namada::proto::{SignableEthMessage, Signed};
+use namada::types::keccak::keccak_hash;
 use namada::types::transaction::protocol::ProtocolTxType;
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
@@ -149,12 +150,13 @@ where
             .to_owned();
         let bp_root = self.storage.get_bridge_pool_root().0;
         let nonce = self.storage.get_bridge_pool_nonce().to_bytes();
-        let to_sign = [bp_root.as_slice(), nonce.as_slice()].concat();
+        let to_sign =
+            keccak_hash([bp_root.as_slice(), nonce.as_slice()].concat());
         let eth_key = self
             .mode
             .get_eth_bridge_keypair()
             .expect(VALIDATOR_EXPECT_MSG);
-        let signed = Signed::<Vec<u8>, SignableEthBytes>::new(eth_key, to_sign);
+        let signed = Signed::<_, SignableEthMessage>::new(eth_key, to_sign);
 
         let ext = bridge_pool_roots::Vext {
             block_height: self.storage.last_height,

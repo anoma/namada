@@ -20,6 +20,7 @@ use thiserror::Error;
 
 use super::address::Address;
 use super::storage::{self, DbKeySeg, Key, KeySeg};
+use crate::ledger::storage::StorageHasher;
 use crate::types::address;
 
 const PK_STORAGE_KEY: &str = "public_key";
@@ -260,6 +261,8 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     type PublicKey: 'static + PublicKey;
     /// Represents the secret key for this scheme
     type SecretKey: 'static + SecretKey;
+    /// Represents the data hasher for this scheme
+    type Hasher: 'static + StorageHasher;
     /// The scheme type of this implementation
     const TYPE: SchemeType;
     /// Generate a keypair.
@@ -270,7 +273,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     /// Sign the data with a key.
     fn sign(
         keypair: &Self::SecretKey,
-        data: impl AsRef<[u8]>,
+        data: impl SignableBytes,
     ) -> Self::Signature;
     /// Check that the public key matches the signature on the given data.
     fn verify_signature<T: BorshSerialize + BorshDeserialize>(
@@ -281,7 +284,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     /// Check that the public key matches the signature on the given raw data.
     fn verify_signature_raw(
         pk: &Self::PublicKey,
-        data: &[u8],
+        data: impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError>;
 }
@@ -382,6 +385,33 @@ pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
 /// Convert Tendermint validator's raw hash bytes to Namada raw hash string
 pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
     HEXUPPER.encode(raw_hash.as_ref())
+}
+
+/// Helper trait to compress arbitrary bytes to a hash value,
+/// which can be signed over.
+pub trait SignableBytes: Sized + AsRef<[u8]> {
+    /// Calculate a hash value to sign over.
+    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+        H::hash(self.as_ref()).into()
+    }
+}
+
+impl SignableBytes for Vec<u8> {}
+impl SignableBytes for &Vec<u8> {}
+impl SignableBytes for &[u8] {}
+impl<const N: usize> SignableBytes for [u8; N] {}
+impl<const N: usize> SignableBytes for &[u8; N] {}
+
+impl SignableBytes for crate::types::hash::Hash {
+    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl SignableBytes for crate::types::keccak::KeccakHash {
+    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+        self.0
+    }
 }
 
 /// Helpers for testing with keys.

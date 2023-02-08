@@ -211,12 +211,12 @@ pub trait VotingPowersMapExt {
     #[inline]
     fn get_bridge_and_gov_hashes(
         &self,
-        signing_epoch: Epoch,
+        next_epoch: Epoch,
     ) -> (KeccakHash, KeccakHash) {
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
             self.get_abi_encoded();
         valset_upd_toks_to_hashes(
-            signing_epoch,
+            next_epoch,
             hot_key_addrs,
             cold_key_addrs,
             voting_powers,
@@ -228,20 +228,20 @@ pub trait VotingPowersMapExt {
 /// the given hot and cold key addresses, and their respective validator's
 /// voting powers, normalized to `2^32`.
 pub fn valset_upd_toks_to_hashes(
-    signing_epoch: Epoch,
+    next_epoch: Epoch,
     hot_key_addrs: Vec<Token>,
     cold_key_addrs: Vec<Token>,
     voting_powers: Vec<Token>,
 ) -> (KeccakHash, KeccakHash) {
     let bridge_hash = compute_hash(
-        signing_epoch,
+        next_epoch,
         BRIDGE_CONTRACT_VERSION,
         BRIDGE_CONTRACT_NAMESPACE,
         hot_key_addrs,
         voting_powers.clone(),
     );
     let governance_hash = compute_hash(
-        signing_epoch,
+        next_epoch,
         GOVERNANCE_CONTRACT_VERSION,
         GOVERNANCE_CONTRACT_NAMESPACE,
         cold_key_addrs,
@@ -284,7 +284,7 @@ fn epoch_to_token(Epoch(e): Epoch) -> Token {
 /// contracts.
 #[inline]
 fn compute_hash(
-    signing_epoch: Epoch,
+    next_epoch: Epoch,
     contract_version: u8,
     contract_namespace: &str,
     validators: Vec<Token>,
@@ -295,7 +295,7 @@ fn compute_hash(
         Token::String(contract_namespace.into()),
         Token::Array(validators),
         Token::Array(voting_powers),
-        epoch_to_token(signing_epoch),
+        epoch_to_token(next_epoch),
     ])
 }
 
@@ -352,18 +352,20 @@ mod tag {
     pub struct SerializeWithAbiEncode;
 
     impl Signable<Vext> for SerializeWithAbiEncode {
-        type Output = Vec<u8>;
+        type Output = KeccakHash;
 
         fn as_signable(ext: &Vext) -> Self::Output {
-            let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) = ext
-                .voting_powers
-                .get_bridge_and_gov_hashes(ext.signing_epoch);
+            // NOTE: the smart contract expects us to sign
+            // against the next nonce (i.e. the new epoch)
+            let next_epoch = ext.signing_epoch.next();
+            let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
+                ext.voting_powers.get_bridge_and_gov_hashes(next_epoch);
             AbiEncode::signable_keccak256(&[
                 Token::Uint(GOVERNANCE_CONTRACT_VERSION.into()),
                 Token::String("updateValidatorsSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
-                epoch_to_token(ext.signing_epoch),
+                epoch_to_token(next_epoch),
             ])
         }
     }

@@ -1010,6 +1010,7 @@ mod test_utils {
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
+    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
@@ -1102,8 +1103,19 @@ mod test_utils {
     }
 
     /// Get the default bridge pool vext bytes to be signed.
-    pub fn get_bp_bytes_to_sign() -> Vec<u8> {
-        [[0; 32], Uint::from(0).to_bytes()].concat()
+    pub fn get_bp_bytes_to_sign() -> KeccakHash {
+        use namada::types::keccak::{Hasher, Keccak};
+
+        let root = [0; 32];
+        let nonce = Uint::from(0).to_bytes();
+
+        let mut output = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(&root);
+        hasher.update(&nonce);
+        hasher.finalize(&mut output);
+
+        KeccakHash(output)
     }
 
     /// A wrapper around the shell that implements

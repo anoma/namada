@@ -197,6 +197,10 @@ where
     /// Compresses a set of signed Ethereum events into a single
     /// [`ethereum_events::VextDigest`], whilst filtering invalid
     /// [`Signed<ethereum_events::Vext>`] instances in the process.
+    ///
+    /// When vote extensions are being used, this performs a check
+    /// that at least 2/3 of the validators by voting power have
+    /// included ethereum events in their vote extension.
     pub fn compress_ethereum_events(
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
@@ -299,7 +303,7 @@ mod test_vote_extensions {
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
     #[cfg(feature = "abcipp")]
-    use namada::proto::{SignableEthBytes, Signed};
+    use namada::proto::{SignableEthMessage, Signed};
     use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
@@ -308,6 +312,8 @@ mod test_vote_extensions {
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum,
     };
+    #[cfg(feature = "abcipp")]
+    use namada::types::keccak::keccak_hash;
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
@@ -481,12 +487,14 @@ mod test_vote_extensions {
             vote_extension: VoteExtension {
                 ethereum_events: Some(ethereum_events.clone()),
                 bridge_pool_root: {
-                    let to_sign = [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat();
-                    let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                    let to_sign = keccak_hash(
+                        [
+                            KeccakHash([0; 32]).encode().into_inner(),
+                            Uint::from(0).encode().into_inner(),
+                        ]
+                        .concat(),
+                    );
+                    let sig = Signed::<_, SignableEthMessage>::new(
                         shell
                             .mode
                             .get_eth_bridge_keypair()
@@ -624,12 +632,14 @@ mod test_vote_extensions {
                 .clone()
                 .sign(shell.mode.get_protocol_key().expect("Test failed"));
             let bp_root = {
-                let to_sign = [
-                    KeccakHash([0; 32]).encode().into_inner(),
-                    Uint::from(0).encode().into_inner(),
-                ]
-                .concat();
-                let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                let to_sign = keccak_hash(
+                    [
+                        KeccakHash([0; 32]).encode().into_inner(),
+                        Uint::from(0).encode().into_inner(),
+                    ]
+                    .concat(),
+                );
+                let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )

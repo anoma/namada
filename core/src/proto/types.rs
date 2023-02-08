@@ -12,6 +12,8 @@ use thiserror::Error;
 use super::generated::types;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::key;
 use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 #[cfg(feature = "ferveo-tpke")]
@@ -58,9 +60,11 @@ pub struct SignedTxData {
 
 /// A serialization method to provide to [`Signed`], such
 /// that we may sign serialized data.
+///
+/// This is a higher level version of [`key::SignableBytes`].
 pub trait Signable<T> {
     /// A byte vector containing the serialized data.
-    type Output: AsRef<[u8]>;
+    type Output: key::SignableBytes;
 
     /// Encodes `data` as a byte vector, with some arbitrary serialization
     /// method.
@@ -79,7 +83,7 @@ pub struct SerializeWithBorsh;
 /// Tag type that indicates we should use ABI serialization
 /// to sign data in a [`Signed`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignableEthBytes;
+pub struct SignableEthMessage;
 
 impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
@@ -90,20 +94,15 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     }
 }
 
-impl<T: AsRef<[u8]>> Signable<T> for SignableEthBytes {
-    type Output = Vec<u8>;
+impl Signable<KeccakHash> for SignableEthMessage {
+    type Output = KeccakHash;
 
-    fn as_signable(data: &T) -> Vec<u8> {
-        let eth_message = {
-            let message = data.as_ref();
-
-            let mut eth_message =
-                format!("\x19Ethereum Signed Message:\n{}", message.len())
-                    .into_bytes();
-            eth_message.extend_from_slice(message);
+    fn as_signable(hash: &KeccakHash) -> KeccakHash {
+        keccak_hash({
+            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
+            eth_message.extend_from_slice(hash.as_ref());
             eth_message
-        };
-        eth_message
+        })
     }
 }
 
@@ -179,7 +178,7 @@ impl<T, S: Signable<T>> Signed<T, S> {
     /// Initialize a new [`Signed`] instance.
     pub fn new(keypair: &common::SecretKey, data: T) -> Self {
         let to_sign = S::as_signable(&data);
-        let sig = common::SigScheme::sign(keypair, to_sign.as_ref());
+        let sig = common::SigScheme::sign(keypair, to_sign);
         Self::new_from(data, sig)
     }
 
@@ -189,8 +188,8 @@ impl<T, S: Signable<T>> Signed<T, S> {
         &self,
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
-        let bytes = S::as_signable(&self.data);
-        common::SigScheme::verify_signature_raw(pk, bytes.as_ref(), &self.sig)
+        let signed_bytes = S::as_signable(&self.data);
+        common::SigScheme::verify_signature_raw(pk, signed_bytes, &self.sig)
     }
 }
 
@@ -257,7 +256,7 @@ impl SigningTx {
             timestamp: self.timestamp,
         };
         let signed_data = tx.hash();
-        common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
+        common::SigScheme::verify_signature_raw(pk, signed_data, sig)
     }
 
     /// Expand this reduced Tx using the supplied code only if the the code
