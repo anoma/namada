@@ -1569,7 +1569,6 @@ pub mod args {
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
-    use namada::types::governance::ProposalVote;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
@@ -1640,7 +1639,7 @@ pub mod args {
             TendermintAddress::from_str(raw).unwrap()
         }));
 
-    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
+    const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     const LOCALHOST: ArgFlag = flag("localhost");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
@@ -1662,7 +1661,9 @@ pub mod args {
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
+    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
+    const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
@@ -1755,11 +1756,14 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                NAMADA_START_TIME
-                    .def()
-                    .about("The start time of the ledger."),
-            )
+            app.arg(NAMADA_START_TIME.def().about(
+                "The start time of the ledger. Accepts a relaxed form of \
+                 RFC3339. A space or a 'T' are accepted as the separator \
+                 between the date and time components. Additional spaces are \
+                 allowed between each component.\nAll of these examples are \
+                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
+                 12:12:12Z\n2023-  01-20T12:  12:12Z",
+            ))
         }
     }
 
@@ -2291,7 +2295,11 @@ pub mod args {
         /// Proposal id
         pub proposal_id: Option<u64>,
         /// The vote
-        pub vote: ProposalVote,
+        pub vote: String,
+        /// PGF proposal
+        pub proposal_pgf: Option<String>,
+        /// ETH proposal
+        pub proposal_eth: Option<String>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
@@ -2302,6 +2310,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
+            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
@@ -2310,6 +2320,8 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
+                proposal_pgf,
+                proposal_eth,
                 offline,
                 proposal_data,
             }
@@ -2329,7 +2341,29 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .about("The vote for the proposal. Either yay or nay."),
+                        .about("The vote for the proposal. Either yay or nay"),
+                )
+                .arg(
+                    PROPOSAL_VOTE_PGF_OPT
+                        .def()
+                        .about(
+                            "The list of proposed councils and spending \
+                             caps:\n$council1 $cap1 $council2 $cap2 ... \
+                             (council is bech32m encoded address, cap is \
+                             expressed in microNAM",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
+                )
+                .arg(
+                    PROPOSAL_VOTE_ETH_OPT
+                        .def()
+                        .about(
+                            "The signing key and message bytes (hex encoded) \
+                             to be signed: $signing_key $message",
+                        )
+                        .requires(PROPOSAL_ID.name)
+                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
@@ -2906,7 +2940,13 @@ pub mod args {
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",
             ))
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            .arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
             .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
@@ -2981,7 +3021,13 @@ pub mod args {
 
     impl Args for Query {
         fn def(app: App) -> App {
-            app.arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            app.arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -3377,7 +3423,8 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the repository: \
+                                          https://github.com/heliaxdev/anoma-network-config"))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(
