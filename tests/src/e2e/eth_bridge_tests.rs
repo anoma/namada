@@ -3,6 +3,7 @@ mod helpers;
 use std::num::NonZeroU64;
 
 use color_eyre::eyre::Result;
+use namada::eth_bridge::oracle;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -448,7 +449,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     ledger.exp_string("This node is a validator")?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     // check that the oracle has been configured with the values from storage
-    let initial_config = namada_ethereum_bridge::oracle::config::Config {
+    let initial_config = oracle::config::Config {
         min_confirmations: ethereum_bridge_params.min_confirmations.into(),
         bridge_contract: ethereum_bridge_params.contracts.bridge.address,
         governance_contract: ethereum_bridge_params
