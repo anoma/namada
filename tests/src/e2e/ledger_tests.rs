@@ -466,8 +466,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--source",
             BERTHA,
             "--public-key",
-            // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
-            "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
+            // Value obtained from `cargo test gen_ed25519_keypair -- --nocapture`
+            "pktest1qzyhgvhrqaj5fut8n9j8wgtleysf4agfq5tnynecq3d63qqfy5a5y7e8exd",
             "--code-path",
             VP_USER_WASM,
             "--alias",
@@ -481,8 +481,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-    //    solution)
+        // 6. Submit a tx to withdraw from faucet account (requires PoW
+        // challenge    solution)
         vec![
             "transfer",
             "--source",
