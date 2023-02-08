@@ -795,22 +795,32 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
-                let partial_proposal_result =
-                    utils::compute_tally(votes, total_stake, &proposal_type);
-                println!(
-                    "{:4}Yay votes: {}",
-                    "", partial_proposal_result.total_yay_power
-                );
-                println!(
-                    "{:4}Nay votes: {}",
-                    "", partial_proposal_result.total_nay_power
-                );
-                println!("{:4}Status: on-going", "");
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(partial_proposal_result) => {
+                        println!(
+                            "{:4}Yay votes: {}",
+                            "", partial_proposal_result.total_yay_power
+                        );
+                        println!(
+                            "{:4}Nay votes: {}",
+                            "", partial_proposal_result.total_nay_power
+                        );
+                        println!("{:4}Status: on-going", "");
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             } else {
-                let proposal_result =
-                    utils::compute_tally(votes, total_stake, &proposal_type);
-                println!("{:4}Status: done", "");
-                println!("{:4}Result: {}", "", proposal_result);
+                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                    Ok(proposal_result) => {
+                        println!("{:4}Status: done", "");
+                        println!("{:4}Result: {}", "", proposal_result);
+                    }
+                    Err(msg) => {
+                        eprintln!("Error in tally computation: {}", msg)
+                    }
+                }
             }
         } else {
             println!("Proposal: {}", id);
@@ -1204,13 +1214,19 @@ pub async fn query_proposal_result(
                             get_total_staked_tokens(&client, end_epoch)
                                 .await
                                 .into();
-                        let proposal_result = utils::compute_tally(
+                        println!("Proposal: {}", id);
+                        match utils::compute_tally(
                             votes,
                             total_stake,
                             &proposal_type,
-                        );
-                        println!("Proposal: {}", id);
-                        println!("{:4}Result: {}", "", proposal_result);
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     } else {
                         eprintln!("Proposal is still in progress.");
                         cli::safe_exit(1)
@@ -1306,13 +1322,18 @@ pub async fn query_proposal_result(
                         )
                         .await
                         .into();
-                        let proposal_result = utils::compute_tally(
+                        match utils::compute_tally(
                             votes,
                             total_stake,
                             &ProposalType::Default(None),
-                        );
-
-                        println!("{:4}Result: {}", "", proposal_result);
+                        ) {
+                            Ok(proposal_result) => {
+                                println!("{:4}Result: {}", "", proposal_result)
+                            }
+                            Err(msg) => {
+                                eprintln!("Error in tally computation: {}", msg)
+                            }
+                        }
                     }
                     None => {
                         eprintln!(
