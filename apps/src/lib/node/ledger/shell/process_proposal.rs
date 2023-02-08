@@ -36,29 +36,8 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-        let block_time = match req.time {
-            Some(t) => {
-                match t.try_into() {
-                    Ok(t) => t,
-                    Err(_) => {
-                        // Default to last committed block time
-                        self.wl_storage
-                            .storage
-                            .get_last_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp")
-                    }
-                }
-            }
-            None => {
-                // Default to last committed block time
-                self.wl_storage
-                    .storage
-                    .get_last_block_timestamp()
-                    .expect("Failed to retrieve last block timestamp")
-            }
-        };
-
-        let tx_results = self.process_txs(&req.txs, block_time);
+        let tx_results =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         ProcessProposal {
             status: if tx_results.iter().all(|res| {
