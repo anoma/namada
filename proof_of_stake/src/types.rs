@@ -141,6 +141,13 @@ pub struct CommissionPair {
     pub max_commission_change_per_epoch: Decimal,
 }
 
+/// Epoched rewards products
+pub type RewardsProducts = LazyMap<Epoch, Decimal>;
+
+/// Consensus validator rewards accumulator (for tracking the fractional block
+/// rewards owed over the course of an epoch)
+pub type RewardsAccumulator = LazyMap<Address, Decimal>;
+
 // --------------------------------------------------------------------------------------------
 
 /// A genesis validator definition.
@@ -334,7 +341,7 @@ pub struct Slash {
     pub epoch: Epoch,
     /// Block height at which the slashable event occurred.
     pub block_height: u64,
-    /// A type of slashsable event.
+    /// A type of slashable event.
     pub r#type: SlashType,
 }
 
@@ -360,6 +367,18 @@ pub enum SlashType {
     DuplicateVote,
     /// Light client attack.
     LightClientAttack,
+}
+
+/// VoteInfo inspired from tendermint
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct VoteInfo {
+    /// the first 20 bytes of the validator public key hash (SHA-256) taken
+    /// from tendermint
+    pub validator_address: Vec<u8>,
+    /// validator voting power
+    pub validator_vp: u64,
+    /// was the validator signature was included in the last block?
+    pub signed_last_block: bool,
 }
 
 /// Bonds and unbonds with all details (slashes and rewards, if any)
