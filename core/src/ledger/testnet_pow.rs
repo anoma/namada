@@ -297,14 +297,10 @@ pub fn is_counter_key<'a>(
     faucet_address: &Address,
 ) -> Option<&'a Address> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(address),
-            DbKeySeg::StringSeg(sub_key),
-            DbKeySeg::StringSeg(data),
-            DbKeySeg::AddressSeg(owner),
-        ] if address == faucet_address
-            && sub_key.as_str() == Keys::VALUES.counters
-            && data.as_str() == lazy_map::DATA_SUBKEY =>
+        [DbKeySeg::AddressSeg(address), DbKeySeg::StringSeg(sub_key), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(owner)]
+            if address == faucet_address
+                && sub_key.as_str() == Keys::VALUES.counters
+                && data.as_str() == lazy_map::DATA_SUBKEY =>
         {
             Some(owner)
         }
@@ -417,7 +413,11 @@ pub struct Difficulty(u8);
 impl Difficulty {
     /// The value must be between `0..=9` (inclusive upper bound).
     pub fn try_new(raw: u8) -> Option<Difficulty> {
-        if raw > 9 { None } else { Some(Self(raw)) }
+        if raw > 9 {
+            None
+        } else {
+            Some(Self(raw))
+        }
     }
 }
 

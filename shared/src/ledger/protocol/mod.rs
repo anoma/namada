@@ -1,12 +1,15 @@
 //! The ledger's protocol
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic;
 
+use namada_core::ledger::gas::TxGasMeter;
+use namada_core::ledger::storage::write_log::StorageModification;
+use namada_core::types::hash::{Hash, HASH_LENGTH};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::eth_bridge::vp::EthBridge;
-use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::gas::{self, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
 use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
@@ -18,7 +21,6 @@ use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::hash::Hash;
 use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
@@ -38,6 +40,8 @@ pub enum Error {
     TxTypeError,
     #[error("Gas error: {0}")]
     GasError(gas::Error),
+    #[error("Insufficient balance to pay fee")]
+    FeeError,
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
@@ -64,6 +68,12 @@ pub enum Error {
     ),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
+    #[error("The gas cost for the tx/vp {0} was not found in storage")]
+    MissingGasCost(String),
+    #[error("Error while converting the transaction code's hash")]
+    TxCodeHashConversion,
+    #[error("Could not retrieve wasm code from storage for hash {0}")]
+    MissingWasmCodeInStorage(Hash),
 }
 
 /// Result of applying a transaction
@@ -79,9 +89,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::too_many_arguments)]
 pub fn apply_tx<D, H, CA>(
     tx: TxType,
-    tx_length: usize,
     tx_index: TxIndex,
-    block_gas_meter: &mut BlockGasMeter,
+    tx_gas_meter: &mut TxGasMeter,
+    gas_table: &BTreeMap<String, u64>,
     write_log: &mut WriteLog,
     storage: &Storage<D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -92,10 +102,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Base gas cost for applying the tx
-    block_gas_meter
-        .add_base_transaction_fee(tx_length)
-        .map_err(Error::GasError)?;
     match tx {
         TxType::Raw(_) => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
@@ -107,7 +113,8 @@ where
                 &tx,
                 &tx_index,
                 storage,
-                block_gas_meter,
+                tx_gas_meter,
+                gas_table,
                 write_log,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -117,7 +124,8 @@ where
                 &tx,
                 &tx_index,
                 storage,
-                block_gas_meter,
+                tx_gas_meter,
+                gas_table,
                 write_log,
                 &verifiers,
                 vp_wasm_cache,
@@ -125,9 +133,7 @@ where
                 has_valid_pow,
             )?;
 
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
+            let gas_used = tx_gas_meter.get_current_transaction_gas();
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
             let ibc_events = write_log.take_ibc_events();
@@ -140,15 +146,7 @@ where
                 ibc_events,
             })
         }
-        _ => {
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
-            Ok(TxResult {
-                gas_used,
-                ..Default::default()
-            })
-        }
+        _ => Ok(TxResult::default()),
     }
 }
 
@@ -157,7 +155,8 @@ fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
-    gas_meter: &mut BlockGasMeter,
+    tx_gas_meter: &mut TxGasMeter,
+    gas_table: &BTreeMap<String, u64>,
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
@@ -167,12 +166,54 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    // Always account for compilation gas cost
+    let (tx_hash, tx_code) = if tx.code_or_hash.len() == HASH_LENGTH {
+        // we assume that there is no wasm code with HASH_LENGTH
+        let code_hash = Hash::try_from(tx.code_or_hash.as_slice())
+            .map_err(|_| Error::TxCodeHashConversion)?;
+
+        let key = storage::Key::wasm_code(&code_hash);
+        let tx_code = match write_log.read(&key).0 {
+            Some(StorageModification::Write { value }) => value.clone(),
+            _ => storage
+                .read(&key)
+                .map_err(Error::StorageError)?
+                .0
+                .ok_or_else(|| {
+                    Error::MissingWasmCodeInStorage(code_hash.clone())
+                })?,
+        };
+
+        (code_hash, std::borrow::Cow::Owned(tx_code))
+    } else {
+        (
+            Hash(tx.code_hash()),
+            std::borrow::Cow::Borrowed(&tx.code_or_hash),
+        )
+    };
+
+    tx_gas_meter
+        .add_compiling_fee(tx_code.len())
+        .map_err(Error::GasError)?;
+    let tx_hash = tx_hash.to_string().to_ascii_lowercase();
+    let tx_gas_required = match gas_table.get(tx_hash.as_str()) {
+        Some(gas) => gas.to_owned(),
+        #[cfg(any(test, feature = "testing"))]
+        None => 1_000,
+        #[cfg(not(any(test, feature = "testing")))]
+        None => return Err(Error::MissingGasCost(tx_hash)),
+    };
+    tx_gas_meter.add(tx_gas_required).map_err(Error::GasError)?;
+
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
+    // Mock gas meter to ignore runtime gas metering while we
+    // rely on the gas table
+    let mut mock_gas_meter = TxGasMeter::new(u64::MAX);
     wasm::run::tx(
         storage,
         write_log,
-        gas_meter,
+        &mut mock_gas_meter,
         tx_index,
         &tx.code_or_hash,
         tx_data,
@@ -188,7 +229,8 @@ fn check_vps<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
-    gas_meter: &mut BlockGasMeter,
+    tx_gas_meter: &mut TxGasMeter,
+    gas_table: &BTreeMap<String, u64>,
     write_log: &WriteLog,
     verifiers_from_tx: &BTreeSet<Address>,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -205,8 +247,6 @@ where
     let (verifiers, keys_changed) =
         write_log.verifiers_and_changed_keys(verifiers_from_tx);
 
-    let initial_gas = gas_meter.get_current_transaction_gas();
-
     let vps_result = execute_vps(
         verifiers,
         keys_changed,
@@ -214,14 +254,16 @@ where
         tx_index,
         storage,
         write_log,
-        initial_gas,
+        tx_gas_meter.tx_gas_limit,
+        tx_gas_meter.get_current_transaction_gas(),
+        gas_table,
         vp_wasm_cache,
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
-    gas_meter
+    tx_gas_meter
         .add_vps_gas(&vps_result.gas_used)
         .map_err(Error::GasError)?;
 
@@ -237,7 +279,9 @@ fn execute_vps<D, H, CA>(
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     write_log: &WriteLog,
+    tx_gas_limit: u64,
     initial_gas: u64,
+    gas_table: &BTreeMap<String, u64>,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
     // This is true when the wrapper of this tx contained a valid
@@ -252,7 +296,7 @@ where
     verifiers
         .par_iter()
         .try_fold(VpsResult::default, |mut result, addr| {
-            let mut gas_meter = VpGasMeter::new(initial_gas);
+            let mut gas_meter = VpGasMeter::new(tx_gas_limit, initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = storage
@@ -267,6 +311,15 @@ where
                         }
                     };
 
+                    add_precomputed_gas(
+                        &mut gas_meter,
+                        gas_table,
+                        &vp_code_hash.to_string().to_ascii_lowercase(),
+                    )?;
+
+                    // Mock gas meter to ignore runtime gas metering while we
+                    // rely on the gas table
+                    let mut mock_gas_meter = VpGasMeter::new(u64::MAX, 0);
                     wasm::run::vp(
                         &vp_code_hash,
                         tx,
@@ -274,7 +327,7 @@ where
                         addr,
                         storage,
                         write_log,
-                        &mut gas_meter,
+                        &mut mock_gas_meter,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
@@ -284,13 +337,16 @@ where
                     .map_err(Error::VpRunnerError)
                 }
                 Address::Internal(internal_addr) => {
+                    // Mock gas meter to ignore runtime gas metering while we
+                    // rely on the gas table
+                    let mock_gas_meter = VpGasMeter::new(u64::MAX, 0);
                     let ctx = native_vp::Ctx::new(
                         addr,
                         storage,
                         write_log,
                         tx,
                         tx_index,
-                        gas_meter,
+                        mock_gas_meter,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
@@ -302,6 +358,13 @@ where
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
+                            // No hash for native vps, just use the name
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_pos",
+                            )?;
+
                             let pos = PosVP { ctx };
                             let verifiers_addr_ref = &verifiers;
                             let pos_ref = &pos;
@@ -328,79 +391,105 @@ where
                                     Err(Error::PosNativeVpRuntime)
                                 }
                             };
-                            // Take the gas meter back out of the context
-                            gas_meter = pos.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::Ibc => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_ibc",
+                            )?;
                             let ibc = Ibc { ctx };
                             let result = ibc
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::IbcNativeVpError);
-                            // Take the gas meter back out of the context
-                            gas_meter = ibc.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::Parameters => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_parameters",
+                            )?;
                             let parameters = ParametersVp { ctx };
                             let result = parameters
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::ParametersNativeVpError);
-                            // Take the gas meter back out of the context
-                            gas_meter = parameters.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::PosSlashPool => {
-                            // Take the gas meter back out of the context
-                            gas_meter = ctx.gas_meter.into_inner();
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_pos_slash_pool",
+                            )?;
                             Err(Error::AccessForbidden(
                                 (*internal_addr).clone(),
                             ))
                         }
                         InternalAddress::Governance => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_governance",
+                            )?;
                             let governance = GovernanceVp { ctx };
                             let result = governance
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
-                            gas_meter = governance.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::SlashFund => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_slash_fund",
+                            )?;
                             let slash_fund = SlashFundVp { ctx };
                             let result = slash_fund
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::SlashFundNativeVpError);
-                            gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcToken(_)
                         | InternalAddress::IbcEscrow
                         | InternalAddress::IbcBurn
                         | InternalAddress::IbcMint => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_ibc_token",
+                            )?;
                             // validate the transfer
                             let ibc_token = IbcToken { ctx };
                             let result = ibc_token
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::IbcTokenNativeVpError);
-                            gas_meter = ibc_token.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::EthBridge => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_eth_bridge",
+                            )?;
                             let bridge = EthBridge { ctx };
                             let result = bridge
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
-                            gas_meter = bridge.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::ReplayProtection => {
+                            add_precomputed_gas(
+                                &mut gas_meter,
+                                gas_table,
+                                "native_vp_replay_protection",
+                            )?;
                             let replay_protection_vp =
                                 ReplayProtectionVp { ctx };
                             let result = replay_protection_vp
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::ReplayProtectionNativeVpError);
-                            gas_meter =
-                                replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
                     };
@@ -433,7 +522,7 @@ where
             }
         })
         .try_reduce(VpsResult::default, |a, b| {
-            merge_vp_results(a, b, initial_gas)
+            merge_vp_results(a, b, tx_gas_limit, initial_gas)
         })
 }
 
@@ -441,6 +530,7 @@ where
 fn merge_vp_results(
     a: VpsResult,
     mut b: VpsResult,
+    tx_gas_limit: u64,
     initial_gas: u64,
 ) -> Result<VpsResult> {
     let mut accepted_vps = a.accepted_vps;
@@ -456,7 +546,7 @@ fn merge_vp_results(
     // gas costs
 
     gas_used
-        .merge(&mut b.gas_used, initial_gas)
+        .merge(&mut b.gas_used, tx_gas_limit, initial_gas)
         .map_err(Error::GasError)?;
 
     Ok(VpsResult {
@@ -465,4 +555,18 @@ fn merge_vp_results(
         gas_used,
         errors,
     })
+}
+
+/// Add the precomputed cost for the vp
+fn add_precomputed_gas(
+    gas_meter: &mut VpGasMeter,
+    gas_table: &BTreeMap<String, u64>,
+    vp: &str,
+) -> Result<()> {
+    let vp_gas_required = match gas_table.get(vp) {
+        Some(gas) => gas.to_owned(),
+        None => return Err(Error::MissingGasCost(vp.to_owned())),
+    };
+
+    gas_meter.add(vp_gas_required).map_err(Error::GasError)
 }

@@ -996,6 +996,8 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -1076,6 +1078,7 @@ mod tests {
             };
             let mut parameters = Parameters {
                 max_proposal_bytes: Default::default(),
+                max_block_gas: 0,
                 epoch_duration: epoch_duration.clone(),
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
@@ -1090,6 +1093,7 @@ mod tests {
                 faucet_account: None,
                 #[cfg(not(feature = "mainnet"))]
                 wrapper_tx_fees: None,
+                gas_table: BTreeMap::default()
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 

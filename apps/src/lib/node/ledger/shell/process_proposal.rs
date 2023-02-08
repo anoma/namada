@@ -4,6 +4,9 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
+use namada::types::hash::HASH_LENGTH;
+use std::collections::BTreeMap;
+
 use namada::core::types::hash::Hash;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
@@ -139,6 +142,19 @@ where
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
+        let mut temp_block_gas_meter =
+            BlockGasMeter::new(
+                self.read_storage_key(
+                    &parameters::storage::get_max_block_gas_key(),
+                )
+                .expect("Missing parameter in storage"),
+            );
+        let gas_table: BTreeMap<String, u64> = self
+            .read_storage_key(&parameters::storage::get_gas_table_storage_key())
+            .expect("Missing gas table in storage");
+
+        let mut wrapper_index = 0;
+
         let tx_results = txs
             .iter()
             .map(|tx_bytes| {
@@ -147,7 +163,10 @@ where
                     &mut tx_queue_iter,
                     &mut metadata,
                     &mut temp_wl_storage,
+                    &mut temp_block_gas_meter,
                     block_time,
+                    &gas_table,
+                    &mut wrapper_index
                 );
                 if let ErrorCodes::Ok =
                     ErrorCodes::from_u32(result.code).unwrap()
@@ -192,7 +211,10 @@ where
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
         metadata: &mut ValidationMeta,
         temp_wl_storage: &mut TempWlStorage<D, H>,
+        temp_block_gas_meter: &mut BlockGasMeter,
         block_time: DateTimeUtc,
+        gas_table: &BTreeMap<String, u64>,
+        wrapper_index: &mut usize,
     ) -> TxResult {
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
@@ -286,29 +308,32 @@ where
                         .into(),
                 }
             }
-            TxType::Decrypted(tx) => {
-                metadata.has_decrypted_txs = true;
-                match tx_queue_iter.next() {
-                    Some(wrapper) => {
-                        if wrapper.tx.tx_hash != tx.hash_commitment() {
-                            TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
-                            }
-                        } else if verify_decrypted_correctly(&tx, privkey) {
-                            if let DecryptedTx::Decrypted {
-                                tx,
-                                has_valid_pow: _,
-                            } = tx
-                            {
-                                // Tx chain id
-                                if tx.chain_id != self.chain_id {
-                                    return TxResult {
-                                        code:
-                                            ErrorCodes::InvalidDecryptedChainId
+                TxType::Decrypted(tx) => {
+                    // Increase wrapper index
+                    let tx_index = *wrapper_index;
+                    *wrapper_index += 1; 
+
+                    match tx_queue_iter.next() {
+                        Some(wrapper) => {
+                            if wrapper.tx.tx_hash != tx.hash_commitment() {
+                                TxResult {
+                                    code: ErrorCodes::InvalidOrder.into(),
+                                    info: "Process proposal rejected a \
+                                           decrypted transaction that \
+                                           violated the tx order determined \
+                                           in the previous block"
+                                        .into(),
+                                }
+                            } else if verify_decrypted_correctly(&tx, privkey) {
+                                if let DecryptedTx::Decrypted {
+                                    tx,
+                                    has_valid_pow: _,
+                                } = tx
+                                {
+                                    // Tx chain id
+                                    if tx.chain_id != self.chain_id {
+                                        return TxResult {
+                                            code: ErrorCodes::InvalidDecryptedChainId
                                                 .into(),
                                         info: format!(
                                             "Decrypted tx carries a wrong \
@@ -333,7 +358,41 @@ where
                                         };
                                     }
                                 }
+
+                                    // Tx gas (partial check)
+                                let tx_hash = if tx.code_or_hash.len() == HASH_LENGTH {
+                                    match Hash::try_from(tx.code_or_hash.as_slice()) {
+                                        Ok(hash) => hash,
+                                        Err(_) => return TxResult {
+                                            code: ErrorCodes::Undecryptable.into(),
+                                            info: format!("Failed conversion of transaction's hash")
+                                        }
+                                    }
+                                } else {
+                                    Hash(tx.code_hash())
+                                };
+                                    let tx_gas = match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
+                                        Some(gas) => gas.to_owned(),
+        #[cfg(any(test, feature = "testing"))]
+        None => 1000, 
+        #[cfg(not(any(test, feature = "testing")))]
+                                        None => return TxResult {
+                                            // Tx is not whitelisted
+                                          code: ErrorCodes::Undecryptable.into(),
+                                            info: "Tx is not whitelisted".to_string()   
+                                        }
+                                    };
+                                    let inner_tx_gas_limit = temp_wl_storage.storage.tx_queue.get(tx_index).map_or(0, |wrapper| wrapper.gas);
+                                    let mut tx_gas_meter = TxGasMeter::new(inner_tx_gas_limit);
+ if let Err(e) = tx_gas_meter.add(tx_gas) {
+                                        
+ return TxResult {
+                                            code: ErrorCodes::TxGasLimit.into(),
+                                            info: format!("Decrypted transaction gas error: {}", e)
+                                        };
+                                }
                             }
+
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -355,9 +414,31 @@ where
                         info: "Received more decrypted txs than expected"
                             .into(),
                     },
-                }
-            }
-            TxType::Wrapper(wrapper) => {
+                }}
+                TxType::Wrapper(wrapper) => {
+                    // Account for gas. This is done even if the transaction is later deemed invalid, to incentivize the proposer to
+                    // include only valid transaction and avoid wasting block gas limit
+                    // Wrapper gas limit, Max block gas and cumulated block gas
+                    let mut tx_gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
+                    if let Err(_) =  tx_gas_meter.add_tx_size_gas(tx_bytes.len()) {
+                        let _ = temp_block_gas_meter.finalize_transaction(tx_gas_meter.get_current_transaction_gas());
+
+                        return TxResult {
+                            code: ErrorCodes::TxGasLimit.into(),
+                            info: "Wrapper transactions exceeds its gas limit".to_string(),
+                        };
+                    }
+                    
+                                        if let Err(_) = temp_block_gas_meter.finalize_transaction(tx_gas_meter.get_current_transaction_gas()){
+                        return TxResult {
+                            code: ErrorCodes::BlockGasLimit.into(),
+                            
+                            info:
+                    "Wrapper transaction exceeds the maximum block gas limit"
+                        .to_string()
+                        };
+                    }
+                
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
@@ -405,7 +486,7 @@ where
                     };
                 }
 
-                // Tx expiration
+                                    // Tx expiration
                 if let Some(exp) = tx_expiration {
                     if block_time > exp {
                         return TxResult {
@@ -417,6 +498,7 @@ where
                         };
                     }
                 }
+
 
                 // validate the ciphertext via Ferveo
                 if !wrapper.validate_ciphertext() {
@@ -553,6 +635,8 @@ mod test_process_proposal {
         self, gen_keypair, ProcessProposal, TestError,
     };
 
+const GAS_LIMIT_MULTIPLIER: u64 = 1; 
+
     /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
     #[test]
@@ -572,7 +656,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -625,7 +709,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -722,7 +806,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -790,7 +874,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -842,13 +926,15 @@ mod test_process_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            shell.enqueue_tx(wrapper);
+            let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+            let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
+                        shell.enqueue_tx(wrapper, gas_limit);
             let mut decrypted_tx =
                 Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx,
@@ -905,13 +991,14 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        shell.enqueue_tx(wrapper.clone());
+        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
 
         let mut tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
@@ -960,15 +1047,16 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
         wrapper.tx_hash = Hash([0; 32]);
+        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
 
-        shell.enqueue_tx(wrapper.clone());
+            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
         let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
@@ -1008,14 +1096,15 @@ mod test_process_proposal {
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
-            gas_limit: 0.into(),
+            gas_limit: GAS_LIMIT_MULTIPLIER.into(),
             inner_tx,
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
         };
 
-        shell.enqueue_tx(wrapper.clone());
+        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+            shell.enqueue_tx(wrapper.clone(), u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64);
         let mut signed =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
                 #[allow(clippy::redundant_clone)]
@@ -1134,7 +1223,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1208,7 +1297,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1266,7 +1355,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1352,7 +1441,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1370,7 +1459,7 @@ mod test_process_proposal {
             },
             &keypair_2,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1424,7 +1513,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1493,14 +1582,17 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
+        let signed_wrapper = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+            let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
         let wrapper_in_queue = WrapperTxInQueue {
             tx: wrapper,
+            gas: gas_limit,
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
@@ -1548,7 +1640,7 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1599,14 +1691,17 @@ mod test_process_proposal {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
+        let signed_wrapper_tx = wrapper.sign(&keypair, shell.chain_id.clone(), None).unwrap().to_bytes();
+        let gas_limit = u64::from(&wrapper.gas_limit) - signed_wrapper_tx.len() as u64;
         let wrapper_in_queue = WrapperTxInQueue {
             tx: wrapper,
+            gas: gas_limit,
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);

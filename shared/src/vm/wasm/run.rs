@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
+use namada_core::ledger::gas::TxGasMeter;
 use parity_wasm::elements;
 use pwasm_utils::{self, rules};
 use thiserror::Error;
@@ -10,7 +11,7 @@ use wasmer::{BaseTunables, Module, Store};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
-use crate::ledger::gas::{BlockGasMeter, VpGasMeter};
+use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::proto::Tx;
@@ -82,7 +83,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn tx<DB, H, CA>(
     storage: &Storage<DB, H>,
     write_log: &mut WriteLog,
-    gas_meter: &mut BlockGasMeter,
+    gas_meter: &mut TxGasMeter,
     tx_index: &TxIndex,
     tx_code: impl AsRef<[u8]>,
     tx_data: impl AsRef<[u8]>,
@@ -485,6 +486,8 @@ mod tests {
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
+    const TX_GAS_LIMIT: u64 = 100_000_000;
+
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
     #[test]
@@ -531,7 +534,7 @@ mod tests {
     fn test_tx_memory_limiter_in_guest() {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut gas_meter = BlockGasMeter::default();
+        let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
@@ -589,7 +592,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -677,7 +680,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -742,7 +745,7 @@ mod tests {
     fn test_tx_memory_limiter_in_host_input() {
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut gas_meter = BlockGasMeter::default();
+        let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
         let tx_index = TxIndex::default();
 
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
@@ -798,7 +801,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -860,7 +863,7 @@ mod tests {
     fn test_tx_memory_limiter_in_host_env() {
         let mut storage = TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut gas_meter = BlockGasMeter::default();
+        let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
         let tx_index = TxIndex::default();
 
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
@@ -908,7 +911,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -961,7 +964,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1055,7 +1058,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let storage = TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut gas_meter = BlockGasMeter::default();
+        let mut gas_meter = TxGasMeter::new(TX_GAS_LIMIT);
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
@@ -1111,7 +1114,7 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(0);
+        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();

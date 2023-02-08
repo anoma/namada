@@ -14,7 +14,7 @@ mod process_proposal;
 mod queries;
 mod stats;
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -24,7 +24,7 @@ use std::rc::Rc;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
-use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -33,7 +33,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{ibc, pos, protocol, replay_protection};
+use namada::ledger::{ibc, parameters, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -131,16 +131,19 @@ pub enum ErrorCodes {
     Ok = 0,
     InvalidDecryptedChainId = 1,
     ExpiredDecryptedTx = 2,
-    WasmRuntimeError = 3,
-    InvalidTx = 4,
-    InvalidSig = 5,
-    InvalidOrder = 6,
-    ExtraTxs = 7,
-    Undecryptable = 8,
-    AllocationError = 9,
-    ReplayTx = 10,
-    InvalidChainId = 11,
-    ExpiredTx = 12,
+    DecryptedGasLimit = 3,
+    WasmRuntimeError = 4,
+    InvalidTx = 5,
+    InvalidSig = 6,
+    InvalidOrder = 7,
+    ExtraTxs = 8,
+    Undecryptable = 9,
+    AllocationError = 10,
+    ReplayTx = 11,
+    InvalidChainId = 12,
+    ExpiredTx = 13,
+    BlockGasLimit = 14,
+    TxGasLimit = 15,
 }
 
 impl ErrorCodes {
@@ -154,11 +157,19 @@ impl ErrorCodes {
             Ok
             | InvalidDecryptedChainId
             | ExpiredDecryptedTx
-            | WasmRuntimeError => true,
+            | WasmRuntimeError
+            | DecryptedGasLimit => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx => false,
+            | ExpiredTx | BlockGasLimit | TxGasLimit => false,
         }
+    }
+}
+
+impl ErrorCodes {
+    /// Whether to charge fees depending on the exit code of a transaction
+    pub fn charges_fee(&self) -> bool {
+        matches!(self, Self::Ok | Self::WasmRuntimeError | Self::TxGasLimit)
     }
 }
 
@@ -247,8 +258,6 @@ where
     chain_id: ChainId,
     /// The persistent storage with write log
     pub(super) wl_storage: WlStorage<D, H>,
-    /// Gas meter for the current block
-    gas_meter: BlockGasMeter,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -375,7 +384,6 @@ where
         Self {
             chain_id,
             wl_storage,
-            gas_meter: BlockGasMeter::default(),
             byzantine_validators: vec![],
             base_dir,
             wasm_dir,
@@ -709,6 +717,30 @@ where
 
         // Tx type check
         if let TxType::Wrapper(wrapper) = tx_type {
+            // Tx gas limit
+            let mut gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
+            if let Err(_) = gas_meter.add_tx_size_gas(tx_bytes.len()) {
+                response.code = ErrorCodes::TxGasLimit.into();
+                response.log =
+                    "Wrapper transactions exceeds its gas limit".to_string();
+                return response;
+            }
+
+            // Max block gas
+            let block_gas_limit: u64 = self
+                .read_storage_key(&parameters::storage::get_max_block_gas_key())
+                .expect("Missing max_block_gas parameter in storage");
+            let mut block_gas_meter = BlockGasMeter::new(block_gas_limit);
+            if let Err(_) = block_gas_meter
+                .finalize_transaction(gas_meter.get_current_transaction_gas())
+            {
+                response.code = ErrorCodes::BlockGasLimit.into();
+                response.log =
+                    "Wrapper transaction exceeds the maximum block gas limit"
+                        .to_string();
+                return response;
+            }
+
             // Replay protection check
             let inner_hash_key =
                 replay_protection::get_tx_hash_key(&wrapper.tx_hash);
@@ -788,7 +820,16 @@ where
     /// Simulate validation and application of a transaction.
     fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
         let mut response = response::Query::default();
-        let mut gas_meter = BlockGasMeter::default();
+        let gas_table: BTreeMap<String, u64> = self
+            .read_storage_key(&parameters::storage::get_gas_table_storage_key())
+            .expect("Missing gas table in storage");
+        let mut gas_meter =
+            TxGasMeter::new(
+                self.read_storage_key(
+                    &parameters::storage::get_max_block_gas_key(),
+                )
+                .expect("Missing parameter in storage"),
+            );
         let mut write_log = WriteLog::default();
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
@@ -803,9 +844,9 @@ where
                 });
                 match protocol::apply_tx(
                     tx,
-                    tx_bytes.len(),
                     TxIndex::default(),
                     &mut gas_meter,
+                    &gas_table,
                     &mut write_log,
                     &self.wl_storage.storage,
                     &mut vp_wasm_cache,
@@ -1015,8 +1056,7 @@ mod test_utils {
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            (
-                Self {
+            let mut shell = Self {
                     shell: Shell::<MockDB, Sha256Hasher>::new(
                         config::Ledger::new(
                             base_dir,
@@ -1030,7 +1070,73 @@ mod test_utils {
                         tx_wasm_compilation_cache,
                         address::nam(),
                     ),
-                },
+                };
+
+ // Initialize gas table
+            let mut checksums: BTreeMap<String, String> = serde_json::from_slice(
+                &std::fs::read("../wasm/checksums.json").unwrap(),
+            )
+            .unwrap();
+            // Extend gas table with test transactions and vps
+            checksums.extend(serde_json::from_slice::<BTreeMap<String, String>>(
+                &std::fs::read("../wasm_for_tests/checksums.json").unwrap(),
+            )
+            .unwrap().into_iter());
+
+            let gas_file: BTreeMap<String, u64> = serde_json::from_slice(
+                &std::fs::read("../wasm/gas.json").unwrap(),
+            )
+            .unwrap();
+
+            let mut gas_table = BTreeMap::<String, u64>::new();            
+
+ for id in checksums.keys().chain(gas_file.keys()){
+                // Get tx/vp hash (or name if native)
+                let hash = match checksums.get(id.as_str()) {
+                    Some(v) => {
+v
+                    .split_once('.')
+                    .unwrap()
+                    .1
+                    .split_once('.')
+                    .unwrap()
+                    .0.to_owned()
+                    }
+                    None => {
+                        id.to_owned()
+                    }
+                };
+                let gas = gas_file.get(id).unwrap_or(&1_000).to_owned();
+                gas_table.insert(hash, gas);
+            }
+
+ 
+            let gas_table_key = 
+                namada::core::ledger::parameters::storage::get_gas_table_storage_key();
+            shell.wl_storage
+                .storage
+                .write(&gas_table_key, 
+                namada::core::ledger::storage::types::encode(&gas_table))
+                .expect(
+                "Gas table parameter must be initialized in the genesis block",
+            );
+            
+ let max_block_gas_key =
+                namada::core::ledger::parameters::storage::get_max_block_gas_key(
+                );
+            shell.wl_storage
+                .storage
+                .write(
+                    &max_block_gas_key,
+                    namada::core::ledger::storage::types::encode(
+                        &10_000_000_u64,
+                    ),
+                )
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
+            (
+                shell,
                 receiver,
             )
         }
@@ -1085,15 +1191,17 @@ mod test_utils {
         }
 
         /// Add a wrapper tx to the queue of txs to be decrypted
-        /// in the current block proposal
+        /// in the current block proposal. Takes the length of the encoded wrapper
+        /// as parameter.
         #[cfg(test)]
-        pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
+        pub fn enqueue_tx(&mut self, wrapper: WrapperTx, inner_tx_gas: u64) {
             self.shell
                 .wl_storage
                 .storage
                 .tx_queue
                 .push(WrapperTxInQueue {
                     tx: wrapper,
+                    gas: inner_tx_gas,
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
                 });
@@ -1183,14 +1291,21 @@ mod test_utils {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            1.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
+        let signed_wrapper = wrapper
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .unwrap()
+            .to_bytes();
+        let gas_limit =
+            u64::from(&wrapper.gas_limit) - signed_wrapper.len() as u64;
         shell.wl_storage.storage.tx_queue.push(WrapperTxInQueue {
             tx: wrapper,
+            gas: gas_limit,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });
@@ -1232,6 +1347,9 @@ mod test_mempool_validate {
 
     use super::test_utils::TestShell;
     use super::{MempoolTxType, *};
+
+    
+const GAS_LIMIT_MULTIPLIER: u64 = 1; 
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
@@ -1412,7 +1530,7 @@ mod test_mempool_validate {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            GAS_LIMIT_MULTIPLIER.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

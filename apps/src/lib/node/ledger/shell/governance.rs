@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
@@ -27,6 +29,7 @@ pub struct ProposalsResult {
 pub fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     response: &mut shim::response::FinalizeBlock,
+    gas_table: &BTreeMap<String, u64>,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -76,7 +79,9 @@ where
         let transfer_address = match tally_result {
             TallyResult::Passed(tally) => {
                 let (successful_execution, proposal_event) = match tally {
-                    Tally::Default => execute_default_proposal(shell, id),
+                    Tally::Default => {
+                        execute_default_proposal(shell, id, gas_table)
+                    }
                     Tally::PGFCouncil(council) => {
                         execute_pgf_proposal(id, council)
                     }
@@ -138,6 +143,7 @@ where
 fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
+    gas_table: &BTreeMap<String, u64>,
 ) -> (bool, Event)
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -166,11 +172,9 @@ where
                 .expect("Should be able to write to storage.");
             let tx_result = protocol::apply_tx(
                 tx_type,
-                0, /*  this is used to compute the fee
-                    * based on the code size. We dont
-                    * need it here. */
                 TxIndex::default(),
-                &mut BlockGasMeter::default(),
+                &mut TxGasMeter::new(u64::MAX), // No gas limit for governance proposals
+                gas_table,
                 &mut shell.wl_storage.write_log,
                 &shell.wl_storage.storage,
                 &mut shell.vp_wasm_cache,

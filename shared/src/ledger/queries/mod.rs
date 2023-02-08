@@ -155,6 +155,8 @@ pub mod tm {
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
 mod testing {
+    use std::collections::BTreeMap;
+
     use tempfile::TempDir;
 
     use super::*;
@@ -191,9 +193,67 @@ mod testing {
     {
         #[allow(dead_code)]
         /// Initialize a test client for the given root RPC router
-        pub fn new(rpc: RPC) -> Self {
+        pub fn new(rpc: RPC) -> Self { 
             // Initialize the `TestClient`
-            let wl_storage = TestWlStorage::default();
+            let mut wl_storage = TestWlStorage::default();
+
+            // Initialize gas table
+            let checksums: BTreeMap<String, String> = serde_json::from_slice(
+                &std::fs::read("../wasm/checksums.json").unwrap(),
+            )
+            .unwrap();
+          
+            let gas_file: BTreeMap<String, u64> = serde_json::from_slice(
+                &std::fs::read("../wasm/gas.json").unwrap(),
+            )
+            .unwrap();
+
+            let mut gas_table = BTreeMap::<String, u64>::new();
+
+            for id in checksums.keys().chain(gas_file.keys()){
+                // Get tx/vp hash (or name if native)
+                let hash = match checksums.get(id.as_str()) {
+                    Some(v) => {
+v
+                    .split_once('.')
+                    .unwrap()
+                    .1
+                    .split_once('.')
+                    .unwrap()
+                    .0.to_owned()
+                    }
+                    None => {
+                        id.to_owned()
+                    }
+                };
+                let gas = gas_file.get(id).unwrap_or(&1_000).to_owned(); 
+                gas_table.insert(hash, gas);
+            }
+            
+            let gas_table_key =
+                namada_core::ledger::parameters::storage::get_gas_table_storage_key();
+            wl_storage
+                .storage
+                .write(&gas_table_key, 
+                namada_core::ledger::storage::types::encode(&gas_table))
+                .expect(
+                "Gas table parameter must be initialized in the genesis block",
+            );
+
+            let max_block_gas_key =
+                namada_core::ledger::parameters::storage::get_max_block_gas_key(
+                );
+            wl_storage
+                .storage
+                .write(
+                    &max_block_gas_key,
+                    namada_core::ledger::storage::types::encode(
+                        &10_000_000_u64,
+                    ),
+                )
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();

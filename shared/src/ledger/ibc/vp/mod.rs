@@ -224,8 +224,8 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 
 /// A dummy validator used for testing
 #[cfg(any(feature = "test", feature = "testing"))]
-pub fn get_dummy_genesis_validator()
--> namada_proof_of_stake::types::GenesisValidator {
+pub fn get_dummy_genesis_validator(
+) -> namada_proof_of_stake::types::GenesisValidator {
     use rust_decimal::prelude::Decimal;
 
     use crate::core::types::address::testing::established_address_1;
@@ -359,6 +359,7 @@ mod tests {
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
     const COMMITMENT_PREFIX: &[u8] = b"ibc";
+    const TX_GAS_LIMIT: u64 = 1_000_000;
 
     fn get_client_id() -> ClientId {
         let id = format!("{}-0", MOCK_CLIENT_TYPE);
@@ -717,7 +718,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -736,19 +737,18 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
     fn test_create_client_fail() {
         let mut wl_storage = TestWlStorage::default();
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
@@ -798,7 +798,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -952,14 +952,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1044,7 +1039,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1062,14 +1057,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1142,7 +1132,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1287,14 +1277,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1380,7 +1365,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1397,14 +1382,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1468,7 +1448,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1485,14 +1465,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1592,7 +1567,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1609,14 +1584,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1717,7 +1687,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1734,14 +1704,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1826,7 +1791,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1843,14 +1808,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1933,7 +1893,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1950,14 +1910,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     // skip test_close_init_channel() and test_close_confirm_channel() since it
@@ -2090,14 +2045,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2268,14 +2218,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2398,7 +2343,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2415,14 +2360,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2550,7 +2490,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2567,14 +2507,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2702,7 +2637,7 @@ mod tests {
             None,
         )
         .sign(&keypair_1());
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2719,13 +2654,8 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
-                &keys_changed,
-                &verifiers
-            )
-            .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 }

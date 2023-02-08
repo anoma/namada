@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
-use namada::ledger::gas::BlockGasMeter;
+use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
@@ -47,7 +47,7 @@ pub struct TestTxEnv {
     pub wl_storage: WlStorage<MockDB, Sha256Hasher>,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: BTreeSet<Address>,
-    pub gas_meter: BlockGasMeter,
+    pub gas_meter: TxGasMeter,
     pub tx_index: TxIndex,
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
@@ -71,7 +71,7 @@ impl Default for TestTxEnv {
         Self {
             wl_storage,
             iterators: PrefixIterators::default(),
-            gas_meter: BlockGasMeter::default(),
+            gas_meter: TxGasMeter::new(10_000_000),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
             result_buffer: None,
@@ -168,7 +168,6 @@ impl TestTxEnv {
             .ok();
         self.iterators = PrefixIterators::default();
         self.verifiers = BTreeSet::default();
-        self.gas_meter = BlockGasMeter::default();
     }
 
     /// Credit tokens to the target account.

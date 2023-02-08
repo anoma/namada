@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::gas::TxGasMeter;
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
 
@@ -13,7 +14,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
+use crate::ledger::gas::{self, VpGasMeter, MIN_STORAGE_GAS};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -91,7 +92,7 @@ where
     /// Storage prefix iterators.
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
-    pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
+    pub gas_meter: MutHostRef<'a, &'a TxGasMeter>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -131,7 +132,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
-        gas_meter: &mut BlockGasMeter,
+        gas_meter: &mut TxGasMeter,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -2001,7 +2002,7 @@ pub mod testing {
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &mut BlockGasMeter,
+        gas_meter: &mut TxGasMeter,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,

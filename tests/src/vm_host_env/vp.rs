@@ -73,7 +73,7 @@ impl Default for TestVpEnv {
             addr: address::testing::established_address_1(),
             wl_storage,
             iterators: PrefixIterators::default(),
-            gas_meter: VpGasMeter::default(),
+            gas_meter: VpGasMeter::new(10_000_000, 0),
             tx: Tx::new(vec![], None, chain_id, None),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),

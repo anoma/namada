@@ -1,6 +1,8 @@
 //! Protocol parameters
 pub mod storage;
 
+use std::collections::BTreeMap;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use rust_decimal::Decimal;
 use thiserror::Error;
@@ -36,6 +38,8 @@ pub struct Parameters {
     pub max_expected_time_per_block: DurationSecs,
     /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
+    /// Max gas for block
+    pub max_block_gas: u64,
     /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes (read only)
@@ -58,6 +62,8 @@ pub struct Parameters {
     #[cfg(not(feature = "mainnet"))]
     /// Fixed fees for a wrapper tx to be accepted
     pub wrapper_tx_fees: Option<token::Amount>,
+    /// Gas table
+    pub gas_table: BTreeMap<String, u64>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -111,6 +117,7 @@ impl Parameters {
             epoch_duration,
             max_expected_time_per_block,
             max_proposal_bytes,
+            max_block_gas,
             vp_whitelist,
             tx_whitelist,
             implicit_vp_code_hash,
@@ -123,15 +130,24 @@ impl Parameters {
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
+            gas_table,
         } = self;
 
         // write max proposal bytes parameter
         let max_proposal_bytes_key = storage::get_max_proposal_bytes_key();
         storage.write(&max_proposal_bytes_key, max_proposal_bytes)?;
 
+        // write max block gas parameter
+        let max_block_gas_key = storage::get_max_block_gas_key();
+        storage.write(&max_block_gas_key, max_block_gas)?;
+
         // write epoch parameters
         let epoch_key = storage::get_epoch_duration_storage_key();
         storage.write(&epoch_key, epoch_duration)?;
+
+        // write gas table
+        let gas_table_key = storage::get_gas_table_storage_key();
+        storage.write(&gas_table_key, gas_table)?;
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
@@ -392,6 +408,15 @@ where
             .into_storage_result()?
     };
 
+    // read max block gas
+    let max_block_gas: u64 = {
+        let key = storage::get_max_block_gas_key();
+        let value = storage.read(&key)?;
+        value
+            .ok_or(ReadError::ParametersMissing)
+            .into_storage_result()?
+    };
+
     // read epoch duration
     let epoch_duration = read_epoch_duration_parameter(storage)?;
 
@@ -424,6 +449,13 @@ where
         .into_storage_result()?;
     let implicit_vp_code_hash =
         Hash::try_from(&value[..]).into_storage_result()?;
+
+    // read gas table
+    let gas_table_key = storage::get_gas_table_storage_key();
+    let value = storage.read(&gas_table_key)?;
+    let gas_table: BTreeMap<String, u64> = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
 
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
@@ -472,6 +504,7 @@ where
         epoch_duration,
         max_expected_time_per_block,
         max_proposal_bytes,
+        max_block_gas,
         vp_whitelist,
         tx_whitelist,
         implicit_vp_code_hash,
@@ -484,5 +517,6 @@ where
         faucet_account,
         #[cfg(not(feature = "mainnet"))]
         wrapper_tx_fees,
+        gas_table,
     })
 }

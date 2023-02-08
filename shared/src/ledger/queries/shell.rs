@@ -5,6 +5,7 @@ use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockResults;
+use std::collections::BTreeMap;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -69,14 +70,27 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::ledger::gas::BlockGasMeter;
+    use namada_core::ledger::gas::TxGasMeter;
+    use namada_core::ledger::parameters;
+
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
     use crate::types::transaction::{DecryptedTx, TxType};
 
-    let mut gas_meter = BlockGasMeter::default();
+    let gas_table: BTreeMap<String, u64> = ctx
+        .wl_storage
+        .read(&parameters::storage::get_gas_table_storage_key())
+        .expect("Error while reading storage")
+        .expect("Missing gas table in storage");
+
+    let mut tx_gas_meter = TxGasMeter::new(
+        ctx.wl_storage
+            .read(&parameters::storage::get_max_block_gas_key())
+            .expect("Error while reading storage key")
+            .expect("Missing parameter in storage"),
+    );
     let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     let tx = TxType::Decrypted(DecryptedTx::Decrypted {
@@ -86,9 +100,9 @@ where
     });
     let data = protocol::apply_tx(
         tx,
-        request.data.len(),
         TxIndex(0),
-        &mut gas_meter,
+        &mut tx_gas_meter,
+        &gas_table,
         &mut write_log,
         &ctx.wl_storage.storage,
         &mut ctx.vp_wasm_cache,

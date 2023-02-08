@@ -77,6 +77,7 @@ where
         let genesis::Parameters {
             epoch_duration,
             max_proposal_bytes,
+            max_block_gas,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
@@ -88,6 +89,7 @@ where
             staked_ratio,
             pos_inflation_amount,
             wrapper_tx_fees,
+            gas_table,
         } = genesis.parameters;
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
@@ -170,6 +172,7 @@ where
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
+            max_block_gas,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
@@ -183,6 +186,7 @@ where
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
+            gas_table,
         };
         parameters
             .init_storage(&mut self.wl_storage)

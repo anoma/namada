@@ -1,6 +1,8 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
+use namada::core::ledger::parameters;
+use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
@@ -128,6 +130,14 @@ where
             // valid because of mempool check
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
+        let mut temp_block_gas_meter =
+            BlockGasMeter::new(
+                self.read_storage_key(
+                    &parameters::storage::get_max_block_gas_key(),
+                )
+                .expect("Missing max_block_gas parameter in storage"),
+            );
+
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
@@ -138,8 +148,12 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
                         if block_time > exp { return None }
                     }
-                    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+                    if let Ok(TxType::Wrapper(ref wrapper)) = process_tx(tx) {
+
+// Check tx gas limit
+                    if temp_block_gas_meter.try_finalize_transaction(wrapper.gas_limit.clone().into()).is_ok() {
                         return Some(tx_bytes.clone());
+        }
                     }
                 }
                 None
@@ -205,6 +219,7 @@ where
             .map(
                 |WrapperTxInQueue {
                      tx,
+                    gas: _, 
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                  }| {
@@ -276,6 +291,8 @@ mod test_prepare_proposal {
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
+
+    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
@@ -376,7 +393,7 @@ mod test_prepare_proposal {
                 },
                 &keypair,
                 Epoch(0),
-                0.into(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
@@ -385,7 +402,7 @@ mod test_prepare_proposal {
             let wrapper = wrapper_tx
                 .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
-            shell.enqueue_tx(wrapper_tx);
+            shell.enqueue_tx(wrapper_tx, 0);
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }

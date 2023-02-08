@@ -1,7 +1,9 @@
 pub mod pos;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use namada::ledger::gas::VpGasMeter;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
@@ -48,7 +50,7 @@ impl TestNativeVpEnv {
     {
         let ctx = Ctx {
             iterators: Default::default(),
-            gas_meter: Default::default(),
+            gas_meter: RefCell::new(VpGasMeter::new(0, 0)),
             storage: &self.tx_env.wl_storage.storage,
             write_log: &self.tx_env.wl_storage.write_log,
             tx: &self.tx_env.tx,

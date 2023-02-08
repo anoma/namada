@@ -1,6 +1,6 @@
 //! The parameters used for the chain's genesis
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 #[cfg(not(feature = "dev"))]
 use std::path::Path;
 
@@ -24,7 +24,7 @@ use rust_decimal::Decimal;
 /// Genesis configuration file format
 pub mod genesis_config {
     use std::array::TryFromSliceError;
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::convert::TryInto;
     use std::path::Path;
     use std::str::FromStr;
@@ -247,6 +247,8 @@ pub mod genesis_config {
         /// room for header data, evidence and protobuf
         /// serialization overhead in Tendermint blocks.
         pub max_proposal_bytes: ProposalBytes,
+        /// Max block gas
+        pub max_block_gas: u64,
         /// Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
@@ -270,6 +272,8 @@ pub mod genesis_config {
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
+        /// Gas table
+        pub gas_table: BTreeMap<String, u64>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -607,6 +611,7 @@ pub mod genesis_config {
                 )
                 .into(),
             max_proposal_bytes: parameters.max_proposal_bytes,
+            max_block_gas: parameters.max_block_gas,
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
@@ -617,6 +622,7 @@ pub mod genesis_config {
             staked_ratio: Decimal::ZERO,
             pos_inflation_amount: 0,
             wrapper_tx_fees: parameters.wrapper_tx_fees,
+            gas_table: parameters.gas_table,
         };
 
         let GovernanceParamsConfig {
@@ -840,6 +846,8 @@ pub struct ImplicitAccount {
 pub struct Parameters {
     // Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
+    /// Max block gas
+    pub max_block_gas: u64,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
@@ -865,6 +873,8 @@ pub struct Parameters {
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
+    /// Gas table
+    pub gas_table: BTreeMap<String, u64>,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -951,6 +961,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         max_proposal_bytes: Default::default(),
+        max_block_gas: u64::MAX, //FIXME: adjust this value
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
@@ -962,6 +973,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
         wrapper_tx_fees: Some(token::Amount::whole(0)),
+        gas_table: BTreeMap::default(),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
