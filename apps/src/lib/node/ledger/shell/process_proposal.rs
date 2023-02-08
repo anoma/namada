@@ -33,7 +33,7 @@ where
     /// their order has already been committed in storage, so we simply discard
     /// the single invalid inner tx
     pub fn process_proposal(
-        &mut self,
+        &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
         let tx_results = self.process_txs(&req.txs);
