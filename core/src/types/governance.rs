@@ -128,8 +128,6 @@ pub enum TallyResult {
     Passed(Tally),
     /// Proposal was rejected
     Rejected,
-    /// A critical error in tally computation with an error message
-    Failed(String),
 }
 
 /// The result with votes of a proposal
@@ -175,7 +173,6 @@ impl Display for TallyResult {
                 ),
             },
             TallyResult::Rejected => write!(f, "rejected"),
-            TallyResult::Failed(msg) => write!(f, "failed with: {}", msg),
         }
     }
 }
