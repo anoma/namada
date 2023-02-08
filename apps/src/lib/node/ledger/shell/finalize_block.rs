@@ -419,7 +419,6 @@ where
                 .expect("Could not find the PoS parameters");
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
-        // self.wl_storage.validator_set_update(current_epoch, |update| {
         response.validator_updates =
             namada_proof_of_stake::validator_set_update_tendermint(
                 &self.wl_storage,
