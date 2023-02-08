@@ -289,7 +289,7 @@ pub async fn query_transparent_balance<
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<C, token::Amount>(&client, &key).await {
+            match query_storage_value::<C, token::Amount>(client, &key).await {
                 Some(balance) => match &args.sub_prefix {
                     Some(sub_prefix) => {
                         println!(
@@ -308,7 +308,7 @@ pub async fn query_transparent_balance<
             for (token, _) in tokens {
                 let prefix = token.to_db_key().into();
                 let balances =
-                    query_storage_prefix::<C, token::Amount>(&client, &prefix)
+                    query_storage_prefix::<C, token::Amount>(client, &prefix)
                         .await;
                 if let Some(balances) = balances {
                     print_balances(
@@ -417,7 +417,7 @@ pub async fn query_pinned_balance<
                 let (_asset_type, balance) =
                     value_by_address(&balance, token.clone(), epoch);
                 let currency_code = tokens
-                    .get(&token)
+                    .get(token)
                     .map(|c| Cow::Borrowed(*c))
                     .unwrap_or_else(|| Cow::Owned(token.to_string()));
                 if balance == 0 {
@@ -620,7 +620,7 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
     let current_epoch = query_epoch(client).await;
     match args.proposal_id {
         Some(id) => {
-            if print_proposal::<C>(&client, id, current_epoch, true)
+            if print_proposal::<C>(client, id, current_epoch, true)
                 .await
                 .is_none()
             {
@@ -630,12 +630,12 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
         None => {
             let last_proposal_id_key = gov_storage::get_counter_key();
             let last_proposal_id =
-                query_storage_value::<C, u64>(&client, &last_proposal_id_key)
+                query_storage_value::<C, u64>(client, &last_proposal_id_key)
                     .await
                     .unwrap();
 
             for id in 0..last_proposal_id {
-                if print_proposal::<C>(&client, id, current_epoch, false)
+                if print_proposal::<C>(client, id, current_epoch, false)
                     .await
                     .is_none()
                 {
@@ -941,7 +941,7 @@ pub async fn query_proposal_result<
         Some(id) => {
             let end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
             let end_epoch =
-                query_storage_value::<C, Epoch>(&client, &end_epoch_key).await;
+                query_storage_value::<C, Epoch>(client, &end_epoch_key).await;
 
             match end_epoch {
                 Some(end_epoch) => {
@@ -1074,7 +1074,7 @@ pub async fn query_protocol_parameters<
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
-    let epoch_duration = query_storage_value::<C, EpochDuration>(&client, &key)
+    let epoch_duration = query_storage_value::<C, EpochDuration>(client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1087,26 +1087,26 @@ pub async fn query_protocol_parameters<
     );
 
     let key = param_storage::get_max_expected_time_per_block_key();
-    let max_block_duration = query_storage_value::<C, u64>(&client, &key)
+    let max_block_duration = query_storage_value::<C, u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Max. block duration: {}", "", max_block_duration);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let vp_whitelist = query_storage_value::<C, Vec<String>>(&client, &key)
+    let vp_whitelist = query_storage_value::<C, Vec<String>>(client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}VP whitelist: {:?}", "", vp_whitelist);
 
     let key = param_storage::get_tx_whitelist_storage_key();
-    let tx_whitelist = query_storage_value::<C, Vec<String>>(&client, &key)
+    let tx_whitelist = query_storage_value::<C, Vec<String>>(client, &key)
         .await
         .expect("Parameter should be definied.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
     println!("PoS parameters");
     let key = pos::params_key();
-    let pos_params = query_storage_value::<C, PosParams>(&client, &key)
+    let pos_params = query_storage_value::<C, PosParams>(client, &key)
         .await
         .expect("Parameter should be definied.");
     println!(
@@ -1538,9 +1538,9 @@ pub async fn query_bonded_stake<C: namada::ledger::queries::Client + Sync>(
                     };
                     let is_active = validator_set.active.contains(&weighted);
                     if !is_active {
-                        debug_assert!(validator_set
-                            .inactive
-                            .contains(&weighted));
+                        debug_assert!(
+                            validator_set.inactive.contains(&weighted)
+                        );
                     }
                     println!(
                         "Validator {} is {}, bonded stake: {}",
@@ -1665,7 +1665,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
             // Find slashes for the given validator
             let slashes_key = pos::validator_slashes_key(&validator);
             let slashes =
-                query_storage_value::<C, pos::Slashes>(&client, &slashes_key)
+                query_storage_value::<C, pos::Slashes>(client, &slashes_key)
                     .await;
             match slashes {
                 Some(slashes) => {
@@ -1689,7 +1689,7 @@ pub async fn query_slashes<C: namada::ledger::queries::Client + Sync>(
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
             let slashes = query_storage_prefix::<C, pos::Slashes>(
-                &client,
+                client,
                 &slashes_prefix,
             )
             .await;
@@ -1930,7 +1930,7 @@ pub async fn query_conversions<C: namada::ledger::queries::Client + Sync>(
         .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
         .unwrap();
     let conv_state =
-        query_storage_value::<C, ConversionState>(&client, &state_key)
+        query_storage_value::<C, ConversionState>(client, &state_key)
             .await
             .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found

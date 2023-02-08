@@ -52,14 +52,12 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use sha2::Digest;
 
 use crate::ledger::queries::Client;
-use crate::ledger::rpc;
+use crate::ledger::{args, rpc};
 use crate::proto::{SignedTxData, Tx};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-#[cfg(feature = "masp-tx-gen")]
-use crate::types::masp::{TransferSource, TransferTarget};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
 use crate::types::token::{
@@ -1090,19 +1088,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn gen_shielded_transfer(
         &mut self,
         client: &U::C,
-        source: TransferSource,
-        target: TransferTarget,
-        args_amount: token::Amount,
-        token: Address,
-        fee_amount: token::Amount,
-        fee_token: Address,
+        args: args::TxTransfer,
         shielded_gas: bool,
     ) -> Result<Option<(Transaction, TransactionMetadata)>, builder::Error>
     {
         // No shielded components are needed when neither source nor destination
         // are shielded
-        let spending_key = source.spending_key();
-        let payment_address = target.payment_address();
+        let spending_key = args.source.spending_key();
+        let payment_address = args.target.payment_address();
         if spending_key.is_none() && payment_address.is_none() {
             return Ok(None);
         }
@@ -1119,13 +1112,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Context required for storing which notes are in the source's
         // possesion
         let consensus_branch_id = BranchId::Sapling;
-        let amt: u64 = args_amount.into();
+        let amt: u64 = args.amount.into();
         let memo: Option<Memo> = None;
 
         // Now we build up the transaction within this object
         let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
         // Convert transaction amount into MASP types
-        let (asset_type, amount) = convert_amount(epoch, &token, args_amount);
+        let (asset_type, amount) =
+            convert_amount(epoch, &args.token, args.amount);
 
         // Transactions with transparent input and shielded output
         // may be affected if constructed close to epoch boundary
@@ -1134,7 +1128,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Transaction fees need to match the amount in the wrapper Transfer
             // when MASP source is used
-            let (_, fee) = convert_amount(epoch, &fee_token, fee_amount);
+            let (_, fee) =
+                convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
             builder.set_fee(fee.clone())?;
             // If the gas is coming from the shielded pool, then our shielded
             // inputs must also cover the gas fee
@@ -1210,7 +1205,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             epoch_sensitive = false;
             // Embed the transparent target address into the shielded
             // transaction so that it can be signed
-            let target_enc = target
+            let target_enc = args
+                .target
                 .address()
                 .expect("target address should be transparent")
                 .try_to_vec()
@@ -1240,7 +1236,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 replay_builder.set_fee(Amount::zero())?;
                 let ovk_opt = spending_key.map(|x| x.expsk.ovk);
                 let (new_asset_type, _) =
-                    convert_amount(new_epoch, &token, args_amount);
+                    convert_amount(new_epoch, &args.token, args.amount);
                 replay_builder.add_sapling_output(
                     ovk_opt,
                     payment_address.unwrap().into(),

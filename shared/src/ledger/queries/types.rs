@@ -1,5 +1,8 @@
 use tendermint::block::Height;
-use tendermint_rpc::endpoint::{block, block_results, abci_info, blockchain, commit, consensus_params, consensus_state, health, net_info, status};
+use tendermint_rpc::endpoint::{
+    abci_info, block, block_results, blockchain, commit, consensus_params,
+    consensus_state, health, net_info, status,
+};
 use tendermint_rpc::query::Query;
 use tendermint_rpc::Order;
 use thiserror::Error;
@@ -8,13 +11,12 @@ use crate::ledger::events::log::EventLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
 use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::storage::BlockHeight;
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::wasm::{TxCache, VpCache};
 #[cfg(feature = "wasm-runtime")]
 use crate::vm::WasmCacheRoAccess;
-
-use crate::tendermint_rpc::error::Error as RpcError;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]
@@ -197,7 +199,9 @@ pub trait Client {
     }
 
     /// `/block_results`: get ABCI results for the latest block.
-    async fn latest_block_results(&self) -> Result<block_results::Response, RpcError> {
+    async fn latest_block_results(
+        &self,
+    ) -> Result<block_results::Response, RpcError> {
         self.perform(block_results::Request::default()).await
     }
 
@@ -206,11 +210,16 @@ pub trait Client {
     /// Block headers are returned in descending order (highest first).
     ///
     /// Returns at most 20 items.
-    async fn blockchain<H>(&self, min: H, max: H) -> Result<blockchain::Response, RpcError>
+    async fn blockchain<H>(
+        &self,
+        min: H,
+        max: H,
+    ) -> Result<blockchain::Response, RpcError>
     where
         H: Into<Height> + Send,
     {
-        // TODO(tarcieri): return errors for invalid params before making request?
+        // TODO(tarcieri): return errors for invalid params before making
+        // request?
         self.perform(blockchain::Request::new(min.into(), max.into()))
             .await
     }
@@ -225,7 +234,10 @@ pub trait Client {
 
     /// `/consensus_params`: get current consensus parameters at the specified
     /// height.
-    async fn consensus_params<H>(&self, height: H) -> Result<consensus_params::Response, RpcError>
+    async fn consensus_params<H>(
+        &self,
+        height: H,
+    ) -> Result<consensus_params::Response, RpcError>
     where
         H: Into<Height> + Send,
     {
@@ -234,12 +246,16 @@ pub trait Client {
     }
 
     /// `/consensus_state`: get current consensus state
-    async fn consensus_state(&self) -> Result<consensus_state::Response, RpcError> {
+    async fn consensus_state(
+        &self,
+    ) -> Result<consensus_state::Response, RpcError> {
         self.perform(consensus_state::Request::new()).await
     }
 
     /// `/consensus_params`: get the latest consensus parameters.
-    async fn latest_consensus_params(&self) -> Result<consensus_params::Response, RpcError> {
+    async fn latest_consensus_params(
+        &self,
+    ) -> Result<consensus_params::Response, RpcError> {
         self.perform(consensus_params::Request::new(None)).await
     }
 
@@ -250,7 +266,8 @@ pub trait Client {
 
     /// `/health`: get node health.
     ///
-    /// Returns empty result (200 OK) on success, no response in case of an error.
+    /// Returns empty result (200 OK) on success, no response in case of an
+    /// error.
     async fn health(&self) -> Result<(), Error> {
         self.perform(health::Request).await?;
         Ok(())

@@ -1,3 +1,4 @@
+//! SDK RPC queries
 use std::collections::{HashMap, HashSet};
 
 use borsh::BorshDeserialize;
@@ -40,8 +41,6 @@ pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
     deadline: Duration,
 ) -> Event {
     const ONE_SECOND: Duration = Duration::from_secs(1);
-    let mut backoff = ONE_SECOND;
-
     // sleep for the duration of `backoff`,
     // and update the underlying value
     async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
@@ -56,6 +55,7 @@ pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
         *backoff += ONE_SECOND;
     }
 
+    let mut backoff = ONE_SECOND;
     loop {
         tracing::debug!(query = ?status, "Querying tx status");
         let maybe_event = match query_tx_events(client, status).await {
@@ -68,13 +68,13 @@ pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
         };
         if let Some(e) = maybe_event {
             break e;
-        }
-        if deadline < backoff {
+        } else if deadline < backoff {
             panic!(
                 "Transaction status query deadline of {deadline:?} exceeded"
             );
+        } else {
+            sleep_update(status, &mut backoff).await;
         }
-        sleep_update(status, &mut backoff).await;
     }
 }
 
@@ -153,10 +153,11 @@ pub async fn is_delegator<C: crate::ledger::queries::Client + Sync>(
 ) -> bool {
     let bonds_prefix = pos::bonds_for_source_prefix(address);
     let bonds =
-        query_storage_prefix::<C, pos::Bonds>(&client, &bonds_prefix).await;
+        query_storage_prefix::<C, pos::Bonds>(client, &bonds_prefix).await;
     bonds.is_some() && bonds.unwrap().count() > 0
 }
 
+/// Check if a given address is a known delegator at the given epoch
 pub async fn is_delegator_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
@@ -311,7 +312,9 @@ pub async fn query_has_storage_key<C: crate::ledger::queries::Client + Sync>(
 /// Represents a query for an event pertaining to the specified transaction
 #[derive(Debug, Copy, Clone)]
 pub enum TxEventQuery<'a> {
+    /// Queries whether transaction with given hash was accepted
     Accepted(&'a str),
+    /// Queries whether transaction with given hash was applied
     Applied(&'a str),
 }
 
@@ -390,10 +393,15 @@ pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
 /// in a wrapper.
 #[derive(Debug, Clone)]
 pub enum TxBroadcastData {
+    /// Dry run broadcast data
     DryRun(Tx),
+    /// Wrapper broadcast data
     Wrapper {
+        /// Transaction to broadcast
         tx: Tx,
+        /// Hash of the wrapper transaction
         wrapper_hash: String,
+        /// Hash of decrypted transaction
         decrypted_hash: String,
     },
 }
@@ -401,12 +409,19 @@ pub enum TxBroadcastData {
 /// A parsed event from tendermint relating to a transaction
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
+    /// Response information
     pub info: String,
+    /// Response log
     pub log: String,
+    /// Block height
     pub height: String,
+    /// Transaction height
     pub hash: String,
+    /// Response code
     pub code: String,
+    /// Gas used
     pub gas_used: String,
+    /// Initialized accounts
     pub initialized_accounts: Vec<Address>,
 }
 
@@ -544,6 +559,7 @@ pub async fn query_tx_response<C: crate::ledger::queries::Client + Sync>(
     Ok(result)
 }
 
+/// Get the votes for a given proposal id
 pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
@@ -611,6 +627,7 @@ pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
+/// Get all validators in the given epoch
 pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
@@ -623,6 +640,7 @@ pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Get the total staked tokens in the given epoch
 pub async fn get_total_staked_tokens<
     C: crate::ledger::queries::Client + Sync,
 >(
@@ -634,6 +652,7 @@ pub async fn get_total_staked_tokens<
     )
 }
 
+/// Get the given validator's stake at the given epoch
 pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
@@ -647,6 +666,7 @@ pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Get the delegator's delegation
 pub async fn get_delegators_delegation<
     C: crate::ledger::queries::Client + Sync,
 >(
@@ -658,6 +678,7 @@ pub async fn get_delegators_delegation<
     )
 }
 
+/// Get the givernance parameters
 pub async fn get_governance_parameters<
     C: crate::ledger::queries::Client + Sync,
 >(
@@ -704,7 +725,7 @@ pub async fn get_governance_parameters<
     }
 }
 
-// Compute the result of a proposal
+/// Compute the result of a proposal
 pub async fn compute_tally<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
@@ -759,6 +780,7 @@ pub async fn compute_tally<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
+/// Get the bond amount at the given epoch
 pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     delegator: &Address,

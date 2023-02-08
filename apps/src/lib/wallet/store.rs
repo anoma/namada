@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use file_lock::{FileLock, FileOptions};
+#[cfg(feature = "dev")]
+use namada::ledger::wallet::StoredKeypair;
 use namada::ledger::wallet::{gen_sk, Store, ValidatorKeys};
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
@@ -103,6 +105,7 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
 }
 
 /// Add addresses from a genesis configuration.
+#[cfg(not(feature = "dev"))]
 pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
     for (alias, addr) in super::defaults::addresses_from_genesis(genesis) {
         store.insert_address::<CliWalletUtils>(alias, addr);
@@ -155,6 +158,8 @@ pub fn gen_validator_keys(
 
 #[cfg(all(test, feature = "dev"))]
 mod test_wallet {
+    use namada::types::address::Address;
+
     use super::*;
 
     #[test]
