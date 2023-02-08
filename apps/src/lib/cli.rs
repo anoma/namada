@@ -2347,8 +2347,8 @@ pub mod args {
                         .about(
                             "The list of proposed councils and spending \
                              caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is expressed in \
-                             microNAM",
+                             (council is bech32m encoded address, cap is \
+                             expressed in microNAM",
                         )
                         .requires(PROPOSAL_ID.name)
                         .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
