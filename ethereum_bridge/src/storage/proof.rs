@@ -163,7 +163,7 @@ pub struct RelayProof {
 pub fn tokenize_relay_proof(
     relay_proof: RelayProof,
     voting_powers_map: &VotingPowersMap,
-) -> [eth_abi::Token; 8] {
+) -> [eth_abi::Token; 1] {
     let RelayProof {
         validator_args,
         root,
@@ -175,7 +175,7 @@ pub fn tokenize_relay_proof(
     let [sigs, root, nonce] = root.tokenize();
     let [val_set_args] = validator_args.tokenize();
     let [proof, transfers, flags] = proof.tokenize();
-    [
+    [Token::Tuple(vec![
         val_set_args,
         sigs,
         transfers,
@@ -184,7 +184,7 @@ pub fn tokenize_relay_proof(
         flags,
         nonce,
         Token::String(relayer.to_string()),
-    ]
+    ])]
 }
 
 #[cfg(test)]

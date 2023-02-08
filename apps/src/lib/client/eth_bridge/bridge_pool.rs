@@ -49,6 +49,11 @@ pub async fn add_to_eth_bridge_pool(
     process_tx(ctx, tx, transfer_tx, TxSigningKey::None).await;
 }
 
+#[derive(Serialize, Deserialize)]
+struct AbiBridgePoolProof {
+    proof: Vec<u8>,
+}
+
 /// Construct a proof that a set of transfers are in the bridge pool.
 pub async fn construct_bridge_pool_proof(
     args: args::BridgePoolProof,
@@ -64,10 +69,15 @@ pub async fn construct_bridge_pool_proof(
         .await;
 
     match response {
-        Ok(response) => println!(
-            "Ethereum ABI-encoded proof:\n {:?}",
-            response.data.into_inner()
-        ),
+        Ok(response) => {
+            let abi_encoded_proof = AbiBridgePoolProof {
+                proof: response.data.into_inner(),
+            };
+            println!(
+                "Ethereum ABI-encoded proof:\n {}",
+                serde_json::to_string(&abi_encoded_proof).unwrap()
+            );
+        }
         Err(e) => println!("Encountered error: {}", e.to_string())
     }
 

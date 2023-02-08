@@ -271,7 +271,7 @@ fn test_add_to_bridge_pool() {
     .to_string();
     hash.remove(0);
     hash.truncate(hash.len() - 2);
-
+    let relayer_address = bertha_address().to_string();
     let proof_args = vec![
         "ethereum-bridge-pool",
         "construct-proof",
@@ -280,12 +280,13 @@ fn test_add_to_bridge_pool() {
         "--ledger-address",
         &ledger_addr,
         "--relayer",
-        bertha_address(),
+        &relayer_address,
     ];
     let mut namadar =
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
             .unwrap();
     namadar.exp_string("Ethereum ABI-encoded proof:").unwrap();
+    assert!(false)
 }
 
 /// Tests transfers of wNAM ERC20s from Ethereum are treated differently to
