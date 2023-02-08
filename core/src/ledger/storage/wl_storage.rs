@@ -180,13 +180,13 @@ where
                             write_log::StorageModification::Write { value }
                             | write_log::StorageModification::Temp { value } => {
                                 let gas = value.len() as u64;
-                                return Some((key.to_string(), value, gas));
+                                return Some((key, value, gas));
                             }
                             write_log::StorageModification::InitAccount {
                                 vp,
                             } => {
                                 let gas = vp.len() as u64;
-                                return Some((key.to_string(), vp, gas));
+                                return Some((key, vp, gas));
                             }
                             write_log::StorageModification::Delete => {
                                 continue;
