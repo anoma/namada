@@ -120,8 +120,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
                 ctx.get(args.tx.signers.first().unwrap())
             } else {
                 eprintln!(
-                    "Must specify an address if using more than one \
-                     signer/signing key."
+                    "Must specify and address."
                 );
                 safe_exit(1);
             }
