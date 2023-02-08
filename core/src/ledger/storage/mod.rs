@@ -400,6 +400,9 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
+            // Rebuild Merkle tree
+            self.block.tree = MerkleTree::new(merkle_tree_stores)
+                .or_else(|_| self.get_merkle_tree(height))?;
             if self.last_epoch.0 > 1 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
@@ -417,8 +420,6 @@ where
                 )
                 .expect("unable to decode conversion state")
             }
-            self.block.tree = MerkleTree::new(merkle_tree_stores)
-                .or_else(|_| self.get_merkle_tree(height))?;
             #[cfg(feature = "ferveo-tpke")]
             {
                 self.tx_queue = tx_queue;
