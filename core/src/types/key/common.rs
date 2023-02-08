@@ -384,6 +384,7 @@ impl super::SigScheme for SigScheme {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::key::ed25519;
