@@ -2106,7 +2106,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     // Construct vote
-    let proposal_vote = match args.vote.as_str() {
+    let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
         "yay" => {
             if let Some(pgf) = args.proposal_pgf {
                 let splits = pgf.trim().split_ascii_whitespace();
@@ -2116,8 +2116,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 for (address, cap) in
                     address_iter.zip(cap_iter).map(|(addr, cap)| {
                         (
-                            addr.to_owned()
-                                .parse()
+                            addr.parse()
                                 .expect("Failed to parse pgf council address"),
                             cap.parse::<u64>()
                                 .expect("Failed to parse pgf spending cap"),
