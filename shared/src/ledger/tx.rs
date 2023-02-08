@@ -7,7 +7,7 @@ use namada_core::types::address::{masp, masp_tx_key, Address};
 use prost::EncodeError;
 use rust_decimal::Decimal;
 use thiserror::Error;
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
 use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::signer::Signer;
@@ -371,9 +371,8 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
     // Broadcast the supplied transaction
     broadcast_tx(client, &to_broadcast).await?;
 
-    let max_wait_time =
+    let deadline =
         Duration::from_secs(DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS);
-    let deadline = Instant::now() + max_wait_time;
 
     tracing::debug!(
         transaction = ?to_broadcast,

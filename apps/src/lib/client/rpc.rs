@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::str::FromStr;
+use std::time::Duration;
 
 use async_std::fs;
 use async_std::path::PathBuf;
@@ -46,7 +47,6 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::{address, storage, token};
 use rust_decimal::Decimal;
-use tokio::time::Instant;
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
@@ -60,7 +60,7 @@ use crate::wallet::CliWalletUtils;
 pub async fn query_tx_status<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     status: namada::ledger::rpc::TxEventQuery<'_>,
-    deadline: Instant,
+    deadline: Duration,
 ) -> Event {
     namada::ledger::rpc::query_tx_status(client, status, deadline).await
 }
