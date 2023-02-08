@@ -118,6 +118,39 @@ where
                 continue;
             };
             let tx_length = processed_tx.tx.len();
+            // If [`process_proposal`] rejected a Tx due to invalid signature,
+            // emit an event here and move on to next tx.
+            if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
+                == ErrorCodes::InvalidSig
+            {
+                let mut tx_event = match process_tx(tx.clone()) {
+                    Ok(tx @ TxType::Wrapper(_))
+                    | Ok(tx @ TxType::Protocol(_)) => {
+                        Event::new_tx_event(&tx, height.0)
+                    }
+                    _ => match TxType::try_from(tx) {
+                        Ok(tx @ TxType::Wrapper(_))
+                        | Ok(tx @ TxType::Protocol(_)) => {
+                            Event::new_tx_event(&tx, height.0)
+                        }
+                        _ => {
+                            tracing::error!(
+                                "Internal logic error: FinalizeBlock received \
+                                 a tx with an invalid signature error code \
+                                 that could not be deserialized to a \
+                                 WrapperTx / ProtocolTx type"
+                            );
+                            continue;
+                        }
+                    },
+                };
+                tx_event["code"] = processed_tx.result.code.to_string();
+                tx_event["info"] =
+                    format!("Tx rejected: {}", &processed_tx.result.info);
+                tx_event["gas_used"] = "0".into();
+                response.events.push(tx_event);
+                continue;
+            }
 
             let tx_type = if let Ok(tx_type) = process_tx(tx) {
                 tx_type

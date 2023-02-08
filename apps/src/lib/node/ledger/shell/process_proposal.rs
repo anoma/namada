@@ -73,7 +73,7 @@ where
     /// block.
     // TODO: add block space alloc validation logic to ProcessProposal
     pub fn process_proposal(
-        &mut self,
+        &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
         let (tx_results, metadata) = self.process_txs(&req.txs);
