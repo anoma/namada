@@ -116,7 +116,7 @@ fn validate_tx(
             // 2. the transparent transaction value pool's amount must equal the
             // containing wrapper transaction's fee amount
             // Satisfies 1.
-            if shielded_tx.vin.len() != 0 {
+            if !shielded_tx.vin.is_empty() {
                 debug_log!(
                     "Transparent input to a transaction from the masp must be \
                      0 but is {}",
@@ -131,8 +131,8 @@ fn validate_tx(
             // The following boundary conditions must be satisfied
             // 1. One transparent output
             // 2. Asset type must be properly derived
-            // 3. Value from the output must be the same as the containing transfer
-            // 4. Public key must be the hash of the target
+            // 3. Value from the output must be the same as the containing
+            // transfer 4. Public key must be the hash of the target
             // Satisfies 1.
             if shielded_tx.vout.len() != 1 {
                 debug_log!(

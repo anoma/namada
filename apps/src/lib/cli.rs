@@ -1580,7 +1580,6 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
     use crate::config::TendermintMode;
     use crate::facade::tendermint::Timeout;
@@ -1878,21 +1877,6 @@ pub mod args {
         pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
-    }
-
-    impl TxTransfer {
-        pub fn parse_from_context(
-            &self,
-            ctx: &mut Context,
-        ) -> ParsedTxTransferArgs {
-            ParsedTxTransferArgs {
-                tx: self.tx.parse_from_context(ctx),
-                source: ctx.get_cached(&self.source),
-                target: ctx.get(&self.target),
-                token: ctx.get(&self.token),
-                amount: self.amount,
-            }
-        }
     }
 
     impl Args for TxTransfer {
