@@ -52,6 +52,7 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use tendermint_proto::google::protobuf::Timestamp;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -425,6 +426,35 @@ where
         response
     }
 
+    /// Takes the optional tendermint timestamp of the block: if it's Some than converts it to
+    /// a [`DateTimeUtc`], otherwise retrieve from self the time of the last block committed
+    pub fn get_block_timestamp(
+        &self,
+        tendermint_block_time: Option<Timestamp>,
+    ) -> DateTimeUtc {
+        match tendermint_block_time {
+            Some(t) => {
+                match t.try_into() {
+                    Ok(t) => t,
+                    Err(_) => {
+                        // Default to last committed block time
+                        self.wl_storage
+                            .storage
+                            .get_last_block_timestamp()
+                            .expect("Failed to retrieve last block timestamp")
+                    }
+                }
+            }
+            None => {
+                // Default to last committed block time
+                self.wl_storage
+                    .storage
+                    .get_last_block_timestamp()
+                    .expect("Failed to retrieve last block timestamp")
+            }
+        }
+    }
+
     /// Read the value for a storage key dropping any error
     pub fn read_storage_key<T>(&self, key: &Key) -> Option<T>
     where
@@ -651,11 +681,15 @@ where
 
         // Tx expiration
         if let Some(exp) = tx.expiration {
+<<<<<<< HEAD
             let last_block_timestamp = self
                 .wl_storage
                 .storage
                 .get_block_timestamp()
                 .expect("Failed to retrieve last block timestamp");
+=======
+            let last_block_timestamp = self.get_block_timestamp(None);
+>>>>>>> d73aaec46 (Refactors block time retrieval)
 
             if exp > last_block_timestamp {
                 response.code = ErrorCodes::ExpiredTx.into();

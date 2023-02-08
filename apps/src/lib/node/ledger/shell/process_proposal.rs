@@ -76,6 +76,7 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
+<<<<<<< HEAD
         let (tx_results, metadata) = self.process_txs(&req.txs);
 
         // Erroneous transactions were detected when processing
@@ -116,6 +117,10 @@ where
         } else {
             ProposalStatus::Accept
         };
+=======
+        let tx_results =
+            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
+>>>>>>> d73aaec46 (Refactors block time retrieval)
 
         ProcessProposal {
             status: status as i32,

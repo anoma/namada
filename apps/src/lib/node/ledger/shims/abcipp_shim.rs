@@ -10,6 +10,7 @@ use namada::types::address::Address;
 use namada::types::hash::Hash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
+use namada::types::time::DateTimeUtc;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
@@ -102,34 +103,9 @@ impl AbcippShim {
                     }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
-                    let block_time = match &block.time {
-                        Some(block_time) => {
-                            match block_time.to_owned().try_into() {
-                                Ok(t) => t,
-                                Err(_) => {
-                                    // Default to last committed block time
-                                    self.service
-                                        .wl_storage
-                                        .storage
-                                        .get_last_block_timestamp() // FIXME: manage error?
-                                        .expect(
-                                            "Failed to retrieve last block \
-                                             timestamp",
-                                        )
-                                }
-                            }
-                        }
-                        None => {
-                            // Default to last committed block time
-                            self.service
-                                .wl_storage
-                                .storage
-                                .get_last_block_timestamp() // FIXME: manage error?
-                                .expect(
-                                    "Failed to retrieve last block timestamp",
-                                )
-                        }
-                    };
+                    let block_time = self
+                        .service
+                        .get_block_timestamp_from_tendermint(&block.time);
                     let unprocessed_txs = block.txs.clone();
                     let (processing_results, _) =
                         self.service.process_txs(&block.txs);
