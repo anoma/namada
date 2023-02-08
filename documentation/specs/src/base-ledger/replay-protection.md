@@ -388,7 +388,11 @@ validate it. These will involve:
 - `ChainId`
 - Transaction hash
 - Expiration
+- Wrapper signer has enough funds to pay the fee
 - Unshielding tx (if present), is indeed a masp unshielding transfer
+- The unshielding tx (if present) releases the minimum amount of tokens required
+  to pay fees
+- The unshielding tx (if present) runs succesfully
 
 For gas, fee and the unshielding tx more details can be found in the
 [fee specs](../economics/fee-system.md).
@@ -397,10 +401,10 @@ These checks can all be done before executing the transactions themselves. If
 any of these fails, the transaction should be considered invalid and the action
 to take will be one of the followings:
 
-1. If the checks fail on the signature, chainId, expiration, transaction hash or
-   the unshielding tx, then this transaction will be forever invalid, regardless
-   of the possible evolution of the ledger's state. There's no need to include
-   the transaction in the block. Moreover, we **cannot** include this
+1. If the checks fail on the signature, chainId, expiration, transaction hash,
+   balance or the unshielding tx, then this transaction will be forever invalid,
+   regardless of the possible evolution of the ledger's state. There's no need
+   to include the transaction in the block. Moreover, we **cannot** include this
    transaction in the block to charge a fee (as a sort of punishment) because
    these errors may not depend on the signer of the tx (could be due to
    malicious users or simply a delay in the tx inclusion in the block)
@@ -415,27 +419,7 @@ to take will be one of the followings:
 If instead all the checks pass validation we will include the transaction in the
 block to store the hash and charge the fee.
 
-All these checks are also run in `process_proposal` with a few additions:
-
-- Wrapper signer has enough funds to pay the fee. This check should not be done
-  in mempool because the funds available for a certain address are variable in
-  time and should only be checked at block inclusion time. If any of the checks
-  fail here, the entire block is rejected forcing a new Tendermint round to
-  begin (see a better explanation of this choice in the
-  [relative](#block-rejection) section)
-- The unshielding tx (if present) releases the minimum amount of tokens required
-  to pay fees
-- The unshielding tx (if present) runs succesfully
-
-The `expiration` parameter also justifies that the check on funds is only done
-in `process_proposal` and not in mempool. Without it, the transaction could be
-potentially executed at any future moment, possibly going against the mutated
-interests of the submitter. With the expiration parameter, now, the submitter
-commits himself to accept the execution of the transaction up to the specified
-time: it's going to be his responsibility to provide a sensible value for this
-parameter. Given this constraint the transaction will be kept in mempool up
-until the expiration (since it would become invalid after that in any case), to
-prevent the mempool from increasing too much in size.
+All these checks are also run in `process_proposal`.
 
 This mechanism can also be applied to another scenario. Suppose a transaction
 was not propagated to the network by a node (or a group of colluding nodes).
