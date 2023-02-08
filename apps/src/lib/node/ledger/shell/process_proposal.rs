@@ -43,7 +43,7 @@ where
 
     /// Check all the given txs.
     pub fn process_txs(&self, txs: &[Vec<u8>]) -> Vec<TxResult> {
-        let mut tx_queue_iter = self.storage.tx_queue.iter();
+        let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         txs.iter()
             .map(|tx_bytes| {
                 self.process_single_tx(tx_bytes, &mut tx_queue_iter)
@@ -239,7 +239,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -288,7 +288,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 100.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -372,7 +372,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -413,10 +413,11 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token fee
         let balance_key = token::balance_key(
-            &shell.storage.native_token,
+            &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
+            .wl_storage
             .storage
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
             .unwrap();
@@ -427,8 +428,8 @@ mod test_process_proposal {
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(100),
-                token: shell.storage.native_token.clone(),
+                amount: Amount::whole(1_000_100),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -478,7 +479,7 @@ mod test_process_proposal {
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
@@ -548,7 +549,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -609,7 +610,7 @@ mod test_process_proposal {
         let mut wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -664,7 +665,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),

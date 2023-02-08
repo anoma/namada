@@ -1,0 +1,11 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+name = "namada_test_utils"
+resolver = "2"
+version = "0.14.0"
+
+[dependencies]
+borsh = "0.9.0"
+namada_core = { path = "../core" }

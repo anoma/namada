@@ -548,20 +548,53 @@ mod tests {
 
     #[test]
     fn test_create_client() {
-        let (storage, mut write_log) = insert_init_states();
+        let storage = TestStorage::default();
+        let mut write_log = WriteLog::default();
 
         let height = Height::new(0, 1);
         let header = MockHeader {
             height,
             timestamp: Timestamp::now(),
         };
+        let client_id = get_client_id();
+        // insert client type, state, and consensus state
+        let client_type_key = client_type_key(&client_id);
+        let client_type = ClientType::Mock.as_str().as_bytes().to_vec();
+        write_log
+            .write(&client_type_key, client_type)
+            .expect("write failed");
         let client_state = MockClientState::new(header).wrap_any();
         let consensus_state = MockConsensusState::new(header).wrap_any();
         let msg = MsgCreateAnyClient {
-            client_state,
-            consensus_state,
+            client_state: client_state.clone(),
+            consensus_state: consensus_state.clone(),
             signer: Signer::new("account0"),
         };
+        let client_state_key = client_state_key(&get_client_id());
+        let bytes = client_state.encode_vec().expect("encoding failed");
+        write_log
+            .write(&client_state_key, bytes)
+            .expect("write failed");
+        let consensus_key = consensus_state_key(&client_id, height);
+        let bytes = consensus_state.encode_vec().expect("encoding failed");
+        write_log
+            .write(&consensus_key, bytes)
+            .expect("write failed");
+        // insert update time and height
+        let client_update_time_key = client_update_timestamp_key(&client_id);
+        let bytes = TmTime::now().encode_vec().expect("encoding failed");
+        write_log
+            .write(&client_update_time_key, bytes)
+            .expect("write failed");
+        let client_update_height_key = client_update_height_key(&client_id);
+        let host_height = Height::new(10, 100);
+        write_log
+            .write(
+                &client_update_height_key,
+                host_height.encode_vec().expect("encoding failed"),
+            )
+            .expect("write failed");
+
         let event = make_create_client_event(&get_client_id(), &msg);
         write_log.set_ibc_event(event.try_into().unwrap());
 
@@ -574,7 +607,6 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
         let mut keys_changed = BTreeSet::new();
-        let client_state_key = client_state_key(&get_client_id());
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
@@ -1400,7 +1432,6 @@ mod tests {
         let (storage, mut write_log) = insert_init_states();
         // insert a port
         set_port(&mut write_log, 0);
-        write_log.commit_tx();
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1442,7 +1473,6 @@ mod tests {
         // insert a port
         let index = 0;
         set_port(&mut write_log, index);
-        write_log.commit_tx();
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1888,7 +1918,6 @@ mod tests {
         );
         let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
-        write_log.commit_tx();
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1939,7 +1968,6 @@ mod tests {
             ack_key(&get_port_id(), &get_channel_id(), Sequence::from(1));
         let ack = PacketAck::result_success().encode_to_vec();
         write_log.write(&ack_key, ack).expect("write failed");
-        write_log.commit_tx();
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];

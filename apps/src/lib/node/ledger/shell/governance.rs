@@ -9,10 +9,10 @@ use namada::ledger::native_vp::governance::utils::{
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage_api::{token, StorageWrite};
 use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
-use namada::types::token;
 
 use super::*;
 
@@ -50,9 +50,10 @@ where
                 )
             })?;
 
-        let votes = get_proposal_votes(&shell.storage, proposal_end_epoch, id);
+        let votes =
+            get_proposal_votes(&shell.wl_storage, proposal_end_epoch, id);
         let is_accepted = votes.and_then(|votes| {
-            compute_tally(&shell.storage, proposal_end_epoch, votes)
+            compute_tally(&shell.wl_storage, proposal_end_epoch, votes)
         });
 
         let transfer_address = match is_accepted {
@@ -82,8 +83,8 @@ where
                         let pending_execution_key =
                             gov_storage::get_proposal_execution_key(id);
                         shell
-                            .storage
-                            .write(&pending_execution_key, "")
+                            .wl_storage
+                            .write(&pending_execution_key, ())
                             .expect("Should be able to write to storage.");
                         let tx_result = protocol::apply_tx(
                             tx_type,
@@ -92,19 +93,19 @@ where
                                 * need it here. */
                             TxIndex::default(),
                             &mut BlockGasMeter::default(),
-                            &mut shell.write_log,
-                            &shell.storage,
+                            &mut shell.wl_storage.write_log,
+                            &shell.wl_storage.storage,
                             &mut shell.vp_wasm_cache,
                             &mut shell.tx_wasm_cache,
                         );
                         shell
-                            .storage
+                            .wl_storage
                             .delete(&pending_execution_key)
                             .expect("Should be able to delete the storage.");
                         match tx_result {
                             Ok(tx_result) => {
                                 if tx_result.is_accepted() {
-                                    shell.write_log.commit_tx();
+                                    shell.wl_storage.write_log.commit_tx();
                                     let proposal_event: Event =
                                         ProposalEvent::new(
                                             EventType::Proposal.to_string(),
@@ -119,7 +120,7 @@ where
 
                                     proposal_author
                                 } else {
-                                    shell.write_log.drop_tx();
+                                    shell.wl_storage.write_log.drop_tx();
                                     let proposal_event: Event =
                                         ProposalEvent::new(
                                             EventType::Proposal.to_string(),
@@ -136,7 +137,7 @@ where
                                 }
                             }
                             Err(_e) => {
-                                shell.write_log.drop_tx();
+                                shell.wl_storage.write_log.drop_tx();
                                 let proposal_event: Event = ProposalEvent::new(
                                     EventType::Proposal.to_string(),
                                     TallyResult::Passed,
@@ -201,13 +202,18 @@ where
             }
         };
 
-        let native_token = shell.storage.native_token.clone();
+        let native_token = shell.wl_storage.storage.native_token.clone();
         // transfer proposal locked funds
-        shell.storage.transfer(
+        token::transfer(
+            &mut shell.wl_storage,
             &native_token,
-            funds,
             &gov_address,
             &transfer_address,
+            funds,
+        )
+        .expect(
+            "Must be able to transfer governance locked funds after proposal \
+             has been tallied",
         );
     }
 

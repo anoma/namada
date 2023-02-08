@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
@@ -69,6 +70,21 @@ pub struct WriteLog {
     tx_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC event for the current transaction
     ibc_event: Option<IbcEvent>,
+}
+
+/// Write log prefix iterator
+#[derive(Debug)]
+pub struct PrefixIter {
+    /// The concrete iterator for modifications sorted by storage keys
+    pub iter: std::vec::IntoIter<(storage::Key, StorageModification)>,
+}
+
+impl Iterator for PrefixIter {
+    type Item = (storage::Key, StorageModification);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 impl Default for WriteLog {
@@ -176,6 +192,34 @@ impl WriteLog {
         Ok((gas as _, size_diff))
     }
 
+    /// Write a key and a value.
+    /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
+    /// validity predicate of a new account that's not yet committed to storage.
+    /// Fails with [`Error::UpdateTemporaryValue`] when attempting to update a
+    /// temporary value.
+    pub fn protocol_write(
+        &mut self,
+        key: &storage::Key,
+        value: Vec<u8>,
+    ) -> Result<()> {
+        if let Some(prev) = self
+            .block_write_log
+            .insert(key.clone(), StorageModification::Write { value })
+        {
+            match prev {
+                StorageModification::InitAccount { .. } => {
+                    return Err(Error::UpdateVpOfNewAccount);
+                }
+                StorageModification::Temp { .. } => {
+                    return Err(Error::UpdateTemporaryValue);
+                }
+                StorageModification::Write { .. }
+                | StorageModification::Delete => {}
+            }
+        }
+        Ok(())
+    }
+
     /// Write a key and a value and return the gas cost and the size difference
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
@@ -241,6 +285,29 @@ impl WriteLog {
         Ok((gas as _, -size_diff))
     }
 
+    /// Delete a key and its value.
+    /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
+    /// not possible to delete.
+    pub fn protocol_delete(&mut self, key: &storage::Key) -> Result<()> {
+        if key.is_validity_predicate().is_some() {
+            return Err(Error::DeleteVp);
+        }
+        if let Some(prev) = self
+            .block_write_log
+            .insert(key.clone(), StorageModification::Delete)
+        {
+            match prev {
+                StorageModification::InitAccount { .. } => {
+                    return Err(Error::DeleteVp);
+                }
+                StorageModification::Write { .. }
+                | StorageModification::Delete
+                | StorageModification::Temp { .. } => {}
+            }
+        };
+        Ok(())
+    }
+
     /// Initialize a new account and return the gas cost.
     pub fn init_account(
         &mut self,
@@ -285,7 +352,7 @@ impl WriteLog {
     pub fn get_partitioned_keys(
         &self,
     ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
-        use itertools::{Either, Itertools};
+        use itertools::Either;
         self.tx_write_log.iter().partition_map(|(key, value)| {
             match (key.is_validity_predicate(), value) {
                 (Some(address), StorageModification::InitAccount { .. }) => {
@@ -423,6 +490,41 @@ impl WriteLog {
             }
         }
         (verifiers, changed_keys)
+    }
+
+    /// Iterate modifications prior to the current transaction, whose storage
+    /// key matches the given prefix, sorted by their storage key.
+    pub fn iter_prefix_pre(&self, prefix: &storage::Key) -> PrefixIter {
+        let mut matches = HashMap::new();
+        for (key, modification) in &self.block_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        let iter = matches
+            .into_iter()
+            .sorted_unstable_by_key(|(key, _val)| key.clone());
+        PrefixIter { iter }
+    }
+
+    /// Iterate modifications posterior of the current tx, whose storage key
+    /// matches the given prefix, sorted by their storage key.
+    pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
+        let mut matches = HashMap::new();
+        for (key, modification) in &self.block_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        for (key, modification) in &self.tx_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.clone(), modification.clone());
+            }
+        }
+        let iter = matches
+            .into_iter()
+            .sorted_unstable_by_key(|(key, _val)| key.clone());
+        PrefixIter { iter }
     }
 }
 
@@ -682,12 +784,12 @@ mod tests {
 /// Helpers for testing with write log.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::types::address::testing::arb_address;
-    use namada_core::types::storage::testing::arb_key;
     use proptest::collection;
     use proptest::prelude::{any, prop_oneof, Just, Strategy};
 
     use super::*;
+    use crate::types::address::testing::arb_address;
+    use crate::types::storage::testing::arb_key;
 
     /// Generate an arbitrary tx write log of [`HashMap<storage::Key,
     /// StorageModification>`].

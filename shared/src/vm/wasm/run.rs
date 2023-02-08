@@ -290,7 +290,7 @@ fn run_vp(
 }
 
 /// Validity predicate wasm evaluator for `eval` host function calls.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct VpEvalWasm<DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,

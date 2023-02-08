@@ -176,7 +176,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -198,18 +198,21 @@ where
         vp_host_fns::has_key_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
+            self.ctx.write_log,
             key,
         )
         .into_storage_result()
     }
 
-    fn iter_next<'iter>(
+    fn iter_prefix<'iter>(
         &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        vp_host_fns::iter_pre_next::<DB>(
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+        vp_host_fns::iter_prefix_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
-            iter,
+            self.ctx.write_log,
+            self.ctx.storage,
+            prefix,
         )
         .into_storage_result()
     }
@@ -217,11 +220,12 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix<'iter>(
+    fn iter_next<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        self.ctx.iter_prefix(prefix)
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        vp_host_fns::iter_next::<DB>(&mut self.ctx.gas_meter.borrow_mut(), iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
@@ -256,7 +260,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self:'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -284,14 +288,15 @@ where
         .into_storage_result()
     }
 
-    fn iter_next<'iter>(
+    fn iter_prefix<'iter>(
         &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
-        vp_host_fns::iter_post_next::<DB>(
+        prefix: &crate::types::storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+        vp_host_fns::iter_prefix_post(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.write_log,
-            iter,
+            self.ctx.storage,
+            prefix,
         )
         .into_storage_result()
     }
@@ -299,11 +304,12 @@ where
     // ---- Methods below are implemented in `self.ctx`, because they are
     //      the same in `pre/post` ----
 
-    fn iter_prefix<'iter>(
+    fn iter_next<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        self.ctx.iter_prefix(prefix)
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        vp_host_fns::iter_next::<DB>(&mut self.ctx.gas_meter.borrow_mut(), iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, storage_api::Error> {
@@ -339,7 +345,7 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
     type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
-    type PrefixIter<'iter> = <DB as storage::DBIter<'iter>>::PrefixIter where Self: 'iter;
+    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -426,8 +432,9 @@ where
         &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
-        vp_host_fns::iter_prefix(
+        vp_host_fns::iter_prefix_pre(
             &mut self.gas_meter.borrow_mut(),
+            self.write_log,
             self.storage,
             prefix,
         )

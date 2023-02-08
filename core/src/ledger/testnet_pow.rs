@@ -523,14 +523,15 @@ mod test_with_tx_and_vp_env {
         tx_env.spawn_accounts([&faucet_address, &source]);
 
         init_faucet_storage(
-            &mut tx_env.storage,
+            &mut tx_env.wl_storage,
             &faucet_address,
             difficulty,
             withdrawal_limit,
         )?;
+        tx_env.commit_genesis();
 
         let challenge = Challenge::new(
-            &mut tx_env.storage,
+            &mut tx_env.wl_storage,
             &faucet_address,
             source.clone(),
         )?;

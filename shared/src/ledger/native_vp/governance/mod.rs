@@ -10,10 +10,9 @@ use namada_core::ledger::vp_env::VpEnv;
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
-use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::pos::{self, BondId, Bonds};
 use crate::ledger::storage_api::StorageRead;
+use crate::ledger::{native_vp, pos};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
@@ -531,7 +530,7 @@ where
 
     /// Validate a governance parameter
     pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
-        utils::is_proposal_accepted(self.ctx.storage, tx_data)
+        utils::is_proposal_accepted(&self.ctx.pre(), tx_data)
             .map_err(Error::NativeVpError)
     }
 
@@ -548,28 +547,23 @@ where
         H: 'static + storage::StorageHasher,
         CA: 'static + WasmCacheAccess,
     {
-        let validator_set_key = pos::validator_set_key();
-        let pre_validator_set: pos::ValidatorSets =
-            self.ctx.pre().read(&validator_set_key)?.unwrap();
+        let all_validators =
+            pos::namada_proof_of_stake::read_all_validator_addresses(
+                &self.ctx.pre(),
+                epoch,
+            )?;
+        if !all_validators.is_empty() {
+            let is_voter_validator = all_validators
+                .into_iter()
+                .any(|validator| validator.eq(address));
+            let is_signer_validator = verifiers.contains(address);
+            let is_delegation_address = delegation_address.eq(address);
 
-        let validator_set = pre_validator_set.get(epoch);
-
-        match validator_set {
-            Some(validator_set) => {
-                let all_validators =
-                    validator_set.active.union(&validator_set.inactive);
-
-                let is_voter_validator = all_validators
-                    .into_iter()
-                    .any(|validator| validator.address.eq(address));
-                let is_signer_validator = verifiers.contains(address);
-                let is_delegation_address = delegation_address.eq(address);
-
-                Ok(is_voter_validator
-                    && is_signer_validator
-                    && is_delegation_address)
-            }
-            None => Ok(false),
+            Ok(is_voter_validator
+                && is_signer_validator
+                && is_delegation_address)
+        } else {
+            Ok(false)
         }
     }
 
@@ -581,14 +575,21 @@ where
         address: &Address,
         delegation_address: &Address,
     ) -> Result<bool> {
-        let bond_key = pos::bond_key(&BondId {
-            source: address.clone(),
-            validator: delegation_address.clone(),
-        });
-        let bonds: Option<Bonds> = self.ctx.pre().read(&bond_key)?;
+        // let bond_key = pos::bond_key(&BondId {
+        //     source: address.clone(),
+        //     validator: delegation_address.clone(),
+        // });
+        let bond_handle = pos::namada_proof_of_stake::bond_handle(
+            address,
+            delegation_address,
+        );
+        let params =
+            pos::namada_proof_of_stake::read_pos_params(&self.ctx.pre())?;
+        let bond = bond_handle.get_sum(&self.ctx.pre(), epoch, &params)?;
+        // let bonds: Option<Bonds> = self.ctx.pre().read(&bond_key)?;
 
-        if let Some(bonds) = bonds {
-            Ok(bonds.get(epoch).is_some() && verifiers.contains(address))
+        if bond.is_some() && verifiers.contains(address) {
+            Ok(true)
         } else {
             Ok(false)
         }
@@ -596,6 +597,7 @@ where
 }
 
 #[allow(clippy::upper_case_acronyms)]
+#[derive(Debug)]
 enum KeyType {
     #[allow(non_camel_case_types)]
     COUNTER,

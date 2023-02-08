@@ -6,6 +6,7 @@ use std::hash::Hash;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::into_tm_voting_power;
+use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
@@ -29,7 +30,7 @@ where
         init: request::InitChain,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
-        let (current_chain_id, _) = self.storage.get_chain_id();
+        let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
         if current_chain_id != init.chain_id {
             return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
@@ -37,11 +38,13 @@ where
             )));
         }
         #[cfg(not(feature = "dev"))]
-        let genesis = genesis::genesis(&self.base_dir, &self.storage.chain_id);
+        let genesis =
+            genesis::genesis(&self.base_dir, &self.wl_storage.storage.chain_id);
         #[cfg(not(feature = "dev"))]
         {
             let genesis_bytes = genesis.try_to_vec().unwrap();
-            let errors = self.storage.chain_id.validate(genesis_bytes);
+            let errors =
+                self.wl_storage.storage.chain_id.validate(genesis_bytes);
             use itertools::Itertools;
             assert!(
                 errors.is_empty(),
@@ -135,13 +138,16 @@ where
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
         };
-        parameters.init_storage(&mut self.storage);
+        parameters.init_storage(&mut self.wl_storage.storage);
 
         // Initialize governance parameters
-        genesis.gov_params.init_storage(&mut self.storage);
+        genesis
+            .gov_params
+            .init_storage(&mut self.wl_storage.storage);
 
         // Depends on parameters being initialized
-        self.storage
+        self.wl_storage
+            .storage
             .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
 
@@ -184,19 +190,19 @@ where
                 );
             }
 
-            self.storage
-                .write(&Key::validity_predicate(&address), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
 
             if let Some(pk) = public_key {
                 let pk_storage_key = pk_key(&address);
-                self.storage
-                    .write(&pk_storage_key, pk.try_to_vec().unwrap())
+                self.wl_storage
+                    .write_bytes(&pk_storage_key, pk.try_to_vec().unwrap())
                     .unwrap();
             }
 
             for (key, value) in storage {
-                self.storage.write(&key, value).unwrap();
+                self.wl_storage.write_bytes(&key, value).unwrap();
             }
 
             // When using a faucet WASM, initialize its PoW challenge storage
@@ -209,7 +215,7 @@ where
                     .faucet_withdrawal_limit
                     .unwrap_or_else(|| token::Amount::whole(1_000));
                 testnet_pow::init_faucet_storage(
-                    &mut self.storage,
+                    &mut self.wl_storage,
                     &address,
                     difficulty,
                     withdrawal_limit,
@@ -223,9 +229,7 @@ where
         {
             let address: address::Address = (&public_key).into();
             let pk_storage_key = pk_key(&address);
-            self.storage
-                .write(&pk_storage_key, public_key.try_to_vec().unwrap())
-                .unwrap();
+            self.wl_storage.write(&pk_storage_key, public_key).unwrap();
         }
 
         // Initialize genesis token accounts
@@ -258,16 +262,13 @@ where
                 );
             }
 
-            self.storage
-                .write(&Key::validity_predicate(&address), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
 
             for (owner, amount) in balances {
-                self.storage
-                    .write(
-                        &token::balance_key(&address, &owner),
-                        amount.try_to_vec().unwrap(),
-                    )
+                self.wl_storage
+                    .write(&token::balance_key(&address, &owner), amount)
                     .unwrap();
             }
         }
@@ -299,63 +300,49 @@ where
             }
 
             let addr = &validator.pos_data.address;
-            self.storage
-                .write(&Key::validity_predicate(addr), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(addr), vp_code)
                 .expect("Unable to write user VP");
             // Validator account key
             let pk_key = pk_key(addr);
-            self.storage
-                .write(
-                    &pk_key,
-                    validator
-                        .account_key
-                        .try_to_vec()
-                        .expect("encode public key"),
-                )
+            self.wl_storage
+                .write(&pk_key, &validator.account_key)
                 .expect("Unable to set genesis user public key");
             // Account balance (tokens no staked in PoS)
-            self.storage
+            self.wl_storage
                 .write(
-                    &token::balance_key(&self.storage.native_token, addr),
-                    validator
-                        .non_staked_balance
-                        .try_to_vec()
-                        .expect("encode token amount"),
+                    &token::balance_key(
+                        &self.wl_storage.storage.native_token,
+                        addr,
+                    ),
+                    validator.non_staked_balance,
                 )
                 .expect("Unable to set genesis balance");
-            self.storage
-                .write(
-                    &protocol_pk_key(addr),
-                    validator
-                        .protocol_key
-                        .try_to_vec()
-                        .expect("encode protocol public key"),
-                )
+            self.wl_storage
+                .write(&protocol_pk_key(addr), &validator.protocol_key)
                 .expect("Unable to set genesis user protocol public key");
 
-            self.storage
+            self.wl_storage
                 .write(
                     &dkg_session_keys::dkg_pk_key(addr),
-                    validator
-                        .dkg_public_key
-                        .try_to_vec()
-                        .expect("encode public DKG session key"),
+                    &validator.dkg_public_key,
                 )
                 .expect("Unable to set genesis user public DKG session key");
         }
 
         // PoS system depends on epoch being initialized
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         pos::init_genesis_storage(
-            &mut self.storage,
+            &mut self.wl_storage,
             &genesis.pos_params,
             genesis
                 .validators
-                .iter()
-                .map(|validator| &validator.pos_data),
+                .clone()
+                .into_iter()
+                .map(|validator| validator.pos_data),
             current_epoch,
         );
-        ibc::init_genesis_storage(&mut self.storage);
+        ibc::init_genesis_storage(&mut self.wl_storage.storage);
 
         // Set the initial validator set
         for validator in genesis.validators {
@@ -372,6 +359,11 @@ where
             );
             response.validators.push(abci_validator);
         }
+
+        self.wl_storage
+            .commit_genesis()
+            .expect("Must be able to commit genesis state");
+
         Ok(response)
     }
 }

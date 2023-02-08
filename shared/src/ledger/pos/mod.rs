@@ -2,15 +2,17 @@
 
 pub mod vp;
 
+pub use namada_core::ledger::storage_api;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+pub use namada_core::types::key::common;
+pub use namada_core::types::token;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::storage::*;
 pub use namada_proof_of_stake::types;
-use namada_proof_of_stake::PosBase;
 use rust_decimal::Decimal;
 pub use vp::PosVP;
 
-use crate::ledger::storage::{self as ledger_storage, Storage, StorageHasher};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Epoch;
 
@@ -32,16 +34,25 @@ pub fn into_tm_voting_power(
 }
 
 /// Initialize storage in the genesis block.
-pub fn init_genesis_storage<'a, DB, H>(
-    storage: &mut Storage<DB, H>,
-    params: &'a PosParams,
-    validators: impl Iterator<Item = &'a GenesisValidator> + Clone + 'a,
+pub fn init_genesis_storage<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: Epoch,
 ) where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    S: StorageRead + StorageWrite,
 {
-    storage
-        .init_genesis(params, validators, current_epoch)
-        .expect("Initialize PoS genesis storage")
+    namada_proof_of_stake::init_genesis(
+        storage,
+        params,
+        validators,
+        current_epoch,
+    )
+    .expect("Initialize PoS genesis storage");
 }
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type BondId = namada_proof_of_stake::types::BondId;
+
+/// Alias for a PoS type with the same name with concrete type parameters
+pub type GenesisValidator = namada_proof_of_stake::types::GenesisValidator;
