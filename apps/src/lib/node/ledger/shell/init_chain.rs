@@ -4,10 +4,13 @@ use std::hash::Hash;
 
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::ledger::parameters::storage::get_staked_ratio_key;
 use namada::ledger::parameters::Parameters;
-use namada::ledger::pos::into_tm_voting_power;
+use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
+use namada::types::token::total_supply_key;
+use rust_decimal::Decimal;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
@@ -225,6 +228,8 @@ where
         }
 
         // Initialize genesis implicit
+        // TODO: verify if we can get the total initial token supply from simply
+        // looping over the set of implicit accounts
         for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
         {
             let address: address::Address = (&public_key).into();
@@ -233,6 +238,7 @@ where
         }
 
         // Initialize genesis token accounts
+        let mut total_nam_balance = token::Amount::default();
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -267,6 +273,9 @@ where
                 .unwrap();
 
             for (owner, amount) in balances {
+                if address == staking_token_address() {
+                    total_nam_balance += amount;
+                }
                 self.wl_storage
                     .write(&token::balance_key(&address, &owner), amount)
                     .unwrap();
@@ -274,6 +283,7 @@ where
         }
 
         // Initialize genesis validator accounts
+        let mut total_staked_nam_tokens = token::Amount::default();
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -308,7 +318,12 @@ where
             self.wl_storage
                 .write(&pk_key, &validator.account_key)
                 .expect("Unable to set genesis user public key");
-            // Account balance (tokens no staked in PoS)
+
+            // Balances
+            total_staked_nam_tokens += validator.pos_data.tokens;
+            total_nam_balance +=
+                validator.pos_data.tokens + validator.non_staked_balance;
+            // Account balance (tokens not staked in PoS)
             self.wl_storage
                 .write(
                     &token::balance_key(
@@ -330,7 +345,9 @@ where
                 .expect("Unable to set genesis user public DKG session key");
         }
 
-        // PoS system depends on epoch being initialized
+        // PoS system depends on epoch being initialized. Write the total
+        // genesis staking token balance to storage after
+        // initialization.
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         pos::init_genesis_storage(
             &mut self.wl_storage,
@@ -342,6 +359,22 @@ where
                 .map(|validator| validator.pos_data),
             current_epoch,
         );
+        self.wl_storage
+            .write(
+                &total_supply_key(&staking_token_address()),
+                total_nam_balance,
+            )
+            .expect("unable to set total NAM balance in storage");
+
+        // Set the ratio of staked to total NAM tokens in the parameters storage
+        self.wl_storage
+            .write(
+                &get_staked_ratio_key(),
+                Decimal::from(total_staked_nam_tokens)
+                    / Decimal::from(total_nam_balance),
+            )
+            .expect("unable to set staked ratio of NAM in storage");
+
         ibc::init_genesis_storage(&mut self.wl_storage.storage);
 
         // Set the initial validator set
