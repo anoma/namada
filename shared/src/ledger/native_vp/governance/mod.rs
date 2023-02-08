@@ -68,6 +68,8 @@ where
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key(key, &native_token);
 
+            dbg!(&key, &key_type);
+
             let result = match (key_type, proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
                     self.is_valid_vote_key(proposal_id, key, verifiers)
@@ -107,6 +109,7 @@ where
                 _ => Ok(false),
             };
 
+            dbg!(&result);
             result.unwrap_or(false)
         });
         Ok(result)
@@ -644,6 +647,30 @@ where
         } else {
             Ok(false)
         }
+
+        // let validator_set_key = pos::validator_set_key();
+        // let pre_validator_set: pos::ValidatorSets =
+        //     self.ctx.pre().read(&validator_set_key)?.unwrap();
+
+        // let validator_set = pre_validator_set.get(epoch);
+
+        // match validator_set {
+        //     Some(validator_set) => {
+        //         let all_validators =
+        //             validator_set.active.union(&validator_set.inactive);
+
+        //         let is_voter_validator = all_validators
+        //             .into_iter()
+        //             .any(|validator| validator.address.eq(address));
+        //         let is_signer_validator = verifiers.contains(address);
+        //         let is_delegation_address = delegation_address.eq(address);
+
+        //         Ok(is_voter_validator
+        //             && is_signer_validator
+        //             && is_delegation_address)
+        //     }
+        //     None => Ok(false),
+        // }
     }
 
     /// Check if a vote is from a delegator
@@ -672,6 +699,12 @@ where
         } else {
             Ok(false)
         }
+
+        // if let Some(bonds) = bonds {
+        //     Ok(bonds.get(epoch).is_some() && verifiers.contains(address))
+        // } else {
+        //     Ok(false)
+        // }
     }
 }
 

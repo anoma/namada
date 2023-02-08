@@ -406,6 +406,29 @@ where
     namada_proof_of_stake::bonds_and_unbonds(ctx.wl_storage, source, validator)
 }
 
+// /// Get the total bond amount for the given bond ID (this may be delegation
+// or /// self-bond when `owner == validator`) at the given epoch, or the
+// current /// epoch when `None`.
+// fn bond_amount<D, H>(
+//     ctx: RequestCtx<'_, D, H>,
+//     owner: Address,
+//     validator: Address,
+//     epoch: Option<Epoch>,
+// ) -> storage_api::Result<token::Amount>
+// where
+//     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+//     H: 'static + StorageHasher + Sync,
+// {
+//     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+
+//     let bond_id = BondId {
+//         source: owner,
+//         validator,
+//     };
+//     // TODO update
+//     ctx.wl_storage.bond_amount(&bond_id, epoch)
+// }
+
 /// Find all the validator addresses to whom the given `owner` address has
 /// some delegation in any epoch
 fn delegation_validators<D, H>(

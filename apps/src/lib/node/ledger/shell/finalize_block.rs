@@ -13,7 +13,8 @@ use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
-    read_validator_stake, rewards_accumulator_handle,
+    read_validator_stake, rewards_accumulator_handle, update_total_deltas,
+    update_validator_deltas, update_validator_set,
     validator_commission_rate_handle, validator_rewards_products_handle,
     write_last_block_proposer_address,
 };
@@ -60,6 +61,12 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
+        println!(
+            "\nFINALIZE BLOCK {} - NUM TXS = {}",
+            self.wl_storage.storage.block.height + 1,
+            req.txs.len()
+        );
+
         // Reset the gas meter before we start
         self.gas_meter.reset();
 
@@ -79,6 +86,9 @@ where
             "Block height: {height}, epoch: {current_epoch}, new epoch: \
              {new_epoch}."
         );
+
+        println!("BYZANTINE VALIDATORS:");
+        dbg!(&self.byzantine_validators);
 
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
@@ -701,9 +711,14 @@ where
         // for the previous epoch
         //
         // TODO: think about changing the reward to Decimal
-        let mut reward_tokens_remaining = inflation;
-        let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
+        let mut total_reward_amount = 0_u64;
+        let mut new_rewards: HashMap<Address, (u64, Decimal, Decimal)> =
             HashMap::new();
+
+        // TODO: should this be pipeline relative to the current (new) epoch or
+        // the previous one from which these rewards are derived?
+        let _pipeline_epoch = current_epoch + params.pipeline_len;
+
         for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
             let (address, value) = acc?;
 
@@ -739,30 +754,52 @@ where
                 * (Decimal::ONE
                     + (Decimal::ONE - commission_rate) * Decimal::from(reward)
                         / stake);
-            new_rewards_products
-                .insert(address, (new_product, new_delegation_product));
-            reward_tokens_remaining -= reward;
+            new_rewards
+                .insert(address, (reward, new_product, new_delegation_product));
+            total_reward_amount += reward;
         }
-        for (
-            address,
-            (new_validator_reward_product, new_delegator_reward_product),
-        ) in new_rewards_products
+        // Write new rewards products to storage and update deltas
+        for (validator, (reward, new_validator_rp, new_delegator_rp)) in
+            new_rewards
         {
-            validator_rewards_products_handle(&address).insert(
+            validator_rewards_products_handle(&validator).insert(
                 &mut self.wl_storage,
                 last_epoch,
-                new_validator_reward_product,
+                new_validator_rp,
             )?;
-            delegator_rewards_products_handle(&address).insert(
+            delegator_rewards_products_handle(&validator).insert(
                 &mut self.wl_storage,
                 last_epoch,
-                new_delegator_reward_product,
+                new_delegator_rp,
+            )?;
+            update_validator_deltas(
+                &mut self.wl_storage,
+                &params,
+                &validator,
+                token::Change::from(reward),
+                current_epoch,
+                params.pipeline_len,
+            )?;
+            update_validator_set(
+                &mut self.wl_storage,
+                &params,
+                &validator,
+                token::Change::from(reward),
+                current_epoch,
             )?;
         }
+        update_total_deltas(
+            &mut self.wl_storage,
+            &params,
+            token::Change::from(total_reward_amount),
+            current_epoch,
+            params.pipeline_len,
+        )?;
 
         let staking_token = staking_token_address(&self.wl_storage);
 
         // Mint tokens to the PoS account for the last epoch's inflation
+        let reward_tokens_remaining = inflation - total_reward_amount;
         let pos_reward_tokens =
             Amount::from(inflation - reward_tokens_remaining);
         tracing::info!(

@@ -531,6 +531,7 @@ where
         let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
+            // dbg!(&key);
             let last_key_seg = key
                 .last()
                 .ok_or(ReadError::UnexpectedlyEmptyStorageKey)

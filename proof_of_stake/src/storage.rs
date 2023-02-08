@@ -22,6 +22,12 @@ const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
 const VALIDATOR_SELF_REWARDS_PRODUCT_KEY: &str = "validator_rewards_product";
 const VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY: &str =
     "delegation_rewards_product";
+
+const VALIDATOR_SELF_REWARDS_PRODUCT_QUEUE_KEY: &str =
+    "validator_rewards_product_queue";
+const VALIDATOR_DELEGATION_REWARDS_PRODUCT_QUEUE_KEY: &str =
+    "delegation_rewards_product_queue";
+
 const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str =
     "last_known_rewards_product_epoch";
 const SLASHES_PREFIX: &str = "slash";
@@ -196,6 +202,14 @@ pub fn is_validator_self_rewards_product_key(key: &Key) -> Option<&Address> {
     }
 }
 
+/// Storage key for validator's self rewards products queue (for applying
+/// rewards products at pipeline delay).
+pub fn validator_self_rewards_product_queue_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_SELF_REWARDS_PRODUCT_QUEUE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Storage key for validator's delegation rewards products.
 pub fn validator_delegation_rewards_product_key(validator: &Address) -> Key {
     validator_prefix(validator)
@@ -221,6 +235,14 @@ pub fn is_validator_delegation_rewards_product_key(
         }
         _ => None,
     }
+}
+
+/// Storage key for validator's delegation rewards products (for applying
+/// rewards products at pipeline delay)
+pub fn validator_delegation_rewards_product_queue_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_DELEGATION_REWARDS_PRODUCT_QUEUE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Storage key for validator's last known rewards product epoch.
