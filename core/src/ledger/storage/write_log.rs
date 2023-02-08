@@ -1,7 +1,7 @@
 //! Write log is temporary storage for modifications performed by a transaction.
 //! before they are committed to the ledger's storage.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
 use thiserror::Error;
@@ -76,11 +76,12 @@ pub struct WriteLog {
 #[derive(Debug)]
 pub struct PrefixIter {
     /// The concrete iterator for modifications sorted by storage keys
-    pub iter: std::vec::IntoIter<(storage::Key, StorageModification)>,
+    pub iter:
+        std::collections::btree_map::IntoIter<String, StorageModification>,
 }
 
 impl Iterator for PrefixIter {
-    type Item = (storage::Key, StorageModification);
+    type Item = (String, StorageModification);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -495,35 +496,41 @@ impl WriteLog {
     /// Iterate modifications prior to the current transaction, whose storage
     /// key matches the given prefix, sorted by their storage key.
     pub fn iter_prefix_pre(&self, prefix: &storage::Key) -> PrefixIter {
-        let mut matches = HashMap::new();
+        // let mut matches = BTreeMap::new();
+        let mut matches_str = BTreeMap::new();
         for (key, modification) in &self.block_write_log {
             if key.split_prefix(prefix).is_some() {
-                matches.insert(key.clone(), modification.clone());
+                // matches.insert(key.clone(), modification.clone());
+                matches_str.insert(key.to_string(), modification.clone());
             }
         }
-        let iter = matches
-            .into_iter()
-            .sorted_unstable_by_key(|(key, _val)| key.clone());
+
+        let iter = matches_str.into_iter();
+        // .sorted_unstable_by_key(|(key, _val)| key.clone());
         PrefixIter { iter }
     }
 
     /// Iterate modifications posterior of the current tx, whose storage key
     /// matches the given prefix, sorted by their storage key.
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
-        let mut matches = HashMap::new();
+        // let mut matches = BTreeMap::new();
+        let mut matches_str = BTreeMap::new();
+
         for (key, modification) in &self.block_write_log {
             if key.split_prefix(prefix).is_some() {
-                matches.insert(key.clone(), modification.clone());
+                // matches.insert(key.clone(), modification.clone());
+                matches_str.insert(key.to_string(), modification.clone());
             }
         }
         for (key, modification) in &self.tx_write_log {
             if key.split_prefix(prefix).is_some() {
-                matches.insert(key.clone(), modification.clone());
+                // matches.insert(key.clone(), modification.clone());
+                matches_str.insert(key.to_string(), modification.clone());
             }
         }
-        let iter = matches
-            .into_iter()
-            .sorted_unstable_by_key(|(key, _val)| key.clone());
+        // let iter = matches.into_iter();
+        let iter = matches_str.into_iter();
+        // .sorted_unstable_by_key(|(key, _val)| key.clone());
         PrefixIter { iter }
     }
 }
