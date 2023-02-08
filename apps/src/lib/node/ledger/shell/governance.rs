@@ -68,8 +68,9 @@ where
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)
                 .map_err(|msg| Error::BadProposal(id, msg.to_string()))?;
         let total_stake = VotePower::from(u64::from(total_stake));
-        let tally_result =
-            compute_tally(votes, total_stake, &proposal_type).result;
+        let tally_result = compute_tally(votes, total_stake, &proposal_type)
+            .map_err(|msg| Error::BadProposal(id, msg.to_string()))?
+            .result;
 
         // Execute proposal if succesful
         let transfer_address = match tally_result {
@@ -275,31 +276,6 @@ where
                 proposals_result.rejected.push(id);
 
                 slash_fund_address
-            }
-            TallyResult::Failed(msg) => {
-                tracing::error!(
-                    "Unexpectedly failed to tally proposal ID {id} with error \
-                     {msg}"
-                );
-                let proposal_event: Event = ProposalEvent::new(
-                    EventType::Proposal.to_string(),
-                    TallyResult::Failed(msg),
-                    id,
-                    false,
-                    false,
-                )
-                .into();
-                response.events.push(proposal_event);
-
-                let proposal_author_key = gov_storage::get_author_key(id);
-                shell
-                    .read_storage_key::<Address>(&proposal_author_key)
-                    .ok_or_else(|| {
-                        Error::BadProposal(
-                            id,
-                            "Invalid proposal author.".to_string(),
-                        )
-                    })?
             }
         };
 
