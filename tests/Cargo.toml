@@ -18,7 +18,7 @@ abciplus = [
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
-namada = {path = "../shared", default-features = false, features = ["testing"]}
+namada = {path = "../shared", default-features = false, features = ["testing", "namada-sdk"]}
 namada_vp_prelude = {path = "../vp_prelude", default-features = false}
 namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}

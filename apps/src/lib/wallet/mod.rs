@@ -193,7 +193,7 @@ pub fn add_genesis_addresses(
 
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
-    self::store::save(&wallet.store(), &wallet.store_dir())
+    self::store::save(wallet.store(), wallet.store_dir())
 }
 
 /// Load a wallet from the store file.

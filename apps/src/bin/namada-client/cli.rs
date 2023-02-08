@@ -6,7 +6,7 @@ use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
 use namada_apps::wallet::CliWalletUtils;
-use tendermint_rpc::{HttpClient, SubscriptionClient, WebSocketClient};
+use tendermint_rpc::HttpClient;
 
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
@@ -21,10 +21,11 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
-                    tx::submit_custom::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_custom::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
@@ -41,12 +42,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_transfer::<
-                        HttpClient,
-                        CliWalletUtils,
-                        _,
-                    >(
-                        &client, &mut ctx.wallet, &mut ctx.shielded, args
+                    tx::submit_transfer::<HttpClient, CliWalletUtils, _>(
+                        &client,
+                        &mut ctx.wallet,
+                        &mut ctx.shielded,
+                        args,
                     )
                     .await?;
                 }
@@ -55,10 +55,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_ibc_transfer::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_ibc_transfer::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 Sub::TxUpdateVp(TxUpdateVp(args)) => {
@@ -66,10 +67,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_update_vp::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(args)) => {
@@ -78,10 +80,11 @@ pub async fn main() -> Result<()> {
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
                     let dry_run = args.tx.dry_run;
-                    tx::submit_init_account::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_init_account::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                     if !dry_run {
                         namada_apps::wallet::save(&ctx.wallet)
@@ -98,30 +101,27 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_validator::<HttpClient>(
-                        &client, ctx, args,
-                    )
-                    .await;
+                    tx::submit_init_validator::<HttpClient>(&client, ctx, args)
+                        .await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_init_proposal::<HttpClient>(
-                        &client, ctx, args,
-                    )
-                    .await?;
+                    tx::submit_init_proposal::<HttpClient>(&client, ctx, args)
+                        .await?;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     let client =
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_vote_proposal::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_vote_proposal::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 Sub::TxRevealPk(TxRevealPk(args)) => {
@@ -129,10 +129,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_reveal_pk::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_reveal_pk::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 Sub::Bond(Bond(args)) => {
@@ -152,10 +153,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_unbond::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_unbond::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 Sub::Withdraw(Withdraw(args)) => {
@@ -163,10 +165,11 @@ pub async fn main() -> Result<()> {
                         HttpClient::new(args.tx.ledger_address.clone())
                             .unwrap();
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_withdraw::<
-                        HttpClient,
-                        CliWalletUtils,
-                    >(&client, &mut ctx.wallet, args)
+                    tx::submit_withdraw::<HttpClient, CliWalletUtils>(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
                     .await?;
                 }
                 // Ledger queries

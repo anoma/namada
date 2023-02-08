@@ -1798,7 +1798,6 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
-            let native_token = ();
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
                 tx,
@@ -1807,7 +1806,7 @@ pub mod args {
                 token,
                 sub_prefix,
                 amount,
-                native_token,
+                native_token: (),
                 tx_code_path,
             }
         }
@@ -1915,7 +1914,7 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
-                .unwrap_or(PathBuf::from(VP_USER_WASM));
+                .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
@@ -1976,7 +1975,7 @@ pub mod args {
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
-                .unwrap_or(PathBuf::from(VP_USER_WASM));
+                .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
             Self {
@@ -2096,14 +2095,13 @@ pub mod args {
             let validator = VALIDATOR.parse(matches);
             let amount = AMOUNT.parse(matches);
             let source = SOURCE_OPT.parse(matches);
-            let native_token = ();
             let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
                 tx,
                 validator,
                 amount,
                 source,
-                native_token,
+                native_token: (),
                 tx_code_path,
             }
         }
@@ -2194,14 +2192,13 @@ pub mod args {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
-            let native_token = ();
             let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
 
             Self {
                 tx,
                 proposal_data,
                 offline,
-                native_token,
+                native_token: (),
                 tx_code_path,
             }
         }

@@ -1,3 +1,4 @@
+//! Functions to sign transactions
 use borsh::BorshSerialize;
 use namada_core::types::address::{Address, ImplicitAddress};
 
@@ -61,13 +62,13 @@ pub async fn find_keypair<
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 pub enum TxSigningKey {
-    // Do not sign any transaction
+    /// Do not sign any transaction
     None,
-    // Obtain the actual keypair from wallet and use that to sign
+    /// Obtain the actual keypair from wallet and use that to sign
     WalletKeypair(common::SecretKey),
-    // Obtain the keypair corresponding to given address from wallet and sign
+    /// Obtain the keypair corresponding to given address from wallet and sign
     WalletAddress(Address),
-    // Directly use the given secret key to sign transactions
+    /// Directly use the given secret key to sign transactions
     SecretKey(common::SecretKey),
 }
 

@@ -1,3 +1,4 @@
+//! Structures encapsulating SDK arguments
 use rust_decimal::Decimal;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
@@ -142,16 +143,27 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
     pub tx: Tx<C>,
+    /// Source
     pub source: C::Address,
+    /// Signature scheme
     pub scheme: SchemeType,
+    /// Account key
     pub account_key: Option<C::PublicKey>,
+    /// Consensus key
     pub consensus_key: Option<C::Keypair>,
+    /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
+    /// Commission rate
     pub commission_rate: Decimal,
+    /// Maximum commission rate change
     pub max_commission_rate_change: Decimal,
+    /// Path to the VP WASM code file
     pub validator_vp_code_path: C::Data,
+    /// Path to the TX WASM code file
     pub tx_code_path: C::Data,
+    /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
 
@@ -202,6 +214,7 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: C::Data,
 }
 
+/// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
@@ -210,6 +223,7 @@ pub struct RevealPk<C: NamadaTypes = SdkTypes> {
     pub public_key: C::PublicKey,
 }
 
+/// Query proposal
 #[derive(Clone, Debug)]
 pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
     /// Common query args
@@ -218,6 +232,7 @@ pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
     pub proposal_id: Option<u64>,
 }
 
+/// Query protocol parameters
 #[derive(Clone, Debug)]
 pub struct QueryProtocolParameters<C: NamadaTypes = SdkTypes> {
     /// Common query args
@@ -412,49 +427,64 @@ pub struct KeyAndAddressGen {
 /// Wallet key lookup arguments
 #[derive(Clone, Debug)]
 pub struct KeyFind {
+    /// Public key to lookup keypair with
     pub public_key: Option<common::PublicKey>,
+    /// Key alias to lookup keypair with
     pub alias: Option<String>,
+    /// Public key hash to lookup keypair with
     pub value: Option<String>,
+    /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
 
 /// Wallet find shielded address or key arguments
 #[derive(Clone, Debug)]
 pub struct AddrKeyFind {
+    /// Address/key alias
     pub alias: String,
+    /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
 
 /// Wallet list shielded keys arguments
 #[derive(Clone, Debug)]
 pub struct MaspKeysList {
+    /// Don't decrypt spending keys
     pub decrypt: bool,
+    /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
 
 /// Wallet list keys arguments
 #[derive(Clone, Debug)]
 pub struct KeyList {
+    /// Don't decrypt keypairs
     pub decrypt: bool,
+    /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
 
 /// Wallet key export arguments
 #[derive(Clone, Debug)]
 pub struct KeyExport {
+    /// Key alias
     pub alias: String,
 }
 
 /// Wallet address lookup arguments
 #[derive(Clone, Debug)]
 pub struct AddressOrAliasFind {
+    /// Alias to find
     pub alias: Option<String>,
+    /// Address to find
     pub address: Option<Address>,
 }
 
 /// Wallet address add arguments
 #[derive(Clone, Debug)]
 pub struct AddressAdd {
+    /// Address alias
     pub alias: String,
+    /// Address to add
     pub address: Address,
 }

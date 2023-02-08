@@ -569,9 +569,9 @@ pub async fn submit_vote_proposal<
 
     if args.offline {
         let signer = signer;
-        let proposal_file_path = args
-            .proposal_data
-            .ok_or(tx::Error::Other(format!("Proposal file should exist.")))?;
+        let proposal_file_path = args.proposal_data.ok_or(tx::Error::Other(
+            "Proposal file should exist.".to_string(),
+        ))?;
         let file = File::open(&proposal_file_path).expect("File must exist.");
 
         let proposal: OfflineProposal =
@@ -584,7 +584,7 @@ pub async fn submit_vote_proposal<
             safe_exit(1)
         }
 
-        let signing_key = find_keypair::<C, U>(client, wallet, &signer).await?;
+        let signing_key = find_keypair::<C, U>(client, wallet, signer).await?;
         let offline_vote = OfflineVote::new(
             &proposal,
             args.vote,
@@ -618,7 +618,7 @@ pub async fn submit_vote_proposal<
         let proposal_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let proposal_start_epoch = rpc::query_storage_value::<C, Epoch>(
-            &client,
+            client,
             &proposal_start_epoch_key,
         )
         .await;
@@ -686,11 +686,7 @@ pub async fn submit_vote_proposal<
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force {
-                    safe_exit(1)
-                } else {
-                    Ok(())
-                }
+                if !args.tx.force { safe_exit(1) } else { Ok(()) }
             }
         }
     }
@@ -848,7 +844,7 @@ async fn process_tx<
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-async fn save_initialized_accounts<U: WalletUtils>(
+pub async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,

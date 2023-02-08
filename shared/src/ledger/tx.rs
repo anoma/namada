@@ -1,3 +1,4 @@
+//! SDK functions to construct different types of transactions
 use std::borrow::Cow;
 
 use borsh::BorshSerialize;
@@ -202,6 +203,7 @@ pub async fn process_tx<
     }
 }
 
+/// Submit transaction to reveal public key
 pub async fn submit_reveal_pk<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -224,6 +226,7 @@ pub async fn submit_reveal_pk<
     }
 }
 
+/// Submit transaction to rveeal public key if needed
 pub async fn reveal_pk_if_needed<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -244,6 +247,7 @@ pub async fn reveal_pk_if_needed<
     }
 }
 
+/// Check if the public key for the given address has been revealed
 pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     addr: &Address,
@@ -251,6 +255,7 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
     rpc::get_public_key(client, addr).await.is_some()
 }
 
+/// Submit transaction to reveal the given public key
 pub async fn submit_reveal_pk_aux<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -271,7 +276,7 @@ pub async fn submit_reveal_pk_aux<
         Ok(signing_key.clone())
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair::<C, U>(client, wallet, &signer).await
+        find_keypair::<C, U>(client, wallet, signer).await
     } else {
         find_keypair::<C, U>(client, wallet, &addr).await
     }?;
@@ -298,7 +303,7 @@ pub async fn submit_reveal_pk_aux<
         match result {
             Right(Err(err)) => Err(err),
             Left(Err(err)) => Err(err),
-            _ => Ok({}),
+            _ => Ok(()),
         }
     }
 }
@@ -465,6 +470,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
     }
 }
 
+/// Submit validator comission rate change
 pub async fn submit_validator_commission_change<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -498,12 +504,12 @@ pub async fn submit_validator_commission_change<
         let max_commission_rate_change_key =
             ledger::pos::validator_max_commission_rate_change_key(&validator);
         let commission_rates = rpc::query_storage_value::<C, CommissionRates>(
-            &client,
+            client,
             &commission_rate_key,
         )
         .await;
         let max_change = rpc::query_storage_value::<C, Decimal>(
-            &client,
+            client,
             &max_commission_rate_change_key,
         )
         .await;
@@ -538,13 +544,11 @@ pub async fn submit_validator_commission_change<
             }
         }?;
         Ok(())
+    } else if args.tx.force {
+        eprintln!("The given address {validator} is not a validator.");
+        Ok(())
     } else {
-        if args.tx.force {
-            eprintln!("The given address {validator} is not a validator.");
-            Ok(())
-        } else {
-            Err(Error::InvalidValidatorAddress(validator))
-        }
+        Err(Error::InvalidValidatorAddress(validator))
     }?;
 
     let data = pos::CommissionChange {
@@ -566,6 +570,7 @@ pub async fn submit_validator_commission_change<
     Ok(())
 }
 
+/// Submit transaction to withdraw an unbond
 pub async fn submit_withdraw<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -591,7 +596,7 @@ pub async fn submit_withdraw<
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
     let unbonds =
-        rpc::query_storage_value::<C, Unbonds>(&client, &bond_key).await;
+        rpc::query_storage_value::<C, Unbonds>(client, &bond_key).await;
     match unbonds {
         Some(unbonds) => {
             let mut unbonded_amount: token::Amount = 0.into();
@@ -641,6 +646,7 @@ pub async fn submit_withdraw<
     Ok(())
 }
 
+/// Submit a transaction to unbond
 pub async fn submit_unbond<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -662,7 +668,7 @@ pub async fn submit_unbond<
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::bond_key(&bond_id);
-    let bonds = rpc::query_storage_value::<C, Bonds>(&client, &bond_key).await;
+    let bonds = rpc::query_storage_value::<C, Bonds>(client, &bond_key).await;
     match bonds {
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
@@ -721,6 +727,7 @@ pub async fn submit_unbond<
     Ok(())
 }
 
+/// Submit a transaction to bond
 pub async fn submit_bond<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -808,6 +815,7 @@ pub async fn is_safe_voting_window<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
+/// Submit an IBC transfer
 pub async fn submit_ibc_transfer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -903,6 +911,7 @@ pub async fn submit_ibc_transfer<
     Ok(())
 }
 
+/// Submit an ordinary transfer
 pub async fn submit_transfer<
     C: crate::ledger::queries::Client + Sync,
     V: WalletUtils,
@@ -915,7 +924,7 @@ pub async fn submit_transfer<
 ) -> Result<(), Error> {
     // Check that the source address exists on chain
     let force = args.tx.force;
-    let transfer_source = args.source;
+    let transfer_source = args.source.clone();
     let source = source_exists_or_err(
         transfer_source.effective_address(),
         force,
@@ -939,17 +948,17 @@ pub async fn submit_transfer<
     let (sub_prefix, balance_key) = match &args.sub_prefix {
         Some(sub_prefix) => {
             let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            let prefix = token::multitoken_balance_prefix(token, &sub_prefix);
             (
                 Some(sub_prefix),
                 token::multitoken_balance_key(&prefix, &source),
             )
         }
-        None => (None, token::balance_key(&token, &source)),
+        None => (None, token::balance_key(token, &source)),
     };
 
     check_balance_too_low_err(
-        &token,
+        token,
         &source,
         args.amount,
         balance_key,
@@ -958,7 +967,7 @@ pub async fn submit_transfer<
     )
     .await?;
 
-    let tx_code = args.tx_code_path;
+    let tx_code = args.tx_code_path.clone();
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -999,16 +1008,7 @@ pub async fn submit_transfer<
     };
 
     let stx_result = shielded
-        .gen_shielded_transfer(
-            client,
-            transfer_source,
-            transfer_target,
-            args.amount,
-            args.token,
-            args.tx.fee_amount,
-            args.tx.fee_token.clone(),
-            shielded_gas,
-        )
+        .gen_shielded_transfer(client, args.clone(), shielded_gas)
         .await;
     let shielded = match stx_result {
         Ok(stx) => Ok(stx.map(|x| x.0)),
@@ -1042,6 +1042,7 @@ pub async fn submit_transfer<
     Ok(())
 }
 
+/// Submit a transaction to initialize an account
 pub async fn submit_init_account<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -1077,6 +1078,7 @@ pub async fn submit_init_account<
     Ok(())
 }
 
+/// Submit a transaction to update a VP
 pub async fn submit_update_vp<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -1157,6 +1159,7 @@ pub async fn submit_update_vp<
     Ok(())
 }
 
+/// Submit a custom transaction
 pub async fn submit_custom<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -1321,7 +1324,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     force: bool,
     client: &C,
 ) -> Result<(), Error> {
-    match rpc::query_storage_value::<C, token::Amount>(&client, &balance_key)
+    match rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
         .await
     {
         Some(balance) => {
@@ -1364,7 +1367,7 @@ fn validate_untrusted_code_err(
     vp_code: &Vec<u8>,
     force: bool,
 ) -> Result<(), Error> {
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+    if let Err(err) = vm::validate_untrusted_wasm(vp_code) {
         if force {
             eprintln!("Validity predicate code validation failed with {}", err);
             Ok(())
