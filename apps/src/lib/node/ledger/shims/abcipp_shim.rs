@@ -5,9 +5,14 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada::proof_of_stake::{
+    find_validator_by_raw_hash, write_current_block_proposer_address,
+};
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
+#[cfg(not(feature = "abcipp"))]
+use namada::types::key::tm_raw_hash_to_string;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
@@ -90,18 +95,49 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => self
-                    .service
-                    .call(Request::ProcessProposal(proposal))
-                    .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::ProcessProposal(resp) => {
-                            Ok(Resp::ProcessProposal((&resp).into()))
+                Req::ProcessProposal(proposal) => {
+                    #[cfg(not(feature = "abcipp"))]
+                    {
+                        println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
+                        if !proposal.proposer_address.is_empty() {
+                            let tm_raw_hash_string = tm_raw_hash_to_string(
+                                proposal.proposer_address.clone(),
+                            );
+                            let native_proposer_address =
+                                find_validator_by_raw_hash(
+                                    &self.service.wl_storage,
+                                    tm_raw_hash_string,
+                                )
+                                .unwrap()
+                                .expect(
+                                    "Unable to find native validator address \
+                                     of block proposer from tendermint raw \
+                                     hash",
+                                );
+                            println!(
+                                "BLOCK PROPOSER (PROCESSPROPOSAL): {}",
+                                native_proposer_address
+                            );
+                            write_current_block_proposer_address(
+                                &mut self.service.wl_storage,
+                                native_proposer_address,
+                            )
+                            .unwrap();
                         }
-                        _ => unreachable!(),
-                    }),
+                    }
+                    self.service
+                        .call(Request::ProcessProposal(proposal))
+                        .map_err(Error::from)
+                        .and_then(|res| match res {
+                            Response::ProcessProposal(resp) => {
+                                Ok(Resp::ProcessProposal((&resp).into()))
+                            }
+                            _ => unreachable!(),
+                        })
+                }
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
+                    println!("RECEIVED REQUEST FINALIZEBLOCK");
                     let unprocessed_txs = block.txs.clone();
                     let processing_results =
                         self.service.process_txs(&block.txs);
@@ -126,17 +162,20 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
+                    println!("RECEIVED REQUEST BEGINBLOCK");
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::DeliverTx(tx) => {
+                    println!("RECEIVED REQUEST DELIVERTX");
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
+                    println!("RECEIVED REQUEST ENDBLOCK");
                     let processing_results =
                         self.service.process_txs(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
