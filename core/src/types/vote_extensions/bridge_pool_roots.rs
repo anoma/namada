@@ -41,7 +41,7 @@ pub struct BridgePoolRootVext {
     /// the appropriate validator set to verify signatures
     pub block_height: BlockHeight,
     /// The actual signature being submitted.
-    /// This is a signature over KeccakHash(eth_header || root || nonce).
+    /// This is a signature over `keccak(eth_header || keccak(root || nonce))`.
     pub sig: Signature,
 }
 

@@ -6,13 +6,16 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{env, time};
 
+use borsh::BorshDeserialize;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
+use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
 
@@ -42,6 +45,40 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
     })?;
     println!("Found {}", address);
     Ok(address)
+}
+
+/// Find the balance of specific token for an account.
+pub fn find_balance(
+    test: &Test,
+    node: &Who,
+    token: &Address,
+    owner: &Address,
+) -> Result<token::Amount> {
+    let ledger_address = get_actor_rpc(test, node);
+    let balance_key = token::balance_key(token, owner);
+    let mut bytes = run!(
+        test,
+        Bin::Client,
+        &[
+            "query-bytes",
+            "--storage-key",
+            &balance_key.to_string(),
+            "--ledger-address",
+            &ledger_address,
+        ],
+        Some(10)
+    )?;
+    let (_, matched) = bytes.exp_regex("Found data: 0x.*")?;
+    let data_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1[2..]
+        .to_string();
+    let amount =
+        token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
+    bytes.assert_success();
+    Ok(amount)
 }
 
 /// Find the address of the node's RPC endpoint.

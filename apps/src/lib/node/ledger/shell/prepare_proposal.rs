@@ -489,7 +489,7 @@ mod test_prepare_proposal {
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
     use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
-    use namada::proto::{SignableEthBytes, Signed, SignedTxData};
+    use namada::proto::{SignableEthMessage, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -595,7 +595,7 @@ mod test_prepare_proposal {
 
         let bp_root = {
             let to_sign = get_bp_bytes_to_sign();
-            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+            let sig = Signed::<_, SignableEthMessage>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -875,8 +875,7 @@ mod test_prepare_proposal {
 
         let to_sign = get_bp_bytes_to_sign();
         let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
-        let sig =
-            Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig;
+        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
         let bp_vext = ProtocolTxType::BridgePoolVext(
             bridge_pool_roots::Vext {
                 block_height: shell.storage.last_height,
@@ -962,7 +961,7 @@ mod test_prepare_proposal {
         };
         let bp_root = {
             let to_sign = get_bp_bytes_to_sign();
-            let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+            let sig = Signed::<_, SignableEthMessage>::new(
                 shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                 to_sign,
             )
@@ -1143,7 +1142,7 @@ mod test_prepare_proposal {
         {
             let bp_root = {
                 let to_sign = get_bp_bytes_to_sign();
-                let sig = Signed::<Vec<u8>, SignableEthBytes>::new(
+                let sig = Signed::<_, SignableEthMessage>::new(
                     shell.mode.get_eth_bridge_keypair().expect("Test failed"),
                     to_sign,
                 )

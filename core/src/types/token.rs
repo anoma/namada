@@ -88,6 +88,13 @@ impl Amount {
             .checked_add(amount.micro)
             .map(|micro| Self { micro })
     }
+
+    /// Checked subtraction on amounts
+    pub fn checked_sub(&self, amount: &Amount) -> Option<Self> {
+        self.micro
+            .checked_sub(amount.micro)
+            .map(|micro| Self { micro })
+    }
 }
 
 impl serde::Serialize for Amount {

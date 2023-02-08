@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ethabi::Token;
 use thiserror::Error;
-use tiny_keccak::{Hasher, Keccak};
+pub use tiny_keccak::{Hasher, Keccak};
 
 use crate::types::eth_abi::Encode;
 use crate::types::hash::{Hash, HASH_LENGTH};
@@ -100,11 +100,11 @@ impl AsRef<[u8]> for KeccakHash {
 }
 
 /// Hash bytes using Keccak
-pub fn keccak_hash(bytes: &[u8]) -> KeccakHash {
+pub fn keccak_hash<T: AsRef<[u8]>>(bytes: T) -> KeccakHash {
     let mut output = [0; 32];
 
     let mut hasher = Keccak::v256();
-    hasher.update(bytes);
+    hasher.update(bytes.as_ref());
     hasher.finalize(&mut output);
 
     KeccakHash(output)

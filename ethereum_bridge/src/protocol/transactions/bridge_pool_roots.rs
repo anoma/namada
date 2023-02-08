@@ -172,10 +172,10 @@ mod test_apply_bp_roots_to_storage {
         get_key_from_hash, get_nonce_key,
     };
     use namada_core::ledger::storage::testing::TestStorage;
-    use namada_core::proto::{SignableEthBytes, Signed};
+    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
     use namada_core::types::ethereum_events::Uint;
-    use namada_core::types::keccak::KeccakHash;
+    use namada_core::types::keccak::{keccak_hash, KeccakHash};
     use namada_core::types::storage::Key;
     use namada_core::types::vote_extensions::bridge_pool_roots;
 
@@ -247,16 +247,13 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol);
         let TxResult { changed_keys, .. } =
@@ -271,7 +268,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[2].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[2]].protocol);
 
@@ -297,16 +294,13 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let mut vexts: MultiSignedVext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol)
         .into();
@@ -314,7 +308,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
         vexts.insert(vext);
@@ -341,16 +335,13 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -359,7 +350,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
         let TxResult { changed_keys, .. } =
@@ -388,7 +379,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
             BridgePoolRootProof::new((root, nonce)),
         ));
@@ -397,11 +388,8 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -420,7 +408,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -446,7 +434,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
@@ -456,11 +444,8 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -480,7 +465,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -507,7 +492,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
@@ -517,11 +502,8 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -542,7 +524,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
         _ = apply_derived_tx(&mut storage, vext.into()).expect("Test failed");
@@ -573,7 +555,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let mut expected =
             BridgePoolRoot(BridgePoolRootProof::new((root, nonce)));
@@ -582,7 +564,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         };
         expected.0.attach_signature(
             storage
@@ -620,7 +602,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = storage.get_bridge_pool_root();
         let nonce = storage.get_bridge_pool_nonce();
-        let to_sign = [root.0, nonce.clone().to_bytes()].concat();
+        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
 
         assert!(
             storage
@@ -634,11 +616,8 @@ mod test_apply_bp_roots_to_storage {
         let mut vexts: MultiSignedVext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(
-                hot_key,
-                to_sign.clone(),
-            )
-            .sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign.clone())
+                .sig,
         }
         .sign(&keys[&validators[0]].protocol)
         .into();
@@ -647,7 +626,7 @@ mod test_apply_bp_roots_to_storage {
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[1].clone(),
             block_height: 100.into(),
-            sig: Signed::<Vec<u8>, SignableEthBytes>::new(hot_key, to_sign).sig,
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
 
