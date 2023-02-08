@@ -341,7 +341,11 @@ pub fn compute_tally(
                         .into_iter()
                         .max_by(|a, b| a.1.cmp(&b.1))
                         .map(|(vote, _)| vote.to_owned())
-                        .unwrap(); // Cannot be None at this point
+                        .ok_or_else(|| {
+                            Error::Tally(
+                                "Missing expected elected council".to_string(),
+                            )
+                        })?;
 
                     Ok(ProposalResult {
                         result: TallyResult::Passed(Tally::PGFCouncil(council)),
