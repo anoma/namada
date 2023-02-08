@@ -219,3 +219,207 @@ where
 
     Ok(proposals_result)
 }
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;    
+    use std::collections::HashMap;
+
+    use eyre::Result;
+    use namada::ledger::events::EventLevel;
+    use namada::ledger::native_vp::governance::utils::{self, Votes};
+    use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::btree_set::BTreeSetShims;
+    use namada::proof_of_stake::read_consensus_validator_set_addresses;
+
+    use super::*;
+
+    /// Tests that if no governance proposals are present in
+    /// `shell.proposal_data`, then no proposals are executed.
+    #[test]
+    fn test_no_governance_proposals() -> Result<()> {
+        let (mut shell, _) = test_utils::setup();
+
+        assert!(shell.proposal_data.is_empty());
+
+        let mut resp = shim::response::FinalizeBlock::default();
+
+        let proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+
+        assert!(
+            shell.proposal_data.is_empty(),
+            "shell.proposal_data should always be empty after a \
+             `execute_governance_proposals` call"
+        );
+        assert!(proposals_result.passed.is_empty());
+        assert!(proposals_result.rejected.is_empty());
+        assert!(resp.events.is_empty());
+        // TODO: also check expected key changes in `shell.storage` (for this
+        // test, that should be no keys changed?)
+
+        Ok(())
+    }
+
+    #[test]
+    /// Tests that a governance proposal that ends without any votes is
+    /// rejected.
+    fn test_reject_single_governance_proposal() -> Result<()> {
+        let (mut shell, _) = test_utils::setup();
+
+        // we don't bother setting up the shell to be at the right epoch for
+        // this test
+        // TODO: maybe commit blocks up here in `TestShell` up until just before
+        // the first block of Epoch(9), to be more realistic? As governance
+        // proposals should only happen at epoch transitions
+
+        // set up validators in storage (no delegations yet)
+        utils::testing::setup_storage_with_validators(
+            &mut shell.wl_storage.storage,
+            HashMap::from([(
+                address::testing::established_address_1(),
+                token::Amount::from(10_000_000),
+            )]),
+        );
+
+        // set up a proposal in storage
+        // proposals must be in sequence starting from one (or zero?)
+        let proposal_id = 1;
+
+        let proposal_funds = token::Amount::from(100_000_000);
+        let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
+        StorageWrite::write(
+            &mut shell.wl_storage.storage,
+            &proposal_funds_key,
+            proposal_funds,
+        )?;
+
+        let proposal_end_epoch = Epoch(0);
+        let proposal_end_epoch_key =
+            gov_storage::get_voting_end_epoch_key(proposal_id);
+        StorageWrite::write(
+            &mut shell.wl_storage.storage,
+            &proposal_end_epoch_key,
+            proposal_end_epoch,
+        )?;
+
+        // TODO: more keys need to be set up in storage for this proposal to
+        // be realistic - see <https://github.com/anoma/namada/blob/main/tx_prelude/src/governance.rs#L13-L66>
+
+        shell.proposal_data = HashSet::from([proposal_id]);
+
+        let mut resp = shim::response::FinalizeBlock::default();
+
+        // TODO: this is failing because empty votes is accepted?
+        let proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+
+        assert!(
+            shell.proposal_data.is_empty(),
+            "shell.proposal_data should always be empty after a \
+             `execute_governance_proposals` call"
+        );
+        assert!(proposals_result.passed.is_empty());
+        assert_eq!(proposals_result.rejected, vec![proposal_id]);
+        assert_eq!(
+            resp.events,
+            vec![Event {
+                event_type: EventType::Proposal,
+                level: EventLevel::Block,
+                attributes: HashMap::from([
+                    ("proposal_id".to_string(), proposal_id.to_string()),
+                    (
+                        "has_proposal_code".to_string(),
+                        (true as u64).to_string()
+                    ),
+                    (
+                        "tally_result".to_string(),
+                        TallyResult::Rejected.to_string()
+                    ),
+                    (
+                        "proposal_code_exit_status".to_string(),
+                        (true as u64).to_string()
+                    ),
+                ])
+            }]
+        );
+        // TODO: also check expected key changes in `shell.storage`
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_compute_tally_rejects_empty_votes() {
+        let (shell, _) = test_utils::setup();
+        let epoch = Epoch::default();
+
+        let votes = Votes {
+            yay_validators: HashMap::default(),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.wl_storage, epoch, votes);
+
+        assert_matches!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_compute_tally_accepts_enough_yay_votes() {
+        let (shell, _) = test_utils::setup();
+        let epoch = Epoch::default();
+
+        let mut validator_set = shell
+            .wl_storage
+            .storage
+            .read_validator_set()
+            .get(epoch)
+            .unwrap()
+            .to_owned()
+            .active;
+        println!("active validators = {:#?}", validator_set);
+
+        let val1 = validator_set.pop_first_shim().unwrap();
+        let val2 = validator_set.pop_first_shim().unwrap();
+
+        let votes = Votes {
+            yay_validators: HashMap::from([
+                (val1.address, val1.bonded_stake.into()),
+                (val2.address, val2.bonded_stake.into()),
+            ]),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.wl_storage, epoch, votes);
+
+        assert_matches!(result, Ok(true));
+    }
+
+    #[test]
+    fn test_compute_tally_rejects_not_enough_yay_votes() {
+        let (shell, _) = test_utils::setup();
+        let epoch = Epoch::default();
+
+        let mut validator_set = read_consensus_validator_set_addresses(
+            &shell.wl_storage, epoch
+        );
+            
+        println!("active validators = {:#?}", validator_set);
+
+        let val1 = validator_set.pop_first_shim().unwrap();
+
+        let votes = Votes {
+            yay_validators: HashMap::from([(
+                val1.address,
+                val1.bonded_stake.into(),
+            )]),
+            yay_delegators: HashMap::default(),
+            nay_delegators: HashMap::default(),
+        };
+
+        let result = compute_tally(&shell.wl_storage, epoch, votes);
+
+        assert_matches!(result, Ok(false));
+    }
+}
