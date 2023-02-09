@@ -55,13 +55,9 @@ struct AbiBridgePoolProof {
 }
 
 /// Construct a proof that a set of transfers are in the bridge pool.
-pub async fn construct_bridge_pool_proof(
-    args: args::BridgePoolProof,
-) {
+pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let data = (args.transfers, args.relayer)
-        .try_to_vec()
-        .unwrap();
+    let data = (args.transfers, args.relayer).try_to_vec().unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
@@ -78,9 +74,8 @@ pub async fn construct_bridge_pool_proof(
                 serde_json::to_string(&abi_encoded_proof).unwrap()
             );
         }
-        Err(e) => println!("Encountered error: {}", e.to_string())
+        Err(e) => println!("Encountered error: {}", e),
     }
-
 }
 
 /// A json serializable representation of the Ethereum

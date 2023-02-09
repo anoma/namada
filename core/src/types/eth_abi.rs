@@ -127,8 +127,6 @@ mod tests {
     use data_encoding::HEXLOWER;
     use ethabi::ethereum_types::U256;
     use tiny_keccak::{Hasher, Keccak};
-    use crate::types::address::Address;
-    use crate::types::eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 
     use super::*;
     use crate::types::ethereum_events::EthAddress;
@@ -198,7 +196,7 @@ mod tests {
                 EthAddress::from_str(
                     "0x241D37B7Cf5233b3b0b204321420A86e8f7bfdb5",
                 )
-                    .expect("Test failed"),
+                .expect("Test failed"),
             ],
             voting_powers: vec![8828299.into()],
             epoch: 0.into(),
@@ -212,25 +210,5 @@ mod tests {
         241d37b7cf5233b3b0b204321420a86e8f7bfdb50000000000000000000000000000000000000000000000000000\
         000000000001000000000000000000000000000000000000000000000000000000000086b58b";
         assert_eq!(expected, encoded);
-    }
-
-    #[test]
-    fn test_abi_encode_pending_transfer() {
-        let transfer = PendingTransfer {
-            transfer: TransferToEthereum {
-                asset: EthAddress::from_str("0x3949c97925e5Aa13e34ddb18EAbf0B70ABB0C7d4")
-                    .expect("Test failed"),
-                recipient: EthAddress::from_str("0x3949c97925e5Aa13e34ddb18EAbf0B70ABB0C7d4")
-                    .expect("Test failed"),
-                sender: Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
-                    .expect("Test failed"),
-                amount: 76.into(),
-            },
-            gas_fee: GasFee {
-                amount: Default::default(),
-                payer: Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
-                    .expect("Test failed")
-            },
-        };
     }
 }

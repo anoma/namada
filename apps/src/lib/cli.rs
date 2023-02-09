@@ -2139,9 +2139,15 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(HASH_LIST.def().about(
-                "List of Keccak hashes of transfers in the bridge pool.",
-            )).arg(RELAYER.def().about("The rewards address for relaying this proof."))
+            app.add_args::<Query>()
+                .arg(HASH_LIST.def().about(
+                    "List of Keccak hashes of transfers in the bridge pool.",
+                ))
+                .arg(
+                    RELAYER
+                        .def()
+                        .about("The rewards address for relaying this proof."),
+                )
         }
     }
 

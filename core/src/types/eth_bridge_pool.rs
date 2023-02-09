@@ -67,6 +67,19 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
+impl From<PendingTransfer> for ethbridge_structs::Erc20Transfer {
+    fn from(pending: PendingTransfer) -> Self {
+        Self {
+            from: pending.transfer.asset.0.into(),
+            to: pending.transfer.recipient.0.into(),
+            amount: u64::from(pending.transfer.amount).into(),
+            fee_from: pending.gas_fee.payer.to_string(),
+            fee: u64::from(pending.gas_fee.amount).into(),
+            sender: pending.transfer.sender.to_string(),
+        }
+    }
+}
+
 impl Encode<7> for PendingTransfer {
     fn tokenize(&self) -> [Token; 7] {
         // TODO: This version should be looked up from storage

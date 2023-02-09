@@ -11,9 +11,9 @@ use namada::types::address::wnam;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_apps::wallet::defaults::bertha_address;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
-use namada_apps::wallet::defaults::bertha_address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_tx_prelude::ethereum_events::TransferToNamada;
 

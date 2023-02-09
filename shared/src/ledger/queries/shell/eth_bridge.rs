@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use ethers::abi::Tokenizable;
+use namada_core::ethbridge_structs::RelayProof;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{
@@ -20,9 +22,7 @@ use namada_core::types::vote_extensions::validator_set_update::{
 };
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-use namada_ethereum_bridge::storage::proof::{
-    tokenize_relay_proof, EthereumProof, RelayProof,
-};
+use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies;
 use namada_ethereum_bridge::storage::vote_tallies::{
     eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
@@ -203,6 +203,14 @@ where
                 .into(),
             )));
         }
+        let transfers = values
+            .iter()
+            .map(|bytes| {
+                PendingTransfer::try_from_slice(bytes)
+                    .expect("Deserializing storage shouldn't fail")
+                    .into()
+            })
+            .collect();
         // get the membership proof
         match tree.get_sub_tree_existence_proof(
             &keys,
@@ -212,14 +220,21 @@ where
                 let (validator_args, voting_powers) =
                     ctx.storage.get_validator_set_args(None);
                 let data = RelayProof {
-                    validator_args,
-                    root: signed_root,
-                    proof,
-                    relayer,
+                    validator_set_args: validator_args.into(),
+                    signatures: sort_sigs(
+                        &voting_powers,
+                        &signed_root.signatures,
+                    ),
+                    transfers,
+                    pool_root: signed_root.data.0.0,
+                    proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
+                    proof_flags: proof.flags,
+                    batch_nonce: signed_root.data.1.into(),
+                    relayer_address: relayer.to_string(),
                 };
-                let data = EncodeCell::<RelayProof>::new_from(
-                    tokenize_relay_proof(data, &voting_powers),
-                )
+                let data = EncodeCell::<RelayProof>::new_from([
+                    Tokenizable::into_token(data),
+                ])
                 .try_to_vec()
                 .expect("Serializing a relay proof should not fail.");
                 Ok(EncodedResponseQuery {
@@ -758,21 +773,26 @@ mod test_ethbridge_router {
             BTreeMap::from([(transfer.keccak256(), 1.into())]),
         );
         let proof = tree
-            .get_membership_proof(vec![transfer])
+            .get_membership_proof(vec![transfer.clone()])
             .expect("Test failed");
 
         let (validator_args, voting_powers) =
             client.storage.get_validator_set_args(None);
-        let proof = EncodeCell::<RelayProof>::new_from(tokenize_relay_proof(
-            RelayProof {
-                validator_args,
-                root: signed_root,
-                proof,
-                relayer: bertha_address(),
-            },
-            &voting_powers,
-        ))
-        .into_inner();
+        let data = RelayProof {
+            validator_set_args: validator_args.into(),
+            signatures: sort_sigs(&voting_powers, &signed_root.signatures),
+            transfers: vec![transfer.into()],
+            pool_root: signed_root.data.0.0,
+            proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
+            proof_flags: proof.flags,
+            batch_nonce: Default::default(),
+            relayer_address: bertha_address().to_string(),
+        };
+        let proof =
+            EncodeCell::<RelayProof>::new_from([Tokenizable::into_token(data)])
+                .try_to_vec()
+                .expect("Serializing a relay proof should not fail.");
+
         assert_eq!(proof, resp.data.into_inner());
     }
 
