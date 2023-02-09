@@ -1,6 +1,7 @@
 extern crate core;
 
 pub mod bridge_pool_vp;
+pub mod oracle;
 pub mod parameters;
 pub mod protocol;
 pub mod storage;
