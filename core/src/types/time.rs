@@ -132,6 +132,14 @@ impl Add<DurationSecs> for DateTimeUtc {
     }
 }
 
+impl Add<Duration> for DateTimeUtc {
+    type Output = DateTimeUtc;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        (self.0 + rhs).into()
+    }
+}
+
 impl Sub<Duration> for DateTimeUtc {
     type Output = DateTimeUtc;
 
