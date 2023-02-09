@@ -20,7 +20,12 @@ pub fn vp(
 ) -> VpResult {
     let mut change: Change = 0;
     for key in keys_touched.iter() {
-        match token::is_balance_key(token, key) {
+        let owner: Option<&Address> = token::is_balance_key(token, key)
+            .or_else(|| {
+                token::is_multitoken_balance_key(token, key).map(|a| a.1)
+            });
+
+        match owner {
             None => {
                 if token::is_total_supply_key(key, token) {
                     // check if total supply is changed, which it should never
