@@ -1821,7 +1821,7 @@ fn pos_bonds() -> Result<()> {
         "--validator",
         "validator-0",
         "--amount",
-        "100",
+        "10000.0",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1844,7 +1844,7 @@ fn pos_bonds() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "200",
+        "5000.0",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1864,7 +1864,7 @@ fn pos_bonds() -> Result<()> {
         "--validator",
         "validator-0",
         "--amount",
-        "51",
+        "5100.0",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1876,7 +1876,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Amount 51 withdrawable starting from epoch ")?;
+    client.exp_string("Amount 5100 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -1887,7 +1887,7 @@ fn pos_bonds() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "32",
+        "3200.",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1898,7 +1898,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 32 withdrawable starting from epoch ";
+    let expected = "Amount 3200 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched
         .trim()
@@ -1920,7 +1920,7 @@ fn pos_bonds() -> Result<()> {
         epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    let loop_timeout = Duration::new(40, 0);
     loop {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
