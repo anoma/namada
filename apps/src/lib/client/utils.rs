@@ -21,12 +21,12 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
-use crate::cli::{self, args};
+use crate::cli::{self, args, safe_exit};
 use crate::config::genesis::genesis_config::{
     self, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{self, Config, TendermintMode};
+use crate::config::{self, genesis, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -257,13 +257,28 @@ pub async fn join_network(
                 );
                 cli::safe_exit(1)
             });
-
         let genesis_file_path =
             base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let mut wallet = Wallet::load_or_new_from_genesis(
-            &chain_dir,
-            genesis_config::open_genesis_config(genesis_file_path).unwrap(),
-        );
+        let genesis =
+            genesis_config::open_genesis_config(genesis_file_path).unwrap();
+
+        let tendermint_node_pk = tendermint_node_key.ref_to();
+        if !genesis.validator.iter().any(|(alias, config)| {
+            if let Some(tm_node_key) = &config.tendermint_node_key {
+                tm_node_key.0.eq(&tendermint_node_pk.to_string())
+            } else {
+                false
+            }
+        }) {
+            println!(
+                "The pre-genesis config doesn't match any validator for {} \
+                 chain.",
+                chain_id.as_str()
+            );
+            safe_exit(1)
+        };
+
+        let mut wallet = Wallet::load_or_new_from_genesis(&chain_dir, genesis);
 
         let address = wallet
             .find_address(&validator_alias)
