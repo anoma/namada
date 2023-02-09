@@ -73,6 +73,10 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let update_for_tendermint =
+            self.wl_storage.storage.epoch_update_tracker.0
+                && self.wl_storage.storage.epoch_update_tracker.1 == 2;
+
         let current_epoch = self.wl_storage.storage.block.epoch;
 
         if new_epoch {
@@ -380,7 +384,7 @@ where
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
 
-        if new_epoch {
+        if update_for_tendermint {
             self.update_epoch(&mut response);
         }
 
