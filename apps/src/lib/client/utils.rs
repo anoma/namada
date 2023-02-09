@@ -10,7 +10,7 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::ledger::wallet::Wallet;
+use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
@@ -489,11 +489,9 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
             println!("Generating validator {} consensus key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let (_alias, keypair) =
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -508,11 +506,9 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
             println!("Generating validator {} account key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let (_alias, keypair) =
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
             keypair.ref_to()
         });
 
@@ -523,11 +519,9 @@ pub fn init_network(
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
             println!("Generating validator {} protocol signing key...", name);
-            let (_alias, keypair) = wallet.gen_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                unsafe_dont_encrypt,
-            );
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+            let (_alias, keypair) =
+                wallet.gen_key(SchemeType::Ed25519, Some(alias), password);
             keypair.ref_to()
         });
 
@@ -607,10 +601,11 @@ pub fn init_network(
                     "Generating implicit account {} key and address ...",
                     name
                 );
+                let password = read_and_confirm_pwd(unsafe_dont_encrypt);
                 let (_alias, keypair) = wallet.gen_key(
                     SchemeType::Ed25519,
                     Some(name.clone()),
-                    unsafe_dont_encrypt,
+                    password,
                 );
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
@@ -857,10 +852,11 @@ fn init_established_account(
     }
     if config.public_key.is_none() {
         println!("Generating established account {} key...", name.as_ref());
+        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         let (_alias, keypair) = wallet.gen_key(
             SchemeType::Ed25519,
             Some(format!("{}-key", name.as_ref())),
-            unsafe_dont_encrypt,
+            password,
         );
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
@@ -1057,4 +1053,31 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+/// Read the password for encryption from the file/env/stdin with
+/// confirmation.
+pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
+    let password = if unsafe_dont_encrypt {
+        println!("Warning: The keypair will NOT be encrypted.");
+        None
+    } else {
+        Some(CliWalletUtils::read_password(
+            "Enter your encryption password: ",
+        ))
+    };
+    // Bis repetita for confirmation.
+    let to_confirm = if unsafe_dont_encrypt {
+        None
+    } else {
+        Some(CliWalletUtils::read_password(
+            "To confirm, please enter the same encryption password once \
+                 more: ",
+        ))
+    };
+    if to_confirm != password {
+        eprintln!("Your two inputs do not match!");
+        cli::safe_exit(1)
+    }
+    password
 }

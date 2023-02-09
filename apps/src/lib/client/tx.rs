@@ -5,8 +5,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
+use async_std::io;
 use async_std::io::prelude::WriteExt;
-use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
@@ -31,6 +31,7 @@ use namada::vm;
 use rust_decimal::Decimal;
 
 use super::rpc;
+use super::utils::read_and_confirm_pwd;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
@@ -100,12 +101,9 @@ pub async fn submit_init_validator<
     let consensus_key_alias = format!("{}-consensus-key", alias);
     let account_key = account_key.unwrap_or_else(|| {
         println!("Generating validator account key...");
+        let password = read_and_confirm_pwd(unsafe_dont_encrypt);
         ctx.wallet
-            .gen_key(
-                scheme,
-                Some(validator_key_alias.clone()),
-                unsafe_dont_encrypt,
-            )
+            .gen_key(scheme, Some(validator_key_alias.clone()), password)
             .1
             .ref_to()
     });
@@ -120,12 +118,13 @@ pub async fn submit_init_validator<
         })
         .unwrap_or_else(|| {
             println!("Generating consensus key...");
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             ctx.wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
-                    unsafe_dont_encrypt,
+                    password,
                 )
                 .1
         });
@@ -686,7 +685,11 @@ pub async fn submit_vote_proposal<
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force { safe_exit(1) } else { Ok(()) }
+                if !args.tx.force {
+                    safe_exit(1)
+                } else {
+                    Ok(())
+                }
             }
         }
     }

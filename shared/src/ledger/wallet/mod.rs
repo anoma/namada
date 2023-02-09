@@ -27,10 +27,6 @@ use crate::types::masp::{
 pub trait WalletUtils {
     /// The location where the wallet is stored
     type Storage;
-    /// Read the password for encryption from the file/env/stdin with
-    /// confirmation.
-    fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String>;
-
     /// Read the password for encryption/decryption from the file/env/stdin.
     /// Panics if all options are empty/invalid.
     fn read_password(prompt_msg: &str) -> String;
@@ -45,9 +41,6 @@ pub trait WalletUtils {
         alias: &Alias,
         alias_for: &str,
     ) -> store::ConfirmationResponse;
-
-    /// Prompt for pssword and confirm it if parameter is false
-    fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String>;
 }
 
 /// The error that is produced when a given key cannot be obtained
@@ -92,9 +85,8 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        unsafe_dont_encrypt: bool,
+        password: Option<String>,
     ) -> (String, common::SecretKey) {
-        let password = U::read_and_confirm_pwd(unsafe_dont_encrypt);
         let (alias, key) = self.store.gen_key::<U>(scheme, alias, password);
         // Cache the newly added key
         self.decrypted_key_cache.insert(alias.clone(), key.clone());
@@ -105,9 +97,8 @@ impl<U: WalletUtils> Wallet<U> {
     pub fn gen_spending_key(
         &mut self,
         alias: String,
-        unsafe_dont_encrypt: bool,
+        password: Option<String>,
     ) -> (String, ExtendedSpendingKey) {
-        let password = U::new_password_prompt(unsafe_dont_encrypt);
         let (alias, key) = self.store.gen_spending_key::<U>(alias, password);
         // Cache the newly added key
         self.decrypted_spendkey_cache.insert(alias.clone(), key);
@@ -411,9 +402,8 @@ impl<U: WalletUtils> Wallet<U> {
         &mut self,
         alias: String,
         spend_key: ExtendedSpendingKey,
-        unsafe_dont_encrypt: bool,
+        password: Option<String>,
     ) -> Option<String> {
-        let password = U::new_password_prompt(unsafe_dont_encrypt);
         self.store
             .insert_spending_key::<U>(
                 alias.into(),

@@ -9,6 +9,7 @@ use namada::ledger::wallet::pre_genesis::{
 use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
 use namada::types::key::SchemeType;
 
+use crate::client::utils::read_and_confirm_pwd;
 use crate::wallet::store::gen_validator_keys;
 use crate::wallet::CliWalletUtils;
 
@@ -27,7 +28,8 @@ pub fn gen_and_store(
     unsafe_dont_encrypt: bool,
     store_dir: &Path,
 ) -> std::io::Result<ValidatorWallet> {
-    let validator = gen(scheme, unsafe_dont_encrypt);
+    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
+    let validator = gen(scheme, password);
     let data = validator.store.encode();
     let wallet_path = validator_file_name(store_dir);
     // Make sure the dir exists
@@ -98,8 +100,7 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
 
 /// Generate a new [`ValidatorWallet`] with required pre-genesis keys. Will
 /// prompt for password when `!unsafe_dont_encrypt`.
-fn gen(scheme: SchemeType, unsafe_dont_encrypt: bool) -> ValidatorWallet {
-    let password = CliWalletUtils::read_and_confirm_pwd(unsafe_dont_encrypt);
+fn gen(scheme: SchemeType, password: Option<String>) -> ValidatorWallet {
     let (account_key, account_sk) = gen_key_to_store(scheme, &password);
     let (consensus_key, consensus_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for consensus key
