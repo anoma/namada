@@ -333,7 +333,6 @@ where
     write_pos_params(storage, params.clone())?;
 
     let mut total_bonded = token::Amount::default();
-    let mut total_balance = token::Amount::default();
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
@@ -389,8 +388,6 @@ where
             current_epoch,
         )?;
     }
-    // TODO: figure out why I had this here in #714 or if its right here
-    total_balance += total_bonded;
 
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
