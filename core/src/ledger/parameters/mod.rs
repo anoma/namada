@@ -526,6 +526,7 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read max expected block time
     let max_expected_time_per_block_key =
         storage::get_max_expected_time_per_block_key();
     let (value, gas_time) = storage

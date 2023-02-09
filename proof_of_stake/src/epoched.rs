@@ -451,19 +451,10 @@ where
             None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
-                // dbg!(data_handler.get(storage, &Epoch(0)));
-                // dbg!(data_handler.get(storage, &Epoch(1)));
-                // dbg!(data_handler.get(storage, &Epoch(2)));
-                // dbg!(data_handler.len(storage)?);
-
-                // let mut it = data_handler.iter(storage)?;
-                // dbg!(it.next());
-                // dbg!(it.next());
-                // drop(it);
 
                 let future_most_epoch =
                     last_update + FutureEpochs::value(params);
-                // dbg!(future_most_epoch);
+
                 // Epoch can be a lot greater than the epoch where
                 // a value is recorded, we check the upper bound
                 // epoch of the LazyMap data
