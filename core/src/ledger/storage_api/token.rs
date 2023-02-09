@@ -20,6 +20,19 @@ where
     Ok(balance)
 }
 
+/// Read the total network supply of a given token.
+pub fn read_total_supply<S>(
+    storage: &S,
+    token: &Address,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let key = token::total_supply_key(token);
+    let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    Ok(balance)
+}
+
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
 /// only happen if the total supply does't fit in `token::Amount`).
@@ -68,5 +81,11 @@ where
 {
     let key = token::balance_key(token, dest);
     let new_balance = read_balance(storage, token, dest)? + amount;
-    storage.write(&key, new_balance)
+    storage.write(&key, new_balance)?;
+
+    let total_supply_key = token::total_supply_key(token);
+    let current_supply = storage
+        .read::<Amount>(&total_supply_key)?
+        .unwrap_or_default();
+    storage.write(&total_supply_key, current_supply + amount)
 }

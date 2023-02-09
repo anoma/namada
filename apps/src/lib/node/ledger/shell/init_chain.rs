@@ -7,9 +7,11 @@ use namada::core::ledger::testnet_pow;
 use namada::ledger::parameters::storage::get_staked_ratio_key;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
+use namada::ledger::storage_api::token::{
+    credit_tokens, read_balance, read_total_supply,
+};
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
-use namada::types::token::total_supply_key;
 use rust_decimal::Decimal;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
@@ -239,7 +241,6 @@ where
         }
 
         // Initialize genesis token accounts
-        let mut total_nam_balance = token::Amount::default();
         for genesis::TokenAccount {
             address,
             vp_code_path,
@@ -274,17 +275,12 @@ where
                 .unwrap();
 
             for (owner, amount) in balances {
-                if address == staking_token_address() {
-                    total_nam_balance += amount;
-                }
-                self.wl_storage
-                    .write(&token::balance_key(&address, &owner), amount)
+                credit_tokens(&mut self.wl_storage, &address, &owner, amount)
                     .unwrap();
             }
         }
 
         // Initialize genesis validator accounts
-        let mut total_staked_nam_tokens = token::Amount::default();
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -321,19 +317,15 @@ where
                 .expect("Unable to set genesis user public key");
 
             // Balances
-            total_staked_nam_tokens += validator.pos_data.tokens;
-            total_nam_balance +=
-                validator.pos_data.tokens + validator.non_staked_balance;
             // Account balance (tokens not staked in PoS)
-            self.wl_storage
-                .write(
-                    &token::balance_key(
-                        &self.wl_storage.storage.native_token,
-                        addr,
-                    ),
-                    validator.non_staked_balance,
-                )
-                .expect("Unable to set genesis balance");
+            credit_tokens(
+                &mut self.wl_storage,
+                &staking_token_address(),
+                addr,
+                validator.non_staked_balance,
+            )
+            .unwrap();
+
             self.wl_storage
                 .write(&protocol_pk_key(addr), &validator.protocol_key)
                 .expect("Unable to set genesis user protocol public key");
@@ -360,21 +352,27 @@ where
                 .map(|validator| validator.pos_data),
             current_epoch,
         );
-        println!("TOTAL NAM BALANCE = {}", total_nam_balance);
-        println!("TOTAL STAKED NAM BALANCE = {}\n", total_staked_nam_tokens);
-        self.wl_storage
-            .write(
-                &total_supply_key(&staking_token_address()),
-                total_nam_balance,
-            )
-            .expect("unable to set total NAM balance in storage");
+
+        let total_nam =
+            read_total_supply(&self.wl_storage, &staking_token_address())
+                .unwrap();
+        // At this stage in the chain genesis, the PoS address balance is the
+        // same as the number of staked tokens
+        let total_staked_nam = read_balance(
+            &self.wl_storage,
+            &staking_token_address(),
+            &address::POS,
+        )
+        .unwrap();
+
+        println!("READ TOTAL NAM BALANCE = {}", total_nam);
+        println!("READ TOTAL STAKED NAM BALANCE = {}\n", total_staked_nam);
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
         self.wl_storage
             .write(
                 &get_staked_ratio_key(),
-                Decimal::from(total_staked_nam_tokens)
-                    / Decimal::from(total_nam_balance),
+                Decimal::from(total_staked_nam) / Decimal::from(total_nam),
             )
             .expect("unable to set staked ratio of NAM in storage");
 
