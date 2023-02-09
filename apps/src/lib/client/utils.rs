@@ -23,10 +23,10 @@ use sha2::{Digest, Sha256};
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args, safe_exit};
 use crate::config::genesis::genesis_config::{
-    self, HexString, ValidatorPreGenesisConfig,
+    self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{self, genesis, Config, TendermintMode};
+use crate::config::{self, Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -257,28 +257,25 @@ pub async fn join_network(
                 );
                 cli::safe_exit(1)
             });
+
         let genesis_file_path =
             base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let genesis =
+        let genesis_config =
             genesis_config::open_genesis_config(genesis_file_path).unwrap();
 
-        let tendermint_node_pk = tendermint_node_key.ref_to();
-        if !genesis.validator.iter().any(|(alias, config)| {
-            if let Some(tm_node_key) = &config.tendermint_node_key {
-                tm_node_key.0.eq(&tendermint_node_pk.to_string())
-            } else {
-                false
-            }
-        }) {
+        if !is_valid_validator_for_current_chain(
+            &tendermint_node_key.ref_to(),
+            &genesis_config,
+        ) {
             println!(
-                "The pre-genesis config doesn't match any validator for {} \
-                 chain.",
+                "The current validator is not valid for chain {}.",
                 chain_id.as_str()
             );
             safe_exit(1)
-        };
+        }
 
-        let mut wallet = Wallet::load_or_new_from_genesis(&chain_dir, genesis);
+        let mut wallet =
+            Wallet::load_or_new_from_genesis(&chain_dir, genesis_config);
 
         let address = wallet
             .find_address(&validator_alias)
@@ -1072,4 +1069,17 @@ pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+fn is_valid_validator_for_current_chain(
+    validator_pk: &common::PublicKey,
+    genesis_config: &GenesisConfig,
+) -> bool {
+    !genesis_config.validator.iter().any(|(_alias, config)| {
+        if let Some(tm_node_key) = &config.tendermint_node_key {
+            tm_node_key.0.eq(&validator_pk.to_string())
+        } else {
+            false
+        }
+    })
 }
