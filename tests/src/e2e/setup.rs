@@ -179,7 +179,7 @@ pub fn network(
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
-    // Get the generated chain_id` from result of the last command
+    // Get the generated chain_id from result of the last command
     let (unread, matched) =
         init_network.exp_regex(r"Derived chain ID: .*\n")?;
     let chain_id_raw =
