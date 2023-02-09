@@ -3655,6 +3655,7 @@ dependencies = [
  "pwasm-utils",
  "rayon",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -3844,12 +3845,15 @@ name = "namada_proof_of_stake"
 version = "0.14.0"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
+ "hex",
  "namada_core",
  "once_cell",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
+ "tendermint-proto 0.23.5",
  "test-log",
  "thiserror",
  "tracing 0.1.37",

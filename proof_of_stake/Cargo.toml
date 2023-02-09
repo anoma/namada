@@ -20,13 +20,17 @@ testing = ["proptest"]
 namada_core = {path = "../core", default-features = false}
 borsh = "0.9.1"
 derivative = "2.2.0"
+hex = "0.4.3"
 once_cell = "1.8.0"
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 rust_decimal = { version = "1.26.1", features = ["borsh"] }
 rust_decimal_macros = "1.26.1"
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9"}
 thiserror = "1.0.30"
 tracing = "0.1.30"
+data-encoding = "2.3.2"
+
 
 [dev-dependencies]
 namada_core = {path = "../core", features = ["testing"]}

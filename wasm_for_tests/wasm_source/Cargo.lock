@@ -1926,7 +1926,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint",
  "tendermint-light-client-verifier",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "tendermint-testgen",
  "time",
  "tracing",
@@ -1942,7 +1942,7 @@ dependencies = [
  "prost",
  "prost-types",
  "serde",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "tonic",
 ]
 
@@ -1988,7 +1988,7 @@ dependencies = [
  "tendermint",
  "tendermint-light-client",
  "tendermint-light-client-verifier",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
@@ -2481,11 +2481,12 @@ dependencies = [
  "pwasm-utils",
  "rayon",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
  "tendermint",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "thiserror",
  "tracing",
  "wasmer",
@@ -2533,7 +2534,7 @@ dependencies = [
  "sha2 0.9.9",
  "sparse-merkle-tree",
  "tendermint",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "thiserror",
  "tonic-build",
  "tracing",
@@ -2554,12 +2555,15 @@ name = "namada_proof_of_stake"
 version = "0.14.0"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
+ "hex",
  "namada_core",
  "once_cell",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
+ "tendermint-proto 0.23.5",
  "thiserror",
  "tracing",
 ]
@@ -2596,7 +2600,7 @@ dependencies = [
  "tempfile",
  "tendermint",
  "tendermint-config",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "tendermint-rpc",
  "test-log",
  "tokio",
@@ -4106,7 +4110,7 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "time",
  "zeroize",
 ]
@@ -4159,6 +4163,23 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
+version = "0.23.5"
+source = "git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9#95c52476bc37927218374f94ac8e2a19bd35bec9"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "subtle-encoding",
+ "time",
+]
+
+[[package]]
+name = "tendermint-proto"
 version = "0.23.6"
 source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=e6c684731f21bffd89886d3e91074b96aee074ba#e6c684731f21bffd89886d3e91074b96aee074ba"
 dependencies = [
@@ -4197,7 +4218,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint",
  "tendermint-config",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
  "thiserror",
  "time",
  "tokio",
