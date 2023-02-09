@@ -789,11 +789,9 @@ mod test_ethbridge_router {
             relayer_address: bertha_address().to_string(),
         };
         let proof =
-            EncodeCell::<RelayProof>::new_from([Tokenizable::into_token(data)])
-                .try_to_vec()
-                .expect("Serializing a relay proof should not fail.");
+            EncodeCell::<RelayProof>::new_from([Tokenizable::into_token(data)]);
 
-        assert_eq!(proof, resp.data.into_inner());
+        assert_eq!(proof, resp.data);
     }
 
     /// Test if the merkle tree including a transfer
