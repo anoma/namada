@@ -370,8 +370,8 @@ where
         )
         .unwrap();
 
-        println!("READ TOTAL NAM BALANCE = {}", total_nam);
-        println!("READ TOTAL STAKED NAM BALANCE = {}\n", total_staked_nam);
+        tracing::info!("Genesis total native tokens: {total_nam}.");
+        tracing::info!("Total staked tokens: {total_staked_nam}.");
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
         self.wl_storage

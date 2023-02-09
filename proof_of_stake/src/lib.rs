@@ -2565,7 +2565,7 @@ fn make_unbond_details<S>(
     }
 }
 
-/// Tally a running sum of the fracton of rewards owed to each validator in
+/// Tally a running sum of the fraction of rewards owed to each validator in
 /// the consensus set. This is used to keep track of the rewards due to each
 /// consensus validator over the lifetime of an epoch.
 pub fn log_block_rewards<S>(
@@ -2587,32 +2587,6 @@ where
     let epoch: Epoch = epoch.into();
     let params = read_pos_params(storage)?;
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
-    // dbg!(&epoch);
-
-    // let validator_set = self.read_validator_set();
-    // dbg!(&validator_set);
-    // let validators = validator_set.get(epoch).unwrap();
-    // let pos_params = self.read_pos_params();
-
-    // println!(
-    //     "VALIDATOR SET OF EPOCH {} LAST UPDATE = {}, LEN = {}:",
-    //     epoch,
-    //     validator_set.last_update(),
-    //     validator_set.data.len()
-    // );
-    // for val in &validators.active {
-    //     println!("STAKE: {}, ADDRESS: {}", val.bonded_stake, val.address);
-    //     let ck = self
-    //         .read_validator_consensus_key(&val.address)
-    //         .unwrap()
-    //         .get(epoch)
-    //         .unwrap()
-    //         .to_owned();
-    //     let hash_string1 = tm_consensus_key_raw_hash(&ck);
-    //     let bytes1 = HEXUPPER.decode(hash_string1.as_bytes()).unwrap();
-    //     dbg!(bytes1);
-    // }
-    // dbg!(votes);
 
     // Get total stake of the consensus validator set
     // TODO: this will need to account for rewards products?

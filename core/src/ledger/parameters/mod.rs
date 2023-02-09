@@ -408,6 +408,7 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read max expected block time
     let max_expected_time_per_block_key =
         storage::get_max_expected_time_per_block_key();
     let value = storage.read(&max_expected_time_per_block_key)?;
