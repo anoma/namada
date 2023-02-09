@@ -63,7 +63,13 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // reset gas meter before we start
+        println!(
+            "\nFINALIZE BLOCK {} - NUM TXS = {}",
+            self.wl_storage.storage.block.height + 1,
+            req.txs.len()
+        );
+
+        // Reset the gas meter before we start
         self.gas_meter.reset();
 
         let mut response = shim::response::FinalizeBlock::default();
@@ -76,6 +82,11 @@ where
         let update_for_tendermint =
             self.wl_storage.storage.epoch_update_tracker.0
                 && self.wl_storage.storage.epoch_update_tracker.1 == 2;
+
+        println!(
+            "BLOCK HEIGHT {} AND EPOCH {}, NEW EPOCH = {}",
+            height, current_epoch, new_epoch
+        );
 
         let current_epoch = self.wl_storage.storage.block.epoch;
 

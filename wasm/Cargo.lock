@@ -2481,6 +2481,7 @@ dependencies = [
  "pwasm-utils",
  "rayon",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
@@ -2554,7 +2555,9 @@ name = "namada_proof_of_stake"
 version = "0.14.2"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
+ "hex",
  "namada_core",
  "once_cell",
  "proptest",
