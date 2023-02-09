@@ -878,9 +878,13 @@ mod test_utils {
         }
 
         /// Forward a InitChain request and expect a success
-        pub fn init_chain(&mut self, req: RequestInitChain) {
+        pub fn init_chain(
+            &mut self,
+            req: RequestInitChain,
+            #[cfg(feature = "dev")] num_validators: u64,
+        ) {
             self.shell
-                .init_chain(req)
+                .init_chain(req, num_validators)
                 .expect("Test shell failed to initialize");
         }
 
@@ -941,16 +945,21 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup() -> (TestShell, UnboundedReceiver<Vec<u8>>) {
+    pub(super) fn setup(
+        num_validators: u64,
+    ) -> (TestShell, UnboundedReceiver<Vec<u8>>) {
         let (mut test, receiver) = TestShell::new();
-        test.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        test.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            num_validators,
+        );
         (test, receiver)
     }
 
