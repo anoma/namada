@@ -593,14 +593,17 @@ mod test_process_proposal {
     #[test]
     fn test_invalid_hash_commitment() {
         let (mut shell, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        shell.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            1,
+        );
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -649,14 +652,17 @@ mod test_process_proposal {
     #[test]
     fn test_undecryptable() {
         let (mut shell, _) = TestShell::new();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        shell.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            1,
+        );
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
