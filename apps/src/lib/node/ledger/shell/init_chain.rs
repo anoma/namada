@@ -33,6 +33,7 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
+        #[cfg(feature = "dev")] num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
@@ -58,7 +59,7 @@ where
             );
         }
         #[cfg(feature = "dev")]
-        let genesis = genesis::genesis();
+        let genesis = genesis::genesis(num_validators);
 
         let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
         let initial_height = init
@@ -459,14 +460,17 @@ mod test {
         let initial_storage_state: std::collections::BTreeMap<String, Vec<u8>> =
             store_block_state(&shell);
 
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
+        shell.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            1,
+        );
 
         // Store the full state again
         let storage_state: std::collections::BTreeMap<String, Vec<u8>> =
