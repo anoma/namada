@@ -10,7 +10,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use directories::BaseDirs;
+use directories::ProjectDirs;
 use namada::types::chain::ChainId;
 use namada::types::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
@@ -350,8 +350,8 @@ impl Config {
 }
 
 pub fn get_default_namada_folder() -> PathBuf {
-    if let Some(base_dirs) = BaseDirs::new() {
-        base_dirs.home_dir().join(DEFAULT_BASE_DIR)
+    if let Some(project_dir) = ProjectDirs::from("com", "anoma", "namada") {
+        project_dir.data_dir().to_path_buf()
     } else {
         DEFAULT_BASE_DIR.into()
     }
