@@ -849,6 +849,7 @@ mod test_finalize_block {
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use rust_decimal_macros::dec;
+    use test_log::test;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -1280,8 +1281,42 @@ mod test_finalize_block {
         > = store_block_state(&shell);
 
         // Keep applying finalize block
+        let validator = shell.mode.get_validator_address().unwrap();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+        let consensus_key =
+            namada_proof_of_stake::validator_consensus_key_handle(validator)
+                .get(&shell.wl_storage, Epoch::default(), &pos_params)
+                .unwrap()
+                .unwrap();
+        let proposer_address = HEXUPPER
+            .decode(consensus_key.tm_raw_hash().as_bytes())
+            .unwrap();
+        let val_stake = read_validator_stake(
+            &shell.wl_storage,
+            &pos_params,
+            validator,
+            Epoch::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        let votes = vec![VoteInfo {
+            validator: Some(Validator {
+                address: proposer_address.clone(),
+                power: u64::from(val_stake) as i64,
+            }),
+            signed_last_block: true,
+        }];
+
+        // Need to supply a proposer address and votes to flow through the
+        // inflation code
         for _ in 0..20 {
-            let req = FinalizeBlock::default();
+            let req = FinalizeBlock {
+                proposer_address: proposer_address.clone(),
+                votes: votes.clone(),
+                ..Default::default()
+            };
             let _events = shell.finalize_block(req).unwrap();
             let new_state = store_block_state(&shell);
             // The new state must be unchanged

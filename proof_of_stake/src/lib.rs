@@ -2577,8 +2577,12 @@ where
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
     let mut total_signing_stake: u64 = 0;
-    for vote in votes.iter() {
-        if !vote.signed_last_block {
+    for VoteInfo {
+        validator_address,
+        validator_vp,
+    } in votes
+    {
+        if validator_vp == 0 {
             continue;
         }
 
@@ -2632,6 +2636,14 @@ where
             },
             address,
         ) = validator?;
+
+        // TODO:
+        // When below-threshold validator set is added, this shouldn't be needed
+        // anymore since some minimal stake will be required to be in at least
+        // the consensus set
+        if stake == token::Amount::default() {
+            continue;
+        }
 
         let mut rewards_frac = Decimal::default();
         let stake: Decimal = u64::from(stake).into();
