@@ -58,7 +58,7 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // reset gas meter before we start
+        // Reset the gas meter before we start
         self.gas_meter.reset();
 
         let mut response = shim::response::FinalizeBlock::default();
@@ -73,7 +73,10 @@ where
             Some(EPOCH_SWITCH_BLOCKS_DELAY)
         );
 
-        let current_epoch = self.wl_storage.storage.block.epoch;
+        tracing::debug!(
+            "Block height: {height}, epoch: {current_epoch}, new epoch: \
+             {new_epoch}."
+        );
 
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
