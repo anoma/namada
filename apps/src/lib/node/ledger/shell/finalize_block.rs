@@ -4,16 +4,12 @@ use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{
-    decimal_mult_u64, into_tm_voting_power, VoteInfo,
-};
-use namada::ledger::pos::{
-    namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
-};
-use namada::ledger::protocol;
-use namada::ledger::storage_api::StorageRead;
-#[cfg(feature = "abcipp")]
-use namada::proof_of_stake::find_validator_by_raw_hash;
+use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
+use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
+use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
+use namada::ledger::storage_api::token::credit_tokens;
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::{inflation, protocol};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -72,6 +68,11 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let update_for_tendermint = matches!(
+            self.wl_storage.storage.update_epoch_blocks_delay,
+            Some(EPOCH_SWITCH_BLOCKS_DELAY)
+        );
+
         let current_epoch = self.wl_storage.storage.block.epoch;
 
         if new_epoch {
@@ -379,7 +380,7 @@ where
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
 
-        if new_epoch {
+        if update_for_tendermint {
             self.update_epoch(&mut response);
         }
 
