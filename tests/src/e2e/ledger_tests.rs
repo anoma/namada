@@ -2417,7 +2417,7 @@ fn proposal_submission() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 1,
+                min_num_of_blocks: 2,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
