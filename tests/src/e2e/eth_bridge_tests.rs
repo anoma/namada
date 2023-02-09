@@ -3,6 +3,7 @@ mod helpers;
 use std::num::NonZeroU64;
 
 use color_eyre::eyre::Result;
+use namada::eth_bridge::oracle;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -394,5 +395,71 @@ async fn test_wnam_transfer() -> Result<()> {
             - wnam_transfer.amount
     );
 
+    Ok(())
+}
+
+/// Tests that the ledger configures its Ethereum oracle with values from
+/// storage, if the Ethereum bridge has been bootstrapped for the Namada chain.
+#[test]
+fn test_configure_oracle_from_storage() -> Result<()> {
+    let ethereum_bridge_params = EthereumBridgeConfig {
+        min_confirmations: MinimumConfirmations::from(unsafe {
+            // SAFETY: The only way the API contract of `NonZeroU64` can
+            // be violated is if we construct values
+            // of this type using 0 as argument.
+            NonZeroU64::new_unchecked(10)
+        }),
+        contracts: Contracts {
+            native_erc20: EthAddress([1; 20]),
+            bridge: UpgradeableContract {
+                address: EthAddress([2; 20]),
+                version: ContractVersion::default(),
+            },
+            governance: UpgradeableContract {
+                address: EthAddress([3; 20]),
+                version: ContractVersion::default(),
+            },
+        },
+    };
+
+    // use a network-config.toml with eth bridge parameters in it
+    let test = setup::network(
+        |mut genesis| {
+            genesis.ethereum_bridge_params = Some(ethereum_bridge_params);
+            genesis
+        },
+        None,
+    )?;
+
+    // start the ledger with the real oracle and wait for a block to be
+    // committed
+
+    // TODO(namada#1061): need to start up a fake Ethereum node here for the
+    // oracle to connect to, to avoid errors in the ledger logs
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Remote,
+    );
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    // check that the oracle has been configured with the values from storage
+    let initial_config = oracle::config::Config {
+        min_confirmations: ethereum_bridge_params.min_confirmations.into(),
+        bridge_contract: ethereum_bridge_params.contracts.bridge.address,
+        governance_contract: ethereum_bridge_params
+            .contracts
+            .governance
+            .address,
+    };
+    ledger.exp_string(&format!(
+        "Oracle received initial configuration - {:?}",
+        &initial_config
+    ))?;
     Ok(())
 }
