@@ -360,6 +360,8 @@ where
                 .map(|validator| validator.pos_data),
             current_epoch,
         );
+        println!("TOTAL NAM BALANCE = {}", total_nam_balance);
+        println!("TOTAL STAKED NAM BALANCE = {}\n", total_staked_nam_tokens);
         self.wl_storage
             .write(
                 &total_supply_key(&staking_token_address()),
