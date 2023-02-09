@@ -90,7 +90,7 @@ impl Shell {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
-                self.init_chain(init).map(Response::InitChain)
+                self.init_chain(init, 1).map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
@@ -446,7 +446,7 @@ fn start_abci_broadcaster_shell(
     #[cfg(not(feature = "dev"))]
     let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
     #[cfg(feature = "dev")]
-    let genesis = genesis::genesis();
+    let genesis = genesis::genesis(1);
     let (shell, abci_service) = AbcippShim::new(
         config,
         wasm_dir,
