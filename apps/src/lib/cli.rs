@@ -413,8 +413,7 @@ pub mod cmds {
                 .about(
                     "Restores a keypair from the given mnemonic code and \
                      derives the implicit address from its public key. Stores \
-                     the keypair and the address with the given alias.
-                     Only ed25519 keypairs are supported.",
+                     the keypair and the address with the given alias.",
                 )
                 .add_args::<args::KeyAndAddressRestore>()
         }
@@ -3297,6 +3296,8 @@ pub mod args {
     /// Wallet add key and implicit address arguments
     #[derive(Clone, Debug)]
     pub struct KeyAndAddressRestore {
+        /// Scheme type
+        pub scheme: SchemeType,
         /// Key alias
         pub alias: Option<String>,
         /// Don't encrypt the keypair
@@ -3305,16 +3306,23 @@ pub mod args {
 
     impl Args for KeyAndAddressRestore {
         fn parse(matches: &ArgMatches) -> Self {
+            let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
+                scheme,
                 alias,
                 unsafe_dont_encrypt,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS_OPT.def().about(
+            app.arg(SCHEME.def().about(
+                "The type of key that should be added. Argument must be \
+                 either ed25519 or secp256k1. If none provided, the default \
+                 key scheme is ed25519.",
+            ))
+            .arg(ALIAS_OPT.def().about(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
@@ -3367,8 +3375,8 @@ pub mod args {
                  used in a live network.",
             ))
             .arg(MNEMONIC.def().about(
-                "Use mnemonic code for ed25519 keypair generation. Only \
-                 English wordlist is supported.",
+                "Use mnemonic code for key generation. Only English wordlist \
+                 is supported.",
             ))
         }
     }
