@@ -1075,7 +1075,7 @@ fn is_valid_validator_for_current_chain(
     validator_pk: &common::PublicKey,
     genesis_config: &GenesisConfig,
 ) -> bool {
-    !genesis_config.validator.iter().any(|(_alias, config)| {
+    genesis_config.validator.iter().any(|(_alias, config)| {
         if let Some(tm_node_key) = &config.tendermint_node_key {
             tm_node_key.0.eq(&validator_pk.to_string())
         } else {
