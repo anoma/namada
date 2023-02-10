@@ -29,7 +29,7 @@ use epoched::{
 };
 use namada_core::ledger::storage_api;
 use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::key::common;
+use namada_core::types::key::{common, PublicKeyTmRawHash};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 pub use parameters::PosParams;
@@ -813,15 +813,16 @@ pub trait PosBase {
                         params.tm_votes_per_token,
                         validator.bonded_stake,
                     );
+                    let prev_tm_vp = into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        prev_validator_stake,
+                    );
                     if prev_validators.active.contains(validator)
-                        || tm_vp
-                            == into_tm_voting_power(
-                                params.tm_votes_per_token,
-                                prev_validator_stake,
-                            )
+                        || tm_vp == prev_tm_vp
                     {
-                        println!(
-                            "skipping validator update, still the same {}",
+                        tracing::debug!(
+                            "skipping validator update, still the same {}, vp \
+                             {tm_vp}, prev {prev_tm_vp}",
                             validator.address
                         );
                         return None;
@@ -836,14 +837,20 @@ pub trait PosBase {
                             if let Some(ValidatorState::Pending) =
                                 state.get(prev_epoch)
                             {
-                                println!(
-                                    "skipping validator update, it's new {}",
+                                tracing::debug!(
+                                    "skipping validator update, it's new {}, \
+                                     vp {tm_vp}, prev {prev_tm_vp}",
                                     validator.address
                                 );
                                 return None;
                             }
                         }
                     }
+                    tracing::debug!(
+                        "active validator update {}, vp {tm_vp}, prev \
+                         {prev_tm_vp}",
+                        validator.address
+                    );
                 }
                 let consensus_key = self
                     .read_validator_consensus_key(&validator.address)
@@ -851,6 +858,7 @@ pub trait PosBase {
                     .get(current_epoch)
                     .unwrap()
                     .clone();
+                tracing::debug!("hash {}", consensus_key.tm_raw_hash());
                 Some(ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
                     bonded_stake: validator.bonded_stake,
@@ -859,41 +867,74 @@ pub trait PosBase {
         );
         let inactive_validators = cur_validators.inactive.iter().filter_map(
             |validator: &WeightedValidator| {
-                // If the validators set from previous epoch contains the same
-                // validator, it means its voting power hasn't changed and hence
-                // doesn't need to updated.
-                if let (Some(prev_epoch), Some(prev_validators)) =
-                    (previous_epoch, prev_validators)
-                {
-                    let prev_validator_stake =
-                        self.validator_stake(&validator.address, prev_epoch);
-                    let tm_vp = into_tm_voting_power(
-                        params.tm_votes_per_token,
-                        validator.bonded_stake,
+                let prev_validator_stake = previous_epoch
+                    .map(|prev_epoch| {
+                        self.validator_stake(&validator.address, prev_epoch)
+                    })
+                    .unwrap_or_default();
+                let prev_tm_vp = into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    prev_validator_stake,
+                );
+                // If the validator previously had no voting power, it wasn't in
+                // tendermint set and we have to skip it.
+                if prev_tm_vp == 0 {
+                    tracing::debug!(
+                        "skipping validator update {}, it's inactive and \
+                         previously had no voting power",
+                        validator.address
                     );
-                    if prev_validators.inactive.contains(validator)
-                        || tm_vp
-                            == into_tm_voting_power(
-                                params.tm_votes_per_token,
-                                prev_validator_stake,
-                            )
+                    return None;
+                }
+
+                let tm_vp = into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    validator.bonded_stake,
+                );
+                // If the validator has no voting power and was `Pending` in
+                // the previous epoch, it means that it just was just added to
+                // validator set. We have to skip it.
+                if tm_vp == 0 {
+                    if let Some(state) =
+                        self.read_validator_state(&validator.address)
                     {
-                        return None;
-                    }
-                    if tm_vp == 0 {
-                        // If the validator was `Pending` in the previous epoch,
-                        // it means that it just was just added to validator
-                        // set. We have to skip it, because it's 0.
-                        if let Some(state) =
-                            self.read_validator_state(&validator.address)
-                        {
-                            if let Some(ValidatorState::Pending) =
-                                state.get(prev_epoch)
-                            {
-                                return None;
-                            }
+                        let was_pending = previous_epoch
+                            .map(|prev_epoch| {
+                                matches!(
+                                    state.get(prev_epoch),
+                                    Some(ValidatorState::Pending)
+                                )
+                            })
+                            .unwrap_or_default();
+                        if was_pending {
+                            tracing::debug!(
+                                "skipping validator update {}, it's newly \
+                                 added inactive and and has no voting power",
+                                validator.address
+                            );
+                            return None;
                         }
                     }
+                }
+                // If the validators set from previous epoch contains the same
+                // validator and its voting power hasn't changed, it doesn't
+                // need to updated.
+                if let Some(prev_validators) = prev_validators {
+                    if prev_validators.inactive.contains(validator)
+                        || tm_vp == prev_tm_vp
+                    {
+                        tracing::debug!(
+                            "skipping validator update, it's inactive or \
+                             unchanged {}, vp {tm_vp}, prev {prev_tm_vp}",
+                            validator.address
+                        );
+                        return None;
+                    }
+                    tracing::debug!(
+                        "inactive validator update {}, vp {tm_vp}, prev \
+                         {prev_tm_vp}",
+                        validator.address
+                    );
                 }
                 let consensus_key = self
                     .read_validator_consensus_key(&validator.address)
@@ -901,6 +942,7 @@ pub trait PosBase {
                     .get(current_epoch)
                     .unwrap()
                     .clone();
+                tracing::debug!("hash {}", consensus_key.tm_raw_hash());
                 Some(ValidatorSetUpdate::Deactivated(consensus_key))
             },
         );
