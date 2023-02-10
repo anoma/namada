@@ -1834,12 +1834,13 @@ where
 }
 
 /// NEW: adapting `PosBase::validator_set_update for lazy storage
-pub fn validator_set_update_tendermint<S>(
+pub fn validator_set_update_tendermint<S, T>(
     storage: &S,
     params: &PosParams,
     current_epoch: Epoch,
-    f: impl FnMut(ValidatorSetUpdate),
-) where
+    f: impl FnMut(ValidatorSetUpdate) -> T,
+) -> storage_api::Result<Vec<T>>
+where
     S: StorageRead,
 {
     let current_epoch: Epoch = current_epoch;
@@ -1858,8 +1859,7 @@ pub fn validator_set_update_tendermint<S>(
     });
 
     let consensus_validators = cur_consensus_validators
-        .iter(storage)
-        .unwrap()
+        .iter(storage)?
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
@@ -1983,9 +1983,10 @@ pub fn validator_set_update_tendermint<S>(
                 .unwrap();
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
         });
-    consensus_validators
+    Ok(consensus_validators
         .chain(below_capacity_validators)
-        .for_each(f)
+        .map(f)
+        .collect())
 }
 
 /// Find all validators to which a given bond `owner` (or source) has a

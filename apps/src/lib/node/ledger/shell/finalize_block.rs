@@ -421,38 +421,39 @@ where
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
         // self.wl_storage.validator_set_update(current_epoch, |update| {
-        namada_proof_of_stake::validator_set_update_tendermint(
-            &self.wl_storage,
-            &pos_params,
-            current_epoch,
-            |update| {
-                let (consensus_key, power) = match update {
-                    ValidatorSetUpdate::Consensus(ConsensusValidator {
-                        consensus_key,
-                        bonded_stake,
-                    }) => {
-                        let power: i64 = into_tm_voting_power(
-                            pos_params.tm_votes_per_token,
+        response.validator_updates =
+            namada_proof_of_stake::validator_set_update_tendermint(
+                &self.wl_storage,
+                &pos_params,
+                current_epoch,
+                |update| {
+                    let (consensus_key, power) = match update {
+                        ValidatorSetUpdate::Consensus(ConsensusValidator {
+                            consensus_key,
                             bonded_stake,
-                        );
-                        (consensus_key, power)
-                    }
-                    ValidatorSetUpdate::Deactivated(consensus_key) => {
-                        // Any validators that have been dropped from the
-                        // consensus set must have voting power set to 0 to
-                        // remove them from the conensus set
-                        let power = 0_i64;
-                        (consensus_key, power)
-                    }
-                };
-                let pub_key = TendermintPublicKey {
-                    sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-                };
-                let pub_key = Some(pub_key);
-                let update = ValidatorUpdate { pub_key, power };
-                response.validator_updates.push(update);
-            },
-        );
+                        }) => {
+                            let power: i64 = into_tm_voting_power(
+                                pos_params.tm_votes_per_token,
+                                bonded_stake,
+                            );
+                            (consensus_key, power)
+                        }
+                        ValidatorSetUpdate::Deactivated(consensus_key) => {
+                            // Any validators that have been dropped from the
+                            // consensus set must have voting power set to 0 to
+                            // remove them from the conensus set
+                            let power = 0_i64;
+                            (consensus_key, power)
+                        }
+                    };
+                    let pub_key = TendermintPublicKey {
+                        sum: Some(key_to_tendermint(&consensus_key).unwrap()),
+                    };
+                    let pub_key = Some(pub_key);
+                    ValidatorUpdate { pub_key, power }
+                },
+            )
+            .expect("Must be able to update validator sets");
     }
 }
 
