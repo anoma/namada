@@ -813,15 +813,16 @@ pub trait PosBase {
                         params.tm_votes_per_token,
                         validator.bonded_stake,
                     );
+                    let prev_tm_vp = into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        prev_validator_stake,
+                    );
                     if prev_validators.active.contains(validator)
-                        || tm_vp
-                            == into_tm_voting_power(
-                                params.tm_votes_per_token,
-                                prev_validator_stake,
-                            )
+                        || tm_vp == prev_tm_vp
                     {
                         println!(
-                            "skipping validator update, still the same {}",
+                            "skipping validator update, still the same {}, vp \
+                             {tm_vp}, prev {prev_tm_vp}",
                             validator.address
                         );
                         return None;
@@ -837,13 +838,19 @@ pub trait PosBase {
                                 state.get(prev_epoch)
                             {
                                 println!(
-                                    "skipping validator update, it's new {}",
+                                    "skipping validator update, it's new {}, \
+                                     vp {tm_vp}, prev {prev_tm_vp}",
                                     validator.address
                                 );
                                 return None;
                             }
                         }
                     }
+                    println!(
+                        "active validator update {}, vp {tm_vp}, prev \
+                         {prev_tm_vp}",
+                        validator.address
+                    );
                 }
                 let consensus_key = self
                     .read_validator_consensus_key(&validator.address)
@@ -871,13 +878,18 @@ pub trait PosBase {
                         params.tm_votes_per_token,
                         validator.bonded_stake,
                     );
+                    let prev_tm_vp = into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        prev_validator_stake,
+                    );
                     if prev_validators.inactive.contains(validator)
-                        || tm_vp
-                            == into_tm_voting_power(
-                                params.tm_votes_per_token,
-                                prev_validator_stake,
-                            )
+                        || tm_vp == prev_tm_vp
                     {
+                        println!(
+                            "skipping validator update, it's inactive or \
+                             unchanged {}, vp {tm_vp}, prev {prev_tm_vp}",
+                            validator.address
+                        );
                         return None;
                     }
                     if tm_vp == 0 {
@@ -890,10 +902,20 @@ pub trait PosBase {
                             if let Some(ValidatorState::Pending) =
                                 state.get(prev_epoch)
                             {
+                                println!(
+                                    "skipping validator update, it's inactive \
+                                     and new {}, vp {tm_vp}, prev {prev_tm_vp}",
+                                    validator.address
+                                );
                                 return None;
                             }
                         }
                     }
+                    println!(
+                        "inactive validator update {}, vp {tm_vp}, prev \
+                         {prev_tm_vp}",
+                        validator.address
+                    );
                 }
                 let consensus_key = self
                     .read_validator_consensus_key(&validator.address)
