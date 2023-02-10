@@ -107,8 +107,12 @@ const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
-    let tx_code =
-        fs::read(args.clone().code_path).expect("Code path file not found.");
+    let tx_code = match ctx.try_read_wasm(&args.code_path) {
+        Some(bytes) => bytes,
+        None => {
+            fs::read(args.clone().code_path).expect("Code path file not found.")
+        }
+    };
     let tx_data = std::fs::read(args.clone().data_path.unwrap())
         .expect("Expected a file at given data path");
     let timestamp = args.timestamp.unwrap_or_default();
@@ -119,9 +123,7 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
             if args.tx.signers.len() == 1 {
                 ctx.get(args.tx.signers.first().unwrap())
             } else {
-                eprintln!(
-                    "Must specify and address."
-                );
+                eprintln!("Must specify and address.");
                 safe_exit(1);
             }
         }
