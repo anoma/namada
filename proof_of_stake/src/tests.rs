@@ -27,8 +27,9 @@ use test_log::test;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
-    BondDetails, BondId, BondsAndUnbondsDetails, GenesisValidator, Position,
-    ReverseOrdTokenAmount, ValidatorState, WeightedValidator,
+    BondDetails, BondId, BondsAndUnbondsDetails, ConsensusValidator,
+    GenesisValidator, Position, ReverseOrdTokenAmount, ValidatorSetUpdate,
+    ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -40,8 +41,8 @@ use crate::{
     read_num_consensus_validators, read_total_stake,
     read_validator_delta_value, read_validator_stake, staking_token_address,
     total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
-    update_validator_set, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash,
+    update_validator_set, validator_set_update_tendermint,
+    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
 };
 
 proptest! {
@@ -761,7 +762,6 @@ fn test_validator_sets() {
 
     // Start with two genesis validators with 1 NAM stake
     let epoch = Epoch::default();
-    let pipeline_epoch = epoch + params.pipeline_len;
     let pk1 = key::testing::keypair_1().to_public();
     let pk2 = key::testing::keypair_2().to_public();
     let (val1, stake1) = (gen_validator(), token::Amount::whole(1));
@@ -784,14 +784,14 @@ fn test_validator_sets() {
             GenesisValidator {
                 address: val1.clone(),
                 tokens: stake1,
-                consensus_key: pk1,
+                consensus_key: pk1.clone(),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
             GenesisValidator {
                 address: val2.clone(),
                 tokens: stake2,
-                consensus_key: pk2,
+                consensus_key: pk2.clone(),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -800,6 +800,28 @@ fn test_validator_sets() {
         epoch,
     )
     .unwrap();
+
+    // Check tendermint validator set updates
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk1.clone(),
+            bonded_stake: stake1.into(),
+        })
+    );
+    assert_eq!(
+        tm_updates[1],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk2.clone(),
+            bonded_stake: stake2.into(),
+        })
+    );
+
+    // Advance epoch
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
 
     // Insert another validator with the greater stake 10 NAM
     insert_validator_into_validator_set(
@@ -811,6 +833,10 @@ fn test_validator_sets() {
         params.pipeline_len,
     )
     .unwrap();
+
+    // Validator `val3` will be added at pipeline offset (2)
+    let val3_epoch = pipeline_epoch;
+
     // Update deltas as they are needed for validator set updates
     update_validator_deltas(&mut s, &params, &val3, stake3.change(), epoch)
         .unwrap();
@@ -847,6 +873,10 @@ fn test_validator_sets() {
         }, address)
         if address == &val3 && stake == &stake3 && *position == Position(0)
     ));
+
+    // Check tendermint validator set updates - there should be none
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
 
     // Insert another validator with a greater stake still 1000 NAM. It should
     // replace 2nd consensus validator with stake 1, which should become
@@ -1185,6 +1215,14 @@ fn test_validator_sets() {
         )
         if address == &val1 && stake == &stake1 && *position == Position(0)
     ));
+}
+
+fn get_tendermint_set_updates(
+    s: &TestWlStorage,
+    params: &PosParams,
+    epoch: Epoch,
+) -> Vec<ValidatorSetUpdate> {
+    validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
 }
 
 /// Advance to the next epoch. Returns the new epoch.
