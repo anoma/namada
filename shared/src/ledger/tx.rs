@@ -426,7 +426,7 @@ pub async fn submit_tx<C: crate::ledger::queries::Client + Sync>(
 /// Save accounts initialized from a tx into the wallet, if any.
 pub async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<U>,
-    args: &args::Tx,
+    alias: String,
     initialized_accounts: Vec<Address>,
 ) {
     let len = initialized_accounts.len();
@@ -440,20 +440,15 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
         // Store newly initialized account addresses in the wallet
         for (ix, address) in initialized_accounts.iter().enumerate() {
             let encoded = address.encode();
-            let alias: Cow<str> = match &args.initialized_account_alias {
-                Some(initialized_account_alias) => {
-                    if len == 1 {
-                        // If there's only one account, use the
-                        // alias as is
-                        initialized_account_alias.into()
-                    } else {
-                        // If there're multiple accounts, use
-                        // the alias as prefix, followed by
-                        // index number
-                        format!("{}{}", initialized_account_alias, ix).into()
-                    }
-                }
-                None => U::read_alias(&encoded).into(),
+            let alias: Cow<str> = if len == 1 {
+                // If there's only one account, use the
+                // alias as is
+                Cow::from(&alias)
+            } else {
+                // If there're multiple accounts, use
+                // the alias as prefix, followed by
+                // index number
+                Cow::from(format!("{}{}", alias, ix))
             };
             let alias = alias.into_owned();
             let added = wallet.add_address(alias.clone(), address.clone());
@@ -1073,7 +1068,7 @@ pub async fn submit_init_account<
     )
     .await
     .unwrap();
-    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
+    save_initialized_accounts::<U>(wallet, args.alias, initialized_accounts)
         .await;
     Ok(())
 }
@@ -1174,7 +1169,7 @@ pub async fn submit_custom<
     let initialized_accounts =
         process_tx::<C, U>(client, wallet, &args.tx, tx, TxSigningKey::None)
             .await?;
-    save_initialized_accounts::<U>(wallet, &args.tx, initialized_accounts)
+    save_initialized_accounts::<U>(wallet, args.alias, initialized_accounts)
         .await;
     Ok(())
 }

@@ -849,10 +849,11 @@ async fn process_tx<
 /// Save accounts initialized from a tx into the wallet, if any.
 pub async fn save_initialized_accounts<U: WalletUtils>(
     wallet: &mut Wallet<U>,
-    args: &args::Tx,
     initialized_accounts: Vec<Address>,
+    alias: String,
 ) {
-    tx::save_initialized_accounts::<U>(wallet, args, initialized_accounts).await
+    tx::save_initialized_accounts::<U>(wallet, alias, initialized_accounts)
+        .await
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that

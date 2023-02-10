@@ -31,9 +31,6 @@ pub trait WalletUtils {
     /// Panics if all options are empty/invalid.
     fn read_password(prompt_msg: &str) -> String;
 
-    /// Read an alias from the file/env/stdin.
-    fn read_alias(prompt_msg: &str) -> String;
-
     /// The given alias has been selected but conflicts with another alias in
     /// the store. Offer the user to either replace existing mapping, alter the
     /// chosen alias to a name of their chosing, or cancel the aliasing.

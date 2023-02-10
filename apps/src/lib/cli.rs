@@ -1739,6 +1739,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
+                alias: self.alias,
                 code_path: ctx.read_wasm(self.code_path),
                 data_path: self.data_path.map(|data_path| {
                     std::fs::read(data_path)
@@ -1753,8 +1754,10 @@ pub mod args {
             let tx = Tx::parse(matches);
             let code_path = CODE_PATH.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
+            let alias = ALIAS.parse(matches);
             Self {
                 tx,
+                alias,
                 code_path,
                 data_path,
             }
@@ -1900,6 +1903,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
+                alias: self.alias,
                 source: ctx.get(&self.source),
                 vp_code_path: ctx.read_wasm(self.vp_code_path),
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
@@ -1911,6 +1915,7 @@ pub mod args {
     impl Args for TxInitAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
+            let alias = ALIAS.parse(matches);
             let source = SOURCE.parse(matches);
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
@@ -1919,6 +1924,7 @@ pub mod args {
             let public_key = PUBLIC_KEY.parse(matches);
             Self {
                 tx,
+                alias,
                 source,
                 vp_code_path,
                 public_key,

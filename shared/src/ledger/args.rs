@@ -75,6 +75,8 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub code_path: C::Data,
     /// Path to the data file
     pub data_path: Option<C::Data>,
+    /// Alias
+    pub alias: String,
 }
 
 /// Transfer transaction arguments
@@ -138,6 +140,8 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: C::Data,
     /// Public key for the new account
     pub public_key: C::PublicKey,
+    /// Alias
+    pub alias: String,
 }
 
 /// Transaction to initialize a new account
