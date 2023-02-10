@@ -1731,7 +1731,7 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `.namada`.",
+                     `$XDG_DATA_HOME/com/anoma.namada`.",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
