@@ -774,6 +774,8 @@ pub trait PosBase {
         params: &PosParams,
         f: impl FnMut(ValidatorSetUpdate),
     ) {
+        use namada_core::types::key::PublicKeyTmRawHash;
+
         let current_epoch: Epoch = current_epoch;
         let current_epoch_u64: u64 = current_epoch.into();
         // INVARIANT: We can only access the previous epochs data, because
