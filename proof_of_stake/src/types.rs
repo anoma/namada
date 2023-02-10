@@ -169,7 +169,7 @@ pub struct GenesisValidator {
 }
 
 /// An update of the consensus and below-capacity validator set.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValidatorSetUpdate {
     /// A validator is consensus-participating
     Consensus(ConsensusValidator),
@@ -179,7 +179,7 @@ pub enum ValidatorSetUpdate {
 }
 
 /// Consensus validator's consensus key and its bonded stake.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ConsensusValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
