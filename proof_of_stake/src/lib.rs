@@ -858,6 +858,7 @@ pub trait PosBase {
                     .get(current_epoch)
                     .unwrap()
                     .clone();
+                println!("hash {}", consensus_key.tm_raw_hash());
                 Some(ValidatorSetUpdate::Active(ActiveValidator {
                     consensus_key,
                     bonded_stake: validator.bonded_stake,
@@ -923,6 +924,7 @@ pub trait PosBase {
                     .get(current_epoch)
                     .unwrap()
                     .clone();
+                println!("hash {}", consensus_key.tm_raw_hash());
                 Some(ValidatorSetUpdate::Deactivated(consensus_key))
             },
         );
