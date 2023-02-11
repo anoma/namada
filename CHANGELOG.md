@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.13.4
+
+Namada 0.13.4 is a bugfix release addressing logic errors in active
+validator set updates.
+
+### BUG FIXES
+
+- Fix Tendermint validator set update to properly skip validator with no voting
+  power. ([#1144](https://github.com/anoma/namada/pull/1144))
+
 ## v0.13.3
 
 Namada 0.13.3 is a bugfix release addressing issues with voting power
