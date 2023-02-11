@@ -31,13 +31,12 @@ use namada::vm;
 use rust_decimal::Decimal;
 
 use super::rpc;
-use super::utils::read_and_confirm_pwd;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::signing::find_keypair;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{gen_validator_keys, CliWalletUtils};
+use crate::wallet::{gen_validator_keys, read_and_confirm_pwd, CliWalletUtils};
 
 pub async fn submit_custom<
     C: namada::ledger::queries::Client + Sync,
@@ -685,11 +684,7 @@ pub async fn submit_vote_proposal<
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force {
-                    safe_exit(1)
-                } else {
-                    Ok(())
-                }
+                if !args.tx.force { safe_exit(1) } else { Ok(()) }
             }
         }
     }

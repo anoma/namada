@@ -182,3 +182,29 @@ pub fn load_or_new_from_genesis(
         });
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
+
+/// Read the password for encryption from the file/env/stdin with
+/// confirmation.
+pub fn read_and_confirm_pwd(unsafe_dont_encrypt: bool) -> Option<String> {
+    let password = if unsafe_dont_encrypt {
+        println!("Warning: The keypair will NOT be encrypted.");
+        None
+    } else {
+        Some(CliWalletUtils::read_password(
+            "Enter your encryption password: ",
+        ))
+    };
+    // Bis repetita for confirmation.
+    let to_confirm = if unsafe_dont_encrypt {
+        None
+    } else {
+        Some(CliWalletUtils::read_password(
+            "To confirm, please enter the same encryption password once more: ",
+        ))
+    };
+    if to_confirm != password {
+        eprintln!("Your two inputs do not match!");
+        cli::safe_exit(1)
+    }
+    password
+}

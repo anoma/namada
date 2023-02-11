@@ -8,14 +8,15 @@ use color_eyre::eyre::Result;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::masp::find_valid_diversifier;
-use namada::ledger::wallet::{FindKeyError, WalletUtils};
+use namada::ledger::wallet::FindKeyError;
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_apps::cli;
 use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::{args, cmds, Context};
-use namada_apps::client::utils::read_and_confirm_pwd;
-use namada_apps::wallet::{CliWalletUtils, DecryptionError};
+use namada_apps::wallet::{
+    read_and_confirm_pwd, CliWalletUtils, DecryptionError,
+};
 use rand_core::OsRng;
 
 pub fn main() -> Result<()> {
@@ -203,7 +204,7 @@ fn spending_key_gen(
 ) {
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
-    let password = new_password_prompt(unsafe_dont_encrypt);
+    let password = read_and_confirm_pwd(unsafe_dont_encrypt);
     let (alias, _key) = wallet.gen_spending_key(alias, password);
     namada_apps::wallet::save(&wallet)
         .unwrap_or_else(|err| eprintln!("{}", err));
@@ -268,7 +269,7 @@ fn address_key_add(
             (alias, "viewing key")
         }
         MaspValue::ExtendedSpendingKey(spending_key) => {
-            let password = new_password_prompt(unsafe_dont_encrypt);
+            let password = read_and_confirm_pwd(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
                 .encrypt_insert_spending_key(alias, spending_key, password)
@@ -498,30 +499,4 @@ fn address_add(ctx: Context, args: args::AddressAdd) {
         "Successfully added a key and an address with alias: \"{}\"",
         args.alias.to_lowercase()
     );
-}
-
-/// Prompt for pssword and confirm it if parameter is false
-fn new_password_prompt(unsafe_dont_encrypt: bool) -> Option<String> {
-    let password = if unsafe_dont_encrypt {
-        println!("Warning: The keypair will NOT be encrypted.");
-        None
-    } else {
-        Some(CliWalletUtils::read_password(
-            "Enter your encryption password: ",
-        ))
-    };
-    // Bis repetita for confirmation.
-    let pwd = if unsafe_dont_encrypt {
-        None
-    } else {
-        Some(CliWalletUtils::read_password(
-            "To confirm, please enter the same encryption password once \
-                 more: ",
-        ))
-    };
-    if pwd != password {
-        eprintln!("Your two inputs do not match!");
-        cli::safe_exit(1)
-    }
-    password
 }

@@ -9,9 +9,8 @@ use namada::ledger::wallet::pre_genesis::{
 use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
 use namada::types::key::SchemeType;
 
-use crate::client::utils::read_and_confirm_pwd;
 use crate::wallet::store::gen_validator_keys;
-use crate::wallet::CliWalletUtils;
+use crate::wallet::{read_and_confirm_pwd, CliWalletUtils};
 
 /// Validator pre-genesis wallet file name
 const VALIDATOR_FILE_NAME: &str = "wallet.toml";
