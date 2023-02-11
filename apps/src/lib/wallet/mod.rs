@@ -112,7 +112,7 @@ pub fn gen_validator_keys(
 ) -> Result<ValidatorKeys, FindKeyError> {
     let protocol_keypair = protocol_pk.map(|pk| {
         wallet
-            .find_key_by_pkh(&PublicKeyHash::from(&pk))
+            .find_key_by_pkh(&PublicKeyHash::from(&pk), None)
             .ok()
             .or_else(|| {
                 wallet

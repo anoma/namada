@@ -22,7 +22,8 @@ pub async fn find_keypair<
     wallet: &mut Wallet<U>,
     addr: &Address,
 ) -> Result<common::SecretKey, tx::Error> {
-    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr).await
+    namada::ledger::signing::find_keypair::<C, U>(client, wallet, addr, None)
+        .await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction

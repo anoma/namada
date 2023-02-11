@@ -84,7 +84,7 @@ fn address_key_find(
         println!("Viewing key: {}", viewing_key);
         if unsafe_show_secret {
             // Check if alias is also a spending key
-            match wallet.find_spending_key(&alias) {
+            match wallet.find_spending_key(&alias, None) {
                 Ok(spending_key) => println!("Spending key: {}", spending_key),
                 Err(FindKeyError::KeyNotFound) => {}
                 Err(err) => eprintln!("{}", err),
@@ -331,7 +331,7 @@ fn key_find(
 ) {
     let mut wallet = ctx.wallet;
     let found_keypair = match public_key {
-        Some(pk) => wallet.find_key_by_pk(&pk),
+        Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
             let alias = alias.or(value);
             match alias {
@@ -342,7 +342,7 @@ fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_key(alias.to_lowercase()),
+                Some(alias) => wallet.find_key(alias.to_lowercase(), None),
             }
         }
     };
@@ -414,7 +414,7 @@ fn key_list(
 fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     let mut wallet = ctx.wallet;
     wallet
-        .find_key(alias.to_lowercase())
+        .find_key(alias.to_lowercase(), None)
         .map(|keypair| {
             let file_data = keypair
                 .try_to_vec()

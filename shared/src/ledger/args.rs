@@ -380,6 +380,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signer: Option<C::Address>,
     /// Path to the TX WASM code file
     pub tx_code_path: C::Data,
+    /// Password to decrypt key
+    pub password: Option<String>,
 }
 
 /// MASP add key or address arguments

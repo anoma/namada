@@ -276,9 +276,10 @@ pub async fn submit_reveal_pk_aux<
         Ok(signing_key.clone())
     } else if let Some(signer) = args.signer.as_ref() {
         let signer = signer;
-        find_keypair::<C, U>(client, wallet, signer).await
+        find_keypair::<C, U>(client, wallet, signer, args.password.clone())
+            .await
     } else {
-        find_keypair::<C, U>(client, wallet, &addr).await
+        find_keypair::<C, U>(client, wallet, &addr, args.password.clone()).await
     }?;
     let epoch = rpc::query_epoch(client).await;
     let to_broadcast = if args.dry_run {

@@ -6,6 +6,7 @@ mod store;
 
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 pub use alias::Alias;
@@ -41,6 +42,29 @@ pub trait WalletUtils {
         alias: &Alias,
         alias_for: &str,
     ) -> store::ConfirmationResponse;
+}
+
+/// A degenerate implementation of wallet interactivity
+pub struct SdkWalletUtils<U>(PhantomData<U>);
+
+impl<U> WalletUtils for SdkWalletUtils<U> {
+    type Storage = U;
+
+    fn read_password(_prompt_msg: &str) -> String {
+        panic!("attempted to prompt for password in non-interactive mode");
+    }
+
+    fn read_alias(_prompt_msg: &str) -> String {
+        panic!("attempted to prompt for alias in non-interactive mode");
+    }
+
+    fn show_overwrite_confirmation(
+        _alias: &Alias,
+        _alias_for: &str,
+    ) -> store::ConfirmationResponse {
+        // Automatically replace aliases in non-interactive mode
+        store::ConfirmationResponse::Replace
+    }
 }
 
 /// The error that is produced when a given key cannot be obtained
@@ -127,12 +151,13 @@ impl<U: WalletUtils> Wallet<U> {
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.
-    /// If the key is encrypted, will prompt for password from stdin.
-    /// Any keys that are decrypted are stored in and read from a cache to avoid
-    /// prompting for password multiple times.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted. Any keys that are decrypted are stored in and
+    /// read from a cache to avoid prompting for password multiple times.
     pub fn find_key(
         &mut self,
         alias_pkh_or_pk: impl AsRef<str>,
+        password: Option<String>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) = self
@@ -150,13 +175,17 @@ impl<U: WalletUtils> Wallet<U> {
             &mut self.decrypted_key_cache,
             stored_key,
             alias_pkh_or_pk.into(),
+            password,
         )
     }
 
-    /// Find the spending key with the given alias in the wallet and return it
+    /// Find the spending key with the given alias in the wallet and return it.
+    /// If the spending key is encrypted but a password is not supplied, then it
+    /// will be interactively prompted.
     pub fn find_spending_key(
         &mut self,
         alias: impl AsRef<str>,
+        password: Option<String>,
     ) -> Result<ExtendedSpendingKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) =
@@ -173,6 +202,7 @@ impl<U: WalletUtils> Wallet<U> {
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
             alias.into(),
+            password,
         )
     }
 
@@ -196,12 +226,13 @@ impl<U: WalletUtils> Wallet<U> {
     }
 
     /// Find the stored key by a public key.
-    /// If the key is encrypted, will prompt for password from stdin.
-    /// Any keys that are decrypted are stored in and read from a cache to avoid
-    /// prompting for password multiple times.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
     pub fn find_key_by_pk(
         &mut self,
         pk: &common::PublicKey,
+        password: Option<String>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
@@ -222,16 +253,18 @@ impl<U: WalletUtils> Wallet<U> {
             &mut self.decrypted_key_cache,
             stored_key,
             alias,
+            password,
         )
     }
 
     /// Find the stored key by a public key hash.
-    /// If the key is encrypted, will prompt for password from stdin.
-    /// Any keys that are decrypted are stored in and read from a cache to avoid
-    /// prompting for password multiple times.
+    /// If the key is encrypted and password is not supplied, then password will
+    /// be interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
     pub fn find_key_by_pkh(
         &mut self,
         pkh: &PublicKeyHash,
+        password: Option<String>,
     ) -> Result<common::SecretKey, FindKeyError> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = self
@@ -251,25 +284,30 @@ impl<U: WalletUtils> Wallet<U> {
             &mut self.decrypted_key_cache,
             stored_key,
             alias,
+            password,
         )
     }
 
     /// Decrypt stored key, if it's not stored un-encrypted.
-    /// If a given storage key needs to be decrypted, prompt for password from
-    /// stdin and if successfully decrypted, store it in a cache.
+    /// If a given storage key needs to be decrypted and password is not
+    /// supplied, then interactively prompt for password and if successfully
+    /// decrypted, store it in a cache.
     fn decrypt_stored_key<
         T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
     >(
         decrypted_key_cache: &mut HashMap<Alias, T>,
         stored_key: &StoredKeypair<T>,
         alias: Alias,
+        password: Option<String>,
     ) -> Result<T, FindKeyError>
     where
         <T as std::str::FromStr>::Err: Display,
     {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
-                let password = U::read_password("Enter decryption password: ");
+                let password = password.unwrap_or_else(|| {
+                    U::read_password("Enter decryption password: ")
+                });
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;

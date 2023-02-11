@@ -2813,6 +2813,7 @@ pub mod args {
                 signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
                 signer: self.signer.map(|x| ctx.get(&x)),
                 tx_code_path: ctx.read_wasm(self.tx_code_path),
+                password: self.password,
             }
         }
     }
@@ -2877,10 +2878,10 @@ pub mod args {
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
-
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
             let tx_code_path = PathBuf::from(TX_REVEAL_PK);
+            let password = None;
             Self {
                 dry_run,
                 force,
@@ -2893,6 +2894,7 @@ pub mod args {
                 signing_key,
                 signer,
                 tx_code_path,
+                password,
             }
         }
     }

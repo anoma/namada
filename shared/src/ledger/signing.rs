@@ -12,7 +12,9 @@ use crate::types::storage::Epoch;
 use crate::types::transaction::{hash_tx, Fee, WrapperTx};
 
 /// Find the public key for the given address and try to load the keypair
-/// for it from the wallet. Errors if the key cannot be found or loaded.
+/// for it from the wallet. If the keypair is encrypted but a password is not
+/// supplied, then it is interactively prompted. Errors if the key cannot be
+/// found or loaded.
 pub async fn find_keypair<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -20,6 +22,7 @@ pub async fn find_keypair<
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
+    password: Option<String>,
 ) -> Result<common::SecretKey, Error> {
     match addr {
         Address::Established(_) => {
@@ -33,7 +36,7 @@ pub async fn find_keypair<
                     addr.encode()
                 )),
             )?;
-            wallet.find_key_by_pk(&public_key).map_err(|err| {
+            wallet.find_key_by_pk(&public_key, password).map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for public \
                      key {}. Failed with: {}",
@@ -42,7 +45,7 @@ pub async fn find_keypair<
             })
         }
         Address::Implicit(ImplicitAddress(pkh)) => {
-            wallet.find_key_by_pkh(pkh).map_err(|err| {
+            wallet.find_key_by_pkh(pkh, password).map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
                      implicit address {}. Failed with: {}",
@@ -98,8 +101,13 @@ pub async fn tx_signer<
         TxSigningKey::WalletKeypair(signing_key) => Ok(signing_key),
         TxSigningKey::WalletAddress(signer) => {
             let signer = signer;
-            let signing_key =
-                find_keypair::<C, U>(client, wallet, &signer).await?;
+            let signing_key = find_keypair::<C, U>(
+                client,
+                wallet,
+                &signer,
+                args.password.clone(),
+            )
+            .await?;
             // Check if the signer is implicit account that needs to reveal its
             // PK first
             if matches!(signer, Address::Implicit(_)) {
