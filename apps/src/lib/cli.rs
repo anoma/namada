@@ -1446,7 +1446,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
-        PkToTmAddress(PkToTmAddress)
+        PkToTmAddress(PkToTmAddress),
     }
 
     impl SubCmd for Utils {
@@ -1461,7 +1461,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
-                let pk_to_tm_address = SubCmd::parse(matches).map(Self::PkToTmAddress);
+                let pk_to_tm_address =
+                    SubCmd::parse(matches).map(Self::PkToTmAddress);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
@@ -1576,9 +1577,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "Convert a public key to a tendermint address.",
-                )
+                .about("Convert a public key to a tendermint address.")
                 .add_args::<args::PkToTmAddress>()
         }
     }
@@ -3415,19 +3414,21 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct PkToTmAddress {
-        pub public_key: common::PublicKey
+        pub public_key: common::PublicKey,
     }
 
     impl Args for PkToTmAddress {
         fn parse(matches: &ArgMatches) -> Self {
             let public_key = RAW_PUBLIC_KEY.parse(matches);
-            Self {
-                public_key
-            }
+            Self { public_key }
         }
 
         fn def(app: App) -> App {
-            app.arg(RAW_PUBLIC_KEY.def().about("The public key to be converted to tendermint address."))
+            app.arg(
+                RAW_PUBLIC_KEY.def().about(
+                    "The public key to be converted to tendermint address.",
+                ),
+            )
         }
     }
 
