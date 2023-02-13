@@ -111,6 +111,9 @@ pub async fn main() -> Result<()> {
             Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                 utils::init_genesis_validator(global_args, args)
             }
+            Utils::PkToTmAddress(PkToTmAddress(args)) => {
+                utils::pk_to_tm_address(global_args, args)
+            },
         },
     }
     Ok(())

@@ -1446,6 +1446,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
+        PkToTmAddress(PkToTmAddress)
     }
 
     impl SubCmd for Utils {
@@ -1460,10 +1461,12 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
+                let pk_to_tm_address = SubCmd::parse(matches).map(Self::PkToTmAddress);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
+                    .or(pk_to_tm_address)
             })
         }
 
@@ -1474,6 +1477,7 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
+                .subcommand(PkToTmAddress::def())
                 .setting(AppSettings::SubcommandRequiredElseHelp)
         }
     }
@@ -1555,6 +1559,27 @@ pub mod cmds {
                      node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress(pub args::PkToTmAddress);
+
+    impl SubCmd for PkToTmAddress {
+        const CMD: &'static str = "pk-to-tm";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PkToTmAddress::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Convert a public key to a tendermint address.",
+                )
+                .add_args::<args::PkToTmAddress>()
         }
     }
 }
@@ -1666,7 +1691,8 @@ pub mod args {
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
-    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
+    const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
+    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = RAW_PUBLIC_KEY.opt();
     const RECEIVER: Arg<String> = arg("receiver");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
@@ -3384,6 +3410,24 @@ pub mod args {
             .arg(DONT_PREFETCH_WASM.def().about(
                 "Do not pre-fetch WASM.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PkToTmAddress {
+        pub public_key: common::PublicKey
+    }
+
+    impl Args for PkToTmAddress {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key = RAW_PUBLIC_KEY.parse(matches);
+            Self {
+                public_key
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(RAW_PUBLIC_KEY.def().about("The public key to be converted to tendermint address."))
         }
     }
 
