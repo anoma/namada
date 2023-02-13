@@ -504,8 +504,7 @@ where
     Ok(amount)
 }
 
-/// Write PoS validator's consensus key (used for signing block votes).
-/// Note: for EpochedDelta, write the value to change storage by
+/// Add or remove PoS validator's stake delta value
 pub fn update_validator_deltas<S>(
     storage: &mut S,
     params: &PosParams,
@@ -985,9 +984,9 @@ where
             let lowest_position =
                 find_first_position(&below_capacity_vals_max, storage)?
                     .unwrap();
-            let removed_max_below_capacity =
-                below_capacity_vals_max.remove(storage, &lowest_position)?;
-            debug_assert!(removed_max_below_capacity.is_some());
+            let removed_max_below_capacity = below_capacity_vals_max
+                .remove(storage, &lowest_position)?
+                .expect("Must have been removed");
 
             // Insert the previous max below-capacity validator into the
             // consensus set
@@ -995,14 +994,27 @@ where
                 &consensus_val_handle.at(&max_below_capacity_validator_amount),
                 storage,
                 &epoch,
-                &removed_max_below_capacity.unwrap(),
+                &removed_max_below_capacity,
             )?;
+            validator_state_handle(&removed_max_below_capacity).set(
+                storage,
+                ValidatorState::Consensus,
+                current_epoch,
+                params.pipeline_len,
+            )?;
+
             // Insert the current validator into the below-capacity set
             insert_validator_into_set(
                 &below_capacity_val_handle.at(&tokens_post.into()),
                 storage,
                 &epoch,
                 validator,
+            )?;
+            validator_state_handle(&validator).set(
+                storage,
+                ValidatorState::BelowCapacity,
+                current_epoch,
+                params.pipeline_len,
             )?;
         } else {
             println!("VALIDATOR REMAINS IN CONSENSUS SET\n");
@@ -1053,6 +1065,12 @@ where
                 &epoch,
                 &removed_min_consensus,
             )?;
+            validator_state_handle(&removed_min_consensus).set(
+                storage,
+                ValidatorState::BelowCapacity,
+                current_epoch,
+                params.pipeline_len,
+            )?;
 
             // Insert the current validator into the consensus set
             insert_validator_into_set(
@@ -1061,6 +1079,12 @@ where
                 &epoch,
                 validator,
             )?;
+            validator_state_handle(&validator).set(
+                storage,
+                ValidatorState::Consensus,
+                current_epoch,
+                params.pipeline_len,
+            )?;
         } else {
             // The current validator should remain in the below-capacity set
             insert_validator_into_set(
@@ -1068,6 +1092,12 @@ where
                 storage,
                 &epoch,
                 validator,
+            )?;
+            validator_state_handle(&validator).set(
+                storage,
+                ValidatorState::BelowCapacity,
+                current_epoch,
+                params.pipeline_len,
             )?;
         }
     }
