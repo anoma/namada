@@ -2394,6 +2394,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethbridge-governance-contract"
+version = "0.4.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.4.0#7ae663994bede2b00a3f8d21f9ffcc0839e4c2dc"
+dependencies = [
+ "ethbridge-governance-events",
+ "ethbridge-structs",
+ "ethers",
+]
+
+[[package]]
+name = "ethbridge-governance-events"
+version = "0.4.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.4.0#7ae663994bede2b00a3f8d21f9ffcc0839e4c2dc"
+dependencies = [
+ "ethbridge-structs",
+ "ethers",
+]
+
+[[package]]
 name = "ethbridge-structs"
 version = "0.4.0"
 source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.4.0#7ae663994bede2b00a3f8d21f9ffcc0839e4c2dc"
@@ -4680,6 +4699,7 @@ dependencies = [
  "derivative",
  "ed25519-consensus",
  "ethabi",
+ "ethbridge-governance-contract",
  "eyre",
  "ferveo",
  "ferveo-common",
