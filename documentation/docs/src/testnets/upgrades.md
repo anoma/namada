@@ -1,6 +1,50 @@
 # Upgrades
 This page covers all installation steps required by various upgrades to testnets.
 
+
+## Latest Upgrade
+***13/02/2023*** `public-testnet-3`
+
+On *09/02/2023* the Namada chain `public-testnet-3` halted due to a bug in the Proof of Stake implementation when handling an edge case. Over the weekend, the team were able to fix and test a new patch that resolves the issue at hand. On *13/02/2023 11:30 UTC*, we were able to recover the network by having internal validators upgrade to the new patch. We are now calling on validators to upgrade to the new testnet as well, which will allow you to interact with the recovered chain.
+
+**Upgrading**
+1. Begin by stopping all instances of the namada node
+```bash
+killall namadan
+```
+2. Build the new tag (or download the binaries [here](https://github.com/anoma/namada/releases/tag/v0.13.4))
+```bash
+cd namada
+export NAMADA_TAG=v0.13.4
+make build-release
+```
+3. Copy the new binaries to path. More in depth instructions can be found at [here](./environment-setup.md)
+4. Once this has been completed, **the node must tesync from genesis** (see below)
+
+**How to resync from genesis:**
+1. As a precautionary measure, make a backup of your pregenesis keys
+```bash
+mkdir backup-pregenesis && cp -r .namada/pre-genesis backup-pregenesis/
+```
+2. Delete the relevant folder in .namada
+```bash
+rm -r .namada/public-testnet-3.0.81edd4d6eb6
+rm .namada/public-testnet-3.0.81edd4d6eb6.toml
+```
+WARNING: Do not delete the entire `.namada` folder, as it contains your pre-genesis keys. If this is accidentally done, you will have to copy over the backup-pregenesis file. See [these instructions](./run-your-genesis-validator.md) for more details
+3. Rejoin the network
+```bash
+export CHAIN_ID="public-testnet-3.0.81edd4d6eb6"
+namada client utils join-network \
+--chain-id $CHAIN_ID --genesis-validator $ALIAS
+```
+4. Run the node. One can simply run the ledger again using the familiar command
+```bash
+  NAMADA_TM_STDOUT=true namada node ledger run
+  ```
+
+Please reach out with any questions if you have any. This upgrade can be done asynchronously, but if you wish to continue validating the chain and testing our features, you must execute the above steps.
+
 ## Latest Testnet
 
 ***06/02/2023*** `public-testnet-3`
