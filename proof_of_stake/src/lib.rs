@@ -1010,7 +1010,7 @@ where
                 &epoch,
                 validator,
             )?;
-            validator_state_handle(&validator).set(
+            validator_state_handle(validator).set(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -1079,7 +1079,7 @@ where
                 &epoch,
                 validator,
             )?;
-            validator_state_handle(&validator).set(
+            validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
@@ -1093,7 +1093,7 @@ where
                 &epoch,
                 validator,
             )?;
-            validator_state_handle(&validator).set(
+            validator_state_handle(validator).set(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -1983,6 +1983,31 @@ where
                 "BELOW-CAPACITY VALIDATOR ADDRESS {}, STAKE {}\n",
                 address, cur_stake
             );
+
+            let prev_tm_voting_power = previous_epoch
+                .map(|prev_epoch| {
+                    let prev_validator_stake =
+                        validator_deltas_handle(&address)
+                            .get_sum(storage, prev_epoch, params)
+                            .unwrap()
+                            .map(token::Amount::from_change)
+                            .unwrap_or_default();
+                    into_tm_voting_power(
+                        params.tm_votes_per_token,
+                        prev_validator_stake,
+                    )
+                })
+                .unwrap_or_default();
+
+            // If the validator previously had no voting power, it wasn't in
+            // tendermint set and we have to skip it.
+            if prev_tm_voting_power == 0 {
+                tracing::debug!(
+                    "skipping validator update {address}, it's inactive and \
+                     previously had no voting power"
+                );
+                return None;
+            }
 
             let prev_below_capacity_vals =
                 below_capacity_validator_set_handle()
