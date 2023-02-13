@@ -1151,10 +1151,6 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
             unread
         ));
     }
-    println!(
-        "DEBUG: commited at height {} on chain {}",
-        height, test.net.chain_id
-    );
 
     // wait for the next block to use the app hash
     while height as u64 + 1 > query_height(test)?.revision_height {
@@ -1182,10 +1178,6 @@ fn query_height(test: &Test) -> Result<Height> {
         .block_on(client.status())
         .map_err(|e| eyre!("Getting the status failed: {}", e))?;
 
-    println!(
-        "DEBUG: height {} on chain {}",
-        status.sync_info.latest_block_height, test.net.chain_id
-    );
     Ok(Height::new(0, status.sync_info.latest_block_height.into()))
 }
 
