@@ -1735,12 +1735,15 @@ pub mod cmds {
     pub enum ValidatorSet {
         /// Query an Ethereum ABI encoding of the active validator
         /// set in Namada, at the given epoch, or the latest
-        /// one, if none is provided..
+        /// one, if none is provided.
         ActiveValidatorSet(args::ActiveValidatorSet),
         /// Query an Ethereum ABI encoding of a proof of the active
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
         ValidatorSetProof(args::ValidatorSetProof),
+        /// Relay a validator set update to Namada's Ethereum bridge
+        /// smart contracts.
+        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay),
     }
 
     impl SubCmd for ValidatorSet {
@@ -1752,7 +1755,9 @@ pub mod cmds {
                     .map(|args| Self::ActiveValidatorSet(args.0));
                 let validator_set_proof = ValidatorSetProof::parse(matches)
                     .map(|args| Self::ValidatorSetProof(args.0));
-                active_validator_set.or(validator_set_proof)
+                let relay = ValidatorSetUpdateRelay::parse(matches)
+                    .map(|args| Self::ValidatorSetUpdateRelay(args.0));
+                active_validator_set.or(validator_set_proof).or(relay)
             })
         }
 
@@ -1766,6 +1771,7 @@ pub mod cmds {
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(ActiveValidatorSet::def().display_order(1))
                 .subcommand(ValidatorSetProof::def().display_order(1))
+                .subcommand(ValidatorSetUpdateRelay::def().display_order(1))
         }
     }
 
@@ -1812,6 +1818,28 @@ pub mod cmds {
                      next one, if no epoch is provided.",
                 )
                 .add_args::<args::ValidatorSetProof>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay);
+
+    impl SubCmd for ValidatorSetUpdateRelay {
+        const CMD: &'static str = "relay";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::ValidatorSetUpdateRelay::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Relay a validator set update to Namada's Ethereum bridge \
+                     smart contracts.",
+                )
+                .add_args::<args::ValidatorSetUpdateRelay>()
         }
     }
 }
@@ -1881,6 +1909,8 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const ERC20: Arg<EthAddress> = arg("erc20");
+    const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
+    const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
@@ -2189,6 +2219,52 @@ pub mod args {
                     .def()
                     .about("The epoch of the set of validators to be proven."),
             )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ValidatorSetUpdateRelay {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch of the validator set to relay.
+        pub epoch: Option<Epoch>,
+        /// The Ethereum gas that can be spent during
+        /// the relay call.
+        pub gas: Option<u64>,
+        /// The price of Ethereum gas, during the
+        /// relay call.
+        pub gas_price: Option<u64>,
+    }
+
+    impl Args for ValidatorSetUpdateRelay {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            let gas = ETH_GAS.parse(matches);
+            let gas_price = ETH_GAS_PRICE.parse(matches);
+            Self {
+                query,
+                epoch,
+                gas,
+                gas_price,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(
+                    EPOCH
+                        .def()
+                        .about("The epoch of the set of validators to relay."),
+                )
+                .arg(ETH_GAS.def().about(
+                    "The Ethereum gas that can be spent during the relay call.",
+                ))
+                .arg(
+                    ETH_GAS_PRICE.def().about(
+                        "The price of Ethereum gas, during the relay call.",
+                    ),
+                )
         }
     }
 
