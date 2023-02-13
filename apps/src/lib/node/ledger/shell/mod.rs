@@ -37,7 +37,7 @@ use namada::proto::{self, Tx};
 use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
-use namada::types::internal::WrapperTxInQueue;
+use namada::types::internal::TxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -353,7 +353,7 @@ where
 
     /// Iterate over the wrapper txs in order
     #[allow(dead_code)]
-    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTxInQueue> {
+    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &TxInQueue> {
         self.storage.tx_queue.iter()
     }
 
@@ -928,7 +928,7 @@ mod test_utils {
             inner_tx: Option<EncryptedTx>,
             inner_tx_code: Option<EncryptedTx>,
         ) {
-            self.shell.storage.tx_queue.push(WrapperTxInQueue {
+            self.shell.storage.tx_queue.push(TxInQueue {
                 tx: wrapper,
                 inner_tx,
                 inner_tx_code,
@@ -1014,7 +1014,7 @@ mod test_utils {
             None,
         )
         .bind(tx);
-        shell.storage.tx_queue.push(WrapperTxInQueue {
+        shell.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
             inner_tx: Some(encrypted_tx),
             inner_tx_code: None,

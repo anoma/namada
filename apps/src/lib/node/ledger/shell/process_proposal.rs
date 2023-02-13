@@ -1,7 +1,7 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
-use namada::types::internal::WrapperTxInQueue;
+use namada::types::internal::TxInQueue;
 
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
@@ -72,7 +72,7 @@ where
     pub(crate) fn process_single_tx<'a>(
         &self,
         tx_bytes: &[u8],
-        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
+        tx_queue_iter: &mut impl Iterator<Item = &'a TxInQueue>,
     ) -> TxResult {
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
@@ -108,7 +108,7 @@ where
                         .into(),
                 },
                 TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(WrapperTxInQueue {
+                    Some(TxInQueue {
                         tx: wrapper,
                         inner_tx,
                         inner_tx_code,

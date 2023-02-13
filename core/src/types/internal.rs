@@ -53,7 +53,7 @@ mod tx_queue {
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
     /// add `has_valid_pow` flag for only used in testnets.
     #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
-    pub struct WrapperTxInQueue {
+    pub struct TxInQueue {
         /// Wrapper tx
         pub tx: crate::types::transaction::WrapperTx,
         /// the encrypted payload
@@ -70,23 +70,23 @@ mod tx_queue {
 
     #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
     /// Wrapper txs to be decrypted in the next block proposal
-    pub struct TxQueue(std::collections::VecDeque<WrapperTxInQueue>);
+    pub struct TxQueue(std::collections::VecDeque<TxInQueue>);
 
     impl TxQueue {
         /// Add a new wrapper at the back of the queue
-        pub fn push(&mut self, wrapper: WrapperTxInQueue) {
+        pub fn push(&mut self, wrapper: TxInQueue) {
             self.0.push_back(wrapper);
         }
 
         /// Remove the wrapper at the head of the queue
-        pub fn pop(&mut self) -> Option<WrapperTxInQueue> {
+        pub fn pop(&mut self) -> Option<TxInQueue> {
             self.0.pop_front()
         }
 
         /// Get an iterator over the queue
         pub fn iter(
             &self,
-        ) -> impl std::iter::Iterator<Item = &WrapperTxInQueue> {
+        ) -> impl std::iter::Iterator<Item = &TxInQueue> {
             self.0.iter()
         }
 
@@ -99,4 +99,4 @@ mod tx_queue {
 }
 
 #[cfg(feature = "ferveo-tpke")]
-pub use tx_queue::{TxQueue, WrapperTxInQueue};
+pub use tx_queue::{TxQueue, TxInQueue};

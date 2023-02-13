@@ -215,7 +215,7 @@ where
                         }
                     }
 
-                    self.storage.tx_queue.push(WrapperTxInQueue {
+                    self.storage.tx_queue.push(TxInQueue {
                         tx: wrapper.clone(),
                         inner_tx: tx.inner_tx,
                         inner_tx_code: tx.inner_tx_code,

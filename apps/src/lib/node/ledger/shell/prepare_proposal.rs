@@ -2,7 +2,7 @@
 
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
-use namada::types::internal::WrapperTxInQueue;
+use namada::types::internal::TxInQueue;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -99,7 +99,7 @@ where
 
             // decrypt the wrapper txs included in the previous block
             let decrypted_txs = self.storage.tx_queue.iter().map(
-                |WrapperTxInQueue {
+                |TxInQueue {
                      tx,
                      inner_tx,
                      inner_tx_code,
