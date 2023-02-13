@@ -37,7 +37,9 @@ use namada_core::ledger::storage_api::{
     self, OptionExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::key::{common, tm_consensus_key_raw_hash};
+use namada_core::types::key::{
+    common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
+};
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use once_cell::unsync::Lazy;
@@ -1899,9 +1901,8 @@ where
                 address,
             ) = validator.unwrap();
 
-            println!(
-                "CONSENSUS VALIDATOR ADDRESS {}, CUR_STAKE {}\n",
-                address, cur_stake
+            tracing::debug!(
+                "Consensus validator address {address}, stake {cur_stake}"
             );
 
             // Check if the validator was consensus in the previous epoch with
@@ -1954,11 +1955,14 @@ where
                     }
                 }
             }
-            println!("\nMAKING A CONSENSUS VALIDATOR CHANGE");
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, current_epoch, params)
                 .unwrap()
                 .unwrap();
+            tracing::debug!(
+                "{address} consensus key {}",
+                consensus_key.tm_raw_hash()
+            );
             Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key,
                 bonded_stake: cur_stake.into(),
@@ -1979,9 +1983,8 @@ where
             ) = validator.unwrap();
             let cur_stake = token::Amount::from(cur_stake);
 
-            println!(
-                "BELOW-CAPACITY VALIDATOR ADDRESS {}, STAKE {}\n",
-                address, cur_stake
+            tracing::debug!(
+                "Below-capacity validator address {address}, stake {cur_stake}"
             );
 
             let prev_tm_voting_power = previous_epoch
@@ -2036,6 +2039,10 @@ where
                 .get(storage, current_epoch, params)
                 .unwrap()
                 .unwrap();
+            tracing::debug!(
+                "{address} consensus key {}",
+                consensus_key.tm_raw_hash()
+            );
             Some(ValidatorSetUpdate::Deactivated(consensus_key))
         });
     Ok(consensus_validators
