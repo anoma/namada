@@ -5,6 +5,7 @@ pub mod chain;
 pub mod eth_abi;
 pub mod eth_bridge_pool;
 pub mod ethereum_events;
+pub mod ethereum_structs;
 pub mod governance;
 pub mod hash;
 pub mod ibc;
