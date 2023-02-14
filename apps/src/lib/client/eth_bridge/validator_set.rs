@@ -95,10 +95,8 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     println!("Sigs: {signatures:?}");
     println!("Governance addr: {}", governance_contract.address);
 
-    let eth_client = Arc::new(
-        // TODO: add eth rpc address to args
-        Provider::<Http>::try_from("http://localhost:8545").unwrap(),
-    );
+    let eth_client =
+        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let governance = Governance::new(governance_contract.address, eth_client);
 
     drop(governance);

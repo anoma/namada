@@ -1912,6 +1912,10 @@ pub mod args {
     const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
+    const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
+        "eth-rpc-endpoint",
+        DefaultFn(|| "http://localhost:8545".into()),
+    );
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -2226,6 +2230,8 @@ pub mod args {
     pub struct ValidatorSetUpdateRelay {
         /// The query parameters.
         pub query: Query,
+        /// The Ethereum RPC endpoint.
+        pub eth_rpc_endpoint: String,
         /// The epoch of the validator set to relay.
         pub epoch: Option<Epoch>,
         /// The Ethereum gas that can be spent during
@@ -2242,11 +2248,13 @@ pub mod args {
             let epoch = EPOCH.parse(matches);
             let gas = ETH_GAS.parse(matches);
             let gas_price = ETH_GAS_PRICE.parse(matches);
+            let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
             Self {
                 query,
                 epoch,
                 gas,
                 gas_price,
+                eth_rpc_endpoint,
             }
         }
 
