@@ -165,6 +165,8 @@ pub mod cmds {
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
+                // Pgf transactions
+                .subcommand(TxCreateCouncil::def().display_order(1))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(3))
                 .subcommand(QueryTransfers::def().display_order(3))
@@ -200,6 +202,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
+            let tx_counsil_crate = Self::parse_with_ctx(matches, TxCreateCouncil);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -233,6 +236,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
+                .or(tx_counsil_crate)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -290,12 +294,12 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        QueryResult(QueryResult),
         TxUpdateVp(TxUpdateVp),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
+        TxCreateCouncil(TxCreateCouncil),
         TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
@@ -314,6 +318,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        QueryResult(QueryResult),
         SignTx(SignTx),
     }
 
@@ -1416,6 +1421,30 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxCreateCouncil(pub args::CreateCouncil);
+
+    impl SubCmd for TxCreateCouncil {
+        const CMD: &'static str = "counsil-create";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxCreateCouncil(args::CreateCouncil::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to create a new pgf counsil.",
+                )
+                .add_args::<args::CreateCouncil>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxRevealPk(pub args::RevealPk);
 
     impl SubCmd for TxRevealPk {
@@ -1598,7 +1627,7 @@ pub mod args {
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
     use namada::types::time::DateTimeUtc;
-    use namada::types::token;
+    use namada::types::token::{self, Amount};
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
 
@@ -1689,6 +1718,7 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
+    const PGF_COUNSIL_DATA: ArgOpt<String> = arg_opt("counsil-data");
     const PROPOSAL_VOTE: Arg<ProposalVote> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
@@ -2477,6 +2507,36 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(PUBLIC_KEY.def().about("A public key to reveal."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct CreateCouncil {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// The enstablished address of the candidate counsil
+        pub address: WalletAddress,
+        /// The spending cap of the candidate counsil
+        pub spending_cap: Amount,
+        /// The data attached to the candidated counsil.
+        pub data: Option<String>
+    }
+
+    impl Args for CreateCouncil {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let address = ADDRESS.parse(matches);
+            let spending_cap = AMOUNT.parse(matches);
+            let data = PGF_COUNSIL_DATA.parse(matches);
+
+            Self { tx, address, spending_cap, data }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(ADDRESS.def().about("The enstablished address of the new counsil candidate."))
+                .arg(AMOUNT.def().about("The spending cap amount of the candidated counsil."))
+                .arg(PGF_COUNSIL_DATA.def().about("Some arbitrary data to attach to the candidacy. Limited to 4096 characters."))
         }
     }
 
