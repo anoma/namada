@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
-use ethabi::Address;
 use ethbridge_governance_contract::Governance;
 use ethbridge_structs::{Signature, ValidatorSetArgs};
 use namada::core::types::storage::Epoch;
-use namada::eth_bridge::ethers::abi::AbiDecode;
+use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::ledger::queries::RPC;
 
@@ -62,36 +61,58 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     } else {
         RPC.shell().epoch(&nam_client).await.unwrap().next()
     };
-    let encoded_proof = RPC
-        .shell()
-        .eth_bridge()
-        .read_valset_upd_proof(&nam_client, &epoch_to_relay)
-        .await
-        .unwrap();
+    let shell = RPC.shell().eth_bridge();
+    let encoded_proof_fut =
+        shell.read_valset_upd_proof(&nam_client, &epoch_to_relay);
 
     let bridge_current_epoch = Epoch(epoch_to_relay.0.saturating_sub(2));
-    let encoded_validator_set_args = RPC
-        .shell()
-        .eth_bridge()
-        .read_active_valset(&nam_client, &bridge_current_epoch)
-        .await
+    let shell = RPC.shell().eth_bridge();
+    let encoded_validator_set_args_fut =
+        shell.read_active_valset(&nam_client, &bridge_current_epoch);
+
+    let shell = RPC.shell().eth_bridge();
+    let governance_address_fut = shell.read_governance_contract(&nam_client);
+
+    let (encoded_proof, encoded_validator_set_args, governance_contract) =
+        futures::try_join!(
+            encoded_proof_fut,
+            encoded_validator_set_args_fut,
+            governance_address_fut
+        )
         .unwrap();
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
         [u8; 32],
         Vec<Signature>,
-    ) = AbiDecode::decode(encoded_proof).unwrap();
+    ) = abi_decode_struct(encoded_proof);
     let active_set: ValidatorSetArgs =
-        AbiDecode::decode(encoded_validator_set_args).unwrap();
+        abi_decode_struct(encoded_validator_set_args);
+
+    println!("Bridge hash: {bridge_hash:?}");
+    println!("Governance hash: {gov_hash:?}");
+    println!("Active: {active_set:?}");
+    println!("Sigs: {signatures:?}");
+    println!("Governance addr: {}", governance_contract.address);
 
     let eth_client = Arc::new(
         // TODO: add eth rpc address to args
         Provider::<Http>::try_from("http://localhost:8545").unwrap(),
     );
-    // TODO: query address of governance contract from RPC method
-    let governance_address = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
-        .parse::<Address>()
-        .unwrap();
-    let governance = Governance::new(governance_address, eth_client);
+    let governance = Governance::new(governance_contract.address, eth_client);
+
+    drop(governance);
+}
+
+// NOTE: there's a bug (or feature?!) in ethers, where
+// `EthAbiCodec` derived `AbiDecode` implementations
+// have a decode method that expects a tuple, but
+// passes invalid param types to `abi::decode()`
+fn abi_decode_struct<T, D>(data: T) -> D
+where
+    T: AsRef<[u8]>,
+    D: Tokenizable + AbiDecode + AbiType,
+{
+    let decoded: (D,) = AbiDecode::decode(data).unwrap();
+    decoded.0
 }
