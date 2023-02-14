@@ -2,6 +2,7 @@
 
 use color_eyre::eyre::Result;
 use namada_apps::cli;
+use namada_apps::cli::args::CreateCouncil;
 use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
 
@@ -47,6 +48,9 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::Withdraw(Withdraw(args)) => {
                     tx::submit_withdraw(ctx, args).await;
+                }
+                Sub::TxCreateCouncil(TxCreateCouncil(args)) => {
+                    tx::submit_init_counsil(ctx, args).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {
@@ -95,7 +99,7 @@ pub async fn main() -> Result<()> {
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
                 }
-                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
+                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
