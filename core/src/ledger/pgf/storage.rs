@@ -1,4 +1,9 @@
+use std::str::FromStr;
+
+use borsh::BorshDeserialize;
+
 use crate::ledger::pgf::ADDRESS;
+use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -13,7 +18,7 @@ const ACTIVE_COUNSIL: &str = "active_counsil";
 // /PGFAddress/spending_cap = Amount
 // /PGFAddress/spent_amount = Amount
 // /PGFAddress/candidacy_length = u8
-// /PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)
+// /PGFAddress/council_candidates/$candidate_address/$spending_cap = (epoch, url)
 // /PGFAddress/active_council/address = Address
 
 /// Check if key is inside pfg address space
@@ -102,4 +107,28 @@ pub fn get_active_counsil_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&ACTIVE_COUNSIL.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Get PGF candidate address
+pub fn get_candidate_address(key: &Key) -> Option<&Address> {
+    match key.get_at(2) {
+        Some(addr) => match addr {
+            DbKeySeg::AddressSeg(res) => Some(res),
+            DbKeySeg::StringSeg(_) => None,
+        },
+        None => None,
+    }
+}
+
+/// Get PGF candidate address
+pub fn get_candidate_spending_cap(key: &Key) -> Option<Amount> {
+    match key.get_at(3) {
+        Some(addr) => match addr {
+            DbKeySeg::AddressSeg(_) => None,
+            DbKeySeg::StringSeg(amount) => {
+                Amount::try_from_slice(amount.as_bytes()).ok()
+            },
+        },
+        None => None,
+    }
 }
