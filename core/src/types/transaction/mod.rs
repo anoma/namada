@@ -297,7 +297,6 @@ pub mod tx_types {
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx.clone(),
-                inner_tx_code: tx.inner_tx_code.clone(),
             }
             .partial_hash();
             match TxType::try_from(Tx {
@@ -305,7 +304,6 @@ pub mod tx_types {
                 data: Some(data),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx,
-                inner_tx_code: tx.inner_tx_code,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {

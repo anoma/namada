@@ -102,7 +102,6 @@ where
                 |TxInQueue {
                      tx,
                      inner_tx,
-                     inner_tx_code,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                  }| {
@@ -111,58 +110,13 @@ where
                             .clone()
                             .and_then(|x| tx.decrypt(privkey, x).ok())
                         {
-                            Some(mut inner_tx) => {
-                                if let Some(inner_tx_code) = inner_tx_code {
-                                    if let Some(inner_tx_code) = inner_tx
-                                        .decrypt_code(
-                                            privkey,
-                                            inner_tx_code.clone(),
-                                        )
-                                    {
-                                        // Embed the inner_tx_code inside the tx
-                                        // for
-                                        // future processing
-                                        inner_tx
-                                            .code
-                                            .expand(inner_tx_code)
-                                            .expect(
-                                                "decrypted code should have \
-                                                 correct hash",
-                                            );
-                                        // An inner_tx_code consistent with code
-                                        // is
-                                        // treated as a successful decryption
-                                        DecryptedTx::Decrypted {
-                                            tx: inner_tx,
-                                            #[cfg(not(feature = "mainnet"))]
-                                            has_valid_pow: *has_valid_pow,
-                                        }
-                                    } else {
-                                        // A failure to decrypt an inner_tx_code
-                                        // is
-                                        // treated as undecryptable
-                                        DecryptedTx::UndecryptableCode(inner_tx)
-                                    }
-                                } else if inner_tx.code.is_literal() {
-                                    // A literal code without an inner_tx_code
-                                    // is
-                                    // treated as a successful decryption
-                                    DecryptedTx::Decrypted {
-                                        tx: inner_tx,
-                                        #[cfg(not(feature = "mainnet"))]
-                                        has_valid_pow: *has_valid_pow,
-                                    }
-                                } else {
-                                    // The code being absent from both inner_tx
-                                    // and
-                                    // the code field is treated as
-                                    // undecryptable
-                                    DecryptedTx::UndecryptableCode(inner_tx)
-                                }
-                            }
+                            Some(inner_tx) => DecryptedTx::Decrypted {
+                                tx: inner_tx,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow: *has_valid_pow,
+                            },
                             // An absent or undecryptable inner_tx are both
-                            // treated
-                            // as undecryptable
+                            // treated as undecryptable
                             None => DecryptedTx::Undecryptable(tx.clone()),
                         },
                     )
@@ -352,11 +306,7 @@ mod test_prepare_proposal {
                 .sign(&keypair)
                 .expect("Test failed")
                 .attach_inner_tx(&tx, Default::default());
-            shell.enqueue_tx(
-                wrapper_tx,
-                wrapper.inner_tx.clone(),
-                wrapper.inner_tx_code.clone(),
-            );
+            shell.enqueue_tx(wrapper_tx, wrapper.inner_tx.clone());
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }

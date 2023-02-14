@@ -111,7 +111,6 @@ where
                     Some(TxInQueue {
                         tx: wrapper,
                         inner_tx,
-                        inner_tx_code,
                         #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: _,
                     }) => {
@@ -127,7 +126,6 @@ where
                             &tx,
                             privkey,
                             inner_tx.clone(),
-                            inner_tx_code.clone(),
                         ) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
@@ -218,7 +216,7 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::proto::{SignedTxData, TxCode};
+    use namada::proto::SignedTxData;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -287,9 +285,8 @@ mod test_process_proposal {
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
-        let inner_tx_code = "wasm_code".as_bytes().to_owned();
         let tx = Tx::new(
-            inner_tx_code.clone(),
+            "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
         let timestamp = tx.timestamp;
@@ -306,10 +303,8 @@ mod test_process_proposal {
         )
         .bind(tx.clone())
         .sign(&keypair)
-        .expect("Test failed");
-        let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
-        let inner_tx_code =
-            EncryptedTx::encrypt(&inner_tx_code, Default::default());
+        .expect("Test failed")
+        .attach_inner_tx(&tx, Default::default());
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
             sig,
@@ -333,7 +328,7 @@ mod test_process_proposal {
                 .try_to_vec()
                 .expect("Test failed");
             Tx {
-                code: TxCode::Literal(vec![]),
+                code: vec![],
                 data: Some(
                     SignedTxData {
                         sig,
@@ -343,8 +338,7 @@ mod test_process_proposal {
                     .expect("Test failed"),
                 ),
                 timestamp,
-                inner_tx: Some(inner_tx),
-                inner_tx_code: Some(inner_tx_code),
+                inner_tx: tx.inner_tx,
             }
         } else {
             panic!("Test failed");
@@ -501,7 +495,7 @@ mod test_process_proposal {
                 None,
             )
             .bind(tx.clone());
-            shell.enqueue_tx(wrapper, Some(encrypted_tx.clone()), None);
+            shell.enqueue_tx(wrapper, Some(encrypted_tx.clone()));
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
                 #[cfg(not(feature = "mainnet"))]
@@ -576,11 +570,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(
-            wrapper,
-            tx.inner_tx.clone(),
-            tx.inner_tx_code.clone(),
-        );
+        shell.enqueue_tx(wrapper, tx.inner_tx.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -644,11 +634,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(
-            wrapper,
-            tx.inner_tx.clone(),
-            tx.inner_tx_code.clone(),
-        );
+        shell.enqueue_tx(wrapper, tx.inner_tx.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -697,7 +683,7 @@ mod test_process_proposal {
             pow_solution: None,
         };
 
-        shell.enqueue_tx(wrapper.clone(), Some(inner_tx), None);
+        shell.enqueue_tx(wrapper.clone(), Some(inner_tx));
         let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),

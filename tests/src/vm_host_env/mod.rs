@@ -43,7 +43,6 @@ mod tests {
     use test_log::test;
 
     use super::{ibc, tx, vp};
-    use crate::namada::proto::TxCode;
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
 
@@ -538,11 +537,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -577,11 +575,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -612,11 +609,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and update the client without a header
@@ -659,11 +655,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // update the client with the message
@@ -690,11 +685,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // upgrade the client with the message
@@ -730,11 +724,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // get and increment the connection counter
@@ -769,11 +762,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // init a connection with the message
@@ -797,11 +789,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the message
@@ -835,11 +826,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open try a connection with the message
@@ -864,11 +854,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the connection with the mssage
@@ -907,11 +896,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // not bind a port
@@ -950,11 +938,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // bind a port
@@ -996,11 +983,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // init a channel with the message
@@ -1022,11 +1008,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open the channle with the message
@@ -1062,11 +1047,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // try open a channel with the message
@@ -1089,11 +1073,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // open a channel with the message
@@ -1131,11 +1114,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
@@ -1173,11 +1155,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1220,11 +1201,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1262,11 +1242,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1313,11 +1292,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send the token and a packet with the data
@@ -1380,11 +1358,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1459,11 +1436,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1508,11 +1484,10 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // send a packet with the message
@@ -1539,11 +1514,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // ack the packet with the message
@@ -1592,11 +1566,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
         // receive a packet with the message
@@ -1656,11 +1629,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 
@@ -1730,11 +1702,10 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
-            code: TxCode::Literal(vec![]),
+            code: vec![],
             data: Some(tx_data.clone()),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
         }
         .sign(&key::testing::keypair_1());
 

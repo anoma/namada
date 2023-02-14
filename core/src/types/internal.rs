@@ -58,8 +58,6 @@ mod tx_queue {
         pub tx: crate::types::transaction::WrapperTx,
         /// the encrypted payload
         pub inner_tx: Option<EncryptedTx>,
-        /// the encrypted payload
-        pub inner_tx_code: Option<EncryptedTx>,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet
         /// transactions.
@@ -84,9 +82,7 @@ mod tx_queue {
         }
 
         /// Get an iterator over the queue
-        pub fn iter(
-            &self,
-        ) -> impl std::iter::Iterator<Item = &TxInQueue> {
+        pub fn iter(&self) -> impl std::iter::Iterator<Item = &TxInQueue> {
             self.0.iter()
         }
 
@@ -99,4 +95,4 @@ mod tx_queue {
 }
 
 #[cfg(feature = "ferveo-tpke")]
-pub use tx_queue::{TxQueue, TxInQueue};
+pub use tx_queue::{TxInQueue, TxQueue};

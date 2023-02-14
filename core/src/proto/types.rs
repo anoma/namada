@@ -136,78 +136,6 @@ where
     }
 }
 
-/// Failed expansion due to hash of supplied code not matching contained hash
-#[derive(Debug)]
-pub struct InvalidCodeError;
-
-/// Represents either the literal code of a transaction or its hash. Useful for
-/// supporting both wallets that need the full transaction code, and those that
-/// only need the hash. Also useful for cases when passing full transaction code
-/// around separately from their transactions is cumbersome.
-#[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Hash,
-    PartialEq,
-    Eq,
-)]
-pub enum TxCode {
-    /// A hash of transaction code
-    Hash([u8; 32]),
-    /// The full transaction code
-    Literal(Vec<u8>),
-}
-
-impl TxCode {
-    /// Get the literal transaction code if available
-    pub fn code(&self) -> Option<Vec<u8>> {
-        match self {
-            Self::Hash(_hash) => None,
-            Self::Literal(lit) => Some(lit.clone()),
-        }
-    }
-
-    /// Return the transaction code hash
-    pub fn code_hash(&self) -> [u8; 32] {
-        match self {
-            Self::Hash(hash) => *hash,
-            Self::Literal(lit) => hash_tx(lit).0,
-        }
-    }
-
-    /// Expand this reduced Tx using the supplied code only if the the code
-    /// hashes to the stored code hash
-    pub fn expand(
-        &mut self,
-        code: Vec<u8>,
-    ) -> std::result::Result<(), InvalidCodeError> {
-        if hash_tx(&code).0 == self.code_hash() {
-            *self = TxCode::Literal(code);
-            Ok(())
-        } else {
-            Err(InvalidCodeError)
-        }
-    }
-
-    /// Replace a literal code with its hash
-    pub fn contract(&mut self) {
-        *self = TxCode::Hash(self.code_hash());
-    }
-
-    /// Indicates that this object contains the full code
-    pub fn is_literal(&self) -> bool {
-        matches!(self, Self::Literal(_))
-    }
-
-    /// Indicates that this object only contains the hash of the code
-    pub fn is_hash(&self) -> bool {
-        matches!(self, Self::Hash(_))
-    }
-}
-
 /// A SigningTx but with the full code embedded. This structure will almost
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
@@ -215,7 +143,7 @@ impl TxCode {
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
 )]
 pub struct Tx {
-    pub code: TxCode,
+    pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
     /// the encrypted inner transaction if data contains a WrapperTx
@@ -223,11 +151,6 @@ pub struct Tx {
     pub inner_tx: Option<EncryptedTx>,
     #[cfg(not(feature = "ferveo-tpke"))]
     pub inner_tx: Option<Vec<u8>>,
-    /// the encrypted inner transaction code if data contains a WrapperTx
-    #[cfg(feature = "ferveo-tpke")]
-    pub inner_tx_code: Option<EncryptedTx>,
-    #[cfg(not(feature = "ferveo-tpke"))]
-    pub inner_tx_code: Option<Vec<u8>>,
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -246,26 +169,11 @@ impl TryFrom<&[u8]> for Tx {
                     .map_err(Error::TxDeserializingError)
             })
             .transpose()?;
-        let inner_tx_code = tx
-            .inner_tx_code
-            .map(|x| {
-                BorshDeserialize::try_from_slice(&x)
-                    .map_err(Error::TxDeserializingError)
-            })
-            .transpose()?;
-        let code = if tx.is_code_hash {
-            TxCode::Hash(
-                tx.code.try_into().expect("Unable to deserialize code hash"),
-            )
-        } else {
-            TxCode::Literal(tx.code)
-        };
         Ok(Tx {
-            code,
+            code: tx.code,
             data: tx.data,
             timestamp,
             inner_tx,
-            inner_tx_code,
         })
     }
 }
@@ -277,20 +185,11 @@ impl From<Tx> for types::Tx {
             x.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         });
-        let inner_tx_code = tx.inner_tx_code.map(|x| {
-            x.try_to_vec()
-                .expect("Unable to serialize encrypted transaction code")
-        });
         types::Tx {
-            code: tx
-                .code
-                .code()
-                .unwrap_or_else(|| tx.code.code_hash().to_vec()),
-            is_code_hash: tx.code.is_hash(),
+            code: tx.code,
             data: tx.data,
             timestamp,
             inner_tx,
-            inner_tx_code,
         }
     }
 }
@@ -384,33 +283,10 @@ impl From<Tx> for ResponseDeliverTx {
 impl Tx {
     pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
         Tx {
-            code: TxCode::Literal(code),
+            code,
             data,
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            inner_tx_code: None,
-        }
-    }
-
-    /// Decrypt the wrapped transaction.
-    ///
-    /// Will fail if the inner transaction does match the
-    /// hash commitment or we are unable to recover a
-    /// valid Tx from the decoded byte stream.
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn decrypt_code(
-        &self,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        inner_tx: EncryptedTx,
-    ) -> Option<Vec<u8>> {
-        // decrypt the inner tx
-        let decrypted = inner_tx.decrypt(privkey);
-        // check that the hash equals commitment
-        if hash_tx(&decrypted).0 != self.code.code_hash() {
-            None
-        } else {
-            // convert back to Tx type
-            Some(decrypted)
         }
     }
 
@@ -428,12 +304,10 @@ impl Tx {
         let timestamp = Some(self.timestamp.into());
         let mut bytes = vec![];
         types::Tx {
-            code: self.code.code_hash().to_vec(),
-            is_code_hash: true,
+            code: hash_tx(&self.code).0.to_vec(),
             data: self.data.clone(),
             timestamp,
             inner_tx: None,
-            inner_tx_code: None,
         }
         .encode(&mut bytes)
         .expect("encoding a transaction failed");
@@ -442,7 +316,7 @@ impl Tx {
 
     /// Get the hash of this transaction's code
     pub fn code_hash(&self) -> [u8; 32] {
-        self.code.code_hash()
+        hash_tx(&self.code).0
     }
 
     /// Sign a transaction using [`SignedTxData`].
@@ -460,7 +334,6 @@ impl Tx {
             data: Some(signed),
             timestamp: self.timestamp,
             inner_tx: self.inner_tx,
-            inner_tx_code: self.inner_tx_code,
         }
     }
 
@@ -481,7 +354,6 @@ impl Tx {
             data,
             timestamp: self.timestamp,
             inner_tx: self.inner_tx.clone(),
-            inner_tx_code: self.inner_tx_code.clone(),
         };
         let signed_data = tx.partial_hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -500,38 +372,15 @@ impl Tx {
         self
     }
 
-    /// Attach the given transaction code to this one. Useful when the inner_tx
-    /// field contains a Tx and its code field needs a witness.
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn attach_inner_tx_code(
-        mut self,
-        tx: &[u8],
-        encryption_key: EncryptionKey,
-    ) -> Self {
-        let inner_tx_code = EncryptedTx::encrypt(tx, encryption_key);
-        self.inner_tx_code = Some(inner_tx_code);
-        self
-    }
-
     /// A validity check on the ciphertext.
     #[cfg(feature = "ferveo-tpke")]
     pub fn validate_ciphertext(&self) -> bool {
-        let mut valid = true;
         // Check the inner_tx ciphertext if it is there
-        if let Some(inner_tx) = &self.inner_tx {
-            valid = valid &&
-                inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
-                    -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-                ));
-        }
-        // Check the inner_tx_code ciphertext if it is there
-        if let Some(inner_tx_code) = &self.inner_tx_code {
-            valid = valid &&
-                inner_tx_code.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
-                    -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-                ));
-        }
-        valid
+        self.inner_tx.as_ref().map(|inner_tx| {
+            inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
+                -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
+            ))
+        }).unwrap_or(true)
     }
 }
 
@@ -626,11 +475,9 @@ mod tests {
 
         let types_tx = types::Tx {
             code,
-            is_code_hash: false,
             data: Some(data),
             timestamp: None,
             inner_tx: None,
-            inner_tx_code: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

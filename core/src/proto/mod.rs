@@ -3,7 +3,7 @@
 pub mod generated;
 mod types;
 
-pub use types::{Dkg, Error, Signed, SignedTxData, Tx, TxCode};
+pub use types::{Dkg, Error, Signed, SignedTxData, Tx};
 
 #[cfg(test)]
 mod tests {
@@ -18,12 +18,10 @@ mod tests {
         let code = "wasm code".as_bytes().to_owned();
         let inner_tx = "arbitrary data".as_bytes().to_owned();
         let tx = Tx {
-            code: code.clone(),
-            is_code_hash: false,
+            code,
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
             inner_tx: Some(inner_tx),
-            inner_tx_code: Some(code),
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

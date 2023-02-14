@@ -218,7 +218,6 @@ where
                     self.storage.tx_queue.push(TxInQueue {
                         tx: wrapper.clone(),
                         inner_tx: tx.inner_tx,
-                        inner_tx_code: tx.inner_tx_code,
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -239,8 +238,7 @@ where
                                     .to_string(),
                             );
                         }
-                        DecryptedTx::Undecryptable(_)
-                        | DecryptedTx::UndecryptableCode(_) => {
+                        DecryptedTx::Undecryptable(_) => {
                             event["log"] =
                                 "Transaction could not be decrypted.".into();
                             event["code"] = ErrorCodes::Undecryptable.into();
@@ -517,11 +515,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(
-                    wrapper.clone(),
-                    tx.inner_tx,
-                    tx.inner_tx_code,
-                );
+                shell.enqueue_tx(wrapper.clone(), tx.inner_tx);
             }
 
             if i != 3 {
@@ -597,7 +591,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper, Some(encrypted_raw_tx), None);
+        shell.enqueue_tx(wrapper, Some(encrypted_raw_tx));
 
         // check that the decrypted tx was not applied
         for event in shell
@@ -652,7 +646,7 @@ mod test_finalize_block {
             },
         };
 
-        shell.enqueue_tx(wrapper, Some(inner_tx), None);
+        shell.enqueue_tx(wrapper, Some(inner_tx));
 
         // check that correct error message is returned
         for event in shell
@@ -720,7 +714,7 @@ mod test_finalize_block {
                 None,
             )
             .bind(raw_tx.clone());
-            shell.enqueue_tx(wrapper_tx, Some(encrypted_raw_tx), None);
+            shell.enqueue_tx(wrapper_tx, Some(encrypted_raw_tx));
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: raw_tx,

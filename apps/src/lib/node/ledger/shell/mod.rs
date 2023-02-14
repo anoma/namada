@@ -926,12 +926,10 @@ mod test_utils {
             &mut self,
             wrapper: WrapperTx,
             inner_tx: Option<EncryptedTx>,
-            inner_tx_code: Option<EncryptedTx>,
         ) {
             self.shell.storage.tx_queue.push(TxInQueue {
                 tx: wrapper,
                 inner_tx,
-                inner_tx_code,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             });
@@ -1017,7 +1015,6 @@ mod test_utils {
         shell.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
             inner_tx: Some(encrypted_tx),
-            inner_tx_code: None,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });
