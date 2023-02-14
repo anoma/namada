@@ -8,6 +8,8 @@ pub mod tx_ibc;
 pub mod tx_init_account;
 #[cfg(feature = "tx_init_proposal")]
 pub mod tx_init_proposal;
+#[cfg(feature = "tx_init_counsil")]
+pub mod tx_init_counsil;
 #[cfg(feature = "tx_init_validator")]
 pub mod tx_init_validator;
 #[cfg(feature = "tx_reveal_pk")]

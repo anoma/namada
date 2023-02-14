@@ -19,6 +19,7 @@ enum KeyType<'a> {
     Vp(&'a Address),
     Masp,
     GovernanceVote(&'a Address),
+    PgfCandidate(&'a Address),
     Unknown,
 }
 
@@ -36,6 +37,13 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             let voter_address = gov_storage::get_voter_address(key);
             if let Some(address) = voter_address {
                 Self::GovernanceVote(address)
+            } else {
+                Self::Unknown
+            }
+        } else if pgf_storage::is_candidates_key(&key) {
+            let candidate_address = pgf_storage::get_candidate_address(&key);
+            if let Some(address) = candidate_address {
+                Self::PgfCandidate(address)
             } else {
                 Self::Unknown
             }
@@ -137,6 +145,13 @@ fn validate_tx(
             }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
+                    *valid_sig
+                } else {
+                    true
+                }
+            }
+            KeyType::PgfCandidate(candidate) => {
+                if candidate == &addr {
                     *valid_sig
                 } else {
                     true
