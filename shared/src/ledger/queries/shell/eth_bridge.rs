@@ -23,7 +23,9 @@ use namada_core::types::vote_extensions::validator_set_update::{
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
+use namada_ethereum_bridge::storage::proof::{
+    tokenize_relay_proof, EthereumProof, RelayProof,
+};
 use namada_ethereum_bridge::storage::vote_tallies::{
     eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
 };

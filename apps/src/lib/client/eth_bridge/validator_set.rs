@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
-use ethbridge_structs::{Signature, ValidatorSetArgs};
 use namada::core::types::storage::Epoch;
 use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
+use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
 
 use crate::cli::args;
