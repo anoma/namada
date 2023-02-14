@@ -1909,6 +1909,7 @@ pub mod args {
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const ERC20: Arg<EthAddress> = arg("erc20");
+    const ETH_CONFIRMATIONS: Arg<u64> = arg("confirmations");
     const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
@@ -2230,6 +2231,8 @@ pub mod args {
     pub struct ValidatorSetUpdateRelay {
         /// The query parameters.
         pub query: Query,
+        /// The number of block confirmations on Ethereum.
+        pub confirmations: u64,
         /// The Ethereum RPC endpoint.
         pub eth_rpc_endpoint: String,
         /// The epoch of the validator set to relay.
@@ -2249,11 +2252,13 @@ pub mod args {
             let gas = ETH_GAS.parse(matches);
             let gas_price = ETH_GAS_PRICE.parse(matches);
             let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
+            let confirmations = ETH_CONFIRMATIONS.parse(matches);
             Self {
                 query,
                 epoch,
                 gas,
                 gas_price,
+                confirmations,
                 eth_rpc_endpoint,
             }
         }

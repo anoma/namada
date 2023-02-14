@@ -89,17 +89,31 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     let active_set: ValidatorSetArgs =
         abi_decode_struct(encoded_validator_set_args);
 
-    println!("Bridge hash: {bridge_hash:?}");
-    println!("Governance hash: {gov_hash:?}");
-    println!("Active: {active_set:?}");
-    println!("Sigs: {signatures:?}");
-    println!("Governance addr: {}", governance_contract.address);
-
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
     let governance = Governance::new(governance_contract.address, eth_client);
 
-    drop(governance);
+    let mut relay_op = governance.update_validators_set(
+        active_set,
+        bridge_hash,
+        gov_hash,
+        signatures,
+        epoch_to_relay.0.into(),
+    );
+    if let Some(gas) = args.gas {
+        relay_op.tx.set_gas(gas);
+    }
+    if let Some(gas_price) = args.gas_price {
+        relay_op.tx.set_gas_price(gas_price);
+    }
+
+    let pending_tx = relay_op.send().await.unwrap();
+    let transf_result = pending_tx
+        .confirmations(args.confirmations as usize)
+        .await
+        .unwrap();
+
+    println!("{transf_result:?}");
 }
 
 // NOTE: there's a bug (or feature?!) in ethers, where
