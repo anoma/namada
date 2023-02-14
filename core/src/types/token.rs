@@ -88,6 +88,10 @@ impl Amount {
             .map(|result| Self { micro: result })
     }
 
+    pub fn is_greater_than_zero(&self) -> bool {
+        self.micro > 0
+    }
+
     /// Create amount from Change
     ///
     /// # Panics
