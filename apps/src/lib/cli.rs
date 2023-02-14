@@ -2278,6 +2278,12 @@ pub mod args {
                         "The price of Ethereum gas, during the relay call.",
                     ),
                 )
+                .arg(ETH_RPC_ENDPOINT.def().about("The Ethereum RPC endpoint."))
+                .arg(
+                    ETH_CONFIRMATIONS.def().about(
+                        "The number of block confirmations on Ethereum.",
+                    ),
+                )
         }
     }
 
