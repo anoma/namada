@@ -1421,8 +1421,8 @@ fn test_validator_sets_swap() {
 
     // Start with two genesis validators, one with 1 voting power and other 0
     let epoch = Epoch::default();
-    // 1 voting power
-    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::from(10));
+    // 1M voting power
+    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(10));
     // 0 voting power
     let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from(5));
     // 0 voting power
@@ -1464,9 +1464,11 @@ fn test_validator_sets_swap() {
 
     assert_eq!(stake2, stake3);
 
+    // Add 2 bonds, one for val2 and greater one for val3
+    let bonds_epoch_1 = pipeline_epoch;
     let bond2 = token::Amount::from(1);
     let stake2 = stake2 + bond2;
-    let bond3 = token::Amount::from(2);
+    let bond3 = token::Amount::from(4);
     let stake3 = stake3 + bond3;
 
     assert!(stake2 < stake3);
@@ -1483,21 +1485,59 @@ fn test_validator_sets_swap() {
     update_validator_deltas(&mut s, &params, &val3, bond3.change(), epoch)
         .unwrap();
 
-    let bond_epoch = pipeline_epoch;
-
     // Advance to EPOCH 2
-    let _epoch = advance_epoch(&mut s, &params);
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Add 2 more bonds, same amount for `val2` and val3`
+    let bonds_epoch_2 = pipeline_epoch;
+    let bonds = token::Amount::whole(1);
+    let stake2 = stake2 + bonds;
+    let stake3 = stake3 + bonds;
+    assert!(stake2 < stake3);
+    assert_eq!(
+        into_tm_voting_power(params.tm_votes_per_token, stake2),
+        into_tm_voting_power(params.tm_votes_per_token, stake3)
+    );
+
+    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val2, bonds.change(), epoch)
+        .unwrap();
+
+    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val3, bonds.change(), epoch)
+        .unwrap();
 
     // Advance to EPOCH 3
     let epoch = advance_epoch(&mut s, &params);
 
     // Check tendermint validator set updates
-    assert_eq!(bond_epoch, epoch);
+    assert_eq!(bonds_epoch_1, epoch);
     let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
     // `val2` must not be given to tendermint - even though it was in the
     // consensus set, its voting power was 0, so it wasn't in TM set before the
     // bond
     assert!(tm_updates.is_empty());
+
+    // Advance to EPOCH 4
+    let epoch = advance_epoch(&mut s, &params);
+
+    // Check tendermint validator set updates
+    assert_eq!(bonds_epoch_2, epoch);
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    dbg!(&tm_updates);
+    assert_eq!(tm_updates.len(), 1);
+    // `val2` must not be given to tendermint as it was and still is below
+    // capacity
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk3,
+            bonded_stake: stake3.into(),
+        })
+    );
 }
 
 fn get_tendermint_set_updates(
