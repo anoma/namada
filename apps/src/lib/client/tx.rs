@@ -59,6 +59,7 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
+use namada::types::transaction::pgf::InitCounsil;
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::vm;
@@ -83,6 +84,7 @@ use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+const TX_INIT_COUNSIL: &str = "tx_init_counsil.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
@@ -272,8 +274,6 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         pks_map.insert(pk.clone(), index as u64);
     }
 
-    // TODO: refactor args.source and require either --signer or --signing-keys
-    // or --signatures
     let default_signer = args.source.unwrap();
 
     let tx = Tx::new(tx_code, Some(data));
@@ -2530,6 +2530,44 @@ async fn filter_delegations(
     .await;
     // Take out the `None`s
     delegations.into_iter().flatten().collect()
+}
+
+pub async fn submit_init_counsil(ctx: Context, args::CreateCouncil {
+    tx: tx_args,
+    address,
+    spending_cap,
+    data,
+}: args::CreateCouncil) {
+    let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
+    let counsil_address = ctx.get(&address);
+    
+    let current_epoch = rpc::query_and_print_epoch(args::Query {
+        ledger_address: tx_args.ledger_address.clone(),
+    })
+    .await;
+
+    let tx_code = ctx.read_wasm(TX_INIT_COUNSIL);
+    let data = InitCounsil {
+        address: counsil_address.clone(),
+        spending_cap,
+        epoch: current_epoch,
+        data: data.unwrap_or_default()
+    };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+
+    let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
+
+    let tx = Tx::new(tx_code, Some(data));
+    let (ctx, initialized_accounts) = process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        pks_map,
+        vec![TxSigningKey::WalletAddress(address)],
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
 }
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
