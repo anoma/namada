@@ -42,7 +42,6 @@ where
     ) -> Result<shim::response::FinalizeBlock> {
         // reset gas meter before we start
         self.gas_meter.reset();
-
         let mut response = shim::response::FinalizeBlock::default();
         // begin the next block and check if a new epoch began
         let (height, new_epoch) =

@@ -627,6 +627,7 @@ mod test_oracle {
             transfers: vec![TransferToEthereum {
                 amount: Default::default(),
                 asset: EthAddress([0; 20]),
+                sender: gas_payer.clone(),
                 receiver: EthAddress([1; 20]),
                 gas_amount: Default::default(),
                 gas_payer: gas_payer.clone(),
@@ -698,6 +699,7 @@ mod test_oracle {
                 TransferToEthereum {
                     amount: Default::default(),
                     asset: EthAddress([0; 20]),
+                    sender: gas_payer.clone(),
                     receiver: EthAddress([1; 20]),
                     gas_amount: Default::default(),
                     gas_payer: gas_payer.clone(),

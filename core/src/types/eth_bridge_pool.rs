@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{
     EthAddress, TransferToEthereum as TransferToEthereumEvent,
@@ -80,8 +80,8 @@ impl From<PendingTransfer> for ethbridge_structs::Erc20Transfer {
     }
 }
 
-impl Encode<7> for PendingTransfer {
-    fn tokenize(&self) -> [Token; 7] {
+impl Encode<8> for PendingTransfer {
+    fn tokenize(&self) -> [Token; 8] {
         // TODO: This version should be looked up from storage
         let version = Token::Uint(1.into());
         let namespace = Token::String(NAMESPACE.into());
@@ -90,7 +90,8 @@ impl Encode<7> for PendingTransfer {
         let to = Token::Address(self.transfer.recipient.0.into());
         let amount = Token::Uint(u64::from(self.transfer.amount).into());
         let fee_from = Token::String(self.gas_fee.payer.to_string());
-        [version, namespace, from, to, amount, fee, fee_from]
+        let sender = Token::String(self.transfer.sender.to_string());
+        [version, namespace, from, to, amount, fee_from, fee, sender]
     }
 }
 
@@ -99,8 +100,7 @@ impl From<&TransferToEthereumEvent> for PendingTransfer {
         let transfer = TransferToEthereum {
             asset: event.asset,
             recipient: event.receiver,
-            // The sender is dummy because it doesn't affect the hash
-            sender: Address::Internal(InternalAddress::EthBridgePool),
+            sender: event.sender.clone(),
             amount: event.amount,
         };
         let gas_fee = GasFee {

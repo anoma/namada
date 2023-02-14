@@ -1,9 +1,9 @@
 pub mod signatures {
     pub const TRANSFER_TO_NAMADA_SIG: &str =
         "TransferToNamada(uint256,(address,uint256,string)[],uint256)";
-    pub const TRANSFER_TO_ETHEREUM_SIG: &str = "TransferToErc(uint256,\
-                                                (address,address,uint256,\
-                                                string,uint256)[],string)";
+    pub const TRANSFER_TO_ETHEREUM_SIG: &str =
+        "TransferToErc(uint256,(address,address,string,uint256,string,\
+         uint256)[],string)";
     pub const VALIDATOR_SET_UPDATE_SIG: &str =
         "ValidatorSetUpdate(uint256,bytes32,bytes32)";
     pub const NEW_CONTRACT_SIG: &str = "NewContract(string,address)";
@@ -309,6 +309,7 @@ pub mod eth_events {
                     ParamType::Array(Box::new(ParamType::Tuple(vec![
                         ParamType::Address,
                         ParamType::Address,
+                        ParamType::String,
                         ParamType::Uint(256),
                         ParamType::String,
                         ParamType::Uint(256),
@@ -350,6 +351,7 @@ pub mod eth_events {
                     |TransferToEthereum {
                          amount,
                          asset,
+                         sender,
                          receiver,
                          gas_amount,
                          gas_payer,
@@ -357,6 +359,7 @@ pub mod eth_events {
                         Token::Tuple(vec![
                             Token::Address(asset.0.into()),
                             Token::Address(receiver.0.into()),
+                            Token::String(sender.to_string()),
                             Token::Uint(u64::from(amount).into()),
                             Token::String(gas_payer.to_string()),
                             Token::Uint(u64::from(gas_amount).into()),
@@ -727,12 +730,14 @@ pub mod eth_events {
             if let Token::Tuple(mut items) = self {
                 let asset = items.remove(0).parse_eth_address()?;
                 let receiver = items.remove(0).parse_eth_address()?;
+                let sender = items.remove(0).parse_address()?;
                 let amount = items.remove(0).parse_amount()?;
                 let gas_payer = items.remove(0).parse_address()?;
                 let gas_amount = items.remove(0).parse_amount()?;
                 Ok(TransferToEthereum {
                     asset,
                     amount,
+                    sender,
                     receiver,
                     gas_amount,
                     gas_payer,
@@ -996,6 +1001,7 @@ pub mod eth_events {
                     TransferToEthereum {
                         amount: Default::default(),
                         asset: EthAddress([1; 20]),
+                        sender: address.clone(),
                         receiver: EthAddress([2; 20]),
                         gas_amount: Default::default(),
                         gas_payer: address.clone(),

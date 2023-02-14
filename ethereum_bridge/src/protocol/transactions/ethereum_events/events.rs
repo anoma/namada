@@ -578,6 +578,7 @@ mod tests {
                 receiver: transfer.transfer.recipient,
                 gas_amount: transfer.gas_fee.amount,
                 gas_payer: transfer.gas_fee.payer,
+                sender: transfer.transfer.sender,
             };
             transfers.push(transfer_to_eth);
         }

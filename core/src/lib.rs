@@ -12,7 +12,8 @@ pub mod ledger;
 pub mod proto;
 pub mod types;
 
-pub use ethbridge_structs;
+pub use data_encoding::HEXLOWER;
+pub use {ethbridge_structs, libsecp256k1};
 #[cfg(feature = "abciplus")]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]

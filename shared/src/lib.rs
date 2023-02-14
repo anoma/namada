@@ -10,6 +10,10 @@
 pub use tendermint_rpc;
 #[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
+pub use {
+    ethers, namada_core as core, namada_ethereum_bridge as eth_bridge,
+    namada_proof_of_stake as proof_of_stake,
+};
 #[cfg(feature = "abciplus")]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
@@ -17,10 +21,6 @@ pub use {
     ibc_abcipp as ibc, ibc_proto_abcipp as ibc_proto,
     tendermint_abcipp as tendermint,
     tendermint_proto_abcipp as tendermint_proto,
-};
-pub use {
-    namada_core as core, namada_ethereum_bridge as eth_bridge,
-    namada_proof_of_stake as proof_of_stake,
 };
 pub mod ledger;
 pub use namada_core::proto;

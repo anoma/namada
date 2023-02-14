@@ -67,7 +67,7 @@ pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     match response {
         Ok(response) => {
             let abi_encoded_proof = AbiBridgePoolProof {
-                proof: response.data.into_inner(),
+                proof: response.data,
             };
             println!(
                 "Ethereum ABI-encoded proof:\n {}",

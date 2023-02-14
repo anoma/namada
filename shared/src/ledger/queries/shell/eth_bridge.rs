@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ethers::abi::Tokenizable;
 use namada_core::ethbridge_structs::RelayProof;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
@@ -35,6 +34,8 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::Epoch;
 use crate::types::storage::MembershipProof::BridgePool;
 
+pub type RelayProofBytes = Vec<u8>;
+
 router! {ETH_BRIDGE,
     // Get the current contents of the Ethereum bridge pool
     ( "pool" / "contents" )
@@ -48,7 +49,7 @@ router! {ETH_BRIDGE,
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
     ( "pool" / "proof" )
-        -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
+        -> RelayProofBytes = (with_options generate_bridge_pool_proof),
 
     // Iterates over all ethereum events and returns the amount of
     // voting power backing each `TransferToEthereum` event.
@@ -232,11 +233,9 @@ where
                     batch_nonce: signed_root.data.1.into(),
                     relayer_address: relayer.to_string(),
                 };
-                let data = EncodeCell::<RelayProof>::new_from([
-                    Tokenizable::into_token(data),
-                ])
-                .try_to_vec()
-                .expect("Serializing a relay proof should not fail.");
+                let data = ethers::abi::AbiEncode::encode(data)
+                    .try_to_vec()
+                    .expect("Serializing a relay proof should not fail.");
                 Ok(EncodedResponseQuery {
                     data,
                     ..Default::default()
@@ -788,9 +787,7 @@ mod test_ethbridge_router {
             batch_nonce: Default::default(),
             relayer_address: bertha_address().to_string(),
         };
-        let proof =
-            EncodeCell::<RelayProof>::new_from([Tokenizable::into_token(data)]);
-
+        let proof = ethers::abi::AbiEncode::encode(data);
         assert_eq!(proof, resp.data);
     }
 
@@ -984,6 +981,7 @@ mod test_ethbridge_router {
                 amount: transfer.transfer.amount,
                 gas_payer: transfer.gas_fee.payer.clone(),
                 gas_amount: transfer.gas_fee.amount,
+                sender: transfer.transfer.sender.clone(),
             };
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
