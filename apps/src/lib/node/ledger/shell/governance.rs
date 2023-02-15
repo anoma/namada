@@ -1,3 +1,4 @@
+use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
@@ -78,7 +79,7 @@ where
                 let (successful_execution, proposal_event) = match tally {
                     Tally::Default => execute_default_proposal(shell, id),
                     Tally::PGFCouncil(council) => {
-                        execute_pgf_proposal(id, council)
+                        execute_pgf_proposal(shell, id, council)
                     }
                     Tally::ETHBridge => execute_eth_proposal(id),
                 };
@@ -221,9 +222,34 @@ where
     }
 }
 
-fn execute_pgf_proposal(id: u64, council: Council) -> (bool, Event) {
-    // TODO: implement when PGF is in place, update the PGF
-    // council in storage
+fn execute_pgf_proposal<D, H>(
+    shell: &mut Shell<D, H>,
+    id: u64,
+    council: Council,
+) -> (bool, Event)
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    // Write storage address and spending cap in storage
+    let council_address_storage_key = pgf_storage::get_active_counsil_key();
+    shell
+        .wl_storage
+        .write(&council_address_storage_key, council.0.clone())
+        .expect("Should be able to write storage");
+    let council_cap_storage_key = pgf_storage::get_spending_cap_key();
+    shell
+        .wl_storage
+        .write(&council_cap_storage_key, council.1)
+        .expect("Should be able to write to storage");
+
+    // Reset spent budget
+    let spent_amount_key = pgf_storage::get_spent_amount_key();
+    shell
+        .wl_storage
+        .write(&spent_amount_key, 0)
+        .expect("Should be able to write to storage");
+
     (
         true,
         ProposalEvent::new(
