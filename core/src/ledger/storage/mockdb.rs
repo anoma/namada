@@ -13,6 +13,7 @@ use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::types::ethereum;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -87,6 +88,14 @@ impl DB for MockDB {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
+
+        let ethereum_height: Option<ethereum::BlockHeight> =
+            match self.0.borrow().get("ethereum_height") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
 
         // Load data at the height
         let prefix = format!("{}/", height.raw());
@@ -163,6 +172,7 @@ impl DB for MockDB {
                     results,
                     #[cfg(feature = "ferveo-tpke")]
                     tx_queue,
+                    ethereum_height,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -184,6 +194,7 @@ impl DB for MockDB {
             next_epoch_min_start_time,
             address_gen,
             results,
+            ethereum_height,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
         }: BlockStateWrite = state;
@@ -197,6 +208,9 @@ impl DB for MockDB {
             "next_epoch_min_start_time".into(),
             types::encode(&next_epoch_min_start_time),
         );
+        self.0
+            .borrow_mut()
+            .insert("ethereum_height".into(), types::encode(&ethereum_height));
         #[cfg(feature = "ferveo-tpke")]
         {
             self.0

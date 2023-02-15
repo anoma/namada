@@ -35,7 +35,7 @@ use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{local_node, DBIter, Storage, DB};
+use namada::ledger::storage::{DBIter, Storage, DB};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -412,7 +412,6 @@ where
                 tracing::error!("Cannot load the last state from the DB {}", e);
             })
             .expect("PersistentStorage cannot be initialized");
-        local_node::ensure_values_present(&mut storage);
 
         let vp_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");
@@ -720,17 +719,13 @@ where
                 .as_ref()
                 .cloned();
             match last_processed_block {
-                Some(mrpb) => {
+                Some(eth_height) => {
                     tracing::info!(
                         "Ethereum oracle's most recently processed Ethereum \
                          block is {}",
-                        mrpb
+                        eth_height
                     );
-                    local_node::write_value(
-                        &mut self.storage,
-                        local_node::EthereumOracleLastProcessedBlock,
-                        Some(mrpb),
-                    )
+                    self.storage.ethereum_height = Some(eth_height);
                 }
                 None => tracing::info!(
                     "Ethereum oracle has not yet fully processed any Ethereum \
@@ -814,11 +809,8 @@ where
                 );
                 return;
             };
-            let start_block = match local_node::read_value(
-                &self.storage,
-                local_node::EthereumOracleLastProcessedBlock,
-            ) {
-                Some(start_block) => start_block,
+            let start_block = match &self.storage.ethereum_height {
+                Some(start_block) => start_block.clone(),
                 None => ethereum::BlockHeight::from(0),
             };
             tracing::info!(
@@ -1456,6 +1448,7 @@ mod test_utils {
                 address_gen: &address_gen,
                 results: &BlockResults::default(),
                 tx_queue: &shell.storage.tx_queue,
+                ethereum_height: shell.storage.ethereum_height.as_ref(),
             })
             .expect("Test failed");
 

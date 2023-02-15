@@ -1,7 +1,6 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
 pub mod ics23_specs;
-pub mod local_node;
 pub mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
@@ -43,7 +42,6 @@ use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
-// TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -51,7 +49,7 @@ use crate::types::storage::{
     TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
-use crate::types::token;
+use crate::types::{ethereum, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -105,6 +103,9 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<ethereum::BlockHeight>,
 }
 
 /// The block storage data
@@ -176,6 +177,9 @@ pub struct BlockStateRead {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<ethereum::BlockHeight>,
 }
 
 /// The block's state to write into the database.
@@ -203,6 +207,9 @@ pub struct BlockStateWrite<'a> {
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: &'a TxQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<&'a ethereum::BlockHeight>,
 }
 
 /// A database backend.
@@ -364,6 +371,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
             native_token,
+            ethereum_height: None,
         }
     }
 
@@ -382,6 +390,7 @@ where
             address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue,
+            ethereum_height,
         }) = self.db.read_last_block()?
         {
             self.block.tree = MerkleTree::new(merkle_tree_stores);
@@ -416,6 +425,7 @@ where
             {
                 self.tx_queue = tx_queue;
             }
+            self.ethereum_height = ethereum_height;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
@@ -448,6 +458,7 @@ where
             address_gen: &self.address_gen,
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
+            ethereum_height: self.ethereum_height.as_ref(),
         };
         self.db.write_block(state)?;
         self.last_height = self.block.height;
@@ -1234,6 +1245,7 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+                ethereum_height: None,
             }
         }
     }
