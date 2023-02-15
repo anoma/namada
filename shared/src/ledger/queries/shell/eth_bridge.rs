@@ -13,19 +13,25 @@ use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{EthereumEvent, TransferToEthereum};
+use namada_core::types::ethereum_events::{
+    EthAddress, EthereumEvent, TransferToEthereum,
+};
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_ethereum_bridge::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{
     tokenize_relay_proof, EthereumProof, RelayProof,
 };
-use namada_ethereum_bridge::storage::vote_tallies;
 use namada_ethereum_bridge::storage::vote_tallies::{
     eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
+};
+use namada_ethereum_bridge::storage::{
+    bridge_contract_key, governance_contract_key, native_erc20_key,
+    vote_tallies,
 };
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
@@ -68,6 +74,79 @@ router! {ETH_BRIDGE,
     // The request may fail if no validator set exists at that epoch.
     ( "validator_set" / "active" / [epoch: Epoch] )
         -> EncodeCell<ValidatorSetArgs> = read_active_valset,
+
+    // Read the address and version of the Ethereum bridge's Governance
+    // smart contract.
+    ( "contracts" / "governance" )
+        -> UpgradeableContract = read_governance_contract,
+
+    // Read the address and version of the Ethereum bridge's Bridge
+    // smart contract.
+    ( "contracts" / "bridge" )
+        -> UpgradeableContract = read_bridge_contract,
+
+    // Read the address of the Ethereum bridge's native ERC20
+    // smart contract.
+    ( "contracts" / "native_erc20" )
+        -> EthAddress = read_native_erc20_contract,
+}
+
+/// Helper function to read a smart contract from storage.
+fn read_contract<T, D, H>(
+    key: &Key,
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<T>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshDeserialize,
+{
+    let Some(contract) = StorageRead::read(ctx.storage, key)? else {
+        return Err(storage_api::Error::SimpleMessage(
+            "Failed to read contract: The Ethereum bridge \
+             storage is not initialized",
+        ));
+    };
+    Ok(contract)
+}
+
+/// Read the address and version of the Ethereum bridge's Governance
+/// smart contract.
+#[inline]
+fn read_governance_contract<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<UpgradeableContract>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_contract(&governance_contract_key(), ctx)
+}
+
+/// Read the address and version of the Ethereum bridge's Bridge
+/// smart contract.
+#[inline]
+fn read_bridge_contract<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<UpgradeableContract>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_contract(&bridge_contract_key(), ctx)
+}
+
+/// Read the address of the Ethereum bridge's native ERC20
+/// smart contract.
+#[inline]
+fn read_native_erc20_contract<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<EthAddress>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_contract(&native_erc20_key(), ctx)
 }
 
 /// Read the current contents of the Ethereum bridge
