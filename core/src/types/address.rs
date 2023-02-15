@@ -254,6 +254,9 @@ impl Address {
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
+                internal::PGF => {
+                    Ok(Address::Internal(InternalAddress::Pgf))
+                }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -505,7 +508,7 @@ impl Display for InternalAddress {
                 Self::IbcBurn => "IbcBurn".to_string(),
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
-                Self::Pgf => "PubliGoodsFunding".to_string(),
+                Self::Pgf => "PublicGoodsFunding".to_string(),
             }
         )
     }
