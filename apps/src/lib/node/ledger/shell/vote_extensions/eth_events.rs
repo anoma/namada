@@ -76,7 +76,7 @@ where
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::IssuedAtGenesis);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         // verify if we have any duplicate Ethereum events,
         // and if these are sorted in ascending order

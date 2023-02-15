@@ -30,8 +30,6 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 /// The error yielded from validating faulty vote extensions in the shell
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
-    #[error("The vote extension was issued at block height 0.")]
-    IssuedAtGenesis,
     #[error("The vote extension was issued for an unexpected block height.")]
     UnexpectedBlockHeight,
     #[error("The vote extension was issued for an unexpected epoch.")]

@@ -73,7 +73,7 @@ where
         }
         if last_height.0 == 0 {
             tracing::error!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::IssuedAtGenesis);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
 
         let validator = &ext.data.validator_addr;
