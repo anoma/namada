@@ -1,4 +1,3 @@
-pub mod config;
 pub mod control;
 
 use std::ops::Deref;
@@ -6,6 +5,7 @@ use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
+use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
@@ -13,7 +13,6 @@ use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
 
-use self::config::Config;
 use super::events::{signatures, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
@@ -139,7 +138,10 @@ async fn run_oracle_aux(mut oracle: Oracle) {
     tracing::info!("Oracle is awaiting initial configuration");
     let config = match await_initial_configuration(&mut oracle.control).await {
         Some(config) => {
-            tracing::info!(?config, "Oracle received initial configuration");
+            tracing::info!(
+                "Oracle received initial configuration - {:?}",
+                config
+            );
             config
         }
         None => {
