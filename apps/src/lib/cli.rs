@@ -1913,6 +1913,7 @@ pub mod args {
     const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
+    const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = arg_opt("ethereum-address");
     const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
         "eth-rpc-endpoint",
         DefaultFn(|| "http://localhost:8545".into()),
@@ -2243,6 +2244,9 @@ pub mod args {
         /// The price of Ethereum gas, during the
         /// relay call.
         pub gas_price: Option<u64>,
+        /// The address of the Ethereum wallet to pay the gas fees.
+        /// If unset, the default wallet is used.
+        pub eth_addr: Option<EthAddress>,
     }
 
     impl Args for ValidatorSetUpdateRelay {
@@ -2252,6 +2256,7 @@ pub mod args {
             let gas = ETH_GAS.parse(matches);
             let gas_price = ETH_GAS_PRICE.parse(matches);
             let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
+            let eth_addr = ETH_ADDRESS_OPT.parse(matches);
             let confirmations = ETH_CONFIRMATIONS.parse(matches);
             Self {
                 query,
@@ -2260,11 +2265,16 @@ pub mod args {
                 gas_price,
                 confirmations,
                 eth_rpc_endpoint,
+                eth_addr,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
+                .arg(ETH_ADDRESS_OPT.def().about(
+                    "The address of the Ethereum wallet to pay the gas fees. \
+                     If unset, the default wallet is used.",
+                ))
                 .arg(
                     EPOCH
                         .def()

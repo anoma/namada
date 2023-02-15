@@ -106,6 +106,9 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     if let Some(gas_price) = args.gas_price {
         relay_op.tx.set_gas_price(gas_price);
     }
+    if let Some(eth_addr) = args.eth_addr {
+        relay_op.tx.set_from(eth_addr.into());
+    }
 
     let pending_tx = relay_op.send().await.unwrap();
     let transf_result = pending_tx
