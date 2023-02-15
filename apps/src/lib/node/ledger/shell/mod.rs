@@ -8,6 +8,7 @@
 mod finalize_block;
 mod governance;
 mod init_chain;
+mod pgf;
 mod prepare_proposal;
 mod process_proposal;
 mod queries;
@@ -102,6 +103,8 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
+    #[error("Error while executing PGF: {0}")]
+    BadPGF(String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
     #[error("Error reading from or writing to storage: {0}")]
