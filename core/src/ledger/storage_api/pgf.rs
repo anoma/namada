@@ -30,7 +30,7 @@ pub fn update_projects<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let project_key = pgf_storage::cpgf_recipient_key();
+    let project_key = pgf_storage::get_cpgf_recipient_key();
     storage.write(&project_key, data);
 
     Ok(())

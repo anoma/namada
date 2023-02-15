@@ -63,7 +63,7 @@ pub fn is_project_key(key: &Key) -> bool {
 }
 
 /// Get continuous PGF recipients addresses key
-pub fn cpgf_recipient_key() -> Key {
+pub fn get_cpgf_recipient_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&CPGF_RECIPIENTS.to_owned())
         .expect("Cannot obtain a storage key")

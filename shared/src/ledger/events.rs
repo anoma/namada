@@ -10,6 +10,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::ledger::native_vp::governance::utils::ProposalEvent;
+use crate::ledger::pgf::utils::PgfEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
@@ -49,6 +50,8 @@ pub enum EventType {
     Ibc(String),
     /// The proposal that has been executed
     Proposal,
+    /// The Pgf transfer that has been executed
+    Pgf
 }
 
 impl Display for EventType {
@@ -58,6 +61,7 @@ impl Display for EventType {
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
+            EventType::Pgf => write!(f, "pgf")
         }?;
         Ok(())
     }
@@ -157,6 +161,16 @@ impl From<ProposalEvent> for Event {
             event_type: EventType::Proposal,
             level: EventLevel::Block,
             attributes: proposal_event.attributes,
+        }
+    }
+}
+
+impl From<PgfEvent> for Event {
+    fn from(pgf_event: PgfEvent) -> Self {
+        Self {
+            event_type: EventType::Pgf,
+            level: EventLevel::Block,
+            attributes: pgf_event.attributes
         }
     }
 }
