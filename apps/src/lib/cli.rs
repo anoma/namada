@@ -2791,7 +2791,13 @@ pub mod args {
                 "Do not wait for the transaction to be applied. This will \
                  return once the transaction is added to the mempool.",
             ))
-            .arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            .arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
             .arg(ALIAS_OPT.def().about(
                 "If any new account is initialized by the tx, use the given \
                  alias to save it in the wallet. If multiple accounts are \
@@ -2864,7 +2870,13 @@ pub mod args {
 
     impl Args for Query {
         fn def(app: App) -> App {
-            app.arg(LEDGER_ADDRESS_DEFAULT.def().about(LEDGER_ADDRESS_ABOUT))
+            app.arg(
+                LEDGER_ADDRESS_DEFAULT
+                    .def()
+                    .about(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
