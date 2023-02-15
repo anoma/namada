@@ -13,7 +13,6 @@ pub mod proto;
 pub mod types;
 
 pub use ethbridge_structs;
-
 #[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
