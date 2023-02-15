@@ -1,6 +1,7 @@
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
+use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::ledger::governance::{
     storage as gov_storage, ADDRESS as gov_address,
 };
@@ -209,12 +210,20 @@ where
                             }
                         }
                     }
-                    Tally::PGFCouncil(council) => {
-                        // TODO: implement when PGF is in place, update the PGF
-                        // council in storage
+                    Tally::PGFCouncil((council_address, council_spending_cap)) => {
+                        // Write storage address and spending cap in storage
+                        let council_address_storage_key = pgf_storage::get_active_counsil_key();
+                        shell.wl_storage.write(&council_address_storage_key, council_address.clone()).expect("Should be able to write storage");
+                        let council_cap_storage_key = pgf_storage::get_spending_cap_key();
+                        shell.wl_storage.write(&council_cap_storage_key, council_spending_cap).expect("Should be able to write to storage");
+
+                        // Reset spent budget
+                        let spent_amount_key = pgf_storage::get_spent_amount_key();
+                        shell.wl_storage.write(&spent_amount_key, 0).expect("Should be able to write to storage");
+
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),
-                            TallyResult::Passed(Tally::PGFCouncil(council)),
+                            TallyResult::Passed(Tally::PGFCouncil((council_address, council_spending_cap))),
                             id,
                             false,
                             false,
