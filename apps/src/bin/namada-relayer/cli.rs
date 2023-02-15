@@ -29,6 +29,9 @@ pub async fn main() -> Result<()> {
             cmds::ValidatorSet::ValidatorSetProof(args) => {
                 validator_set::query_validator_set_update_proof(args).await;
             }
+            cmds::ValidatorSet::ValidatorSetUpdateRelay(args) => {
+                validator_set::relay_validator_set_update(args).await;
+            }
         },
     }
     Ok(())
