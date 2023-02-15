@@ -94,7 +94,9 @@ config = "0.11.0"
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
-ethabi = "17.0.0"
+ethabi = "18.0.0"
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.4.0"}
+ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.4.0"}
 ferveo = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 eyre = "0.6.5"
@@ -142,7 +144,7 @@ tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
-thiserror = "1.0.30"
+thiserror = "1.0.36"
 tokio = {version = "1.8.2", features = ["full"]}
 toml = "0.5.8"
 tonic = "0.6.1"

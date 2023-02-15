@@ -83,7 +83,7 @@ testing = [
 ]
 
 [dependencies]
-namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify"]}
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign-verify", "ethers-derive"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
@@ -95,6 +95,7 @@ circular-queue = "0.2.6"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 data-encoding = "2.3.2"
 derivative = "2.2.0"
+ethers = "1.0.2"
 eyre = "0.6.8"
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 # TODO using the same version of tendermint-rs as we do here.
