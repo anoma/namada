@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -58,7 +58,7 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::pgf::InitCounsil;
+use namada::types::transaction::pgf::{InitCounsil, PgfProject, PgfProjectsUpdate};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::vm;
@@ -88,6 +88,7 @@ const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+const TX_UPDATE_PGF_PROJECTS: &str = "tx_update_pgf_projects.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
@@ -2237,6 +2238,42 @@ pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
     }
 }
 
+pub async fn submit_update_pgf_projects(
+    mut ctx: Context,
+    args::UpdatePgfProjects {
+        tx: tx_args,
+        address,
+        data_path,
+    }: args::UpdatePgfProjects,
+) {
+    let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
+
+    let file = File::open(data_path).expect("File must exist.");
+    let pgf_projects: PgfProjectsUpdate =
+        serde_json::from_reader(file).expect("JSON was not well-formatted");
+
+    let counsil_address = ctx.get(&address);
+
+    let data = pgf_projects
+        .try_to_vec()
+        .expect("Encoding proposal data shouldn't fail");
+    let tx_code = ctx.read_wasm(TX_UPDATE_PGF_PROJECTS);
+    let tx = Tx::new(tx_code, Some(data));
+
+    let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
+
+    process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        pks_map,
+        vec![TxSigningKey::WalletAddress(address)],
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+}
+
 pub async fn reveal_pk_if_needed(
     ctx: &mut Context,
     public_key: &common::PublicKey,
@@ -2412,15 +2449,18 @@ async fn filter_delegations(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_init_counsil(ctx: Context, args::CreateCouncil {
-    tx: tx_args,
-    address,
-    spending_cap,
-    data,
-}: args::CreateCouncil) {
+pub async fn submit_init_counsil(
+    ctx: Context,
+    args::CreateCouncil {
+        tx: tx_args,
+        address,
+        spending_cap,
+        data,
+    }: args::CreateCouncil,
+) {
     let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
     let counsil_address = ctx.get(&address);
-    
+
     let current_epoch = rpc::query_and_print_epoch(args::Query {
         ledger_address: tx_args.ledger_address.clone(),
     })
@@ -2431,7 +2471,7 @@ pub async fn submit_init_counsil(ctx: Context, args::CreateCouncil {
         address: counsil_address.clone(),
         spending_cap,
         epoch: current_epoch,
-        data: data.unwrap_or_default()
+        data: data.unwrap_or_default(),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 

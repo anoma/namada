@@ -1,11 +1,14 @@
 //! Pgf library code
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use crate::types::{
     address::{Address, InternalAddress},
     storage::Epoch,
 };
+
+use super::storage_api::token::Amount;
 
 /// pgf parameters
 pub mod parameters;

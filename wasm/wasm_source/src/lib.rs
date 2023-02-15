@@ -10,6 +10,8 @@ pub mod tx_init_account;
 pub mod tx_init_proposal;
 #[cfg(feature = "tx_init_counsil")]
 pub mod tx_init_counsil;
+#[cfg(feature = "tx_update_pgf_projects")]
+pub mod tx_update_pgf_projects;
 #[cfg(feature = "tx_init_validator")]
 pub mod tx_init_validator;
 #[cfg(feature = "tx_reveal_pk")]

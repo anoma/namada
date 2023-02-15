@@ -166,26 +166,27 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 // Pgf transactions
-                .subcommand(TxCreateCouncil::def().display_order(1))
+                .subcommand(TxCreateCouncil::def().display_order(3))
+                .subcommand(TxUpdatePgfProjects::def().display_order(3))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryTransfers::def().display_order(3))
-                .subcommand(QueryConversions::def().display_order(3))
-                .subcommand(QueryBlock::def().display_order(3))
-                .subcommand(QueryBalance::def().display_order(3))
-                .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryBondedStake::def().display_order(3))
-                .subcommand(QuerySlashes::def().display_order(3))
-                .subcommand(QueryDelegations::def().display_order(3))
-                .subcommand(QueryResult::def().display_order(3))
-                .subcommand(QueryRawBytes::def().display_order(3))
-                .subcommand(QueryProposal::def().display_order(3))
-                .subcommand(QueryProposalResult::def().display_order(3))
-                .subcommand(QueryProtocolParameters::def().display_order(3))
+                .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryTransfers::def().display_order(4))
+                .subcommand(QueryConversions::def().display_order(4))
+                .subcommand(QueryBlock::def().display_order(4))
+                .subcommand(QueryBalance::def().display_order(4))
+                .subcommand(QueryBonds::def().display_order(4))
+                .subcommand(QueryBondedStake::def().display_order(4))
+                .subcommand(QuerySlashes::def().display_order(4))
+                .subcommand(QueryDelegations::def().display_order(4))
+                .subcommand(QueryResult::def().display_order(4))
+                .subcommand(QueryRawBytes::def().display_order(4))
+                .subcommand(QueryProposal::def().display_order(4))
+                .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Commands
-                .subcommand(SignTx::def().display_order(4))
+                .subcommand(SignTx::def().display_order(5))
                 // Utils
-                .subcommand(Utils::def().display_order(5))
+                .subcommand(Utils::def().display_order(6))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -203,6 +204,7 @@ pub mod cmds {
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
             let tx_counsil_crate = Self::parse_with_ctx(matches, TxCreateCouncil);
+            let tx_update_pgf_projects = Self::parse_with_ctx(matches, TxUpdatePgfProjects);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -237,6 +239,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_counsil_crate)
+                .or(tx_update_pgf_projects)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -300,6 +303,7 @@ pub mod cmds {
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxCreateCouncil(TxCreateCouncil),
+        TxUpdatePgfProjects(TxUpdatePgfProjects),
         TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
@@ -1445,6 +1449,30 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxUpdatePgfProjects(pub args::UpdatePgfProjects);
+
+    impl SubCmd for TxUpdatePgfProjects {
+        const CMD: &'static str = "update-pgf-projects";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxUpdatePgfProjects(args::UpdatePgfProjects::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to update the activily founded projects on pgf.",
+                )
+                .add_args::<args::UpdatePgfProjects>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxRevealPk(pub args::RevealPk);
 
     impl SubCmd for TxRevealPk {
@@ -2537,6 +2565,32 @@ pub mod args {
                 .arg(ADDRESS.def().about("The enstablished address of the new counsil candidate."))
                 .arg(AMOUNT.def().about("The spending cap amount of the candidated counsil."))
                 .arg(PGF_COUNSIL_DATA.def().about("Some arbitrary data to attach to the candidacy. Limited to 4096 characters."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UpdatePgfProjects {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// The pgf active counsil address
+        pub address: WalletAddress,
+        /// Path to a json file containing the relations project address - amount
+        pub data_path: PathBuf,
+    }
+
+    impl Args for UpdatePgfProjects {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let address = ADDRESS.parse(matches);
+            let data_path = DATA_PATH.parse(matches);
+
+            Self { tx, address, data_path }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(ADDRESS.def().about("The enstablished address of the activ counsil."))
+                .arg(DATA_PATH.def().about("Path to the json file containing the relation between project address - amount."))
         }
     }
 
