@@ -13,20 +13,12 @@ const SPENT_AMOUNT: &str = "spent_amount";
 const CANDIDACY_EXPIRATION: &str = "candidacy_expiration";
 const CANDIDATES: &str = "candidates";
 const ACTIVE_COUNSIL: &str = "active_counsil";
-
-// /PGFAddress/cPGF_recipients/Address = Amount
-// /PGFAddress/spending_cap = Amount
-// /PGFAddress/spent_amount = Amount
-// /PGFAddress/candidacy_length = u8
-// /PGFAddress/council_candidates/$candidate_address/$spending_cap = (epoch, url)
-// /PGFAddress/active_council/address = Address
+const PROJECTS: &str = "projects";
 
 /// Check if key is inside pfg address space
 pub fn is_pgf_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
 }
-
-// /PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)
 
 /// Check if a key is a PGF candidate key
 pub fn is_candidates_key(key: &Key) -> bool {
@@ -58,12 +50,22 @@ pub fn is_spent_amount_key(key: &Key) -> bool {
     }
 }
 
+pub fn is_project_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix)
+        ] if addr == &ADDRESS && prefix == PROJECTS => {
+            true
+        }
+        _ => false
+    }
+}
+
 /// Get continuous PGF recipients addresses key
-pub fn cpgf_recipient_key(address: &Address) -> Key {
+pub fn cpgf_recipient_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&CPGF_RECIPIENTS.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&address.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

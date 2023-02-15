@@ -16,6 +16,7 @@ wasms += tx_vote_proposal
 wasms += tx_transfer
 wasms += tx_unbond
 wasms += tx_update_vp
+wasms += tx_update_pgf_projects
 wasms += tx_withdraw
 wasms += tx_change_validator_commission
 wasms += vp_masp
