@@ -4824,6 +4824,7 @@ dependencies = [
  "masp_primitives",
  "num-rational 0.4.1",
  "num-traits 0.2.15",
+ "num256",
  "pretty_assertions",
  "proptest",
  "prost",

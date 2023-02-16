@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
+use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
@@ -29,6 +30,8 @@ pub struct Oracle {
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
+    /// The most recently processed block is recorded here.
+    last_processed_block: last_processed_block::Sender,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
@@ -49,6 +52,7 @@ impl Oracle {
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
+        last_processed_block: last_processed_block::Sender,
         backoff: Duration,
         control: control::Receiver,
     ) -> Self {
@@ -56,6 +60,7 @@ impl Oracle {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
             backoff,
+            last_processed_block,
             control,
         }
     }
@@ -104,6 +109,7 @@ pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
+    last_processed_block: last_processed_block::Sender,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
     // we have to run the oracle in a [`LocalSet`] due to the web30
@@ -115,8 +121,13 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle =
-                        Oracle::new(&url, sender, DEFAULT_BACKOFF, control);
+                    let oracle = Oracle::new(
+                        &url,
+                        sender,
+                        last_processed_block,
+                        DEFAULT_BACKOFF,
+                        control,
+                    );
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -157,9 +168,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
     // confirmations
     let mut pending: Vec<PendingEvent> = Vec::new();
 
-    // TODO(namada#560): get the appropriate Ethereum block height to start
-    // checking from rather than starting from zero every time
-    let mut next_block_to_process: Uint256 = 0u8.into();
+    let mut next_block_to_process = config.start_block.clone();
 
     loop {
         tracing::info!(
@@ -169,7 +178,10 @@ async fn run_oracle_aux(mut oracle: Oracle) {
         tokio::select! {
             result = process(&oracle, &config, &mut pending, next_block_to_process.clone()) => {
                 match result {
-                    Ok(()) => next_block_to_process += 1u8.into(),
+                    Ok(()) => {
+                        oracle.last_processed_block.send_replace(Some(next_block_to_process.clone()));
+                        next_block_to_process += 1.into()
+                    },
                     Err(error) => tracing::warn!(
                         ?error,
                         block = ?next_block_to_process,
@@ -182,7 +194,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                     "Ethereum oracle can not send events to the ledger; the \
                     receiver has hung up. Shutting down"
                 );
-                break
+                break;
             }
         };
         oracle.sleep().await;
@@ -195,12 +207,12 @@ async fn process(
     oracle: &Oracle,
     config: &Config,
     pending: &mut Vec<PendingEvent>,
-    block_to_process: Uint256,
+    block_to_process: ethereum_structs::BlockHeight,
 ) -> Result<()> {
     // update the latest block height
     let latest_block = loop {
         let latest_block = match oracle.eth_block_number().await {
-            Ok(height) => height,
+            Ok(height) => height.into(),
             Err(error) => {
                 return Err(eyre!(
                     "Couldn't get the latest synced Ethereum block height \
@@ -208,8 +220,8 @@ async fn process(
                 ));
             }
         };
-        let minimum_latest_block = block_to_process.clone()
-            + Uint256::from(u64::from(config.min_confirmations));
+        let minimum_latest_block =
+            block_to_process.clone() + config.min_confirmations.into();
         if minimum_latest_block > latest_block {
             tracing::debug!(
                 ?block_to_process,
@@ -248,8 +260,8 @@ async fn process(
         let mut events = {
             let logs = match oracle
                 .check_for_events(
-                    block_to_process.clone(),
-                    Some(block_to_process.clone()),
+                    block_to_process.clone().into(),
+                    Some(block_to_process.clone().into()),
                     vec![addr],
                     vec![sig],
                 )
@@ -276,7 +288,7 @@ async fn process(
                 .filter_map(|log| {
                     match PendingEvent::decode(
                         sig,
-                        block_to_process.clone(),
+                        block_to_process.clone().into(),
                         log.data.0.as_slice(),
                         u64::from(config.min_confirmations).into(),
                     ) {
@@ -349,6 +361,22 @@ fn process_queue(
     confirmed
 }
 
+pub mod last_processed_block {
+    //! Functionality to do with publishing which blocks we have processed.
+    use namada::core::types::ethereum_structs;
+    use tokio::sync::watch;
+
+    pub type Sender = watch::Sender<Option<ethereum_structs::BlockHeight>>;
+    pub type Receiver = watch::Receiver<Option<ethereum_structs::BlockHeight>>;
+
+    /// Construct a [`tokio::sync::watch`] channel to publish the most recently
+    /// processed block. Until the live oracle processes its first block, this
+    /// will be `None`.
+    pub fn channel() -> (Sender, Receiver) {
+        watch::channel(None)
+    }
+}
+
 #[cfg(test)]
 mod test_oracle {
     use std::num::NonZeroU64;
@@ -404,11 +432,13 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
+        let (last_processed_block_sender, _) = last_processed_block::channel();
         let (control_sender, control_receiver) = control::channel();
         TestPackage {
             oracle: Oracle {
                 client,
                 sender: eth_sender,
+                last_processed_block: last_processed_block_sender,
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
                 control: control_receiver,
@@ -488,8 +518,9 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
+        let min_confirmations = 100;
         let config = Config {
-            min_confirmations: NonZeroU64::try_from(100)
+            min_confirmations: NonZeroU64::try_from(min_confirmations)
                 .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
@@ -497,9 +528,7 @@ mod test_oracle {
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(
-                u64::from(config.min_confirmations).into(),
-            ))
+            .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
         let new_event = ChangedContract {
@@ -538,8 +567,9 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
+        let min_confirmations = 100;
         let config = Config {
-            min_confirmations: NonZeroU64::try_from(100)
+            min_confirmations: NonZeroU64::try_from(min_confirmations)
                 .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
@@ -547,9 +577,7 @@ mod test_oracle {
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(
-                u64::from(config.min_confirmations).into(),
-            ))
+            .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
         // set the oracle to be unresponsive
@@ -602,8 +630,9 @@ mod test_oracle {
             control_sender,
             ..
         } = setup();
+        let min_confirmations = 100;
         let config = Config {
-            min_confirmations: NonZeroU64::try_from(100)
+            min_confirmations: NonZeroU64::try_from(min_confirmations)
                 .expect("Test wasn't set up correctly"),
             ..Config::default()
         };
@@ -611,9 +640,7 @@ mod test_oracle {
             start_with_default_config(oracle, control_sender, config).await;
         // Increase height above the configured minimum confirmations
         admin_channel
-            .send(TestCmd::NewHeight(
-                u64::from(config.min_confirmations).into(),
-            ))
+            .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
         // confirmed after 100 blocks
@@ -727,7 +754,8 @@ mod test_oracle {
         } = setup();
         let config = Config::default();
         let oracle =
-            start_with_default_config(oracle, control_sender, config).await;
+            start_with_default_config(oracle, control_sender, config.clone())
+                .await;
 
         // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
@@ -791,7 +819,8 @@ mod test_oracle {
         } = setup();
         let config = Config::default();
         let oracle =
-            start_with_default_config(oracle, control_sender, config).await;
+            start_with_default_config(oracle, control_sender, config.clone())
+                .await;
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height =

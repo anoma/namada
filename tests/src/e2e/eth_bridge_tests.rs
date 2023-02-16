@@ -463,6 +463,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
             .contracts
             .governance
             .address,
+        start_block: 0.into(),
     };
     ledger.exp_string(&format!(
         "Oracle received initial configuration - {:?}",
