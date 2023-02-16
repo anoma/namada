@@ -134,3 +134,10 @@ pub fn get_candidate_spending_cap(key: &Key) -> Option<Amount> {
         None => None,
     }
 }
+
+/// Get candidates prefix 
+pub fn candidates_prefix_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&CANDIDATES.to_owned())
+        .expect("Cannot obtain a storage key")
+}

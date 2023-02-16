@@ -28,6 +28,8 @@ use namada::core::types::key;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
+use namada::core::ledger::pgf::storage as pgf_storage;
+
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
@@ -1425,6 +1427,50 @@ pub async fn query_protocol_parameters(
     println!("{:4}Pipeline length: {}", "", pos_params.pipeline_len);
     println!("{:4}Unbonding length: {}", "", pos_params.unbonding_len);
     println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
+}
+
+pub async fn query_pgf_counsil(
+    _ctx: Context,
+    args: args::QueryPgfCounsil,
+) {
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let counsil_data: Option<(Address, token::Amount, token::Amount)> = unwrap_client_response(
+        RPC.vp().pgf().current_counsil(&client).await
+    );
+    
+    match counsil_data {
+        Some((address, spending_cap, spent_amount)) => {
+            println!("PGF counsil:");
+            println!("{:4}Address: {}", "", address.to_pretty_string());
+            println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
+            println!("{:4}Spent amount: {}", "", spent_amount.to_string());
+        },
+        None => {
+            println!("There is no active counsil yet.");
+        },
+    }
+}
+
+pub async fn query_pgf_candidates(
+    _ctx: Context,
+    args: args::QueryPgfCandidates,
+) {
+
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+    let candidates_data: Vec<(Address, token::Amount, String)> = unwrap_client_response(
+        RPC.vp().pgf().candidates(&client).await
+    );
+    match candidates_data.len() {
+        0 => println!("There are not candidates for pgf."),
+        _ => {
+            println!("PGF candidates:");
+            for (address, spending_cap, data) in candidates_data {
+                println!("{:4}Address: {}", "", address.to_pretty_string());
+                println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
+                println!("{:4}Extra data: {}", "", data.to_string());
+            }
+        }
+    }
 }
 
 pub async fn query_bond(
