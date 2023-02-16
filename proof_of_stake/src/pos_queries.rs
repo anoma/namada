@@ -1,12 +1,10 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
-use std::collections::HashSet;
-
 use borsh::BorshDeserialize;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
-use namada_core::ledger::storage::types::decode;
 use namada_core::ledger::storage::WlStorage;
+use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
 use namada_core::ledger::{storage, storage_api};
 use namada_core::tendermint_proto::google::protobuf;
 use namada_core::tendermint_proto::types::EvidenceParams;
@@ -16,8 +14,8 @@ use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{key, token};
 use thiserror::Error;
 
-use crate::types::WeightedValidator;
-use crate::{read_consensus_validator_set_addresses_with_stake, PosParams};
+use crate::types::{ConsensusValidatorSet, WeightedValidator};
+use crate::{consensus_validator_set_handle, PosParams};
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
@@ -54,59 +52,11 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 /// Methods used to query blockchain proof-of-stake related state,
 /// such as the currently active set of validators.
 pub trait PosQueries {
-    /// Get the set of active validators for a given epoch (defaulting to the
-    /// epoch of the current yet-to-be-committed block).
-    fn get_active_validators(
-        &self,
-        epoch: Option<Epoch>,
-    ) -> HashSet<WeightedValidator>;
+    /// The underlying storage type.
+    type Storage;
 
-    /// Lookup the total voting power for an epoch (defaulting to the
-    /// epoch of the current yet-to-be-committed block).
-    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> token::Amount;
-
-    /// Simple helper function for the ledger to get balances
-    /// of the specified token at the specified address.
-    fn get_balance(&self, token: &Address, owner: &Address) -> token::Amount;
-
-    /// Return evidence parameters.
-    // TODO: impove this docstring
-    fn get_evidence_params(
-        &self,
-        epoch_duration: &EpochDuration,
-        pos_params: &PosParams,
-    ) -> EvidenceParams;
-
-    /// Lookup data about a validator from their address.
-    fn get_validator_from_address(
-        &self,
-        address: &Address,
-        epoch: Option<Epoch>,
-    ) -> Result<(token::Amount, key::common::PublicKey)>;
-
-    /// Given a tendermint validator, the address is the hash
-    /// of the validators public key. We look up the native
-    /// address from storage using this hash.
-    // TODO: We may change how this lookup is done, see
-    // https://github.com/anoma/namada/issues/200
-    fn get_validator_from_tm_address(
-        &self,
-        tm_address: &[u8],
-        epoch: Option<Epoch>,
-    ) -> Result<Address>;
-
-    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
-    /// within the current [`Epoch`].
-    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool;
-
-    /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
-    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch>;
-
-    /// Retrieves the [`BlockHeight`] that is currently being decided.
-    fn get_current_decision_height(&self) -> BlockHeight;
-
-    /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
-    fn get_max_proposal_bytes(&self) -> ProposalBytes;
+    /// Return a handle to [`PosQueries`].
+    fn pos_queries(&self) -> PosQueriesHook<'_, Self::Storage>;
 }
 
 impl<D, H> PosQueries for WlStorage<D, H>
@@ -114,19 +64,63 @@ where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
+    type Storage = Self;
+
     #[inline]
-    fn get_active_validators(
-        &self,
-        epoch: Option<Epoch>,
-    ) -> HashSet<WeightedValidator> {
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
-        // TODO: we can iterate over the database directly, no need to allocate
-        // here
-        read_consensus_validator_set_addresses_with_stake(self, epoch)
-            .expect("Reading the active set of validators shouldn't fail")
+    fn pos_queries(&self) -> PosQueriesHook<'_, Self> {
+        PosQueriesHook { wl_storage: self }
+    }
+}
+
+/// A handle to [`PosQueries`].
+///
+/// This type is a wrapper around a pointer to a
+/// [`WlStorage`].
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct PosQueriesHook<'db, DB> {
+    wl_storage: &'db DB,
+}
+
+impl<'db, DB> Clone for PosQueriesHook<'db, DB> {
+    fn clone(&self) -> Self {
+        Self {
+            wl_storage: self.wl_storage,
+        }
+    }
+}
+
+impl<'db, DB> Copy for PosQueriesHook<'db, DB> {}
+
+impl<'db, D, H> PosQueriesHook<'db, WlStorage<D, H>>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    /// Return a handle to the inner [`WlStorage`].
+    #[inline]
+    pub fn storage(self) -> &'db WlStorage<D, H> {
+        self.wl_storage
     }
 
-    fn get_total_voting_power(&self, epoch: Option<Epoch>) -> token::Amount {
+    /// Get the set of active validators for a given epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
+    #[inline]
+    pub fn get_active_validators(
+        self,
+        epoch: Option<Epoch>,
+    ) -> GetActiveValidators<'db, D, H> {
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        GetActiveValidators {
+            wl_storage: self.wl_storage,
+            validator_set: consensus_validator_set_handle().at(&epoch),
+        }
+    }
+
+    /// Lookup the total voting power for an epoch (defaulting to the
+    /// epoch of the current yet-to-be-committed block).
+    pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
         self.get_active_validators(epoch)
             .iter()
             .map(|validator| u64::from(validator.bonded_stake))
@@ -134,9 +128,15 @@ where
             .into()
     }
 
-    fn get_balance(&self, token: &Address, owner: &Address) -> token::Amount {
+    /// Simple helper function for the ledger to get balances
+    /// of the specified token at the specified address.
+    pub fn get_balance(
+        self,
+        token: &Address,
+        owner: &Address,
+    ) -> token::Amount {
         let balance = storage_api::StorageRead::read(
-            self,
+            self.wl_storage,
             &token::balance_key(token, owner),
         );
         // Storage read must not fail, but there might be no value, in which
@@ -146,8 +146,10 @@ where
             .unwrap_or_default()
     }
 
-    fn get_evidence_params(
-        &self,
+    /// Return evidence parameters.
+    // TODO: impove this docstring
+    pub fn get_evidence_params(
+        self,
         epoch_duration: &EpochDuration,
         pos_params: &PosParams,
     ) -> EvidenceParams {
@@ -169,18 +171,22 @@ where
         }
     }
 
-    fn get_validator_from_address(
-        &self,
+    /// Lookup data about a validator from their address.
+    pub fn get_validator_from_address(
+        self,
         address: &Address,
         epoch: Option<Epoch>,
     ) -> Result<(token::Amount, key::common::PublicKey)> {
-        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
-            .into_iter()
+            .iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
                 let protocol_pk_key = key::protocol_pk_key(&validator.address);
+                // TODO: rewrite this, to use `StorageRead::read`
                 let bytes = self
+                    .wl_storage
                     .storage
                     .read(&protocol_pk_key)
                     .expect("Validator should have public protocol key")
@@ -196,8 +202,13 @@ where
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
 
-    fn get_validator_from_tm_address(
-        &self,
+    /// Given a tendermint validator, the address is the hash
+    /// of the validators public key. We look up the native
+    /// address from storage using this hash.
+    // TODO: We may change how this lookup is done, see
+    // https://github.com/anoma/namada/issues/200
+    pub fn get_validator_from_tm_address(
+        self,
         _tm_address: &[u8],
         _epoch: Option<Epoch>,
     ) -> Result<Address> {
@@ -214,7 +225,9 @@ where
         todo!()
     }
 
-    fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current [`Epoch`].
+    pub fn is_deciding_offset_within_epoch(self, height_offset: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
         // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
@@ -222,13 +235,17 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        if self.storage.get_current_epoch().0 == Epoch(0) {
+        if self.wl_storage.storage.get_current_epoch().0 == Epoch(0) {
             let height_offset_within_epoch = BlockHeight(1 + height_offset);
             return current_decision_height == height_offset_within_epoch;
         }
 
-        let fst_heights_of_each_epoch =
-            self.storage.block.pred_epochs.first_block_heights();
+        let fst_heights_of_each_epoch = self
+            .wl_storage
+            .storage
+            .block
+            .pred_epochs
+            .first_block_heights();
 
         fst_heights_of_each_epoch
             .last()
@@ -240,23 +257,65 @@ where
     }
 
     #[inline]
-    fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
-        self.storage.block.pred_epochs.get_epoch(height)
+    /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
+    pub fn get_epoch(self, height: BlockHeight) -> Option<Epoch> {
+        self.wl_storage.storage.block.pred_epochs.get_epoch(height)
     }
 
     #[inline]
-    fn get_current_decision_height(&self) -> BlockHeight {
-        self.storage.last_height + 1
+    /// Retrieves the [`BlockHeight`] that is currently being decided.
+    pub fn get_current_decision_height(self) -> BlockHeight {
+        self.wl_storage.storage.last_height + 1
     }
 
-    fn get_max_proposal_bytes(&self) -> ProposalBytes {
-        let key = get_max_proposal_bytes_key();
-        let (maybe_value, _gas) = self
-            .storage
-            .read(&key)
-            .expect("Must be able to read ProposalBytes from storage");
-        let value =
-            maybe_value.expect("ProposalBytes must be present in storage");
-        decode(value).expect("Must be able to decode ProposalBytes in storage")
+    /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+    pub fn get_max_proposal_bytes(self) -> ProposalBytes {
+        storage_api::StorageRead::read(
+            self.wl_storage,
+            &get_max_proposal_bytes_key(),
+        )
+        .expect("Must be able to read ProposalBytes from storage")
+        .expect("ProposalBytes must be present in storage")
+    }
+}
+
+/// A handle to the set of active validators in Namada,
+/// at some given epoch.
+pub struct GetActiveValidators<'db, D, H>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    wl_storage: &'db WlStorage<D, H>,
+    validator_set: ConsensusValidatorSet,
+}
+
+impl<'db, D, H> GetActiveValidators<'db, D, H>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    /// Iterate over the set of active validators in Namada, at some given
+    /// epoch.
+    pub fn iter<'this: 'db>(
+        &'this self,
+    ) -> impl Iterator<Item = WeightedValidator> + 'db {
+        self.validator_set
+            .iter(self.wl_storage)
+            .expect("Must be able to iterate over active validators")
+            .map(|res| {
+                let (
+                    NestedSubKey::Data {
+                        key: bonded_stake, ..
+                    },
+                    address,
+                ) = res.expect(
+                    "We should be able to decode validators in storage",
+                );
+                WeightedValidator {
+                    address,
+                    bonded_stake,
+                }
+            })
     }
 }
