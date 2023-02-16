@@ -43,7 +43,7 @@ where
     ) -> response::PrepareProposal {
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
-            let alloc = BlockSpaceAllocator::from(&self.storage);
+            let alloc = BlockSpaceAllocator::from(&self.wl_storage);
 
             // decrypt the wrapper txs included in the previous block
             let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
@@ -103,6 +103,7 @@ where
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
         let txs = self
+            .wl_storage
             .storage
             .tx_queue
             .iter()
@@ -132,7 +133,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?self.wl_storage.get_current_decision_height(),
                                 "Dropping decrypted tx from the current proposal",
                             );
                             false
@@ -142,7 +143,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?self.wl_storage.get_current_decision_height(),
                                 "Dropping large decrypted tx from the current proposal",
                             );
                             true
@@ -187,13 +188,15 @@ where
         &self,
         alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
     ) -> EncryptedTxBatchAllocator {
-        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        let is_2nd_height_off =
+            self.wl_storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off =
+            self.wl_storage.is_deciding_offset_within_epoch(2);
 
         if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
             tracing::warn!(
                 proposal_height =
-                    ?self.storage.get_current_decision_height(),
+                    ?self.wl_storage.get_current_decision_height(),
                 "No mempool txs are being included in the current proposal"
             );
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(
@@ -233,7 +236,7 @@ where
                                     ?tx_bytes,
                                     bin_space_left,
                                     proposal_height =
-                                        ?self.storage.get_current_decision_height(),
+                                        ?self.wl_storage.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
@@ -245,7 +248,7 @@ where
                                     ?tx_bytes,
                                     bin_size,
                                     proposal_height =
-                                        ?self.storage.get_current_decision_height(),
+                                        ?self.wl_storage.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
                                 );
                                 true

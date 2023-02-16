@@ -3,7 +3,7 @@
 
 use data_encoding::HEXUPPER;
 use namada::core::hints;
-use namada::core::ledger::storage::Storage;
+use namada::core::ledger::storage::WlStorage;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::types::internal::WrapperTxInQueue;
 
@@ -32,12 +32,12 @@ pub struct ValidationMeta {
     pub decrypted_queue_has_remaining_txs: bool,
 }
 
-impl<D, H> From<&Storage<D, H>> for ValidationMeta
+impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    fn from(storage: &Storage<D, H>) -> Self {
+    fn from(storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes = storage.get_max_proposal_bytes().get();
         let encrypted_txs_bin =
             TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
@@ -125,7 +125,7 @@ where
         txs: &[TxBytes],
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
-        let mut metadata = ValidationMeta::from(&self.storage);
+        let mut metadata = ValidationMeta::from(&self.wl_storage);
         let tx_results = txs
             .iter()
             .map(|tx_bytes| {
@@ -137,7 +137,8 @@ where
             })
             .collect();
         metadata.decrypted_queue_has_remaining_txs =
-            !self.storage.tx_queue.is_empty() && tx_queue_iter.next().is_some();
+            !self.wl_storage.storage.tx_queue.is_empty()
+                && tx_queue_iter.next().is_some();
         (tx_results, metadata)
     }
 
@@ -349,8 +350,10 @@ where
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
     fn encrypted_txs_not_allowed(&self) -> bool {
-        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        let is_2nd_height_off =
+            self.wl_storage.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off =
+            self.wl_storage.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
     }
 }
