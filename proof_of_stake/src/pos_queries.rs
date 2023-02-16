@@ -109,10 +109,10 @@ where
     pub fn get_active_validators(
         self,
         epoch: Option<Epoch>,
-    ) -> GetActiveValidators<'db, D, H> {
+    ) -> ActiveValidators<'db, D, H> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        GetActiveValidators {
+        ActiveValidators {
             wl_storage: self.wl_storage,
             validator_set: consensus_validator_set_handle().at(&epoch),
         }
@@ -281,7 +281,7 @@ where
 
 /// A handle to the set of active validators in Namada,
 /// at some given epoch.
-pub struct GetActiveValidators<'db, D, H>
+pub struct ActiveValidators<'db, D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
@@ -290,7 +290,7 @@ where
     validator_set: ConsensusValidatorSet,
 }
 
-impl<'db, D, H> GetActiveValidators<'db, D, H>
+impl<'db, D, H> ActiveValidators<'db, D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
