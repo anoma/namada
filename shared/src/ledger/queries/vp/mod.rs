@@ -1,11 +1,15 @@
 // Re-export to show in rustdoc!
 pub use pos::Pos;
+pub use pgf::Pgf;
 use pos::POS;
+use pgf::PGF;
 mod pos;
+mod pgf;
 
 // Validity predicate queries
 router! {VP,
     ( "pos" ) = (sub POS),
+    ( "pgf" ) = (sub PGF),
 }
 
 #[cfg(any(test, feature = "async-client"))]

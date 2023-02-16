@@ -182,6 +182,7 @@ pub mod cmds {
                 .subcommand(QueryRawBytes::def().display_order(4))
                 .subcommand(QueryProposal::def().display_order(4))
                 .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryPgfCounsil::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Commands
                 .subcommand(SignTx::def().display_order(5))
@@ -227,6 +228,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let query_pgf_counsil = Self::parse_with_ctx(matches, QueryPgfCounsil);
+            let query_pgf_candidates = Self::parse_with_ctx(matches, QueryPgfCandidates);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
@@ -257,6 +260,8 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_pgf_counsil)
+                .or(query_pgf_candidates)
                 .or(sign_tx)
                 .or(utils)
         }
@@ -322,6 +327,8 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        QueryPgfCounsil(QueryPgfCounsil),
+        QueryPgfCandidates(QueryPgfCandidates),
         QueryResult(QueryResult),
         SignTx(SignTx),
     }
@@ -982,6 +989,54 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query protocol parameters.")
                 .add_args::<args::QueryProtocolParameters>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgfCounsil(pub args::QueryPgfCounsil);
+
+    impl SubCmd for QueryPgfCounsil {
+        const CMD: &'static str = "query-active-counsil";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryPgfCounsil(args::QueryPgfCounsil::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the current pgf active counsil.")
+                .add_args::<args::QueryPgfCounsil>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgfCandidates(pub args::QueryPgfCandidates);
+
+    impl SubCmd for QueryPgfCandidates {
+        const CMD: &'static str = "query-pgf-candidates";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryPgfCandidates(args::QueryPgfCandidates::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the current pgf candidates.")
+                .add_args::<args::QueryPgfCandidates>()
         }
     }
 
@@ -2705,6 +2760,41 @@ pub mod args {
     }
 
     impl Args for QueryProtocolParameters {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+        }
+    }
+    #[derive(Clone, Debug)]
+    pub struct QueryPgfCounsil {
+        /// Common query args
+        pub query: Query,
+    }
+
+    impl Args for QueryPgfCounsil {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgfCandidates {
+        /// Common query args
+        pub query: Query,
+    }
+
+    impl Args for QueryPgfCandidates {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
 
