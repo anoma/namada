@@ -20,9 +20,6 @@ be updated with a standard governance proposal. All fees collected are paid
 directly to the block proposer (incentive-compatible, so that side payments are
 no more profitable).
 
-Fees are only meant for `InnerTx` transactions: `WrapperTx`s carry information
-about fees for the relative inner tx but are not subject to fees themselves.
-
 ## Fee payment
 
 The `WrapperTx` struct holds all the data necessary for the payment of fees in
@@ -253,13 +250,27 @@ subject to fees and do not charge gas.
 
 ## Gas accounting
 
-We provide a mapping between all the whitelisted transactions and VPs to their
-cost in gas units: more specifically, the cost of a tx/VP is given by the run
-time cost of its wasm code. As the cost is constant, it is guaranteed that the
-same transaction will always require the same amount of gas: since the price per
-gas unit is controlled via governance, though, the price for the same
-transaction may vary in time. A transaction is also charged with the gas
-required by the validity predicates that it triggers.
+Gas must take into account the two scarce resources of a block: gas and space.
+
+Regarding the space limit, Namada charges, for every `WrapperTx`, a fixed amount
+of gas per byte.
+
+For the gas limit, we provide a mapping between all the whitelisted transactions
+and VPs to their cost in gas units: more specifically, the cost of a tx/VP is
+given by the run time cost of its wasm code. As the cost is constant, it is
+guaranteed that the same transaction will always require the same amount of gas:
+since the price per gas unit is controlled via governance, though, the price for
+the same transaction may vary in time. A transaction is also charged with the
+gas required by the validity predicates that it triggers.
+
+In addition to these, each inner transaction spends gas for compilation costs
+(of both the tx and the associated, non-native, VPs) which are charged even if
+the compiled transactions was already available in cache, and ancillaries
+operations (like loading non-native VP codes from storage).
+
+To summarize, the gas for a given wrapper transaction can be computed as:
+
+$$WrapperGas = TxSize + FixedRuntimeGas + TxCodeSize + MiscOpsGas$$
 
 Gas accounting is about preventing a transaction from exceeding two gas limits:
 
