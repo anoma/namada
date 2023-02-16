@@ -345,6 +345,7 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
+                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
@@ -356,6 +357,7 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
+                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
@@ -405,6 +407,7 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
+                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
@@ -464,6 +467,7 @@ mod test_vote_extensions {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
+                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
@@ -549,6 +553,7 @@ mod test_vote_extensions {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
+                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
@@ -615,6 +620,7 @@ mod test_vote_extensions {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
+                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),
@@ -693,6 +699,7 @@ mod test_vote_extensions {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
+                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
                     gas_amount: 10.into(),

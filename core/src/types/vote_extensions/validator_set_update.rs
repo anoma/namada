@@ -315,6 +315,27 @@ pub struct ValidatorSetArgs {
     pub epoch: Epoch,
 }
 
+impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
+    fn from(valset: ValidatorSetArgs) -> Self {
+        let ValidatorSetArgs {
+            validators,
+            voting_powers,
+            epoch,
+        } = valset;
+        ethbridge_structs::ValidatorSetArgs {
+            validators: validators
+                .into_iter()
+                .map(|addr| addr.0.into())
+                .collect(),
+            powers: voting_powers
+                .into_iter()
+                .map(|power| u64::from(power).into())
+                .collect(),
+            nonce: epoch.0.into(),
+        }
+    }
+}
+
 impl Encode<1> for ValidatorSetArgs {
     fn tokenize(&self) -> [Token; 1] {
         let addrs = Token::Array(

@@ -16,6 +16,7 @@ use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
+use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
@@ -23,9 +24,7 @@ use namada_core::types::vote_extensions::validator_set_update::{
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-use namada_ethereum_bridge::storage::proof::{
-    tokenize_relay_proof, EthereumProof, RelayProof,
-};
+use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies::{
     eth_msgs_prefix, BODY_KEY_SEGMENT, VOTING_POWER_KEY_SEGMENT,
 };
@@ -41,6 +40,8 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::Epoch;
 use crate::types::storage::MembershipProof::BridgePool;
 
+pub type RelayProofBytes = Vec<u8>;
+
 router! {ETH_BRIDGE,
     // Get the current contents of the Ethereum bridge pool
     ( "pool" / "contents" )
@@ -54,7 +55,7 @@ router! {ETH_BRIDGE,
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
     ( "pool" / "proof" )
-        -> EncodeCell<RelayProof> = (with_options generate_bridge_pool_proof),
+        -> RelayProofBytes = (with_options generate_bridge_pool_proof),
 
     // Iterates over all ethereum events and returns the amount of
     // voting power backing each `TransferToEthereum` event.
@@ -282,6 +283,14 @@ where
                 .into(),
             )));
         }
+        let transfers = values
+            .iter()
+            .map(|bytes| {
+                PendingTransfer::try_from_slice(bytes)
+                    .expect("Deserializing storage shouldn't fail")
+                    .into()
+            })
+            .collect();
         // get the membership proof
         match tree.get_sub_tree_existence_proof(
             &keys,
@@ -291,16 +300,21 @@ where
                 let (validator_args, voting_powers) =
                     ctx.storage.get_validator_set_args(None);
                 let data = RelayProof {
-                    validator_args,
-                    root: signed_root,
-                    proof,
-                    relayer,
+                    validator_set_args: validator_args.into(),
+                    signatures: sort_sigs(
+                        &voting_powers,
+                        &signed_root.signatures,
+                    ),
+                    transfers,
+                    pool_root: signed_root.data.0.0,
+                    proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
+                    proof_flags: proof.flags,
+                    batch_nonce: signed_root.data.1.into(),
+                    relayer_address: relayer.to_string(),
                 };
-                let data = EncodeCell::<RelayProof>::new_from(
-                    tokenize_relay_proof(data, &voting_powers),
-                )
-                .try_to_vec()
-                .expect("Serializing a relay proof should not fail.");
+                let data = ethers::abi::AbiEncode::encode(data)
+                    .try_to_vec()
+                    .expect("Serializing a relay proof should not fail.");
                 Ok(EncodedResponseQuery {
                     data,
                     ..Default::default()
@@ -837,22 +851,23 @@ mod test_ethbridge_router {
             BTreeMap::from([(transfer.keccak256(), 1.into())]),
         );
         let proof = tree
-            .get_membership_proof(vec![transfer])
+            .get_membership_proof(vec![transfer.clone()])
             .expect("Test failed");
 
         let (validator_args, voting_powers) =
             client.storage.get_validator_set_args(None);
-        let proof = EncodeCell::<RelayProof>::new_from(tokenize_relay_proof(
-            RelayProof {
-                validator_args,
-                root: signed_root,
-                proof,
-                relayer: bertha_address(),
-            },
-            &voting_powers,
-        ))
-        .into_inner();
-        assert_eq!(proof, resp.data.into_inner());
+        let data = RelayProof {
+            validator_set_args: validator_args.into(),
+            signatures: sort_sigs(&voting_powers, &signed_root.signatures),
+            transfers: vec![transfer.into()],
+            pool_root: signed_root.data.0.0,
+            proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
+            proof_flags: proof.flags,
+            batch_nonce: Default::default(),
+            relayer_address: bertha_address().to_string(),
+        };
+        let proof = ethers::abi::AbiEncode::encode(data);
+        assert_eq!(proof, resp.data);
     }
 
     /// Test if the merkle tree including a transfer
@@ -1045,6 +1060,7 @@ mod test_ethbridge_router {
                 amount: transfer.transfer.amount,
                 gas_payer: transfer.gas_fee.payer.clone(),
                 gas_amount: transfer.gas_fee.amount,
+                sender: transfer.transfer.sender.clone(),
             };
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),

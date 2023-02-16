@@ -49,26 +49,33 @@ pub async fn add_to_eth_bridge_pool(
     process_tx(ctx, tx, transfer_tx, TxSigningKey::None).await;
 }
 
+#[derive(Serialize, Deserialize)]
+struct AbiBridgePoolProof {
+    proof: Vec<u8>,
+}
+
 /// Construct a proof that a set of transfers are in the bridge pool.
-pub async fn construct_bridge_pool_proof(
-    ctx: Context,
-    args: args::BridgePoolProof,
-) {
+pub async fn construct_bridge_pool_proof(args: args::BridgePoolProof) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let data = (args.transfers, ctx.get(&args.relayer))
-        .try_to_vec()
-        .unwrap();
+    let data = (args.transfers, args.relayer).try_to_vec().unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
         .generate_bridge_pool_proof(&client, Some(data), None, false)
-        .await
-        .unwrap();
+        .await;
 
-    println!(
-        "Ethereum ABI-encoded proof:\n {:?}",
-        response.data.into_inner()
-    );
+    match response {
+        Ok(response) => {
+            let abi_encoded_proof = AbiBridgePoolProof {
+                proof: response.data,
+            };
+            println!(
+                "Ethereum ABI-encoded proof:\n {}",
+                serde_json::to_string(&abi_encoded_proof).unwrap()
+            );
+        }
+        Err(e) => println!("Encountered error: {}", e),
+    }
 }
 
 /// A json serializable representation of the Ethereum

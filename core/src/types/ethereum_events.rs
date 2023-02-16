@@ -314,6 +314,8 @@ pub struct TransferToEthereum {
     pub receiver: EthAddress,
     /// The amount of fees (in NAM)
     pub gas_amount: Amount,
+    /// The address sending assets to Ethereum.
+    pub sender: Address,
     /// The account of fee payer.
     pub gas_payer: Address,
 }

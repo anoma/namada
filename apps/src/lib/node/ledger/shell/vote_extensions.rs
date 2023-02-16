@@ -157,7 +157,6 @@ where
             .get_eth_bridge_keypair()
             .expect(VALIDATOR_EXPECT_MSG);
         let signed = Signed::<_, SignableEthMessage>::new(eth_key, to_sign);
-
         let ext = bridge_pool_roots::Vext {
             block_height: self.storage.last_height,
             validator_addr,

@@ -13,6 +13,7 @@ use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
+use namada_apps::wallet::defaults::bertha_address;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
@@ -280,7 +281,7 @@ fn test_add_to_bridge_pool() {
     .to_string();
     hash.remove(0);
     hash.truncate(hash.len() - 2);
-
+    let relayer_address = bertha_address().to_string();
     let proof_args = vec![
         "ethereum-bridge-pool",
         "construct-proof",
@@ -288,6 +289,8 @@ fn test_add_to_bridge_pool() {
         &hash,
         "--ledger-address",
         &ledger_addr,
+        "--relayer",
+        &relayer_address,
     ];
     let mut namadar =
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)

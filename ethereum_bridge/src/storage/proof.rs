@@ -3,18 +3,16 @@
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi;
-use namada_core::types::eth_abi::{Encode, Token};
+use ethers::abi::Tokenizable;
+use namada_core::types::eth_abi::Encode;
 use namada_core::types::ethereum_events::Uint;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
 use namada_core::types::storage::Epoch;
 use namada_core::types::vote_extensions::validator_set_update::{
-    valset_upd_toks_to_hashes, EthAddrBook, ValidatorSetArgs, VotingPowersMap,
-    VotingPowersMapExt,
+    valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
+use namada_core::types::{eth_abi, ethereum_structs};
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
 /// over some data to be signed.
@@ -76,33 +74,18 @@ impl<T> EthereumProof<T> {
     }
 }
 
-/// Sort signatures based on
-fn sort_sigs(
-    hot_key_addrs: &[eth_abi::Token],
-    cold_key_addrs: &[eth_abi::Token],
+/// Sort signatures based on voting powers in descending order.
+pub fn sort_sigs(
+    voting_powers: &VotingPowersMap,
     signatures: &HashMap<EthAddrBook, secp256k1::Signature>,
-) -> Vec<eth_abi::Token> {
-    hot_key_addrs
-        .iter()
-        .zip(cold_key_addrs.iter())
-        .filter_map(|addresses| {
-            let (bridge_addr, gov_addr) = match addresses {
-                (
-                    &eth_abi::Token::Address(hot),
-                    &eth_abi::Token::Address(cold),
-                ) => (hot, cold),
-                _ => unreachable!(
-                    "Hot and cold key address tokens should have the correct \
-                     variant"
-                ),
-            };
-            let addr_book = EthAddrBook {
-                hot_key_addr: bridge_addr.into(),
-                cold_key_addr: gov_addr.into(),
-            };
-            signatures.get(&addr_book).map(|sig| {
-                let [tokenized_sig] = sig.tokenize();
-                tokenized_sig
+) -> Vec<ethereum_structs::Signature> {
+    voting_powers
+        .get_sorted()
+        .into_iter()
+        .filter_map(|(addr_book, _)| {
+            signatures.get(addr_book).map(|sig| {
+                let (r, s, v) = sig.clone().into_eth_rsv();
+                ethereum_structs::Signature { r, s, v }
             })
         })
         .collect()
@@ -110,10 +93,9 @@ fn sort_sigs(
 
 impl Encode<1> for EthereumProof<(Epoch, VotingPowersMap)> {
     fn tokenize(&self) -> [eth_abi::Token; 1] {
+        let signatures = sort_sigs(&self.data.1, &self.signatures);
         let (hot_key_addrs, cold_key_addrs, voting_powers) =
             self.data.1.get_abi_encoded();
-        let signatures =
-            sort_sigs(&hot_key_addrs, &cold_key_addrs, &self.signatures);
         let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
             valset_upd_toks_to_hashes(
                 self.data.0,
@@ -124,67 +106,9 @@ impl Encode<1> for EthereumProof<(Epoch, VotingPowersMap)> {
         [eth_abi::Token::Tuple(vec![
             eth_abi::Token::FixedBytes(bridge_hash.to_vec()),
             eth_abi::Token::FixedBytes(gov_hash.to_vec()),
-            eth_abi::Token::Array(signatures),
+            Tokenizable::into_token(signatures),
         ])]
     }
-}
-
-impl<'a> Encode<3> for EthereumProof<(&'a VotingPowersMap, KeccakHash, Uint)> {
-    fn tokenize(&self) -> [eth_abi::Token; 3] {
-        let (hot_key_addrs, cold_key_addrs, _) = self.data.0.get_abi_encoded();
-        let sigs = eth_abi::Token::Array(sort_sigs(
-            &hot_key_addrs,
-            &cold_key_addrs,
-            &self.signatures,
-        ));
-        let [root] = self.data.1.tokenize();
-        let [nonce] = self.data.2.tokenize();
-        [sigs, root, nonce]
-    }
-}
-
-/// All the information to relay to Ethereum
-/// that a set of transfers exist in the Ethereum
-/// bridge pool.
-pub struct RelayProof {
-    /// Information about the signing validators
-    pub validator_args: ValidatorSetArgs,
-    /// A merkle root signed by a quorum of validators
-    pub root: BridgePoolRootProof,
-    /// A membership proof
-    pub proof: BridgePoolProof,
-    /// The Namada address for the relayer to receive
-    /// gas fees for those transers relayed.
-    pub relayer: Address,
-}
-
-/// ABI encode a merkle proof of inclusion of a set of transfers in the
-/// Ethereum bridge pool.
-pub fn tokenize_relay_proof(
-    relay_proof: RelayProof,
-    voting_powers_map: &VotingPowersMap,
-) -> [eth_abi::Token; 8] {
-    let RelayProof {
-        validator_args,
-        root,
-        proof,
-        relayer,
-    } = relay_proof;
-    let root: EthereumProof<(&VotingPowersMap, KeccakHash, Uint)> =
-        root.map(|data| (voting_powers_map, data.0, data.1));
-    let [sigs, root, nonce] = root.tokenize();
-    let [val_set_args] = validator_args.tokenize();
-    let [proof, transfers, flags] = proof.tokenize();
-    [
-        val_set_args,
-        sigs,
-        transfers,
-        root,
-        proof,
-        flags,
-        nonce,
-        Token::String(relayer.to_string()),
-    ]
 }
 
 #[cfg(test)]
@@ -207,6 +131,7 @@ mod test_ethbridge_proofs {
         let key = key::testing::keypair_1();
         assert_matches!(&key, common::SecretKey::Ed25519(_));
         let signed = Signed::<&'static str>::new(&key, ":)))))))");
+
         proof.attach_signature(
             EthAddrBook {
                 hot_key_addr: EthAddress([0; 20]),

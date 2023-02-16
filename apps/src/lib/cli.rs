@@ -1965,6 +1965,7 @@ pub mod args {
     const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const RECEIVER: Arg<String> = arg("receiver");
+    const RELAYER: Arg<Address> = arg("relayer");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -2147,14 +2148,14 @@ pub mod args {
         /// The query parameters.
         pub query: Query,
         pub transfers: Vec<KeccakHash>,
-        pub relayer: WalletAddress,
+        pub relayer: Address,
     }
 
     impl Args for BridgePoolProof {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let hashes = HASH_LIST.parse(matches);
-            let relayer = ADDRESS.parse(matches);
+            let relayer = RELAYER.parse(matches);
             Self {
                 query,
                 transfers: hashes
@@ -2174,9 +2175,15 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query>().arg(HASH_LIST.def().about(
-                "List of Keccak hashes of transfers in the bridge pool.",
-            ))
+            app.add_args::<Query>()
+                .arg(HASH_LIST.def().about(
+                    "List of Keccak hashes of transfers in the bridge pool.",
+                ))
+                .arg(
+                    RELAYER
+                        .def()
+                        .about("The rewards address for relaying this proof."),
+                )
         }
     }
 
