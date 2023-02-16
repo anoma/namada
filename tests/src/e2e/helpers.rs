@@ -23,6 +23,35 @@ use super::setup::{sleep, Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::run;
 
+/// Initialize an established account.
+pub fn init_established_account(
+    test: &Test,
+    node: &Who,
+    source_alias: &str,
+    key_alias: &str,
+    established_alias: &str,
+) -> Result<()> {
+    let ledger_address = get_actor_rpc(test, node);
+
+    let init_account_args = vec![
+        "init-account",
+        "--source",
+        source_alias,
+        "--public-key",
+        key_alias,
+        "--alias",
+        established_alias,
+        "--ledger-address",
+        &ledger_address,
+    ];
+    let mut client_init_account =
+        run!(test, Bin::Client, init_account_args, Some(40))?;
+    client_init_account.exp_string("Transaction is valid.")?;
+    client_init_account.exp_string("Transaction applied")?;
+    client_init_account.assert_success();
+    Ok(())
+}
+
 /// Find the address of an account by its alias from the wallet
 pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
     let mut find = run!(
@@ -328,7 +357,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     }
 }
 
-fn strip_trailing_newline(input: &str) -> &str {
+pub(crate) fn strip_trailing_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")
         .or_else(|| input.strip_suffix('\n'))

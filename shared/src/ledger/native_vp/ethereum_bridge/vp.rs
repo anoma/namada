@@ -142,13 +142,28 @@ where
             Some(CheckType::Escrow) => return self.check_escrow(verifiers),
             None => return Ok(false),
         };
-        let (sender, _) = match check_balance_changes(&self.ctx, key_a, key_b)?
-        {
-            Some(sender) => sender,
-            None => return Ok(false),
-        };
-        let authed = authorize::is_authorized(&self.ctx, tx_data, &sender)?;
-        Ok(authed)
+        let (sender, receiver, _) =
+            match check_balance_changes(&self.ctx, key_a, key_b)? {
+                Some(sender) => sender,
+                None => return Ok(false),
+            };
+        if authorize::is_authorized(verifiers, &sender, &receiver) {
+            tracing::info!(
+                ?verifiers,
+                ?sender,
+                ?receiver,
+                "Ethereum Bridge VP authorized transfer"
+            );
+            Ok(true)
+        } else {
+            tracing::info!(
+                ?verifiers,
+                ?sender,
+                ?receiver,
+                "Ethereum Bridge VP rejected unauthorized transfer"
+            );
+            Ok(false)
+        }
     }
 }
 
@@ -230,14 +245,18 @@ fn determine_check_type(
 /// Checks that the balances at both `key_a` and `key_b` have changed by some
 /// amount, and that the changes balance each other out. If the balance changes
 /// are invalid, the reason is logged and a `None` is returned. Otherwise,
-/// return the `Address` of the owner of the balance which is decreasing,
-/// and by how much it decreased, which should be authorizing the balance
-/// change.
+/// return:
+/// - the `Address` of the sender i.e. the owner of the balance which is
+///   decreasing
+/// - the `Address` of the receiver i.e. the owner of the balance which is
+///   increasing
+/// - the `Amount` of the transfer i.e. by how much the sender's balance
+///   decreased, or equivalently by how much the receiver's balance increased
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
     key_b: wrapped_erc20s::Key,
-) -> Result<Option<(Address, Amount)>> {
+) -> Result<Option<(Address, Address, Amount)>> {
     let (balance_a, balance_b) =
         match (key_a.suffix.clone(), key_b.suffix.clone()) {
             (
@@ -342,9 +361,13 @@ pub(super) fn check_balance_changes(
     }
 
     if balance_a_delta < 0 {
-        if let wrapped_erc20s::KeyType::Balance { owner } = key_a.suffix {
+        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_a.suffix
+        {
+            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
+                key_b.suffix else { unreachable!() };
             Ok(Some((
-                owner,
+                sender,
+                receiver,
                 Amount::from(
                     u64::try_from(balance_b_delta)
                         .expect("This should not fail"),
@@ -355,9 +378,13 @@ pub(super) fn check_balance_changes(
         }
     } else {
         assert!(balance_b_delta < 0);
-        if let wrapped_erc20s::KeyType::Balance { owner } = key_b.suffix {
+        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_b.suffix
+        {
+            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
+                key_a.suffix else { unreachable!() };
             Ok(Some((
-                owner,
+                sender,
+                receiver,
                 Amount::from(
                     u64::try_from(balance_a_delta)
                         .expect("This should not fail"),
