@@ -361,8 +361,8 @@ fn process_queue(
     confirmed
 }
 
-/// Functionality to do with publishing which blocks we have processed.
 pub mod last_processed_block {
+    //! Functionality to do with publishing which blocks we have processed.
     use namada::core::types::ethereum;
     use tokio::sync::watch;
 
