@@ -11,7 +11,7 @@ use num256::Uint256;
 /// also be Borsh serializeable, so that it can be stored in blockchain storage.
 ///
 /// In Ethereum, the type for block height is an arbitrary precision integer - see <https://github.com/ethereum/go-ethereum/blob/v1.10.26/core/types/block.go#L79>.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BlockHeight {
     inner: Uint256,
 }
