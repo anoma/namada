@@ -4,8 +4,6 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethers::abi::Tokenizable;
-use namada_core::ethbridge_structs;
-use namada_core::types::eth_abi;
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::ethereum_events::Uint;
 use namada_core::types::keccak::KeccakHash;
@@ -14,6 +12,7 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::vote_extensions::validator_set_update::{
     valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
+use namada_core::types::{eth_abi, ethereum_structs};
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
 /// over some data to be signed.
@@ -79,14 +78,14 @@ impl<T> EthereumProof<T> {
 pub fn sort_sigs(
     voting_powers: &VotingPowersMap,
     signatures: &HashMap<EthAddrBook, secp256k1::Signature>,
-) -> Vec<ethbridge_structs::Signature> {
+) -> Vec<ethereum_structs::Signature> {
     voting_powers
         .get_sorted()
         .into_iter()
         .filter_map(|(addr_book, _)| {
             signatures.get(addr_book).map(|sig| {
                 let (r, s, v) = sig.clone().into_eth_rsv();
-                ethbridge_structs::Signature { r, s, v }
+                ethereum_structs::Signature { r, s, v }
             })
         })
         .collect()

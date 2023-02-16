@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ethbridge_structs::RelayProof;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{
@@ -17,6 +16,7 @@ use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
+use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
