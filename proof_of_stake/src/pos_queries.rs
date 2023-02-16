@@ -1,12 +1,12 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use borsh::BorshDeserialize;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::types::decode;
-use namada_core::ledger::storage::Storage;
+use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::{storage, storage_api};
 use namada_core::tendermint_proto::google::protobuf;
 use namada_core::tendermint_proto::types::EvidenceParams;
@@ -17,7 +17,7 @@ use namada_core::types::{key, token};
 use thiserror::Error;
 
 use crate::types::WeightedValidator;
-use crate::{PosBase, PosParams};
+use crate::{read_consensus_validator_set_addresses_with_stake, PosParams};
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
@@ -59,7 +59,7 @@ pub trait PosQueries {
     fn get_active_validators(
         &self,
         epoch: Option<Epoch>,
-    ) -> BTreeSet<WeightedValidator>;
+    ) -> HashSet<WeightedValidator>;
 
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
@@ -109,28 +109,27 @@ pub trait PosQueries {
     fn get_max_proposal_bytes(&self) -> ProposalBytes;
 }
 
-impl<D, H> PosQueries for Storage<D, H>
+impl<D, H> PosQueries for WlStorage<D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
+    #[inline]
     fn get_active_validators(
         &self,
         epoch: Option<Epoch>,
-    ) -> BTreeSet<WeightedValidator> {
-        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
-        let validator_set = self.read_validator_set();
-        validator_set
-            .get(epoch)
-            .expect("Validators for an epoch should be known")
-            .active
-            .clone()
+    ) -> HashSet<WeightedValidator> {
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
+        // TODO: we can iterate over the database directly, no need to allocate
+        // here
+        read_consensus_validator_set_addresses_with_stake(self, epoch)
+            .expect("Reading the active set of validators shouldn't fail")
     }
 
     fn get_total_voting_power(&self, epoch: Option<Epoch>) -> token::Amount {
         self.get_active_validators(epoch)
             .iter()
-            .map(|validator| validator.bonded_stake)
+            .map(|validator| u64::from(validator.bonded_stake))
             .sum::<u64>()
             .into()
     }
@@ -175,13 +174,14 @@ where
         address: &Address,
         epoch: Option<Epoch>,
     ) -> Result<(token::Amount, key::common::PublicKey)> {
-        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let epoch = epoch.unwrap_or_else(|| self.storage.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
             .into_iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
                 let protocol_pk_key = key::protocol_pk_key(&validator.address);
                 let bytes = self
+                    .storage
                     .read(&protocol_pk_key)
                     .expect("Validator should have public protocol key")
                     .0
@@ -191,7 +191,7 @@ where
                         "Protocol public key in storage should be \
                          deserializable",
                     );
-                (validator.bonded_stake.into(), protocol_pk)
+                (validator.bonded_stake, protocol_pk)
             })
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))
     }
@@ -222,13 +222,13 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        if self.get_current_epoch().0 == Epoch(0) {
+        if self.storage.get_current_epoch().0 == Epoch(0) {
             let height_offset_within_epoch = BlockHeight(1 + height_offset);
             return current_decision_height == height_offset_within_epoch;
         }
 
         let fst_heights_of_each_epoch =
-            self.block.pred_epochs.first_block_heights();
+            self.storage.block.pred_epochs.first_block_heights();
 
         fst_heights_of_each_epoch
             .last()
@@ -241,17 +241,18 @@ where
 
     #[inline]
     fn get_epoch(&self, height: BlockHeight) -> Option<Epoch> {
-        self.block.pred_epochs.get_epoch(height)
+        self.storage.block.pred_epochs.get_epoch(height)
     }
 
     #[inline]
     fn get_current_decision_height(&self) -> BlockHeight {
-        self.last_height + 1
+        self.storage.last_height + 1
     }
 
     fn get_max_proposal_bytes(&self) -> ProposalBytes {
         let key = get_max_proposal_bytes_key();
         let (maybe_value, _gas) = self
+            .storage
             .read(&key)
             .expect("Must be able to read ProposalBytes from storage");
         let value =
