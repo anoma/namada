@@ -1,7 +1,7 @@
 //! Configuration for an oracle.
 use std::num::NonZeroU64;
 
-use namada_core::types::ethereum;
+use namada_core::types::ethereum_structs;
 use namada_core::types::ethereum_events::EthAddress;
 
 /// Configuration for an oracle.
@@ -15,7 +15,7 @@ pub struct Config {
     /// The Ethereum address of the current governance contract.
     pub governance_contract: EthAddress,
     /// The earliest Ethereum block from which events may be processed.
-    pub start_block: ethereum::BlockHeight,
+    pub start_block: ethereum_structs::BlockHeight,
 }
 
 // TODO: this production Default implementation is temporary, there should be no

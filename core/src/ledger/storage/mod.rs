@@ -49,7 +49,7 @@ use crate::types::storage::{
     TxIndex, BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
-use crate::types::{ethereum, token};
+use crate::types::{ethereum_structs, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -105,7 +105,7 @@ where
     pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
-    pub ethereum_height: Option<ethereum::BlockHeight>,
+    pub ethereum_height: Option<ethereum_structs::BlockHeight>,
 }
 
 /// The block storage data
@@ -179,7 +179,7 @@ pub struct BlockStateRead {
     pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
-    pub ethereum_height: Option<ethereum::BlockHeight>,
+    pub ethereum_height: Option<ethereum_structs::BlockHeight>,
 }
 
 /// The block's state to write into the database.
@@ -209,7 +209,7 @@ pub struct BlockStateWrite<'a> {
     pub tx_queue: &'a TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
-    pub ethereum_height: Option<&'a ethereum::BlockHeight>,
+    pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,
 }
 
 /// A database backend.

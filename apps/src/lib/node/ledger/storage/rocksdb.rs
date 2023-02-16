@@ -32,7 +32,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::types::ethereum;
+use namada::core::types::ethereum_structs;
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -325,7 +325,7 @@ impl DB for RocksDB {
             }
         };
 
-        let ethereum_height: Option<ethereum::BlockHeight> = match self
+        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
             .0
             .get("ethereum_height")
             .map_err(|e| Error::DBError(e.into_string()))?

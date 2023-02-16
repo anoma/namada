@@ -13,7 +13,7 @@ use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
-use crate::types::ethereum;
+use crate::types::ethereum_structs;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -89,7 +89,7 @@ impl DB for MockDB {
             None => return Ok(None),
         };
 
-        let ethereum_height: Option<ethereum::BlockHeight> =
+        let ethereum_height: Option<ethereum_structs::BlockHeight> =
             match self.0.borrow().get("ethereum_height") {
                 Some(bytes) => {
                     types::decode(bytes).map_err(Error::CodingError)?

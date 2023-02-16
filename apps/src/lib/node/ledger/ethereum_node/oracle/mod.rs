@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
-use namada::core::types::ethereum;
+use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
@@ -207,7 +207,7 @@ async fn process(
     oracle: &Oracle,
     config: &Config,
     pending: &mut Vec<PendingEvent>,
-    block_to_process: ethereum::BlockHeight,
+    block_to_process: ethereum_structs::BlockHeight,
 ) -> Result<()> {
     // update the latest block height
     let latest_block = loop {
@@ -363,11 +363,11 @@ fn process_queue(
 
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
-    use namada::core::types::ethereum;
+    use namada::core::types::ethereum_structs;
     use tokio::sync::watch;
 
-    pub type Sender = watch::Sender<Option<ethereum::BlockHeight>>;
-    pub type Receiver = watch::Receiver<Option<ethereum::BlockHeight>>;
+    pub type Sender = watch::Sender<Option<ethereum_structs::BlockHeight>>;
+    pub type Receiver = watch::Receiver<Option<ethereum_structs::BlockHeight>>;
 
     /// Construct a [`tokio::sync::watch`] channel to publish the most recently
     /// processed block. Until the live oracle processes its first block, this

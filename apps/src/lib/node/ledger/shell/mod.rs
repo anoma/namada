@@ -23,7 +23,6 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
-use namada::core::types::ethereum;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
@@ -809,10 +808,7 @@ where
                 );
                 return;
             };
-            let start_block = match &self.storage.ethereum_height {
-                Some(start_block) => start_block.clone(),
-                None => ethereum::BlockHeight::from(0),
-            };
+            let start_block = self.storage.ethereum_height.clone().unwrap_or_default();
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
