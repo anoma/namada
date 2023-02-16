@@ -177,7 +177,11 @@ where
         alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
-        // genesis should not contain vote extensions
+        // genesis should not contain vote extensions.
+        //
+        // this is because we have not decided any block through
+        // consensus yet (hence height 0), which in turn means we
+        // have not committed any vote extensions to a block either.
         if self.storage.last_height == BlockHeight(0) {
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
@@ -250,7 +254,11 @@ where
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
         if self.storage.last_height == BlockHeight(0) {
-            // genesis should not contain vote extensions
+            // genesis should not contain vote extensions.
+            //
+            // this is because we have not decided any block through
+            // consensus yet (hence height 0), which in turn means we
+            // have not committed any vote extensions to a block either.
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 

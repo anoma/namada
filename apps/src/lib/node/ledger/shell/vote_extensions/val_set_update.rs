@@ -65,7 +65,7 @@ where
                 "Dropping validator set update vote extension issued at \
                  genesis"
             );
-            return Err(VoteExtensionError::IssuedAtGenesis);
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if ext.data.signing_epoch != signing_epoch {
             tracing::error!(
