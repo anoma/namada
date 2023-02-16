@@ -198,19 +198,20 @@ where
 
     fn get_validator_from_tm_address(
         &self,
-        tm_address: &[u8],
-        epoch: Option<Epoch>,
+        _tm_address: &[u8],
+        _epoch: Option<Epoch>,
     ) -> Result<Address> {
-        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
-        let validator_raw_hash = core::str::from_utf8(tm_address)
-            .map_err(|_| Error::InvalidTMAddress)?;
-        self.read_validator_address_raw_hash(validator_raw_hash)
-            .ok_or_else(|| {
-                Error::NotValidatorKeyHash(
-                    validator_raw_hash.to_string(),
-                    epoch,
-                )
-            })
+        // let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        // let validator_raw_hash = core::str::from_utf8(tm_address)
+        //     .map_err(|_| Error::InvalidTMAddress)?;
+        // self.read_validator_address_raw_hash(validator_raw_hash)
+        //     .ok_or_else(|| {
+        //         Error::NotValidatorKeyHash(
+        //             validator_raw_hash.to_string(),
+        //             epoch,
+        //         )
+        //     })
+        todo!()
     }
 
     fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
