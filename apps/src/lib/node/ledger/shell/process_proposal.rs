@@ -38,7 +38,8 @@ where
     H: StorageHasher,
 {
     fn from(storage: &WlStorage<D, H>) -> Self {
-        let max_proposal_bytes = storage.get_max_proposal_bytes().get();
+        let max_proposal_bytes =
+            storage.pos_queries().get_max_proposal_bytes().get();
         let encrypted_txs_bin =
             TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -350,10 +351,9 @@ where
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
     fn encrypted_txs_not_allowed(&self) -> bool {
-        let is_2nd_height_off =
-            self.wl_storage.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off =
-            self.wl_storage.is_deciding_offset_within_epoch(2);
+        let pos_queries = self.wl_storage.pos_queries();
+        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
     }
 }

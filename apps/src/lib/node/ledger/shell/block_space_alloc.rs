@@ -106,7 +106,7 @@ where
 {
     #[inline]
     fn from(storage: &WlStorage<D, H>) -> Self {
-        Self::init(storage.get_max_proposal_bytes().get())
+        Self::init(storage.pos_queries().get_max_proposal_bytes().get())
     }
 }
 
