@@ -124,8 +124,14 @@ where
         TxType::Protocol(ProtocolTx { tx, .. }) => {
             apply_protocol_tx(tx, storage)
         }
-        _ => {
-            // other transaction types we treat as a noop
+        TxType::Wrapper(_)
+        | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
+            // do nothing.
+            // 1) we can only apply state updates on encrypted txs
+            // at the next block height
+            // 2) undecryptable txs should not perform any state
+            // updates either. errors are emitted at a layer above,
+            // in `Shell::finalize_block()`.
             Ok(TxResult::default())
         }
     }
