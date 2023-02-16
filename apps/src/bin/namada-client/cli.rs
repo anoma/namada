@@ -92,7 +92,6 @@ pub async fn main() -> Result<()> {
                 Sub::QueryRawBytes(QueryRawBytes(args)) => {
                     rpc::query_raw_bytes(ctx, args).await;
                 }
-
                 Sub::QueryProposal(QueryProposal(args)) => {
                     rpc::query_proposal(ctx, args).await;
                 }
@@ -101,6 +100,12 @@ pub async fn main() -> Result<()> {
                 }
                 Sub::QueryProtocolParameters(QueryProtocolParameters(args)) => {
                     rpc::query_protocol_parameters(ctx, args).await;
+                }
+                Sub::QueryPgfCounsil(QueryPgfCounsil(args)) => {
+                    rpc::query_pgf_counsil(ctx, args).await;
+                }
+                Sub::QueryPgfCandidates(QueryPgfCandidates(args)) => {
+                    rpc::query_pgf_candidates(ctx, args).await;
                 }
                 Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await
             }
