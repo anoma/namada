@@ -2793,10 +2793,10 @@ pub async fn submit_tx(
                 .await;
         let parsed = TxResponse::from_event(event);
 
-        println!(
-            "Transaction accepted with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
+        // println!(
+        //     "Transaction accepted with result: {}",
+        //     serde_json::to_string_pretty(&parsed).unwrap()
+        // );
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
