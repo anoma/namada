@@ -1,4 +1,4 @@
-//! Ethereum bridge struct re-exports adn types to do with ethereum.
+//! Ethereum bridge struct re-exports and types to do with ethereum.
 pub use ethbridge_structs::*;
 
 use std::fmt;
