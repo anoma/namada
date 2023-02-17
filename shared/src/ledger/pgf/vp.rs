@@ -54,7 +54,6 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let native_token = self.ctx.pre().get_native_token()?;
-
         let res = self
             .is_valid_key_set(keys_changed, &native_token)
             .unwrap_or(false);
@@ -97,6 +96,7 @@ where
         let candidate_spending_cap =
             pgf_storage::get_candidate_spending_cap(key);
         let counsil_data: Option<CounsilData> = self.ctx.post().read(&key)?;
+
         match (
             counsil_data,
             candidate_spending_cap,
@@ -113,8 +113,7 @@ where
                 let is_valid_amount = spending_cap.is_greater_than_zero();
                 let is_valid_data = data.data_is_less_than(4096)
                     && data.epoch.eq(&current_epoch);
-                let is_valid_address =
-                    self.is_valid_counsil_address(address, verifiers)?;
+                let is_valid_address = self.is_valid_counsil_address(address, verifiers)?;
                 Ok(is_valid_address && is_valid_data && is_valid_amount)
             }
             _ => Ok(false),
@@ -128,7 +127,8 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let address_exist_key = Key::validity_predicate(&address);
-        let address_exist = self.ctx.has_key_post(&address_exist_key)?;
+        let address_exist = self.ctx.has_key_pre(&address_exist_key)?;
+        println!("addr exist: {}", address_exist);
         Ok(address_exist && verifiers.contains(&address))
     }
 

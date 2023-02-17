@@ -41,6 +41,8 @@ pub const SCALE: u64 = 1_000_000;
 /// The largest value that can be represented by this integer type
 pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
 
+pub const ZERO_AMOUNT: Amount = Amount { micro: 0 };
+
 /// A change in tokens amount
 pub type Change = i128;
 

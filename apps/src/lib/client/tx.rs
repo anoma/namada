@@ -2593,6 +2593,7 @@ pub async fn submit_init_counsil(
         epoch: current_epoch,
         data: data.unwrap_or_default(),
     };
+
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
