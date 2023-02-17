@@ -228,7 +228,7 @@ mod tests {
                 seen_by: votes.into_iter().map(|(a, h, _)| (a, h)).collect(),
                 seen: voting_power > FractionalVotingPower::TWO_THIRDS,
             };
-            votes::storage::write(storage, keys, event, &tally)?;
+            votes::storage::write(storage, keys, event, &tally, false)?;
             Ok(tally)
         }
     }
@@ -378,7 +378,6 @@ mod tests {
                 FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
-        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
@@ -407,7 +406,6 @@ mod tests {
                 FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
-        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
@@ -456,7 +454,6 @@ mod tests {
                 FractionalVotingPower::new(1, 3)?,
             )]),
         )?;
-        votes::storage::write(&mut storage, &keys, &event, &tally_pre)?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);

@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{Tally, Votes};
@@ -11,6 +12,7 @@ pub fn write<D, H, T>(
     keys: &vote_tallies::Keys<T>,
     body: &T,
     tally: &Tally,
+    is_updated: bool,
 ) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -21,6 +23,29 @@ where
     storage.write(&keys.seen(), &tally.seen.try_to_vec()?)?;
     storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
     storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
+    if is_updated {
+        storage.write(
+            &keys.epoch(),
+            &storage.get_current_epoch().0.try_to_vec()?,
+        )?;
+    }
+    Ok(())
+}
+
+pub fn delete<D, H, T>(
+    storage: &mut Storage<D, H>,
+    keys: &vote_tallies::Keys<T>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshSerialize,
+{
+    storage.delete(&keys.body())?;
+    storage.delete(&keys.seen())?;
+    storage.delete(&keys.seen_by())?;
+    storage.delete(&keys.voting_power())?;
+    storage.delete(&keys.epoch())?;
     Ok(())
 }
 
@@ -42,6 +67,17 @@ where
         seen_by,
         seen,
     })
+}
+
+pub fn iter_prefix<'a, D, H>(
+    storage: &'a Storage<D, H>,
+    prefix: &Key,
+) -> <D as DBIter<'a>>::PrefixIter
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    storage.iter_prefix(prefix).0
 }
 
 #[inline]
@@ -68,6 +104,19 @@ where
     T: BorshDeserialize,
 {
     super::read::maybe_value(storage, &keys.seen())
+}
+
+#[inline]
+pub fn read_epoch<D, H, T>(
+    storage: &Storage<D, H>,
+    keys: &vote_tallies::Keys<T>,
+) -> Result<BlockHeight>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    T: BorshDeserialize,
+{
+    super::read::value(storage, &keys.epoch())
 }
 
 #[cfg(test)]
@@ -98,7 +147,7 @@ mod tests {
             seen: false,
         };
 
-        let result = write(&mut storage, &keys, &event, &tally);
+        let result = write(&mut storage, &keys, &event, &tally, false);
 
         assert!(result.is_ok());
         let (body, _) = storage.read(&keys.body()).unwrap();
@@ -111,6 +160,11 @@ mod tests {
         assert_eq!(
             voting_power,
             Some(tally.voting_power.try_to_vec().unwrap())
+        );
+        let (height, _) = storage.read(&keys.height()).unwrap();
+        assert_eq!(
+            height,
+            Some(storage.get_block_height().0.try_to_vec().unwrap())
         );
     }
 
@@ -145,10 +199,21 @@ mod tests {
                 &tally.voting_power.try_to_vec().unwrap(),
             )
             .unwrap();
+        storage
+            .write(
+                &keys.height(),
+                &storage.get_block_height().0.try_to_vec().unwrap(),
+            )
+            .unwrap();
 
         let result = read(&storage, &keys);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), tally);
+
+        let result = read_height(&storage, &keys);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), storage.get_block_height().0);
     }
 }

@@ -5,21 +5,24 @@ mod events;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
 use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::PosBase;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};
-use crate::storage::vote_tallies;
+use crate::storage::vote_tallies::{self, Keys};
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
@@ -138,12 +141,13 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (vote_tracking, changed, confirmed) = if !exists_in_storage {
+    let (vote_tracking, changed, confirmed, is_updated) = if !exists_in_storage
+    {
         tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
         let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
         let changed = eth_msg_keys.into_iter().collect();
         let confirmed = vote_tracking.seen;
-        (vote_tracking, changed, confirmed)
+        (vote_tracking, changed, confirmed, false)
     } else {
         tracing::debug!(
             %eth_msg_keys.prefix,
@@ -157,7 +161,7 @@ where
         }
         let confirmed =
             vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
-        (vote_tracking, changed, confirmed)
+        (vote_tracking, changed, confirmed, true)
     };
 
     votes::storage::write(
@@ -165,9 +169,40 @@ where
         &eth_msg_keys,
         &update.body,
         &vote_tracking,
+        is_updated,
     )?;
 
     Ok((changed, confirmed))
+}
+
+fn timeout_events<D, H>(
+    storage: &mut Storage<D, H>,
+) -> Vec<Keys<EthereumEvent>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let unbonding_len = storage.read_pos_params().unbonding_len;
+    let current_epoch = storage.last_epoch;
+    if current_epoch.0 > unbonding_len {
+        let timeout_epoch = Epoch(current_epoch.0 - unbonding_len);
+        let prefix = vote_tallies::eth_msgs_prefix();
+        votes::storage::iter_prefix(storage, &prefix).filter_map(|(key, val, _)| {
+            let key = Key::parse(&key).expect("The key should be parsable");
+            if vote_tallies::is_epoch_key(&key) {
+                let inserted_epoch = Epoch::try_from_slice(&val[..]).expect("Decoding BlockHeight failed");
+                if inserted_epoch <= timeout_epoch {
+                    vote_tallies::eth_event_keys(&key)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }).collect()
+    } else {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
