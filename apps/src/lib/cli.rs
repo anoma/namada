@@ -183,6 +183,7 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(4))
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryPgfCounsil::def().display_order(4))
+                .subcommand(QueryPgfCandidates::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Commands
                 .subcommand(SignTx::def().display_order(5))
@@ -1483,7 +1484,7 @@ pub mod cmds {
     pub struct TxCreateCouncil(pub args::CreateCouncil);
 
     impl SubCmd for TxCreateCouncil {
-        const CMD: &'static str = "counsil-create";
+        const CMD: &'static str = "init-counsil";
 
         fn parse(matches: &ArgMatches) -> Option<Self>
         where

@@ -16,6 +16,7 @@ use namada::proof_of_stake::read_total_stake;
 use namada::types::address::Address;
 use namada::types::governance::{Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
+use namada::types::token::ZERO_AMOUNT;
 
 use super::*;
 
@@ -219,7 +220,9 @@ where
 
                         // Reset spent budget
                         let spent_amount_key = pgf_storage::get_spent_amount_key();
-                        shell.wl_storage.write(&spent_amount_key, 0).expect("Should be able to write to storage");
+                        shell.wl_storage.write(&spent_amount_key, ZERO_AMOUNT).expect("Should be able to write to storage");
+
+                        tracing::info!("PGF initialized new counsil with address {} and spending cap {}.", council_address, council_spending_cap);
 
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),

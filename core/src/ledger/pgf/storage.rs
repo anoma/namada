@@ -26,12 +26,12 @@ pub fn is_candidates_key(key: &Key) -> bool {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
-            DbKeySeg::StringSeg(_address),
+            DbKeySeg::AddressSeg(address),
             DbKeySeg::StringSeg(spending_cap),
         ] if addr == &ADDRESS
             && prefix == CANDIDATES =>
         {
-            spending_cap.parse::<u64>().is_ok()
+            true
         }
         _ => false,
     }
@@ -124,12 +124,11 @@ pub fn get_candidate_address(key: &Key) -> Option<&Address> {
 
 /// Get PGF candidate address
 pub fn get_candidate_spending_cap(key: &Key) -> Option<Amount> {
+    println!("{:?}", key);
     match key.get_at(3) {
         Some(addr) => match addr {
             DbKeySeg::AddressSeg(_) => None,
-            DbKeySeg::StringSeg(amount) => {
-                Amount::try_from_slice(amount.as_bytes()).ok()
-            },
+            DbKeySeg::StringSeg(amount) => Amount::parse(amount.to_owned()).ok(),
         },
         None => None,
     }
