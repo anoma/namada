@@ -9,8 +9,14 @@ pub async fn main() -> Result<()> {
     let (cmd, _) = cli::namada_relayer_cli()?;
     match cmd {
         cmds::NamadaRelayer::EthBridgePool(sub) => match sub {
+            cmds::EthBridgePool::RecommendBatch(args) => {
+                bridge_pool::recommend_batch(args).await;
+            }
             cmds::EthBridgePool::ConstructProof(args) => {
-                bridge_pool::construct_bridge_pool_proof(args).await;
+                bridge_pool::construct_proof(args).await;
+            }
+            cmds::EthBridgePool::RelayProof(args) => {
+                bridge_pool::relay_bridge_pool_proof(args).await;
             }
             cmds::EthBridgePool::QueryPool(query) => {
                 bridge_pool::query_bridge_pool(query).await;

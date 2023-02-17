@@ -807,7 +807,8 @@ where
                 );
                 return;
             };
-            let start_block = self.storage.ethereum_height.clone().unwrap_or_default();
+            let start_block =
+                self.storage.ethereum_height.clone().unwrap_or_default();
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
