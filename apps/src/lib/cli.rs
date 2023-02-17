@@ -2007,7 +2007,7 @@ pub mod args {
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
-    const NAM_TO_ETH: Arg<f64> = arg("nam-to-eth");
+    const NAM_PER_ETH: Arg<f64> = arg("nam-per-eth");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
@@ -2215,7 +2215,7 @@ pub mod args {
         /// gas the relayer is willing to pay.
         pub gas: Option<u64>,
         /// Estimate of amount of NAM a single ETH is worth.
-        pub nam_to_eth: f64,
+        pub nam_per_eth: f64,
     }
 
     impl Args for RecommendBatch {
@@ -2223,12 +2223,12 @@ pub mod args {
             let query = Query::parse(matches);
             let max_gas = MAX_ETH_GAS.parse(matches);
             let gas = ETH_GAS.parse(matches);
-            let nam_to_eth = NAM_TO_ETH.parse(matches);
+            let nam_to_eth = NAM_PER_ETH.parse(matches);
             Self {
                 query,
                 max_gas,
                 gas,
-                nam_to_eth,
+                nam_per_eth: nam_to_eth,
             }
         }
 
@@ -2242,11 +2242,12 @@ pub mod args {
                     "Under ideal conditions, relaying transfers will yield a \
                      net profit. If that is not possible, setting this \
                      optional value will result in a batch transfer that \
-                     costs as close to the value as possible without \
+                     costs as close to the given value as possible without \
                      exceeding it.",
                 ))
-                .arg(NAM_TO_ETH.def().about(
-                    "The amount of NAM that one ETH is worth, represented as a decimal number.",
+                .arg(NAM_PER_ETH.def().about(
+                    "The amount of NAM that one ETH is worth, represented as \
+                     a decimal number.",
                 ))
         }
     }
