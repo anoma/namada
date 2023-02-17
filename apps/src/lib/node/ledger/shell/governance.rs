@@ -16,6 +16,7 @@ use namada::proof_of_stake::read_total_stake;
 use namada::types::address::Address;
 use namada::types::governance::{Council, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
+use namada::types::token::ZERO_AMOUNT;
 
 use super::*;
 
@@ -247,8 +248,14 @@ where
     let spent_amount_key = pgf_storage::get_spent_amount_key();
     shell
         .wl_storage
-        .write(&spent_amount_key, 0)
+        .write(&spent_amount_key, ZERO_AMOUNT)
         .expect("Should be able to write to storage");
+
+    tracing::info!(
+        "PGF initialized new counsil with address {} and spending cap {}.",
+        council.0,
+        council.1
+    );
 
     (
         true,

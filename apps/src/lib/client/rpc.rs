@@ -1437,7 +1437,7 @@ pub async fn query_pgf_counsil(
     let counsil_data: Option<(Address, token::Amount, token::Amount)> = unwrap_client_response(
         RPC.vp().pgf().current_counsil(&client).await
     );
-    
+
     match counsil_data {
         Some((address, spending_cap, spent_amount)) => {
             println!("PGF counsil:");
@@ -1465,7 +1465,7 @@ pub async fn query_pgf_candidates(
         _ => {
             println!("PGF candidates:");
             for (address, spending_cap, data) in candidates_data {
-                println!("{:4}Address: {}", "", address.to_pretty_string());
+                println!("{:2}- Address: {}", "", address.to_pretty_string());
                 println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
                 println!("{:4}Extra data: {}", "", data.to_string());
             }

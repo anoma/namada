@@ -1,5 +1,4 @@
 use namada_core::ledger::storage_api::pgf::{get_current_counsil, get_candidates};
-use namada_core::types::token::Amount;
 
 use crate::ledger::queries::types::RequestCtx;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
@@ -8,11 +7,11 @@ use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token;
 
-type Counsil = (Address, Amount, Amount);
-type Candidate = (Address, Amount, String);
+type Counsil = (Address, token::Amount, token::Amount);
+type Candidate = (Address, token::Amount, String);
 
 router! {PGF,
-    ( "active_counsil"  ) -> Option<Counsil> = current_counsil,
+    ( "current_counsil" ) -> Option<Counsil> = current_counsil,
     ( "candidates"  ) -> Vec<Candidate> = candidates,
 }
 
