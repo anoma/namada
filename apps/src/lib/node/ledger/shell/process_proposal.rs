@@ -372,8 +372,6 @@ mod test_process_proposal {
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
     use super::*;
-    use crate::facade::tendermint_proto::abci::RequestInitChain;
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, ProcessProposal, TestError,
     };
@@ -735,14 +733,6 @@ mod test_process_proposal {
     #[test]
     fn test_invalid_hash_commitment() {
         let (mut shell, _) = test_utils::setup();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -791,14 +781,6 @@ mod test_process_proposal {
     #[test]
     fn test_undecryptable() {
         let (mut shell, _) = test_utils::setup();
-        shell.init_chain(RequestInitChain {
-            time: Some(Timestamp {
-                seconds: 0,
-                nanos: 0,
-            }),
-            chain_id: ChainId::default().to_string(),
-            ..Default::default()
-        });
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
