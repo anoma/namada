@@ -20,12 +20,15 @@ enum KeyType<'a> {
     Masp,
     GovernanceVote(&'a Address),
     PgfCandidate(&'a Address),
+    PgfTransfer,
     Unknown,
 }
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = token::is_any_token_balance_key(key) {
+        if token::is_pgf_balance_key(key) {
+            Self::PgfTransfer
+        } else if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
         } else if let Some((_, address)) =
             token::is_any_multitoken_balance_key(key)
@@ -157,6 +160,7 @@ fn validate_tx(
                     true
                 }
             }
+            KeyType::PgfTransfer => *valid_sig,
             KeyType::Vp(owner) => {
                 let has_post: bool = ctx.has_key_post(key)?;
                 if owner == &addr {

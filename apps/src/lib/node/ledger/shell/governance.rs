@@ -13,10 +13,10 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
-use namada::types::address::Address;
+use namada::types::address::{Address, InternalAddress};
 use namada::types::governance::{Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
-use namada::types::token::ZERO_AMOUNT;
+use namada::types::token::{ZERO_AMOUNT, balance_key};
 
 use super::*;
 
@@ -211,22 +211,30 @@ where
                             }
                         }
                     }
-                    Tally::PGFCouncil((council_address, council_spending_cap)) => {
+                    Tally::PGFCouncil(council) => {
                         // Write storage address and spending cap in storage
                         let council_address_storage_key = pgf_storage::get_active_counsil_key();
-                        shell.wl_storage.write(&council_address_storage_key, council_address.clone()).expect("Should be able to write storage");
+                        shell.wl_storage.write(&council_address_storage_key, council.address.clone()).expect("Should be able to write storage");
                         let council_cap_storage_key = pgf_storage::get_spending_cap_key();
-                        shell.wl_storage.write(&council_cap_storage_key, council_spending_cap).expect("Should be able to write to storage");
+                        shell.wl_storage.write(&council_cap_storage_key, council.spending_cap).expect("Should be able to write to storage");
 
                         // Reset spent budget
                         let spent_amount_key = pgf_storage::get_spent_amount_key();
                         shell.wl_storage.write(&spent_amount_key, ZERO_AMOUNT).expect("Should be able to write to storage");
 
-                        tracing::info!("PGF initialized new counsil with address {} and spending cap {}.", council_address, council_spending_cap);
+                        #[cfg(not(feature = "mainnet"))]
+                        {
+                            // Load some tokens to PGF for testing
+                            let native_token = shell.wl_storage.storage.native_token.clone();
+                            let balance_key = balance_key(&native_token, &Address::Internal(InternalAddress::Pgf));
+                            shell.wl_storage.write(&balance_key, token::Amount::whole(100000)).expect("Should be able to write to storage");
+                        }
+
+                        tracing::info!("PGF initialized new counsil with address {} and spending cap {}.", council.address, council.spending_cap);
 
                         let proposal_event: Event = ProposalEvent::new(
                             EventType::Proposal.to_string(),
-                            TallyResult::Passed(Tally::PGFCouncil((council_address, council_spending_cap))),
+                            TallyResult::Passed(Tally::PGFCouncil(council)),
                             id,
                             false,
                             false,

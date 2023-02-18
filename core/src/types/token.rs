@@ -13,6 +13,8 @@ use thiserror::Error;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
+use super::address::InternalAddress;
+
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
 #[derive(
@@ -363,6 +365,18 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
             DbKeySeg::AddressSeg(owner),
         ] if key == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
+    }
+}
+
+/// Check if the given storage key is a pgf balance
+pub fn is_pgf_balance_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(_),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::AddressSeg(owner),
+        ] if key == BALANCE_STORAGE_KEY && owner.eq(&Address::Internal(InternalAddress::Pgf)) => true,
+        _ => false,
     }
 }
 
