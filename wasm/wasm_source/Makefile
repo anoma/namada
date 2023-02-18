@@ -14,6 +14,7 @@ wasms += tx_init_counsil
 wasms += tx_reveal_pk
 wasms += tx_vote_proposal
 wasms += tx_transfer
+wasms += tx_transfer_pgf
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_update_pgf_projects

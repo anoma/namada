@@ -40,7 +40,7 @@ use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
+    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType, TallyResult, Tally,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -801,6 +801,11 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             {
                 match utils::compute_tally(votes, total_stake, &proposal_type) {
                     Ok(partial_proposal_result) => {
+                        if let TallyResult::Passed(Tally::PGFCouncil(counsil)) = partial_proposal_result.result {
+                            println!("{:4}Most voted counsil:", "");
+                            println!("{:8}Address: {}", "",  counsil.address);
+                            println!("{:8}Spending cap: {}", "", counsil.spending_cap);
+                        }
                         println!(
                             "{:4}Yay votes: {}",
                             "", partial_proposal_result.total_yay_power

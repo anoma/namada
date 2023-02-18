@@ -68,6 +68,16 @@ where
     }
 }
 
+pub fn get_current_counsil_address<S>(
+    storage: &S,
+) -> storage_api::Result<Option<Address>>
+where
+    S: StorageRead + StorageWrite,
+{
+    let counsil_key = pgf_storage::get_active_counsil_key();
+    storage.read(&counsil_key)
+}
+
 pub fn get_candidates<S>(
     storage: &S,
 ) -> storage_api::Result<Vec<(Address, Amount, String)>>

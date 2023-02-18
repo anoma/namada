@@ -64,7 +64,9 @@ where
         let result = keys_changed.iter().all(|key| {
             let key_type = KeyType::from_key(key, &native_token);
 
-            let result: Result<bool> = match (key_type) {
+            println!("{:?}", key_type);
+
+            let result: Result<bool> = match key_type {
                 KeyType::BALANCE => self.is_valid_transfer(verifiers, &native_token),
                 KeyType::SPENT_AMOUNT => {
                     self.is_valid_spent_amount(key, &native_token)
@@ -147,12 +149,15 @@ where
         key: &Key,
         native_token: &Address,
     ) -> Result<bool> {
+        println!("asdasdasda");
         let pgf_balance_amount =
             token::balance_key(native_token, self.ctx.address);
         let pre_balance: Option<Amount> =
             self.ctx.pre().read(&pgf_balance_amount)?;
         let post_balance: Option<Amount> =
             self.ctx.post().read(&pgf_balance_amount)?;
+
+        println!("ads");
 
         let spending_cap_key = pgf_storage::get_spending_cap_key();
         let pre_spending_cap: Option<Amount> =
@@ -162,6 +167,12 @@ where
             self.ctx.post().read(&spend_amount_key)?;
         let pre_spent_amount: Option<Amount> =
             self.ctx.pre().read(&spend_amount_key)?;
+
+        println!("{}", pre_balance.is_some());
+        println!("{}", post_balance.is_some());
+        println!("{}", pre_spending_cap.is_some());
+        println!("{}", post_spent_amount.is_some());
+        println!("{}", pre_spent_amount.is_some());
 
         match (
             pre_balance,
@@ -177,6 +188,8 @@ where
                 Some(pre_spent_amount),
                 Some(post_spent_amount),
             ) => {
+
+                println!("lupo");
                 let amount_transfered = post_balance.checked_sub(pre_balance);
                 if let Some(amount) = amount_transfered {
                     let is_valid_post_spent_amount =
@@ -226,6 +239,9 @@ where
             self.ctx.pre().read(&active_counsil_address_key)?;
         match active_counsil_address {
             Some(address) => {
+                println!("{}", address.to_string());
+                println!("{}", verifiers.contains(&address));
+                println!("{:?}", verifiers);
                 let is_signed_by_active_counsil = verifiers.contains(&address);
                 Ok(is_signed_by_active_counsil)
             }
