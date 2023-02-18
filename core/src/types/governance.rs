@@ -18,8 +18,23 @@ use crate::types::token::{Amount, SCALE};
 /// Type alias for vote power
 pub type VotePower = u128;
 
-/// A PGF cocuncil composed of the address and spending cap
-pub type Council = (Address, Amount);
+/// A PGF council composed of the address and spending cap
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialOrd
+)]
+pub struct Council {
+    pub address: Address,
+    pub spending_cap: Amount
+}
 
 /// The type of a governance vote with the optional associated Memo
 #[derive(
@@ -81,11 +96,11 @@ impl Display for ProposalVote {
                 VoteType::Default => write!(f, "yay"),
                 VoteType::PGFCouncil(councils) => {
                     writeln!(f, "yay with councils:")?;
-                    for (address, spending_cap) in councils {
+                    for council in councils {
                         writeln!(
                             f,
                             "Council: {}, spending cap: {}",
-                            address, spending_cap
+                            council.address, council.spending_cap
                         )?
                     }
 
@@ -162,10 +177,10 @@ impl Display for TallyResult {
         match self {
             TallyResult::Passed(vote) => match vote {
                 Tally::Default | Tally::ETHBridge => write!(f, "passed"),
-                Tally::PGFCouncil((council, cap)) => write!(
+                Tally::PGFCouncil(council) => write!(
                     f,
                     "passed with PGF council address: {}, spending cap: {}",
-                    council, cap
+                    council.address, council.spending_cap
                 ),
             },
             TallyResult::Rejected => write!(f, "rejected"),

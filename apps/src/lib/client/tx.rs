@@ -43,9 +43,9 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
-use namada::types::address::{masp, masp_tx_key, Address};
+use namada::types::address::{masp, masp_tx_key, Address, InternalAddress};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
+    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType, Council,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -92,6 +92,7 @@ const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_PGF_PROJECTS: &str = "tx_update_pgf_projects.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+const TX_TRANSFER_PGF_WASM: &str = "tx_transfer_pgf.wasm";
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -1788,11 +1789,20 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+    let tx_code = if transfer.source == Address::Internal(InternalAddress::Pgf)  {
+        ctx.read_wasm(TX_TRANSFER_PGF_WASM)
+    } else {
+        ctx.read_wasm(TX_TRANSFER_WASM)
+    };
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    let pks_map = rpc::get_address_pks_map(&client, &source).await;
+    let pks_map = if transfer.source == Address::Internal(InternalAddress::Pgf) {
+        let account_address = ctx.get(&args.address.expect("Need to specify the account address."));
+        rpc::get_address_pks_map(&client, &account_address).await
+    } else {
+        rpc::get_address_pks_map(&client, &source).await
+    };
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,
@@ -2090,25 +2100,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
         "yay" => {
-            if let Some(pgf) = args.proposal_pgf {
-                let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().into_iter().step_by(2);
-                let cap_iter = splits.into_iter().skip(1).step_by(2);
-                let mut set = HashSet::new();
-                for (address, cap) in
-                    address_iter.zip(cap_iter).map(|(addr, cap)| {
-                        (
-                            addr.parse()
-                                .expect("Failed to parse pgf council address"),
-                            cap.parse::<u64>()
-                                .expect("Failed to parse pgf spending cap"),
-                        )
-                    })
-                {
-                    set.insert((address, cap.into()));
-                }
-
-                ProposalVote::Yay(VoteType::PGFCouncil(set))
+            if let Some(vote_path) = args.proposal_pgf {
+                let counsil_data_content = tokio::fs::read(vote_path).await.expect("Could not read PGF votes file");
+                let counsil_data: HashSet<Council> = serde_json::from_slice(&counsil_data_content).expect("Should be able to parse pgf file.");        
+                ProposalVote::Yay(VoteType::PGFCouncil(counsil_data))
             } else if let Some(eth) = args.proposal_eth {
                 let mut splits = eth.trim().split_ascii_whitespace();
                 // Sign the message
@@ -2234,20 +2229,20 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     proposal_type, args.vote
                 );
                 safe_exit(1);
-            } else if let VoteType::PGFCouncil(set) = vote_type {
+            } else if let VoteType::PGFCouncil(councils) = vote_type {
                 // Check that addresses proposed as council are established and
                 // are present in storage
-                for (address, _) in set {
-                    match address {
+                for counsil in councils {
+                    match counsil.address {
                         Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(address);
+                            let vp_key = Key::validity_predicate(&counsil.address);
                             if !rpc::query_has_storage_key(&client, &vp_key)
                                 .await
                             {
                                 eprintln!(
                                     "Proposed PGF council {} cannot be found \
                                      in storage",
-                                    address
+                                     counsil.address
                                 );
                                 safe_exit(1);
                             }
@@ -2256,7 +2251,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                             eprintln!(
                                 "PGF council vote contains a non-established \
                                  address: {}",
-                                address
+                                 counsil.address
                             );
                             safe_exit(1);
                         }

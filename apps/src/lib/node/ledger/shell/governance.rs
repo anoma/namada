@@ -236,12 +236,12 @@ where
     let council_address_storage_key = pgf_storage::get_active_counsil_key();
     shell
         .wl_storage
-        .write(&council_address_storage_key, council.0.clone())
+        .write(&council_address_storage_key, council.address.clone())
         .expect("Should be able to write storage");
     let council_cap_storage_key = pgf_storage::get_spending_cap_key();
     shell
         .wl_storage
-        .write(&council_cap_storage_key, council.1)
+        .write(&council_cap_storage_key, council.spending_cap)
         .expect("Should be able to write to storage");
 
     // Reset spent budget
@@ -253,8 +253,8 @@ where
 
     tracing::info!(
         "PGF initialized new counsil with address {} and spending cap {}.",
-        council.0,
-        council.1
+        council.address,
+        council.spending_cap
     );
 
     (

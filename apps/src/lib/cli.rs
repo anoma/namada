@@ -1801,7 +1801,7 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<PathBuf> = arg_opt("pgf");
     const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const PGF_COUNSIL_DATA: ArgOpt<String> = arg_opt("counsil-data");
@@ -2068,6 +2068,8 @@ pub mod args {
         pub sub_prefix: Option<String>,
         /// Transferred token amount
         pub amount: token::Amount,
+        /// The enstablish address
+        pub address: Option<WalletAddress>
     }
 
     impl TxTransfer {
@@ -2093,6 +2095,7 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
+            let address = ADDRESS_OPT.parse(matches);
             Self {
                 tx,
                 source,
@@ -2100,6 +2103,7 @@ pub mod args {
                 token,
                 sub_prefix,
                 amount,
+                address
             }
         }
 
@@ -2116,6 +2120,7 @@ pub mod args {
                 .arg(TOKEN.def().about("The transfer token."))
                 .arg(SUB_PREFIX.def().about("The token's sub prefix."))
                 .arg(AMOUNT.def().about("The amount to transfer in decimal."))
+                .arg(ADDRESS_OPT.def().about("The enstablished address."))
         }
     }
 
@@ -2512,7 +2517,7 @@ pub mod args {
         /// The vote
         pub vote: String,
         /// PGF proposal
-        pub proposal_pgf: Option<String>,
+        pub proposal_pgf: Option<PathBuf>,
         /// ETH proposal
         pub proposal_eth: Option<String>,
         /// Flag if proposal vote should be run offline
@@ -2566,10 +2571,7 @@ pub mod args {
                     PROPOSAL_VOTE_PGF_OPT
                         .def()
                         .about(
-                            "The list of proposed councils and spending \
-                             caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is \
-                             expressed in microNAM",
+                            "The path to the JSON file carrying a map between address (bech32m encoded) and spending cap (in NAMs).",
                         )
                         .requires(PROPOSAL_ID.name)
                         .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
