@@ -1107,7 +1107,8 @@ impl Epochs {
         None
     }
 
-    /// Look-up the starting block height of an epoch before a given height.
+    /// Look-up the starting block height of an epoch at or before a given
+    /// height.
     pub fn get_epoch_start_height(
         &self,
         height: BlockHeight,
