@@ -22,6 +22,7 @@ mod tests {
             data: Some("arbitrary data".as_bytes().to_owned()),
             timestamp: Some(std::time::SystemTime::now().into()),
             inner_tx: Some(inner_tx),
+            extra: vec![],
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

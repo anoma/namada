@@ -14,5 +14,5 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
 
-    ctx.update_validity_predicate(&update_vp.addr, update_vp.vp_code)
+    ctx.update_validity_predicate(&update_vp.addr, ctx.get_tx_extra()?)
 }

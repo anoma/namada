@@ -91,6 +91,8 @@ where
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
+    /// The transaction code is used for signature verification
+    pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -131,6 +133,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut BlockGasMeter,
+        tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -141,6 +144,7 @@ where
         let write_log = unsafe { MutHostRef::new(write_log) };
         let iterators = unsafe { MutHostRef::new(iterators) };
         let gas_meter = unsafe { MutHostRef::new(gas_meter) };
+        let tx = unsafe { HostRef::new(tx) };
         let tx_index = unsafe { HostRef::new(tx_index) };
         let verifiers = unsafe { MutHostRef::new(verifiers) };
         let result_buffer = unsafe { MutHostRef::new(result_buffer) };
@@ -153,6 +157,7 @@ where
             write_log,
             iterators,
             gas_meter,
+            tx,
             tx_index,
             verifiers,
             result_buffer,
@@ -195,6 +200,7 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
+            tx: self.tx.clone(),
             tx_index: self.tx_index.clone(),
             verifiers: self.verifiers.clone(),
             result_buffer: self.result_buffer.clone(),
@@ -1481,9 +1487,9 @@ where
     Ok(height.0)
 }
 
-/// Getting the block height function exposed to the wasm VM Tx
-/// environment. The height is that of the block to which the current
-/// transaction is being applied.
+/// Getting the transaction index function exposed to the wasm VM Tx
+/// environment. The index is that of the transaction being applied
+/// in the current block.
 pub fn tx_get_tx_index<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
 ) -> TxResult<u32>
@@ -1496,6 +1502,44 @@ where
     let tx_index = unsafe { env.ctx.tx_index.get() };
     tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
     Ok(tx_index.0)
+}
+
+/// Getting the transaction extra data function exposed to the wasm VM Tx
+/// environment. The extra data is that of the transaction being applied.
+pub fn tx_get_tx_extra<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    result_ptr: u64,
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let tx = unsafe { env.ctx.tx.get() };
+    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
+    let gas = env
+        .memory
+        .write_bytes(result_ptr, tx.extra.clone())
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)
+}
+
+/// Getting the transaction extra data length function exposed to the wasm
+/// VM Tx environment. The extra data length is that of the transaction
+/// being applied.
+pub fn tx_get_tx_extra_len<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+) -> TxResult<u64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let tx = unsafe { env.ctx.tx.get() };
+    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
+    Ok(tx.extra.len() as u64)
 }
 
 /// Getting the block height function exposed to the wasm VM VP
@@ -1953,6 +1997,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut BlockGasMeter,
+        tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -1969,6 +2014,7 @@ pub mod testing {
             write_log,
             iterators,
             gas_meter,
+            tx,
             tx_index,
             verifiers,
             result_buffer,

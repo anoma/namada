@@ -370,10 +370,6 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
-        get_tx_index()
-    }
-
     fn get_native_token(&self) -> Result<Address, Error> {
         get_native_token()
     }
@@ -431,10 +427,6 @@ impl StorageRead for CtxPostStorageRead<'_> {
 
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
-    }
-
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
-        get_tx_index()
     }
 
     fn get_native_token(&self) -> Result<Address, Error> {

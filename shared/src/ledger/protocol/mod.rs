@@ -164,15 +164,12 @@ where
     gas_meter
         .add_compiling_fee(tx.code.len())
         .map_err(Error::GasError)?;
-    let empty = vec![];
-    let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
         storage,
         write_log,
         gas_meter,
         tx_index,
-        &tx.code,
-        tx_data,
+        tx,
         vp_wasm_cache,
         tx_wasm_cache,
     )

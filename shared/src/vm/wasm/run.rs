@@ -77,8 +77,7 @@ pub fn tx<DB, H, CA>(
     write_log: &mut WriteLog,
     gas_meter: &mut BlockGasMeter,
     tx_index: &TxIndex,
-    tx_code: impl AsRef<[u8]>,
-    tx_data: impl AsRef<[u8]>,
+    tx: &Tx,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -89,9 +88,11 @@ where
 {
     // let wasm_store = untrusted_wasm_store(memory::tx_limit());
 
-    validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
+    let empty = vec![];
+    let tx_data = tx.data.as_ref().unwrap_or(&empty);
+    validate_untrusted_wasm(&tx.code).map_err(Error::ValidationError)?;
 
-    let (module, store) = tx_wasm_cache.fetch_or_compile(&tx_code)?;
+    let (module, store) = tx_wasm_cache.fetch_or_compile(&tx.code)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
@@ -103,6 +104,7 @@ where
         write_log,
         &mut iterators,
         gas_meter,
+        tx,
         tx_index,
         &mut verifiers,
         &mut result_buffer,
@@ -495,8 +497,7 @@ mod tests {
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            tx_code.clone(),
-            tx_data,
+            &Tx::new(tx_code.clone(), Some(tx_data)),
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -510,8 +511,7 @@ mod tests {
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            tx_code,
-            tx_data,
+            &Tx::new(tx_code, Some(tx_data)),
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -692,8 +692,7 @@ mod tests {
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            tx_no_op,
-            tx_data,
+            &Tx::new(tx_no_op, Some(tx_data)),
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -809,8 +808,7 @@ mod tests {
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            tx_read_key,
-            tx_data,
+            &Tx::new(tx_read_key, Some(tx_data)),
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -974,8 +972,7 @@ mod tests {
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            tx_code,
-            tx_data,
+            &Tx::new(tx_code, Some(tx_data)),
             &mut vp_cache,
             &mut tx_cache,
         )

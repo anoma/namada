@@ -146,6 +146,7 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub extra: Vec<u8>,
     /// the encrypted inner transaction if data contains a WrapperTx
     #[cfg(feature = "ferveo-tpke")]
     pub inner_tx: Option<EncryptedTx>,
@@ -172,6 +173,7 @@ impl TryFrom<&[u8]> for Tx {
         Ok(Tx {
             code: tx.code,
             data: tx.data,
+            extra: tx.extra,
             timestamp,
             inner_tx,
         })
@@ -188,6 +190,7 @@ impl From<Tx> for types::Tx {
         types::Tx {
             code: tx.code,
             data: tx.data,
+            extra: tx.extra,
             timestamp,
             inner_tx,
         }
@@ -287,6 +290,7 @@ impl Tx {
             data,
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
+            extra: vec![],
         }
     }
 
@@ -298,25 +302,39 @@ impl Tx {
         bytes
     }
 
-    /// Hash this transaction leaving out the inner tx and its code, but instead
-    /// of including the transaction code in the hash, include its hash instead
-    pub fn partial_hash(&self) -> [u8; 32] {
+    /// Produce a reduced version of this transaction that is sufficient for
+    /// signing. Specifically replaces code and extra with their hashes, and
+    /// leaves out inner tx.
+    pub fn signing_tx(&self) -> types::Tx {
         let timestamp = Some(self.timestamp.into());
-        let mut bytes = vec![];
         types::Tx {
             code: hash_tx(&self.code).0.to_vec(),
+            extra: hash_tx(&self.extra).0.to_vec(),
             data: self.data.clone(),
             timestamp,
             inner_tx: None,
         }
-        .encode(&mut bytes)
-        .expect("encoding a transaction failed");
+    }
+
+    /// Hash this transaction leaving out the inner tx, but instead of including
+    /// the transaction code and extra data in the hash, include their hashes
+    /// instead.
+    pub fn partial_hash(&self) -> [u8; 32] {
+        let mut bytes = vec![];
+        self.signing_tx()
+            .encode(&mut bytes)
+            .expect("encoding a transaction failed");
         hash_tx(&bytes).0
     }
 
     /// Get the hash of this transaction's code
     pub fn code_hash(&self) -> [u8; 32] {
         hash_tx(&self.code).0
+    }
+
+    /// Get the hash of this transaction's extra data
+    pub fn extra_hash(&self) -> [u8; 32] {
+        hash_tx(&self.extra).0
     }
 
     /// Sign a transaction using [`SignedTxData`].
@@ -332,6 +350,7 @@ impl Tx {
         Tx {
             code: self.code,
             data: Some(signed),
+            extra: self.extra,
             timestamp: self.timestamp,
             inner_tx: self.inner_tx,
         }
@@ -351,6 +370,7 @@ impl Tx {
         let data = signed_tx_data.data;
         let tx = Tx {
             code: self.code.clone(),
+            extra: self.extra.clone(),
             data,
             timestamp: self.timestamp,
             inner_tx: self.inner_tx.clone(),
@@ -478,6 +498,7 @@ mod tests {
             data: Some(data),
             timestamp: None,
             inner_tx: None,
+            extra: vec![],
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

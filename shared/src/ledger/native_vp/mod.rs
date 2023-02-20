@@ -240,10 +240,6 @@ where
         self.ctx.get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
-        self.ctx.get_tx_index().into_storage_result()
-    }
-
     fn get_native_token(&self) -> Result<Address, storage_api::Error> {
         self.ctx.get_native_token()
     }
@@ -320,10 +316,6 @@ where
 
     fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
         self.ctx.get_block_epoch()
-    }
-
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
-        self.ctx.get_tx_index().into_storage_result()
     }
 
     fn get_native_token(&self) -> Result<Address, storage_api::Error> {

@@ -166,10 +166,11 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
 
-    let data = UpdateVp { addr, vp_code };
+    let data = UpdateVp { addr };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let mut tx = Tx::new(tx_code, Some(data));
+    tx.extra = vp_code;
     process_tx(
         ctx,
         &args.tx,
@@ -196,13 +197,11 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     }
 
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
-    let data = InitAccount {
-        public_key,
-        vp_code,
-    };
+    let data = InitAccount { public_key };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data));
+    let mut tx = Tx::new(tx_code, Some(data));
+    tx.extra = vp_code;
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,

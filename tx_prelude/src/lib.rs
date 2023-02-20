@@ -199,11 +199,6 @@ impl StorageRead for Ctx {
             namada_tx_result_buffer,
         ))
     }
-
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
-        let tx_index = unsafe { namada_tx_get_tx_index() };
-        Ok(TxIndex(tx_index))
-    }
 }
 
 impl StorageWrite for Ctx {
@@ -323,5 +318,20 @@ impl TxEnv for Ctx {
             namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
         };
         Ok(())
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        let tx_index = unsafe { namada_tx_get_tx_index() };
+        Ok(TxIndex(tx_index))
+    }
+
+    fn get_tx_extra(&self) -> Result<Vec<u8>, Error> {
+        let capacity = unsafe { namada_tx_get_tx_extra_len() } as usize;
+        let result = Vec::with_capacity(capacity);
+        unsafe {
+            namada_tx_get_tx_extra(result.as_ptr() as _);
+        }
+        let slice = unsafe { slice::from_raw_parts(result.as_ptr(), capacity) };
+        Ok(slice.to_vec())
     }
 }
