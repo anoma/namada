@@ -309,6 +309,17 @@ mod recommendations {
         feasible_region: bool,
     }
 
+    /// The algorithm exhibits two different remmondation strategies
+    /// depending on whether the user is will to accept a positive cost
+    /// for relaying.
+    #[derive(PartialEq)]
+    enum AlgorithmMode {
+        /// Only keep profitable transactions
+        Greedy,
+        /// Allow transactions with are not profitable
+        Generous,
+    }
+
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
@@ -355,9 +366,25 @@ mod recommendations {
 
         let max_gas = args.max_gas.unwrap_or(u64::MAX);
         let max_cost = args.gas.map(|x| x as i64).unwrap_or_default();
+        generate(contents, max_gas, max_cost);
+    }
+
+    /// Generates the actual recommendation from restrictions given by the
+    /// input parameters.
+    fn generate(
+        contents: Vec<(String, i64, PendingTransfer)>,
+        max_gas: u64,
+        max_cost: i64,
+    ) -> Option<Vec<String>> {
         let mut state = AlgorithState {
             profitable: true,
             feasible_region: false,
+        };
+
+        let mode = if max_cost <= 0 {
+            AlgorithmMode::Greedy
+        } else {
+            AlgorithmMode::Generous
         };
 
         let mut total_gas = BASE_GAS;
@@ -370,7 +397,7 @@ mod recommendations {
             let next_total_fees =
                 total_fees + u64::from(transfer.gas_fee.amount);
             if cost < 0 {
-                if total_gas <= max_gas && total_cost <= max_cost {
+                if next_total_gas <= max_gas && next_total_cost <= max_cost {
                     state.feasible_region = true;
                 } else if state.feasible_region {
                     // once we leave the feasible region, we will never re-enter
@@ -378,16 +405,18 @@ mod recommendations {
                     break;
                 }
                 recommendation.push(hash);
-            } else {
+            } else if mode == AlgorithmMode::Generous {
                 state.profitable = false;
                 let is_feasible =
-                    total_gas <= max_gas && total_cost <= max_cost;
+                    next_total_gas <= max_gas && next_total_cost <= max_cost;
                 // once we leave the feasible region, we will never re-enter it.
                 if state.feasible_region && !is_feasible {
                     break;
                 } else {
                     recommendation.push(hash);
                 }
+            } else {
+                break;
             }
             total_cost = next_total_cost;
             total_gas = next_total_gas;
@@ -395,15 +424,123 @@ mod recommendations {
         }
 
         if state.feasible_region && !recommendation.is_empty() {
-            println!("Recommended batch: {:?}", recommendation);
-            println!("Total gas (in gwei): {}", total_gas);
-            println!("Total cost (in gwei): {}", total_cost);
+            println!("Recommended batch: {:#?}", recommendation);
+            println!(
+                "Estimated Ethereum transaction gas (in gwei): {}",
+                total_gas
+            );
+            println!("Estimated net profit (in gwei): {}", -total_cost);
             println!("Total fees (in NAM): {}", total_fees);
+            Some(recommendation)
         } else {
             println!(
                 "Unable to find a recommendation satisfying the input \
                  parameters."
-            )
+            );
+            None
+        }
+    }
+
+    #[cfg(test)]
+    mod test_recommendations {
+        use namada::types::ethereum_events::EthAddress;
+
+        use super::*;
+        use crate::wallet::defaults::bertha_address;
+
+        /// Generate a pending transfer with the specified gas
+        /// fee.
+        pub fn transfer(gas_amount: u64) -> PendingTransfer {
+            PendingTransfer {
+                transfer: TransferToEthereum {
+                    asset: EthAddress([1; 20]),
+                    recipient: EthAddress([2; 20]),
+                    sender: bertha_address(),
+                    amount: Default::default(),
+                },
+                gas_fee: GasFee {
+                    amount: gas_amount.into(),
+                    payer: bertha_address(),
+                },
+            }
+        }
+
+        /// Convert transfers into a format that the `generate` function
+        /// understands.
+        fn process_transfers(
+            transfers: Vec<PendingTransfer>,
+        ) -> Vec<(String, i64, PendingTransfer)> {
+            transfers
+                .into_iter()
+                .map(|t| {
+                    (
+                        t.keccak256().to_string(),
+                        TRANSFER_FEE - u64::from(t.gas_fee.amount) as i64,
+                        t,
+                    )
+                })
+                .collect()
+        }
+
+        #[test]
+        fn test_only_profitable() {
+            let profitable = vec![transfer(100_000); 17];
+            let hash = profitable[0].keccak256().to_string();
+            let expected = vec![hash; 17];
+            let recommendation =
+                generate(process_transfers(profitable), u64::MAX, 0)
+                    .expect("Test failed");
+            assert_eq!(recommendation, expected);
+        }
+
+        #[test]
+        fn test_non_profitable_removed() {
+            let mut transfers = vec![transfer(100_000); 17];
+            let hash = transfers[0].keccak256().to_string();
+            transfers.push(transfer(0));
+            let expected: Vec<_> = vec![hash; 17];
+            let recommendation =
+                generate(process_transfers(transfers), u64::MAX, 0)
+                    .expect("Test failed");
+            assert_eq!(recommendation, expected);
+        }
+
+        #[test]
+        fn test_max_gas() {
+            let transfers = vec![transfer(100_000); 17];
+            let hash = transfers[0].keccak256().to_string();
+            let expected = vec![hash; 16];
+            let recommendation =
+                generate(process_transfers(transfers), 1_600_000, i64::MAX)
+                    .expect("Test failed");
+            assert_eq!(recommendation, expected);
+        }
+
+        #[test]
+        fn test_net_loss() {
+            let mut transfers = vec![transfer(100_000); 16];
+            transfers.extend([transfer(25_000), transfer(25_000)]);
+            let expected: Vec<_> = transfers
+                .iter()
+                .map(|t| t.keccak256().to_string())
+                .take(17)
+                .collect();
+            let recommendation =
+                generate(process_transfers(transfers), u64::MAX, 25_000)
+                    .expect("Test failed");
+            assert_eq!(recommendation, expected);
+        }
+
+        #[test]
+        fn test_net_loss_max_gas() {
+            let mut transfers = vec![transfer(100_000); 16];
+            let hash = transfers[0].keccak256().to_string();
+            let expected = vec![hash; 16];
+            transfers.extend([transfer(25_000), transfer(25_000)]);
+            let recommendation =
+                generate(process_transfers(transfers), 1_600_000, 25_000)
+                    .expect("Test failed");
+            assert_eq!(recommendation, expected);
         }
     }
 }
