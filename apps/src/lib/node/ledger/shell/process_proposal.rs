@@ -339,6 +339,7 @@ mod test_process_proposal {
                 ),
                 timestamp,
                 inner_tx: tx.inner_tx,
+                extra: None,
             }
         } else {
             panic!("Test failed");

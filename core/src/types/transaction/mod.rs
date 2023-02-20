@@ -163,8 +163,6 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_key: common::PublicKey,
-    /// The VP code
-    pub vp_code: Vec<u8>,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -297,6 +295,7 @@ pub mod tx_types {
                 data: Some(data.clone()),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx.clone(),
+                extra: tx.extra.clone(),
             }
             .partial_hash();
             match TxType::try_from(Tx {
@@ -304,6 +303,7 @@ pub mod tx_types {
                 data: Some(data),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx,
+                extra: tx.extra,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {

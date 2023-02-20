@@ -47,7 +47,7 @@ use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
-    TxIndex, BLOCK_HASH_LENGTH,
+    BLOCK_HASH_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::token;
@@ -97,8 +97,6 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
-    /// The shielded transaction index
-    pub tx_index: TxIndex,
     /// The currently saved conversion state
     pub conversion_state: ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
@@ -354,7 +352,6 @@ where
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
             ),
-            tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
@@ -1053,10 +1050,6 @@ where
         Ok(self.block.epoch)
     }
 
-    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
-        Ok(self.tx_index)
-    }
-
     fn get_native_token(
         &self,
     ) -> std::result::Result<Address, storage_api::Error> {
@@ -1142,7 +1135,6 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
-                tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),

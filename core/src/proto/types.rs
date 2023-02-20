@@ -146,6 +146,7 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+    pub extra: Option<Vec<u8>>,
     /// the encrypted inner transaction if data contains a WrapperTx
     #[cfg(feature = "ferveo-tpke")]
     pub inner_tx: Option<EncryptedTx>,
@@ -172,6 +173,7 @@ impl TryFrom<&[u8]> for Tx {
         Ok(Tx {
             code: tx.code,
             data: tx.data,
+            extra: tx.extra,
             timestamp,
             inner_tx,
         })
@@ -188,6 +190,7 @@ impl From<Tx> for types::Tx {
         types::Tx {
             code: tx.code,
             data: tx.data,
+            extra: tx.extra,
             timestamp,
             inner_tx,
         }
@@ -287,6 +290,7 @@ impl Tx {
             data,
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
+            extra: None,
         }
     }
 
@@ -305,6 +309,7 @@ impl Tx {
         let mut bytes = vec![];
         types::Tx {
             code: hash_tx(&self.code).0.to_vec(),
+            extra: self.extra.as_ref().map(|x| hash_tx(x).0.to_vec()),
             data: self.data.clone(),
             timestamp,
             inner_tx: None,
@@ -332,6 +337,7 @@ impl Tx {
         Tx {
             code: self.code,
             data: Some(signed),
+            extra: self.extra,
             timestamp: self.timestamp,
             inner_tx: self.inner_tx,
         }
@@ -351,6 +357,7 @@ impl Tx {
         let data = signed_tx_data.data;
         let tx = Tx {
             code: self.code.clone(),
+            extra: self.extra.clone(),
             data,
             timestamp: self.timestamp,
             inner_tx: self.inner_tx.clone(),
@@ -478,6 +485,7 @@ mod tests {
             data: Some(data),
             timestamp: None,
             inner_tx: None,
+            extra: None,
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

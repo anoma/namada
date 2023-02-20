@@ -93,8 +93,14 @@ pub mod tx {
         // Get the current block epoch
         pub fn namada_tx_get_block_epoch() -> u64;
 
-        // Get the current tx id
+        // Get the current tx index
         pub fn namada_tx_get_tx_index() -> u32;
+
+        // Get the current tx extra
+        pub fn namada_tx_get_tx_extra(result_ptr: u64);
+
+        // Get the current tx extra length
+        pub fn namada_tx_get_tx_extra_len() -> u64;
 
         // Get the native token address
         pub fn namada_tx_get_native_token(result_ptr: u64);

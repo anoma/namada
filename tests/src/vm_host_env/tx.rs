@@ -185,14 +185,12 @@ impl TestTxEnv {
 
     /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
-        let empty_data = vec![];
         wasm::run::tx(
             &self.storage,
             &mut self.write_log,
             &mut self.gas_meter,
             &self.tx_index,
-            &self.tx.code,
-            self.tx.data.as_ref().unwrap_or(&empty_data),
+            &self.tx,
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
         )
@@ -317,7 +315,7 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                tx: _,
+                                tx,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -326,6 +324,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx,
                                 tx_index,
                                 result_buffer,
                                 vp_wasm_cache,
@@ -357,7 +356,7 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                tx: _,
+                                tx,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -366,6 +365,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
+                                tx,
                                 tx_index,
                                 result_buffer,
                                 vp_wasm_cache,
