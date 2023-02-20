@@ -363,13 +363,14 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
+    use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
     use namada::proto::SignedTxData;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -572,6 +573,14 @@ mod test_process_proposal {
             .wl_storage
             .storage
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .unwrap();
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &get_wrapper_tx_fees_key(),
+                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let tx = Tx::new(
