@@ -49,6 +49,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
+use namada::types::transaction::pgf::PgfProjectsUpdate;
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
@@ -57,6 +58,7 @@ use namada::types::{address, storage, token};
 use tokio::time::{Duration, Instant};
 
 use super::signing::{tx_signers, OfflineSignature};
+use crate::cli::args::UpdatePgfProjects;
 use crate::cli::{self, args, safe_exit, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
@@ -719,7 +721,7 @@ fn print_balances(
                         format!(
                             ": {}, owned by {}",
                             balance,
-                            lookup_alias(ctx, owner)
+                            lookup_alias(ctx, &owner)
                         ),
                     )
                 }),
@@ -1443,12 +1445,24 @@ pub async fn query_pgf_counsil(
         RPC.vp().pgf().current_counsil(&client).await
     );
 
+    let receipients: Option<PgfProjectsUpdate> = unwrap_client_response(
+        RPC.vp().pgf().receipients(&client).await
+    );
+
+    println!("{}", receipients.is_some());
+
     match counsil_data {
         Some((address, spending_cap, spent_amount)) => {
             println!("PGF counsil:");
             println!("{:4}Address: {}", "", address.to_pretty_string());
             println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
             println!("{:4}Spent amount: {}", "", spent_amount.to_string());
+            if let Some(receipients) = receipients {
+                println!("{:4}Receipients:", "");
+                for receipient in receipients {
+                    println!("{:8}Project address {} is founded with {}nam every epoch", "", receipient.address, receipient.amount);
+                }
+            }
         },
         None => {
             println!("There is no active counsil yet.");
@@ -1465,6 +1479,7 @@ pub async fn query_pgf_candidates(
     let candidates_data: Vec<(Address, token::Amount, String)> = unwrap_client_response(
         RPC.vp().pgf().candidates(&client).await
     );
+    
     match candidates_data.len() {
         0 => println!("There are not candidates for pgf."),
         _ => {

@@ -12,5 +12,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         .wrap_err("failed to decode UpatePgfProjects")?;
     debug_log!("apply_tx called to update pgf projects");
 
-    pgf::update_projects(ctx, tx_data)
+    let counsil_address = pgf::update_projects(ctx, tx_data)?;
+    ctx.insert_verifier(&counsil_address);
+
+    Ok(())
 }
