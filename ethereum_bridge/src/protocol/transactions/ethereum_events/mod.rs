@@ -637,6 +637,7 @@ mod tests {
         storage.commit().unwrap();
         let unbonding_len = storage.read_pos_params().unbonding_len + 1;
         storage.last_epoch = storage.last_epoch + unbonding_len;
+        storage.block.epoch = storage.last_epoch + 1_u64;
 
         let new_event = EthereumEvent::TransfersToNamada {
             nonce: 2.into(),
@@ -677,5 +678,6 @@ mod tests {
              deleted",
         );
         assert!(storage.read(&prev_keys.body()).unwrap().0.is_none());
+        assert!(storage.read(&new_keys.body()).unwrap().0.is_some());
     }
 }
