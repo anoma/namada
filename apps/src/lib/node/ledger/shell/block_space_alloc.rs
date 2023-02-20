@@ -16,12 +16,12 @@
 //! In the current implementation, we allocate space for transactions
 //! in the following order of preference:
 //!
-//! - First, we allot space for DKG decrypted txs. Decrypted txs take up as much
+//! - First, we allot space for DKG encrypted txs. We allow DKG encrypted txs to
+//!   take up at most 1/3 of the total block space.
+//! - Next, we allot space for DKG decrypted txs. Decrypted txs take up as much
 //!   space as needed. We will see, shortly, why in practice this is fine.
-//! - Next, we allot space for protocol txs. Protocol txs get half of the
+//! - Finally, we allot space for protocol txs. Protocol txs get half of the
 //!   remaining block space allotted to them.
-//! - Finally, we allot space for DKG encrypted txs. We allow DKG encrypted txs
-//!   to take up at most 1/3 of the total block space.
 //! - If any space remains, we try to fit any leftover protocol txs in the
 //!   block.
 //!
@@ -80,9 +80,9 @@ pub enum AllocFailure {
 ///
 /// We keep track of the current space utilized by:
 ///
-///   - Protocol transactions.
-///   - DKG decrypted transactions.
 ///   - DKG encrypted transactions.
+///   - DKG decrypted transactions.
+///   - Protocol transactions.
 #[derive(Debug, Default)]
 pub struct BlockSpaceAllocator<State> {
     /// The current state of the [`BlockSpaceAllocator`] state machine.

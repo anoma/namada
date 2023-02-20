@@ -6,18 +6,18 @@
 //!
 //! The state machine moves through the following state DAG:
 //!
-//! 1. [`BuildingDecryptedTxBatch`] - the initial state. In
-//!    this state, we populate a block with DKG decrypted txs.
-//! 2. [`BuildingProtocolTxBatch`] - the second state. In
-//!    this state, we populate a block with protocol txs.
-//! 3. [`BuildingEncryptedTxBatch`] - the third state. In
+//! 1. [`BuildingEncryptedTxBatch`] - the initial state. In
 //!    this state, we populate a block with DKG encrypted txs.
 //!    This state supports two modes of operation, which you can
-//!    think of as two states diverging from [`BuildingProtocolTxBatch`]:
+//!    think of as two sub-states:
 //!   * [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs are
 //!     included in a block proposal.
 //!   * [`WithEncryptedTxs`] - When this mode is active, we are able to include
 //!     encrypted txs in a block proposal.
+//! 2. [`BuildingDecryptedTxBatch`] - the second state. In
+//!    this state, we populate a block with DKG decrypted txs.
+//! 3. [`BuildingProtocolTxBatch`] - the third state. In
+//!    this state, we populate a block with protocol txs.
 //! 4. [`FillingRemainingSpace`] - the fourth and final state.
 //!    During this phase, we fill all remaining block space with arbitrary
 //!    protocol transactions that haven't been included in a block, yet.
