@@ -515,6 +515,14 @@ mod test_process_proposal {
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _) = test_utils::setup();
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &get_wrapper_tx_fees_key(),
+                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+            )
+            .unwrap();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
