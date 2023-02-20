@@ -34,6 +34,7 @@ pub const EPOCH_KEY_SEGMENT: &str = "epoch";
 
 /// Generator for the keys under which details of votes for some piece of data
 /// is stored
+#[derive(Clone, PartialEq)]
 pub struct Keys<T> {
     /// The prefix under which the details of a piece of data for which we are
     /// tallying votes is stored
@@ -105,16 +106,17 @@ pub fn eth_msgs_prefix() -> Key {
         .expect("should always be able to construct this key")
 }
 
-/// Get the Keys from the storage key. It returns None if the storage key isn't for an Ethereum event.
+/// Get the Keys from the storage key. It returns None if the storage key isn't
+/// for an Ethereum event.
 pub fn eth_event_keys(storage_key: &Key) -> Option<Keys<EthereumEvent>> {
     match &storage_key.segments[..] {
         [
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::StringSeg(hash),
-            ..
+            ..,
         ] if prefix == ETH_MSGS_PREFIX_KEY_SEGMENT => {
-            let hash = &Hash::from_str(&hash).expect("Hash should be parsable");
+            let hash = &Hash::from_str(hash).expect("Hash should be parsable");
             Some(hash.into())
         }
         _ => None,
@@ -129,6 +131,16 @@ pub fn is_epoch_key(key: &Key) -> bool {
                 DbKeySeg::StringSeg(_hash),
                 DbKeySeg::StringSeg(e),
             ] if e == EPOCH_KEY_SEGMENT)
+}
+
+/// Return true if the storage key is a key to store the `seen`
+pub fn is_seen_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+                DbKeySeg::AddressSeg(ADDRESS),
+                DbKeySeg::StringSeg(_prefix),
+                DbKeySeg::StringSeg(_hash),
+                DbKeySeg::StringSeg(e),
+            ] if e == SEEN_KEY_SEGMENT)
 }
 
 impl From<&EthereumEvent> for Keys<EthereumEvent> {
@@ -294,6 +306,7 @@ mod test {
                 keys.seen(),
                 keys.seen_by(),
                 keys.voting_power(),
+                keys.epoch(),
             ]
         );
     }

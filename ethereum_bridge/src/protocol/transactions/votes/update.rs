@@ -396,7 +396,7 @@ mod tests {
 
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
-        let tally_pre = setup_tally(
+        let _tally_pre = setup_tally(
             &mut storage,
             &event,
             &keys,
@@ -444,7 +444,7 @@ mod tests {
 
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
-        let tally_pre = setup_tally(
+        let _tally_pre = setup_tally(
             &mut storage,
             &event,
             &keys,

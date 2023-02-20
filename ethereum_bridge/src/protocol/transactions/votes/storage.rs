@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use namada_core::types::storage::{BlockHeight, Key};
+use namada_core::types::storage::Key;
 use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::{Tally, Votes};
@@ -23,7 +23,8 @@ where
     storage.write(&keys.seen(), &tally.seen.try_to_vec()?)?;
     storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
     storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
-    if is_updated {
+    if !is_updated {
+        // add the current epoch for the inserted event
         storage.write(
             &keys.epoch(),
             &storage.get_current_epoch().0.try_to_vec()?,
@@ -106,19 +107,6 @@ where
     super::read::maybe_value(storage, &keys.seen())
 }
 
-#[inline]
-pub fn read_epoch<D, H, T>(
-    storage: &Storage<D, H>,
-    keys: &vote_tallies::Keys<T>,
-) -> Result<BlockHeight>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    T: BorshDeserialize,
-{
-    super::read::value(storage, &keys.epoch())
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -161,10 +149,10 @@ mod tests {
             voting_power,
             Some(tally.voting_power.try_to_vec().unwrap())
         );
-        let (height, _) = storage.read(&keys.height()).unwrap();
+        let (epoch, _) = storage.read(&keys.epoch()).unwrap();
         assert_eq!(
-            height,
-            Some(storage.get_block_height().0.try_to_vec().unwrap())
+            epoch,
+            Some(storage.get_current_epoch().0.try_to_vec().unwrap())
         );
     }
 
@@ -201,7 +189,7 @@ mod tests {
             .unwrap();
         storage
             .write(
-                &keys.height(),
+                &keys.epoch(),
                 &storage.get_block_height().0.try_to_vec().unwrap(),
             )
             .unwrap();
@@ -210,10 +198,5 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), tally);
-
-        let result = read_height(&storage, &keys);
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), storage.get_block_height().0);
     }
 }

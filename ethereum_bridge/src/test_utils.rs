@@ -20,7 +20,7 @@ use namada_proof_of_stake::epoched::Epoched;
 use namada_proof_of_stake::types::{
     ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet, WeightedValidator,
 };
-use namada_proof_of_stake::PosBase;
+use namada_proof_of_stake::{PosBase, PosParams};
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 
@@ -120,6 +120,10 @@ pub fn setup_storage_with_validators(
         let keys = setup_storage_validator(&mut storage, &validator);
         all_keys.insert(validator, keys);
     }
+
+    // write PoS parameteres for timeout check
+    let params = PosParams::default();
+    storage.write_pos_params(&params);
 
     (storage, all_keys)
 }
