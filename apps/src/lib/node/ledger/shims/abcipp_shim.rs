@@ -96,35 +96,7 @@ impl AbcippShim {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
                 Req::ProcessProposal(proposal) => {
-                    #[cfg(not(feature = "abcipp"))]
-                    {
-                        println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
-                        if !proposal.proposer_address.is_empty() {
-                            let tm_raw_hash_string = tm_raw_hash_to_string(
-                                proposal.proposer_address.clone(),
-                            );
-                            let native_proposer_address =
-                                find_validator_by_raw_hash(
-                                    &self.service.wl_storage,
-                                    tm_raw_hash_string,
-                                )
-                                .unwrap()
-                                .expect(
-                                    "Unable to find native validator address \
-                                     of block proposer from tendermint raw \
-                                     hash",
-                                );
-                            println!(
-                                "BLOCK PROPOSER (PROCESSPROPOSAL): {}",
-                                native_proposer_address
-                            );
-                            write_current_block_proposer_address(
-                                &mut self.service.wl_storage,
-                                native_proposer_address,
-                            )
-                            .unwrap();
-                        }
-                    }
+                    println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
                     self.service
                         .call(Request::ProcessProposal(proposal))
                         .map_err(Error::from)
@@ -163,6 +135,33 @@ impl AbcippShim {
                 #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
                     println!("RECEIVED REQUEST BEGINBLOCK");
+                    if let Some(header) = block.header.clone() {
+                        if !header.proposer_address.is_empty() {
+                            let tm_raw_hash_string = tm_raw_hash_to_string(
+                                header.proposer_address.clone(),
+                            );
+                            let native_proposer_address =
+                                find_validator_by_raw_hash(
+                                    &self.service.wl_storage,
+                                    tm_raw_hash_string,
+                                )
+                                .unwrap()
+                                .expect(
+                                    "Unable to find native validator address \
+                                     of block proposer from tendermint raw \
+                                     hash",
+                                );
+                            println!(
+                                "BLOCK PROPOSER (BEGINBLOCK): {}",
+                                native_proposer_address
+                            );
+                            write_current_block_proposer_address(
+                                &mut self.service.wl_storage,
+                                native_proposer_address,
+                            )
+                            .unwrap();
+                        }
+                    }
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
