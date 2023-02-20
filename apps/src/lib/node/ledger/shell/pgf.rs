@@ -18,6 +18,7 @@ where
 {
     // Read recipients map from storage
     let recipients_key = pgf_storage::get_cpgf_recipient_key();
+
     let recipients: PgfProjectsUpdate = match shell.read_storage_key(&recipients_key) {
         Some(r) => r,
         None => {
@@ -54,6 +55,7 @@ where
                 )
                 .into();
                 response.events.push(pgf_event);
+                tracing::info!("PGF active transfer with amount {} has been sent to {}.", project.address, project.amount);
             },
             Err(msg) => {
                 tracing::info!("PGF active transfer to {}, failed: {}", &project.address, msg);

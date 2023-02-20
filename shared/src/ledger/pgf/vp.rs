@@ -53,6 +53,7 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
+        println!("ok");
         let native_token = self.ctx.pre().get_native_token()?;
         let res = self
             .is_valid_key_set(keys_changed, &native_token)
@@ -60,6 +61,8 @@ where
         if !res {
             return Ok(false);
         }
+
+        println!("o2k");
 
         let result = keys_changed.iter().all(|key| {
             let key_type = KeyType::from_key(key, &native_token);
@@ -130,7 +133,6 @@ where
     ) -> Result<bool> {
         let address_exist_key = Key::validity_predicate(&address);
         let address_exist = self.ctx.has_key_pre(&address_exist_key)?;
-        println!("addr exist: {}", address_exist);
         Ok(address_exist && verifiers.contains(&address))
     }
 
@@ -149,7 +151,6 @@ where
         key: &Key,
         native_token: &Address,
     ) -> Result<bool> {
-        println!("asdasdasda");
         let pgf_balance_amount =
             token::balance_key(native_token, self.ctx.address);
         let pre_balance: Option<Amount> =
@@ -157,7 +158,6 @@ where
         let post_balance: Option<Amount> =
             self.ctx.post().read(&pgf_balance_amount)?;
 
-        println!("ads");
 
         let spending_cap_key = pgf_storage::get_spending_cap_key();
         let pre_spending_cap: Option<Amount> =
@@ -167,12 +167,6 @@ where
             self.ctx.post().read(&spend_amount_key)?;
         let pre_spent_amount: Option<Amount> =
             self.ctx.pre().read(&spend_amount_key)?;
-
-        println!("{}", pre_balance.is_some());
-        println!("{}", post_balance.is_some());
-        println!("{}", pre_spending_cap.is_some());
-        println!("{}", post_spent_amount.is_some());
-        println!("{}", pre_spent_amount.is_some());
 
         match (
             pre_balance,
@@ -188,9 +182,7 @@ where
                 Some(pre_spent_amount),
                 Some(post_spent_amount),
             ) => {
-
-                println!("lupo");
-                let amount_transfered = post_balance.checked_sub(pre_balance);
+                let amount_transfered = pre_balance.checked_sub(post_balance);
                 if let Some(amount) = amount_transfered {
                     let is_valid_post_spent_amount =
                         post_spent_amount == pre_spent_amount + amount;
@@ -218,7 +210,7 @@ where
             pgf_storage::get_spent_amount_key(),
         ]);
         let total_sets_diff = mandatory_transfer_group
-            .difference(&mandatory_transfer_group)
+            .difference(&keys)
             .count();
         Ok(total_sets_diff == 0
             || total_sets_diff == mandatory_transfer_group.len())
@@ -237,11 +229,10 @@ where
         let active_counsil_address_key = pgf_storage::get_active_counsil_key();
         let active_counsil_address: Option<Address> =
             self.ctx.pre().read(&active_counsil_address_key)?;
+        println!("{}", active_counsil_address.is_some());
         match active_counsil_address {
             Some(address) => {
-                println!("{}", address.to_string());
-                println!("{}", verifiers.contains(&address));
-                println!("{:?}", verifiers);
+                println!("{}", address.to_pretty_string());
                 let is_signed_by_active_counsil = verifiers.contains(&address);
                 Ok(is_signed_by_active_counsil)
             }
@@ -275,7 +266,7 @@ impl KeyType {
             Self::CANDIDACY
         } else if token::is_balance_key(native_token, key).is_some() {
             Self::BALANCE
-        } else if pgf_storage::is_project_key(key) {
+        } else if pgf_storage::is_cpgf_recipient_key(key) {
             Self::PROJECTS
         } else if pgf_storage::is_pgf_key(key) {
             Self::UNKNOWN_PGF
