@@ -57,7 +57,7 @@ fn next_state<Mode>(
     // in practice will only be, at most, 1/3 of the block space
     // used by encrypted txs at the prev height
     let remaining_free_space = alloc.uninitialized_space_in_bytes();
-    alloc.protocol_txs = TxBin::init(remaining_free_space);
+    alloc.decrypted_txs = TxBin::init(remaining_free_space);
 
     // cast state
     let BlockSpaceAllocator {

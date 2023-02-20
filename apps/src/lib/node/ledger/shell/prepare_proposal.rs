@@ -365,9 +365,9 @@ mod test_prepare_proposal {
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }
-        let expected_txs: Vec<TxBytes> = expected_decrypted
+        let expected_txs: Vec<TxBytes> = expected_wrapper
             .into_iter()
-            .chain(expected_wrapper.into_iter())
+            .chain(expected_decrypted.into_iter())
             // we extract the inner data from the txs for testing
             // equality since otherwise changes in timestamps would
             // fail the test
