@@ -112,3 +112,13 @@ where
     Ok(candidates)
 
 }
+
+pub fn get_receipients<S>(
+    storage: &S,
+) -> storage_api::Result<Option<PgfProjectsUpdate>>
+where
+    S: StorageRead + StorageWrite,
+{
+    let receipients = pgf_storage::get_cpgf_recipient_key();
+    storage.read(&receipients)
+}

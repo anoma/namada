@@ -361,9 +361,9 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(_),
-            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(prefix),
             DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY => Some(owner),
+        ] if prefix == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
     }
 }

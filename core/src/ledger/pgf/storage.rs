@@ -1,7 +1,3 @@
-use std::str::FromStr;
-
-use borsh::BorshDeserialize;
-
 use crate::ledger::pgf::ADDRESS;
 use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
@@ -13,7 +9,6 @@ const SPENT_AMOUNT: &str = "spent_amount";
 const CANDIDACY_EXPIRATION: &str = "candidacy_expiration";
 const CANDIDATES: &str = "candidates";
 const ACTIVE_COUNSIL: &str = "active_counsil";
-const PROJECTS: &str = "projects";
 
 /// Check if key is inside pfg address space
 pub fn is_pgf_key(key: &Key) -> bool {
@@ -50,12 +45,14 @@ pub fn is_spent_amount_key(key: &Key) -> bool {
     }
 }
 
-pub fn is_project_key(key: &Key) -> bool {
+
+/// Check if key is cPGF key
+pub fn is_cpgf_recipient_key(key: &Key) -> bool {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix)
-        ] if addr == &ADDRESS && prefix == PROJECTS => {
+        ] if addr == &ADDRESS && prefix == CPGF_RECIPIENTS => {
             true
         }
         _ => false

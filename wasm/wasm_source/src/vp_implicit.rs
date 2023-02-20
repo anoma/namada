@@ -30,7 +30,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
         if let Some(address) = key::is_pk_key(key) {
             Self::Pk(address)
         } else if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(address)
+            Self::Token(&address)
         } else if let Some((_, address)) =
             token::is_any_multitoken_balance_key(key)
         {

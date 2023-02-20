@@ -18,6 +18,7 @@ where
 {
     // Read recipients map from storage
     let recipients_key = pgf_storage::get_cpgf_recipient_key();
+
     let recipients: PgfProjectsUpdate = match shell.read_storage_key(&recipients_key) {
         Some(r) => r,
         None => {

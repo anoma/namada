@@ -130,7 +130,6 @@ where
     ) -> Result<bool> {
         let address_exist_key = Key::validity_predicate(&address);
         let address_exist = self.ctx.has_key_pre(&address_exist_key)?;
-        println!("addr exist: {}", address_exist);
         Ok(address_exist && verifiers.contains(&address))
     }
 
@@ -149,7 +148,6 @@ where
         key: &Key,
         native_token: &Address,
     ) -> Result<bool> {
-        println!("asdasdasda");
         let pgf_balance_amount =
             token::balance_key(native_token, self.ctx.address);
         let pre_balance: Option<Amount> =
@@ -157,7 +155,6 @@ where
         let post_balance: Option<Amount> =
             self.ctx.post().read(&pgf_balance_amount)?;
 
-        println!("ads");
 
         let spending_cap_key = pgf_storage::get_spending_cap_key();
         let pre_spending_cap: Option<Amount> =
@@ -168,11 +165,6 @@ where
         let pre_spent_amount: Option<Amount> =
             self.ctx.pre().read(&spend_amount_key)?;
 
-        println!("{}", pre_balance.is_some());
-        println!("{}", post_balance.is_some());
-        println!("{}", pre_spending_cap.is_some());
-        println!("{}", post_spent_amount.is_some());
-        println!("{}", pre_spent_amount.is_some());
 
         match (
             pre_balance,
@@ -189,7 +181,6 @@ where
                 Some(post_spent_amount),
             ) => {
 
-                println!("lupo");
                 let amount_transfered = post_balance.checked_sub(pre_balance);
                 if let Some(amount) = amount_transfered {
                     let is_valid_post_spent_amount =
@@ -239,9 +230,6 @@ where
             self.ctx.pre().read(&active_counsil_address_key)?;
         match active_counsil_address {
             Some(address) => {
-                println!("{}", address.to_string());
-                println!("{}", verifiers.contains(&address));
-                println!("{:?}", verifiers);
                 let is_signed_by_active_counsil = verifiers.contains(&address);
                 Ok(is_signed_by_active_counsil)
             }
@@ -275,7 +263,7 @@ impl KeyType {
             Self::CANDIDACY
         } else if token::is_balance_key(native_token, key).is_some() {
             Self::BALANCE
-        } else if pgf_storage::is_project_key(key) {
+        } else if pgf_storage::is_cpgf_recipient_key(key) {
             Self::PROJECTS
         } else if pgf_storage::is_pgf_key(key) {
             Self::UNKNOWN_PGF

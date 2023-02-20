@@ -11,6 +11,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let tx_data = transaction::pgf::PgfProjectsUpdate::try_from_slice(&data[..])
         .wrap_err("failed to decode UpatePgfProjects")?;
     debug_log!("apply_tx called to update pgf projects");
-
+    let pgf_active_counsil = pgf::get_current_counsil_address(ctx)?;
+    let counsil_address = match pgf_active_counsil {
+        Some(address) => address,
+        _ => return Ok(())
+    };
+    ctx.insert_verifier(&counsil_address);
     pgf::update_projects(ctx, tx_data)
 }
