@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocFailure, BlockSpaceAllocator};
+use super::super::{AllocFailure, BlockSpaceAllocator, TxBin};
 use super::{
-    BuildingEncryptedTxBatch, EncryptedTxBatchAllocator, FillingRemainingSpace,
-    NextStateImpl, TryAlloc, WithEncryptedTxs, WithoutEncryptedTxs,
+    BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
+    EncryptedTxBatchAllocator, NextStateImpl, TryAlloc, WithEncryptedTxs,
+    WithoutEncryptedTxs,
 };
 
 impl TryAlloc
@@ -18,7 +19,7 @@ impl TryAlloc
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
+    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -38,7 +39,7 @@ impl TryAlloc
 impl NextStateImpl
     for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
+    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -49,11 +50,14 @@ impl NextStateImpl
 #[inline]
 fn next_state<Mode>(
     mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
-) -> BlockSpaceAllocator<FillingRemainingSpace> {
+) -> BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     alloc.encrypted_txs.shrink_to_fit();
 
-    // reserve space for any remaining txs
-    alloc.claim_block_space();
+    // decrypted txs can use as much space as they need - which
+    // in practice will only be, at most, 1/3 of the block space
+    // used by encrypted txs at the prev height
+    let remaining_free_space = alloc.uninitialized_space_in_bytes();
+    alloc.protocol_txs = TxBin::init(remaining_free_space);
 
     // cast state
     let BlockSpaceAllocator {
@@ -90,7 +94,7 @@ impl TryAlloc for EncryptedTxBatchAllocator {
 }
 
 impl NextStateImpl for EncryptedTxBatchAllocator {
-    type Next = BlockSpaceAllocator<FillingRemainingSpace>;
+    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {

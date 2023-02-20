@@ -18,14 +18,10 @@
 //!    this state, we populate a block with DKG decrypted txs.
 //! 3. [`BuildingProtocolTxBatch`] - the third state. In
 //!    this state, we populate a block with protocol txs.
-//! 4. [`FillingRemainingSpace`] - the fourth and final state.
-//!    During this phase, we fill all remaining block space with arbitrary
-//!    protocol transactions that haven't been included in a block, yet.
 
 mod decrypted_txs;
 mod encrypted_txs;
 mod protocol_txs;
-mod remaining_txs;
 
 use super::{AllocFailure, BlockSpaceAllocator};
 
@@ -64,15 +60,6 @@ pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
 }
-
-/// The leader of the current Tendermint round is populating
-/// all remaining space in a block proposal with arbitrary
-/// protocol transactions that haven't been included in the
-/// block, yet.
-///
-/// For more info, read the module docs of
-/// [`crate::node::ledger::shell::prepare_proposal::block_space_alloc::states`].
-pub enum FillingRemainingSpace {}
 
 /// Allow block proposals to include encrypted txs.
 ///
