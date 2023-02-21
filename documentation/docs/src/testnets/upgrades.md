@@ -3,6 +3,21 @@ This page covers all installation steps required by various upgrades to testnets
 
 
 ## Latest Upgrade
+
+TBD
+
+
+## Latest Testnet
+
+***22/02/2023*** `public-testnet-4`
+
+The testnet launches on 22/02/2023 at 17:00 UTC with the genesis validators from `public-testnet-4`. It launches with [version v0.14.1](https://github.com/anoma/namada/releases/tag/v0.14.1) and chain-id `TBD`. 
+If your genesis transaction is contained in [this folder](https://github.com/anoma/namada-testnets/tree/main/namada-public-testnet-4), you are one of the genesis validators. In order for the testnet to come online at least 2/3 of those validators need to be online.
+
+The installation docs are updated and can be found [here](./environment-setup.md). The running docs for validators/fullnodes can be found [here](./running-a-full-node.md).
+
+## Previous upgrades:
+
 ***13/02/2023*** `public-testnet-3`
 
 On *09/02/2023* the Namada chain `public-testnet-3` halted due to a bug in the Proof of Stake implementation when handling an edge case. Over the weekend, the team were able to fix and test a new patch that resolves the issue at hand. On *13/02/2023 11:30 UTC*, we were able to recover the network by having internal validators upgrade to the new patch. We are now calling on validators to upgrade to the new testnet as well, which will allow you to interact with the recovered chain.
@@ -44,17 +59,6 @@ namada client utils join-network \
   ```
 
 Please reach out with any questions if you have any. This upgrade can be done asynchronously, but if you wish to continue validating the chain and testing our features, you must execute the above steps.
-
-## Latest Testnet
-
-***06/02/2023*** `public-testnet-3`
-
-The testnet launches on 09/02/2023 at 17:00 UTC with the genesis validators from `public-testnet-3`. It launches with [version v0.13.3](https://github.com/anoma/namada/releases/tag/v0.13.3) and chain-id `TBD`. 
-If your genesis transaction is contained in [this folder](https://github.com/anoma/namada-testnets/tree/main/namada-public-testnet-3), you are one of the genesis validators. In order for the testnet to come online at least 2/3 of those validators need to be online.
-
-The installation docs are updated and can be found [here](./environment-setup.md). The running docs for validators/fullnodes can be found [here](./running-a-full-node.md).
-
-## Previous upgrades:
 
 ### Hotfix for Testnet `public-testnet-2.1.4014f207f6d`
 
