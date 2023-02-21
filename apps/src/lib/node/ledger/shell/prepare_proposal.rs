@@ -137,7 +137,7 @@ where
                         |status| match status {
                             AllocFailure::Rejected { bin_space_left } => {
                                 tracing::debug!(
-                                    ?tx_bytes,
+                                    tx_bytes_len = tx_bytes.len(),
                                     bin_space_left,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
@@ -149,7 +149,7 @@ where
                                 // TODO: handle tx whose size is greater
                                 // than bin size
                                 tracing::warn!(
-                                    ?tx_bytes,
+                                    tx_bytes_len = tx_bytes.len(),
                                     bin_size,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
@@ -212,7 +212,7 @@ where
                     |status| match status {
                         AllocFailure::Rejected { bin_space_left } => {
                             tracing::warn!(
-                                ?tx_bytes,
+                                tx_bytes_len = tx_bytes.len(),
                                 bin_space_left,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
@@ -222,7 +222,7 @@ where
                         }
                         AllocFailure::OverflowsBin { bin_size } => {
                             tracing::warn!(
-                                ?tx_bytes,
+                                tx_bytes_len = tx_bytes.len(),
                                 bin_size,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
