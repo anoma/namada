@@ -11,7 +11,7 @@ use namada_core::types::address::testing::{
     address_from_simple_seed, arb_established_address,
 };
 use namada_core::types::address::{Address, EstablishedAddressGen};
-use namada_core::types::key::common::SecretKey;
+use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
@@ -20,6 +20,7 @@ use namada_core::types::{address, key, token};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
@@ -27,8 +28,9 @@ use test_log::test;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
-    BondDetails, BondId, BondsAndUnbondsDetails, GenesisValidator, Position,
-    ReverseOrdTokenAmount, ValidatorState, WeightedValidator,
+    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
+    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
+    ValidatorSetUpdate, ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -40,7 +42,8 @@ use crate::{
     read_num_consensus_validators, read_total_stake,
     read_validator_delta_value, read_validator_stake, staking_token_address,
     total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
-    update_validator_set, validator_state_handle, withdraw_tokens,
+    update_validator_set, validator_consensus_key_handle,
+    validator_set_update_tendermint, validator_state_handle, withdraw_tokens,
     write_validator_address_raw_hash,
 };
 
@@ -755,27 +758,61 @@ fn test_validator_sets() {
         max_validator_slots: 3,
         ..Default::default()
     };
-    let seed = "seed";
-    let mut address_gen = EstablishedAddressGen::new(seed);
-    let mut gen_validator = || address_gen.generate_address(seed);
+    let addr_seed = "seed";
+    let mut address_gen = EstablishedAddressGen::new(addr_seed);
+    let mut sk_seed = 0;
+    let mut gen_validator = || {
+        let res = (
+            address_gen.generate_address(addr_seed),
+            key::testing::common_sk_from_simple_seed(sk_seed).to_public(),
+        );
+        // bump the sk seed
+        sk_seed += 1;
+        res
+    };
+
+    // A helper to insert a non-genesis validator
+    let insert_validator = |s: &mut TestWlStorage,
+                            addr,
+                            pk: &PublicKey,
+                            stake: token::Amount,
+                            epoch: Epoch| {
+        insert_validator_into_validator_set(
+            s,
+            &params,
+            addr,
+            stake,
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        update_validator_deltas(s, &params, addr, stake.change(), epoch)
+            .unwrap();
+
+        // Set their consensus key (needed for
+        // `validator_set_update_tendermint` fn)
+        validator_consensus_key_handle(addr)
+            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .unwrap();
+    };
 
     // Start with two genesis validators with 1 NAM stake
     let epoch = Epoch::default();
-    let pipeline_epoch = epoch + params.pipeline_len;
-    let pk1 = key::testing::keypair_1().to_public();
-    let pk2 = key::testing::keypair_2().to_public();
-    let (val1, stake1) = (gen_validator(), token::Amount::whole(1));
-    let (val2, stake2) = (gen_validator(), token::Amount::whole(1));
-    let (val3, stake3) = (gen_validator(), token::Amount::whole(10));
-    let (val4, stake4) = (gen_validator(), token::Amount::whole(100));
-    let (val5, stake5) = (gen_validator(), token::Amount::whole(1));
-    let (val6, stake6) = (gen_validator(), token::Amount::whole(1));
-    println!("val1: {val1}, {stake1}");
-    println!("val2: {val2}, {stake2}");
-    println!("val3: {val3}, {stake3}");
-    println!("val4: {val4}, {stake4}");
-    println!("val5: {val5}, {stake5}");
-    println!("val6: {val6}, {stake6}");
+    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(1));
+    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::whole(1));
+    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::whole(10));
+    let ((val4, pk4), stake4) = (gen_validator(), token::Amount::whole(1));
+    let ((val5, pk5), stake5) = (gen_validator(), token::Amount::whole(100));
+    let ((val6, pk6), stake6) = (gen_validator(), token::Amount::whole(1));
+    let ((val7, pk7), stake7) = (gen_validator(), token::Amount::whole(1));
+    println!("val1: {val1}, {pk1}, {stake1}");
+    println!("val2: {val2}, {pk2}, {stake2}");
+    println!("val3: {val3}, {pk3}, {stake3}");
+    println!("val4: {val4}, {pk4}, {stake4}");
+    println!("val5: {val5}, {pk5}, {stake5}");
+    println!("val6: {val6}, {pk6}, {stake6}");
+    println!("val7: {val7}, {pk7}, {stake7}");
 
     init_genesis(
         &mut s,
@@ -784,14 +821,14 @@ fn test_validator_sets() {
             GenesisValidator {
                 address: val1.clone(),
                 tokens: stake1,
-                consensus_key: pk1,
+                consensus_key: pk1.clone(),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
             GenesisValidator {
                 address: val2.clone(),
                 tokens: stake2,
-                consensus_key: pk2,
+                consensus_key: pk2.clone(),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -801,19 +838,36 @@ fn test_validator_sets() {
     )
     .unwrap();
 
+    // Check tendermint validator set updates
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk1.clone(),
+            bonded_stake: stake1.into(),
+        })
+    );
+    assert_eq!(
+        tm_updates[1],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk2.clone(),
+            bonded_stake: stake2.into(),
+        })
+    );
+
+    // Advance to EPOCH 1
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
     // Insert another validator with the greater stake 10 NAM
-    insert_validator_into_validator_set(
-        &mut s,
-        &params,
-        &val3,
-        stake3,
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
-    // Update deltas as they are needed for validator set updates
-    update_validator_deltas(&mut s, &params, &val3, stake3.change(), epoch)
-        .unwrap();
+    insert_validator(&mut s, &val3, &pk3, stake3, epoch);
+    // Insert validator with stake 1 NAM
+    insert_validator(&mut s, &val4, &pk4, stake4, epoch);
+
+    // Validator `val3` and `val4` will be added at pipeline offset (2) - epoch
+    // 3
+    let val3_and_4_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
         .at(&pipeline_epoch)
@@ -848,20 +902,20 @@ fn test_validator_sets() {
         if address == &val3 && stake == &stake3 && *position == Position(0)
     ));
 
+    // Check tendermint validator set updates - there should be none
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Advance to EPOCH 2
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
     // Insert another validator with a greater stake still 1000 NAM. It should
     // replace 2nd consensus validator with stake 1, which should become
     // below-capacity
-    insert_validator_into_validator_set(
-        &mut s,
-        &params,
-        &val4,
-        stake4,
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
-    update_validator_deltas(&mut s, &params, &val4, stake4.change(), epoch)
-        .unwrap();
+    insert_validator(&mut s, &val5, &pk5, stake5, epoch);
+    // Validator `val5` will be added at pipeline offset (2) - epoch 4
+    let val5_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
         .at(&pipeline_epoch)
@@ -893,39 +947,8 @@ fn test_validator_sets() {
                 key: stake,
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
+        if address == &val5 && stake == &stake5 && *position == Position(0)
     ));
-
-    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(below_capacity_vals.len(), 1);
-    assert!(matches!(
-        &below_capacity_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(0)
-    ));
-
-    // Insert another validator with a stake 1 NAM. It should be added to the
-    // below-capacity set
-    insert_validator_into_validator_set(
-        &mut s,
-        &params,
-        &val5,
-        stake5,
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
-    update_validator_deltas(&mut s, &params, &val5, stake5.change(), epoch)
-        .unwrap();
 
     let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
         .at(&pipeline_epoch)
@@ -941,7 +964,7 @@ fn test_validator_sets() {
                 key: ReverseOrdTokenAmount(stake),
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(0)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
     ));
     assert!(matches!(
         &below_capacity_vals[1],
@@ -949,8 +972,84 @@ fn test_validator_sets() {
                 key: ReverseOrdTokenAmount(stake),
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val5 && stake == &stake5 && *position == Position(1)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
     ));
+
+    // Advance to EPOCH 3
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(
+        val3_and_4_epoch, epoch,
+        "val3 and val4 are in the validator sets now"
+    );
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    // `val4` is newly added below-capacity, must be skipped in updated in TM
+    assert_eq!(tm_updates.len(), 1);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk3,
+            bonded_stake: stake3.into(),
+        })
+    );
+
+    // Insert another validator with a stake 1 NAM. It should be added to the
+    // below-capacity set
+    insert_validator(&mut s, &val6, &pk6, stake6, epoch);
+    // Validator `val6` will be added at pipeline offset (2) - epoch 5
+    let val6_epoch = pipeline_epoch;
+
+    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_capacity_vals.len(), 3);
+    assert!(matches!(
+        &below_capacity_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[2],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val6 && stake == &stake6 && *position == Position(2)
+    ));
+
+    // Advance to EPOCH 4
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(val5_epoch, epoch, "val5 is in the validator sets now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk5,
+            bonded_stake: stake5.into(),
+        })
+    );
+    assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
     // Unbond some stake from val1, it should be be swapped with the greatest
     // below-capacity validator val2 into the below-capacity set
@@ -964,6 +1063,8 @@ fn test_validator_sets() {
         .unwrap();
     update_validator_deltas(&mut s, &params, &val1, -unbond.change(), epoch)
         .unwrap();
+    // Epoch 6
+    let val1_unbond_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
         .at(&pipeline_epoch)
@@ -979,7 +1080,7 @@ fn test_validator_sets() {
                 key: stake,
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(0)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
     ));
     assert!(matches!(
         &consensus_vals[1],
@@ -991,164 +1092,12 @@ fn test_validator_sets() {
     ));
     assert!(matches!(
         &consensus_vals[2],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
-    ));
-
-    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(below_capacity_vals.len(), 2);
-    assert!(matches!(
-        &below_capacity_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val5 && stake == &stake5 && *position == Position(1)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[1],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
-
-    // Insert another validator with stake 1 - it should be added after val1
-    insert_validator_into_validator_set(
-        &mut s,
-        &params,
-        &val6,
-        stake6,
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
-    update_validator_deltas(&mut s, &params, &val6, stake6.change(), epoch)
-        .unwrap();
-
-    let consensus_vals: Vec<_> = consensus_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(consensus_vals.len(), 3);
-    assert!(matches!(
-        &consensus_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val3 && stake == &stake3 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[2],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
-    ));
-
-    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(below_capacity_vals.len(), 3);
-    assert!(matches!(
-        &below_capacity_vals[0],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val5 && stake == &stake5 && *position == Position(1)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val6 && stake == &stake6 && *position == Position(2)
-    ));
-    assert!(matches!(
-        &below_capacity_vals[2],
-        (
-            lazy_map::NestedSubKey::Data {
-                key: ReverseOrdTokenAmount(stake),
-                nested_sub_key: lazy_map::SubKey::Data(position),
-            },
-            address
-        )
-        if address == &val1 && stake == &stake1 && *position == Position(0)
-    ));
-
-    // Bond some stake to val5, it should be be swapped with the lowest
-    // consensus validator val2 into the consensus set
-    let bond = token::Amount::from(500_000);
-    let stake5 = stake5 + bond;
-    println!("val5 {val5} new stake {stake5}");
-    update_validator_set(&mut s, &params, &val5, bond.change(), epoch).unwrap();
-    update_validator_deltas(&mut s, &params, &val5, bond.change(), epoch)
-        .unwrap();
-
-    let consensus_vals: Vec<_> = consensus_validator_set_handle()
-        .at(&pipeline_epoch)
-        .iter(&s)
-        .unwrap()
-        .map(Result::unwrap)
-        .collect();
-
-    assert_eq!(consensus_vals.len(), 3);
-    assert!(matches!(
-        &consensus_vals[0],
         (lazy_map::NestedSubKey::Data {
                 key: stake,
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
         if address == &val5 && stake == &stake5 && *position == Position(0)
     ));
-    assert!(matches!(
-        &consensus_vals[1],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val3 && stake == &stake3 && *position == Position(0)
-    ));
-    assert!(matches!(
-        &consensus_vals[2],
-        (lazy_map::NestedSubKey::Data {
-                key: stake,
-                nested_sub_key: lazy_map::SubKey::Data(position),
-        }, address)
-        if address == &val4 && stake == &stake4 && *position == Position(0)
-    ));
 
     let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
         .at(&pipeline_epoch)
@@ -1164,7 +1113,7 @@ fn test_validator_sets() {
                 key: ReverseOrdTokenAmount(stake),
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val6 && stake == &stake6 && *position == Position(2)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
     ));
     assert!(matches!(
         &below_capacity_vals[1],
@@ -1172,7 +1121,7 @@ fn test_validator_sets() {
                 key: ReverseOrdTokenAmount(stake),
                 nested_sub_key: lazy_map::SubKey::Data(position),
         }, address)
-        if address == &val2 && stake == &stake2 && *position == Position(3)
+        if address == &val6 && stake == &stake6 && *position == Position(2)
     ));
     assert!(matches!(
         &below_capacity_vals[2],
@@ -1185,6 +1134,418 @@ fn test_validator_sets() {
         )
         if address == &val1 && stake == &stake1 && *position == Position(0)
     ));
+
+    // Advance to EPOCH 5
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(val6_epoch, epoch, "val6 is in the validator sets now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Insert another validator with stake 1 - it should be added to below
+    // capacity set after val1
+    insert_validator(&mut s, &val7, &pk7, stake7, epoch);
+    // Epoch 7
+    let val7_epoch = pipeline_epoch;
+
+    let consensus_vals: Vec<_> = consensus_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(consensus_vals.len(), 3);
+    assert!(matches!(
+        &consensus_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val4 && stake == &stake4 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val3 && stake == &stake3 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[2],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val5 && stake == &stake5 && *position == Position(0)
+    ));
+
+    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_capacity_vals.len(), 4);
+    assert!(matches!(
+        &below_capacity_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val6 && stake == &stake6 && *position == Position(2)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[2],
+        (
+            lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+            },
+            address
+        )
+        if address == &val7 && stake == &stake7 && *position == Position(3)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[3],
+        (
+            lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+            },
+            address
+        )
+        if address == &val1 && stake == &stake1 && *position == Position(0)
+    ));
+
+    // Advance to EPOCH 6
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Check tendermint validator set updates
+    assert_eq!(val1_unbond_epoch, epoch, "val1's unbond is applied now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk4.clone(),
+            bonded_stake: stake4.into(),
+        })
+    );
+    assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
+
+    // Bond some stake to val6, it should be be swapped with the lowest
+    // consensus validator val2 into the consensus set
+    let bond = token::Amount::from(500_000);
+    let stake6 = stake6 + bond;
+    println!("val6 {val6} new stake {stake6}");
+    update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
+    update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch)
+        .unwrap();
+    let val6_bond_epoch = pipeline_epoch;
+
+    let consensus_vals: Vec<_> = consensus_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(consensus_vals.len(), 3);
+    assert!(matches!(
+        &consensus_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val6 && stake == &stake6 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val3 && stake == &stake3 && *position == Position(0)
+    ));
+    assert!(matches!(
+        &consensus_vals[2],
+        (lazy_map::NestedSubKey::Data {
+                key: stake,
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val5 && stake == &stake5 && *position == Position(0)
+    ));
+
+    let below_capacity_vals: Vec<_> = below_capacity_validator_set_handle()
+        .at(&pipeline_epoch)
+        .iter(&s)
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+
+    assert_eq!(below_capacity_vals.len(), 4);
+    dbg!(&below_capacity_vals);
+    assert!(matches!(
+        &below_capacity_vals[0],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val2 && stake == &stake2 && *position == Position(1)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[1],
+        (lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+        }, address)
+        if address == &val7 && stake == &stake7 && *position == Position(3)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[2],
+        (
+            lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+            },
+            address
+        )
+        if address == &val4 && stake == &stake4 && *position == Position(4)
+    ));
+    assert!(matches!(
+        &below_capacity_vals[3],
+        (
+            lazy_map::NestedSubKey::Data {
+                key: ReverseOrdTokenAmount(stake),
+                nested_sub_key: lazy_map::SubKey::Data(position),
+            },
+            address
+        )
+        if address == &val1 && stake == &stake1 && *position == Position(0)
+    ));
+
+    // Advance to EPOCH 7
+    let epoch = advance_epoch(&mut s, &params);
+    assert_eq!(val7_epoch, epoch, "val6 is in the validator sets now");
+
+    // Check tendermint validator set updates
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Advance to EPOCH 8
+    let epoch = advance_epoch(&mut s, &params);
+
+    // Check tendermint validator set updates
+    assert_eq!(val6_bond_epoch, epoch, "val5's bond is applied now");
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    dbg!(&tm_updates);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk6,
+            bonded_stake: stake6.into(),
+        })
+    );
+    assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
+}
+
+/// When a consensus set validator with 0 voting power adds a bond in the same
+/// epoch as another below-capacity set validator with 0 power, but who adds
+/// more bonds than the validator who is in the consensus set, they get swapped
+/// in the sets. But if both of their new voting powers are still 0 after
+/// bonding, the newly below-capacity validator must not be given to tendermint
+/// with 0 voting power, because it wasn't it its set before
+#[test]
+fn test_validator_sets_swap() {
+    let mut s = TestWlStorage::default();
+    // Only 2 consensus validator slots
+    let params = PosParams {
+        max_validator_slots: 2,
+        // Set 0.1 votes per token
+        tm_votes_per_token: dec!(0.1),
+        ..Default::default()
+    };
+    let addr_seed = "seed";
+    let mut address_gen = EstablishedAddressGen::new(addr_seed);
+    let mut sk_seed = 0;
+    let mut gen_validator = || {
+        let res = (
+            address_gen.generate_address(addr_seed),
+            key::testing::common_sk_from_simple_seed(sk_seed).to_public(),
+        );
+        // bump the sk seed
+        sk_seed += 1;
+        res
+    };
+
+    // A helper to insert a non-genesis validator
+    let insert_validator = |s: &mut TestWlStorage,
+                            addr,
+                            pk: &PublicKey,
+                            stake: token::Amount,
+                            epoch: Epoch| {
+        insert_validator_into_validator_set(
+            s,
+            &params,
+            addr,
+            stake,
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        update_validator_deltas(s, &params, addr, stake.change(), epoch)
+            .unwrap();
+
+        // Set their consensus key (needed for
+        // `validator_set_update_tendermint` fn)
+        validator_consensus_key_handle(addr)
+            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .unwrap();
+    };
+
+    // Start with two genesis validators, one with 1 voting power and other 0
+    let epoch = Epoch::default();
+    // 1M voting power
+    let ((val1, pk1), stake1) = (gen_validator(), token::Amount::whole(10));
+    // 0 voting power
+    let ((val2, pk2), stake2) = (gen_validator(), token::Amount::from(5));
+    // 0 voting power
+    let ((val3, pk3), stake3) = (gen_validator(), token::Amount::from(5));
+    println!("val1: {val1}, {pk1}, {stake1}");
+    println!("val2: {val2}, {pk2}, {stake2}");
+    println!("val3: {val3}, {pk3}, {stake3}");
+
+    init_genesis(
+        &mut s,
+        &params,
+        [
+            GenesisValidator {
+                address: val1,
+                tokens: stake1,
+                consensus_key: pk1,
+                commission_rate: Decimal::new(1, 1),
+                max_commission_rate_change: Decimal::new(1, 1),
+            },
+            GenesisValidator {
+                address: val2.clone(),
+                tokens: stake2,
+                consensus_key: pk2,
+                commission_rate: Decimal::new(1, 1),
+                max_commission_rate_change: Decimal::new(1, 1),
+            },
+        ]
+        .into_iter(),
+        epoch,
+    )
+    .unwrap();
+
+    // Advance to EPOCH 1
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Insert another validator with 0 voting power
+    insert_validator(&mut s, &val3, &pk3, stake3, epoch);
+
+    assert_eq!(stake2, stake3);
+
+    // Add 2 bonds, one for val2 and greater one for val3
+    let bonds_epoch_1 = pipeline_epoch;
+    let bond2 = token::Amount::from(1);
+    let stake2 = stake2 + bond2;
+    let bond3 = token::Amount::from(4);
+    let stake3 = stake3 + bond3;
+
+    assert!(stake2 < stake3);
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
+    assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
+
+    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val2, bond2.change(), epoch)
+        .unwrap();
+
+    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val3, bond3.change(), epoch)
+        .unwrap();
+
+    // Advance to EPOCH 2
+    let epoch = advance_epoch(&mut s, &params);
+    let pipeline_epoch = epoch + params.pipeline_len;
+
+    // Add 2 more bonds, same amount for `val2` and val3`
+    let bonds_epoch_2 = pipeline_epoch;
+    let bonds = token::Amount::whole(1);
+    let stake2 = stake2 + bonds;
+    let stake3 = stake3 + bonds;
+    assert!(stake2 < stake3);
+    assert_eq!(
+        into_tm_voting_power(params.tm_votes_per_token, stake2),
+        into_tm_voting_power(params.tm_votes_per_token, stake3)
+    );
+
+    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val2, bonds.change(), epoch)
+        .unwrap();
+
+    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val3, bonds.change(), epoch)
+        .unwrap();
+
+    // Advance to EPOCH 3
+    let epoch = advance_epoch(&mut s, &params);
+
+    // Check tendermint validator set updates
+    assert_eq!(bonds_epoch_1, epoch);
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    // `val2` must not be given to tendermint - even though it was in the
+    // consensus set, its voting power was 0, so it wasn't in TM set before the
+    // bond
+    assert!(tm_updates.is_empty());
+
+    // Advance to EPOCH 4
+    let epoch = advance_epoch(&mut s, &params);
+
+    // Check tendermint validator set updates
+    assert_eq!(bonds_epoch_2, epoch);
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    dbg!(&tm_updates);
+    assert_eq!(tm_updates.len(), 1);
+    // `val2` must not be given to tendermint as it was and still is below
+    // capacity
+    assert_eq!(
+        tm_updates[0],
+        ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key: pk3,
+            bonded_stake: stake3.into(),
+        })
+    );
+}
+
+fn get_tendermint_set_updates(
+    s: &TestWlStorage,
+    params: &PosParams,
+    epoch: Epoch,
+) -> Vec<ValidatorSetUpdate> {
+    validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
 }
 
 /// Advance to the next epoch. Returns the new epoch.
