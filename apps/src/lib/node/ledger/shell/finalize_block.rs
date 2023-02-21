@@ -12,10 +12,8 @@ use namada::ledger::pos::{
 };
 use namada::ledger::protocol;
 use namada::ledger::storage_api::StorageRead;
-#[cfg(feature = "abcipp")]
-use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::proof_of_stake::{
-    delegator_rewards_products_handle, read_current_block_proposer_address,
+    delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
     read_validator_stake, rewards_accumulator_handle,
     validator_commission_rate_handle, validator_rewards_products_handle,
@@ -87,8 +85,6 @@ where
             "BLOCK HEIGHT {} AND EPOCH {}, NEW EPOCH = {}",
             height, current_epoch, new_epoch
         );
-
-        let current_epoch = self.wl_storage.storage.block.epoch;
 
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
@@ -403,6 +399,7 @@ where
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
             Some(proposer_address) => {
+                println!("FOUND LAST BLOCK PROPOSER");
                 if new_epoch {
                     self.apply_inflation(
                         current_epoch,
@@ -418,43 +415,24 @@ where
                     )
                     .unwrap();
                 }
-                #[cfg(feature = "abcipp")]
-                {
-                    // TODO: better error handling that converts
-                    // storage_api::Error -> shell::Error
-                    let tm_raw_hash_string =
-                        tm_raw_hash_to_string(req.proposer_address);
-                    let native_proposer_address = find_validator_by_raw_hash(
-                        &self.wl_storage,
-                        tm_raw_hash_string,
-                    )
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
-                    write_last_block_proposer_address(
-                        &mut self.wl_storage,
-                        native_proposer_address,
-                    )?;
-                }
-
-                #[cfg(not(feature = "abcipp"))]
-                {
-                    let cur_proposer =
-                        read_current_block_proposer_address(&self.wl_storage)?
-                            .expect(
-                                "Should have found the current block proposer \
-                                 address",
-                            );
-                    write_last_block_proposer_address(
-                        &mut self.wl_storage,
-                        cur_proposer,
-                    )?;
-                }
+                let tm_raw_hash_string =
+                    tm_raw_hash_to_string(req.proposer_address);
+                let native_proposer_address = find_validator_by_raw_hash(
+                    &self.wl_storage,
+                    tm_raw_hash_string,
+                )?
+                .expect(
+                    "Unable to find native validator address of block \
+                     proposer from tendermint raw hash",
+                );
+                write_last_block_proposer_address(
+                    &mut self.wl_storage,
+                    native_proposer_address,
+                )?;
             }
             None => {
-                #[cfg(feature = "abcipp")]
+                println!("CANT FIND LAST BLOCK PROPOSER");
+
                 if req.votes.is_empty() && !req.proposer_address.is_empty() {
                     // Get proposer address from storage based on the consensus
                     // key hash
@@ -473,21 +451,6 @@ where
                         &mut self.wl_storage,
                         native_proposer_address,
                     )?;
-                }
-                #[cfg(not(feature = "abcipp"))]
-                {
-                    let proposer =
-                        read_current_block_proposer_address(&self.wl_storage)?;
-                    // .expect(
-                    //     "Current block proposer should always be set in \
-                    //      ProcessProposal",
-                    // );
-                    if let Some(proposer) = proposer {
-                        write_last_block_proposer_address(
-                            &mut self.wl_storage,
-                            proposer,
-                        )?;
-                    }
                 }
             }
         }
@@ -844,7 +807,6 @@ mod test_finalize_block {
         read_consensus_validator_set_addresses_with_stake,
         rewards_accumulator_handle, validator_consensus_key_handle,
         validator_rewards_products_handle,
-        write_current_block_proposer_address,
     };
     use namada::types::governance::ProposalVote;
     use namada::types::storage::Epoch;
@@ -1397,7 +1359,7 @@ mod test_finalize_block {
         // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
-        next_block_for_inflation(&mut shell, &val1.address, vec![]);
+        next_block_for_inflation(&mut shell, pkh1.clone(), vec![]);
         assert!(
             rewards_accumulator_handle()
                 .is_empty(&shell.wl_storage)
@@ -1407,7 +1369,7 @@ mod test_finalize_block {
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
         // proposer.
-        next_block_for_inflation(&mut shell, &val2.address, votes.clone());
+        next_block_for_inflation(&mut shell, pkh2.clone(), votes.clone());
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -1430,7 +1392,7 @@ mod test_finalize_block {
         );
 
         // FINALIZE BLOCK 3, with val1 as proposer for the next block.
-        next_block_for_inflation(&mut shell, &val1.address, votes);
+        next_block_for_inflation(&mut shell, pkh1.clone(), votes);
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -1451,7 +1413,7 @@ mod test_finalize_block {
         // Now we don't receive a vote from val4.
         let votes = vec![
             VoteInfo {
-                validator_address: pkh1,
+                validator_address: pkh1.clone(),
                 validator_vp: u64::from(val1.bonded_stake),
                 signed_last_block: true,
             },
@@ -1474,7 +1436,7 @@ mod test_finalize_block {
 
         // FINALIZE BLOCK 4. The next block proposer will be val1. Only val1,
         // val2, and val3 vote on this block.
-        next_block_for_inflation(&mut shell, &val1.address, votes.clone());
+        next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -1507,7 +1469,7 @@ mod test_finalize_block {
                 get_rewards_acc(&shell.wl_storage),
                 get_rewards_sum(&shell.wl_storage),
             );
-            next_block_for_inflation(&mut shell, &val1.address, votes.clone());
+            next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone());
         }
         assert!(
             rewards_accumulator_handle()
@@ -1560,15 +1522,11 @@ mod test_finalize_block {
 
     fn next_block_for_inflation(
         shell: &mut TestShell,
-        next_proposer: &Address,
+        proposer_address: Vec<u8>,
         votes: Vec<VoteInfo>,
     ) {
-        write_current_block_proposer_address(
-            &mut shell.wl_storage,
-            next_proposer.clone(),
-        )
-        .unwrap();
         let req = FinalizeBlock {
+            proposer_address,
             votes,
             ..Default::default()
         };

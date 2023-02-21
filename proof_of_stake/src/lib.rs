@@ -46,14 +46,14 @@ use parameters::PosParams;
 use rewards::PosRewardsCalculator;
 use rust_decimal::Decimal;
 use storage::{
-    bonds_for_source_prefix, bonds_prefix, current_block_proposer_key,
-    get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
-    is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
-    mult_amount, mult_change_to_amount, num_consensus_validators_key,
-    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
-    validator_address_raw_hash_key, validator_max_commission_rate_change_key,
-    BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    ReverseOrdTokenAmount, RewardsAccumulator, UnbondDetails,
+    bonds_for_source_prefix, bonds_prefix, get_validator_address_from_bond,
+    into_tm_voting_power, is_bond_key, is_unbond_key, is_validator_slashes_key,
+    last_block_proposer_key, mult_amount, mult_change_to_amount,
+    num_consensus_validators_key, params_key, slashes_prefix,
+    unbonds_for_source_prefix, unbonds_prefix, validator_address_raw_hash_key,
+    validator_max_commission_rate_change_key, BondDetails,
+    BondsAndUnbondsDetail, BondsAndUnbondsDetails, ReverseOrdTokenAmount,
+    RewardsAccumulator, UnbondDetails,
 };
 use thiserror::Error;
 use types::{
@@ -508,29 +508,6 @@ where
 {
     let key = num_consensus_validators_key();
     storage.write(&key, new_num)
-}
-
-/// Read current block proposer address.
-pub fn read_current_block_proposer_address<S>(
-    storage: &S,
-) -> storage_api::Result<Option<Address>>
-where
-    S: StorageRead,
-{
-    let key = current_block_proposer_key();
-    storage.read(&key)
-}
-
-/// Write current block proposer address.
-pub fn write_current_block_proposer_address<S>(
-    storage: &mut S,
-    address: Address,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = current_block_proposer_key();
-    storage.write(&key, address)
 }
 
 /// Read last block proposer address.

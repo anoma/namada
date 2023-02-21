@@ -5,14 +5,9 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-use namada::proof_of_stake::{
-    find_validator_by_raw_hash, write_current_block_proposer_address,
-};
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::key::tm_raw_hash_to_string;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
 #[cfg(not(feature = "abcipp"))]
@@ -135,33 +130,6 @@ impl AbcippShim {
                 #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
                     println!("RECEIVED REQUEST BEGINBLOCK");
-                    if let Some(header) = block.header.clone() {
-                        if !header.proposer_address.is_empty() {
-                            let tm_raw_hash_string = tm_raw_hash_to_string(
-                                header.proposer_address.clone(),
-                            );
-                            let native_proposer_address =
-                                find_validator_by_raw_hash(
-                                    &self.service.wl_storage,
-                                    tm_raw_hash_string,
-                                )
-                                .unwrap()
-                                .expect(
-                                    "Unable to find native validator address \
-                                     of block proposer from tendermint raw \
-                                     hash",
-                                );
-                            println!(
-                                "BLOCK PROPOSER (BEGINBLOCK): {}",
-                                native_proposer_address
-                            );
-                            write_current_block_proposer_address(
-                                &mut self.service.wl_storage,
-                                native_proposer_address,
-                            )
-                            .unwrap();
-                        }
-                    }
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))

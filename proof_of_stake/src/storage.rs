@@ -32,7 +32,6 @@ const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
-const CURRENT_BLOCK_PROPOSER_STORAGE_KEY: &str = "current_block_proposer";
 const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
 
@@ -525,18 +524,6 @@ pub fn last_block_proposer_key() -> Key {
 /// Is storage key for block proposer address of the previous block?
 pub fn is_last_block_proposer_key(key: &Key) -> bool {
     matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY)
-}
-
-/// Storage key for block proposer address of the current block.
-pub fn current_block_proposer_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&CURRENT_BLOCK_PROPOSER_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for block proposer address of the current block?
-pub fn is_current_block_proposer_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == CURRENT_BLOCK_PROPOSER_STORAGE_KEY)
 }
 
 /// Storage key for the consensus validator set rewards accumulator.
