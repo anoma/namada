@@ -62,7 +62,7 @@ Make sure to check the [Changelog](https://github.com/anoma/namada/tree/main/.ch
 1. Wait for the genesis file to be ready, `CHAIN_ID`.
 2. Join the network with the `CHAIN_ID`
 ``` bash
-export CHAIN_ID="public-testnet-3.0.81edd4d6eb6"
+export CHAIN_ID="TBD"
 namada client utils join-network \
 --chain-id $CHAIN_ID --genesis-validator $ALIAS
 ```
