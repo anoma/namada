@@ -295,7 +295,7 @@ fn test_add_to_bridge_pool() {
     let mut namadar =
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
             .unwrap();
-    namadar.exp_string("Ethereum ABI-encoded proof:").unwrap();
+    namadar.exp_string(r#"{"hashes":["#).unwrap();
 }
 
 /// Tests transfers of wNAM ERC20s from Ethereum are treated differently to

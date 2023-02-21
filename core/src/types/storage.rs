@@ -180,6 +180,14 @@ impl From<BlockHeight> for u64 {
     }
 }
 
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(s.parse::<u64>()?))
+    }
+}
+
 /// Hash of a block as fixed-size byte array
 #[derive(
     Clone,

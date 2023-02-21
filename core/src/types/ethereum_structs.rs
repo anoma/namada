@@ -1,11 +1,10 @@
 //! Ethereum bridge struct re-exports and types to do with ethereum.
-pub use ethbridge_structs::*;
-
 use std::fmt;
 use std::num::NonZeroU64;
 use std::ops::{Add, AddAssign, Deref};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+pub use ethbridge_structs::*;
 use num256::Uint256;
 
 /// This type must be able to represent any valid Ethereum block height. It must
