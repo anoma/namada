@@ -1793,7 +1793,7 @@ fn pos_bonds() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 4,
+                min_num_of_blocks: 6,
                 max_expected_time_per_block: 1,
                 epochs_per_year: 31_536_000,
                 ..genesis.parameters
