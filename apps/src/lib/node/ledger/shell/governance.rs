@@ -222,15 +222,23 @@ where
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;    
+    use assert_matches::assert_matches;
+    use namada::ledger::storage_api::governance::{vote_proposal, init_proposal};
+    use namada::types::address::testing::established_address_1;
+    use namada::types::governance::ProposalVote;
+    use namada::types::transaction::governance::{VoteProposalData, InitProposalData};    
     use std::collections::HashMap;
 
     use eyre::Result;
     use namada::ledger::events::EventLevel;
-    use namada::ledger::native_vp::governance::utils::{self, Votes};
+    use namada::ledger::native_vp::governance::utils::{Votes};
     use namada::ledger::storage_api::StorageWrite;
-    use namada::proof_of_stake::btree_set::BTreeSetShims;
-    use namada::proof_of_stake::read_consensus_validator_set_addresses;
+    use namada::proof_of_stake::{read_consensus_validator_set_addresses, read_consensus_validator_set_addresses_with_stake, bond_tokens};
+    use namada::core::types::address::{gen_established_address};
+    use namada::core::types::governance::{VotePower};
+    
+    
+    use crate::node::ledger::shell::test_utils::TestShell;
 
     use super::*;
 
@@ -238,7 +246,7 @@ mod tests {
     /// `shell.proposal_data`, then no proposals are executed.
     #[test]
     fn test_no_governance_proposals() -> Result<()> {
-        let (mut shell, _) = test_utils::setup();
+        let (mut shell, _) = test_utils::setup(3);
 
         assert!(shell.proposal_data.is_empty());
 
@@ -261,11 +269,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
     /// Tests that a governance proposal that ends without any votes is
     /// rejected.
+    #[test]
     fn test_reject_single_governance_proposal() -> Result<()> {
-        let (mut shell, _) = test_utils::setup();
+        let (mut shell, _) = test_utils::setup(3);
+        let epoch = Epoch::default();
+
 
         // we don't bother setting up the shell to be at the right epoch for
         // this test
@@ -274,14 +284,12 @@ mod tests {
         // proposals should only happen at epoch transitions
 
         // set up validators in storage (no delegations yet)
-        utils::testing::setup_storage_with_validators(
-            &mut shell.wl_storage.storage,
-            HashMap::from([(
-                address::testing::established_address_1(),
-                token::Amount::from(10_000_000),
-            )]),
-        );
 
+        let validator_set = read_consensus_validator_set_addresses(
+            &shell.wl_storage, epoch
+        ).unwrap();
+
+        println!("active validators = {:#?}", validator_set);
         // set up a proposal in storage
         // proposals must be in sequence starting from one (or zero?)
         let proposal_id = 1;
@@ -289,7 +297,7 @@ mod tests {
         let proposal_funds = token::Amount::from(100_000_000);
         let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
         StorageWrite::write(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &proposal_funds_key,
             proposal_funds,
         )?;
@@ -298,7 +306,7 @@ mod tests {
         let proposal_end_epoch_key =
             gov_storage::get_voting_end_epoch_key(proposal_id);
         StorageWrite::write(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &proposal_end_epoch_key,
             proposal_end_epoch,
         )?;
@@ -310,7 +318,6 @@ mod tests {
 
         let mut resp = shim::response::FinalizeBlock::default();
 
-        // TODO: this is failing because empty votes is accepted?
         let proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
 
@@ -349,8 +356,151 @@ mod tests {
     }
 
     #[test]
+    fn test_accept_single_governance_proposal() -> Result<()> {
+        let (mut shell, _) = test_utils::setup(3);
+        let epoch = Epoch::default();
+
+
+        // we don't bother setting up the shell to be at the right epoch for
+        // this test
+        // TODO: maybe commit blocks up here in `TestShell` up until just before
+        // the first block of Epoch(9), to be more realistic? As governance
+        // proposals should only happen at epoch transitions
+
+
+        // Set up validators and delegations
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch
+        ).unwrap();
+
+
+        println!("active validators = {:#?}", validator_set);
+
+        let mut validator_set_iterator = validator_set.iter();
+    
+        let val1 = validator_set_iterator.next().unwrap();
+        
+        let delegator1 = gen_established_address("four-twenty");
+        let delegator2 = gen_established_address("leeeeeet");
+
+        // Source the delegators with some tokens
+        
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
+
+        // Source the proposal author with some tokens
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &established_address_1(), token::Amount::from(100_000_000_000)).unwrap();
+        
+
+        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+
+
+        // set up a proposal in storage
+        // proposals must be in sequence starting from one (or zero?)
+        let proposal_id = 0;
+
+        let proposal_funds = token::Amount::from(100_000_000);
+        let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
+
+        // delegator1 votes yes
+        let vote_proposal_data1 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Yay,
+            voter: delegator1,
+            delegations: vec![val1.address.clone()]
+        };
+
+        //delegator2 votes no
+        let vote_proposal_data2 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Nay,
+            voter: delegator2,
+            delegations: vec![val1.address.clone()]
+        };
+
+        //Validator votes yes
+        let vote_proposal_data3 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Yay,
+            voter: val1.address.clone(),
+            delegations: Vec::new(),
+        };
+
+        let vote_proposals = vec![vote_proposal_data1, vote_proposal_data2, vote_proposal_data3];
+        
+        for vote_p in vote_proposals.iter(){
+            vote_proposal(&mut shell.wl_storage, vote_p.to_owned()).unwrap();
+        }
+
+        let proposal_data = InitProposalData{
+            id: Some(0),
+            /// The proposal content
+            content: vec![],
+            /// The proposal author address
+            author: established_address_1(),
+            /// The epoch from which voting is allowed
+            voting_start_epoch: Epoch(1),
+            /// The epoch from which voting is stopped
+            voting_end_epoch: Epoch(1),
+            /// The epoch from which this changes are executed
+            grace_epoch: Epoch(1),
+            /// The code containing the storage changes
+            proposal_code: None,
+
+        };
+
+        //advance the epoch beforehand
+        advance_epoch(&mut shell);
+        
+        init_proposal(&mut shell.wl_storage, proposal_data).unwrap();
+
+        // Let validators vote on the respective proposal
+        return Ok(());
+
+        let mut resp = shim::response::FinalizeBlock::default();
+
+        return Ok(());
+        let proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+
+        assert!(
+            shell.proposal_data.is_empty(),
+            "shell.proposal_data should always be empty after a \
+             `execute_governance_proposals` call"
+        );
+        assert!(proposals_result.passed.is_empty());
+        assert!(proposals_result.rejected.is_empty());
+    //     assert_eq!(
+    //         resp.events,
+    //         vec![Event {
+    //             event_type: EventType::Proposal,
+    //             level: EventLevel::Block,
+    //             attributes: HashMap::from([
+    //                 ("proposal_id".to_string(), proposal_id.to_string()),
+    //                 (
+    //                     "has_proposal_code".to_string(),
+    //                     (true as u64).to_string()
+    //                 ),
+    //                 (
+    //                     "tally_result".to_string(),
+    //                     TallyResult::Rejected.to_string()
+    //                 ),
+    //                 (
+    //                     "proposal_code_exit_status".to_string(),
+    //                     (true as u64).to_string()
+    //                 ),
+    //             ])
+    //         }]
+    //     );
+    //     // TODO: also check expected key changes in `shell.storage`
+
+        Ok(())
+    }
+
+    #[test]
     fn test_compute_tally_rejects_empty_votes() {
-        let (shell, _) = test_utils::setup();
+        let (shell, _) = test_utils::setup(3);
         let epoch = Epoch::default();
 
         let votes = Votes {
@@ -366,26 +516,24 @@ mod tests {
 
     #[test]
     fn test_compute_tally_accepts_enough_yay_votes() {
-        let (shell, _) = test_utils::setup();
+        let (shell, _) = test_utils::setup(3);
         let epoch = Epoch::default();
 
-        let mut validator_set = shell
-            .wl_storage
-            .storage
-            .read_validator_set()
-            .get(epoch)
-            .unwrap()
-            .to_owned()
-            .active;
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch
+        ).unwrap();
         println!("active validators = {:#?}", validator_set);
 
-        let val1 = validator_set.pop_first_shim().unwrap();
-        let val2 = validator_set.pop_first_shim().unwrap();
+        
+        let mut validator_set_iterator = validator_set.iter();
+        
+        let val1 = validator_set_iterator.next().unwrap();
+        let val2 = validator_set_iterator.next().unwrap();
 
         let votes = Votes {
             yay_validators: HashMap::from([
-                (val1.address, val1.bonded_stake.into()),
-                (val2.address, val2.bonded_stake.into()),
+                (val1.address.clone(), val1.bonded_stake.clone().into()),
+                (val2.address.clone(), val2.bonded_stake.clone().into()),
             ]),
             yay_delegators: HashMap::default(),
             nay_delegators: HashMap::default(),
@@ -398,28 +546,203 @@ mod tests {
 
     #[test]
     fn test_compute_tally_rejects_not_enough_yay_votes() {
-        let (shell, _) = test_utils::setup();
+        let (shell, _) = test_utils::setup(3);
         let epoch = Epoch::default();
 
-        let mut validator_set = read_consensus_validator_set_addresses(
-            &shell.wl_storage, epoch
-        );
-            
-        println!("active validators = {:#?}", validator_set);
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch).unwrap();
 
-        let val1 = validator_set.pop_first_shim().unwrap();
+        let val1 = validator_set.iter().next().unwrap();
 
         let votes = Votes {
             yay_validators: HashMap::from([(
-                val1.address,
-                val1.bonded_stake.into(),
+                val1.address.clone(),
+                val1.bonded_stake.clone().into(),
             )]),
-            yay_delegators: HashMap::default(),
             nay_delegators: HashMap::default(),
+            yay_delegators: HashMap::default(),
         };
-
+        
         let result = compute_tally(&shell.wl_storage, epoch, votes);
 
         assert_matches!(result, Ok(false));
     }
+    #[test]
+    fn test_compute_tally_rejects_enough_nay_votes() {
+        let (mut shell, _) = test_utils::setup(3);
+        let epoch = Epoch::default();
+
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch).unwrap();
+        
+
+        let mut validator_set_iterator = validator_set.iter();
+    
+        let val1 = validator_set_iterator.next().unwrap();
+        let val2 = validator_set_iterator.next().unwrap();
+        
+        let delegator1 = gen_established_address("four-twenty");
+
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
+
+        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+
+        let val1_vote_power : VotePower = u64::from(val1.bonded_stake).into();
+
+        let mut nay_delegator = HashMap::default();
+        nay_delegator.insert(delegator1, HashMap::from([(val1.address.clone(), val1_vote_power)]));
+
+        
+
+        let votes = Votes {
+            yay_validators: HashMap::from([
+                (val1.address.clone(), val1.bonded_stake.clone().into()),
+                (val2.address.clone(), val2.bonded_stake.clone().into()),
+            ]),
+            yay_delegators: HashMap::default(),
+            nay_delegators: nay_delegator,
+        
+        };
+    
+        let result = compute_tally(&shell.wl_storage, epoch, votes);
+
+        assert_matches!(result, Ok(false));
+    }
+
+    #[test]
+    fn test_compute_tally_accepts_delegates() {
+        let (mut shell, _) = test_utils::setup(3);
+        let epoch = Epoch::default();
+
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch).unwrap();
+        
+
+        let mut validator_set_iterator = validator_set.iter();
+    
+        let val1 = validator_set_iterator.next().unwrap();
+        
+        let delegator1 = gen_established_address("four-twenty");
+        let delegator2 = gen_established_address("leeeeeet");
+
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
+
+        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+
+        let val1_vote_power : VotePower = u64::from(val1.bonded_stake).into();
+        let val2_vote_power : VotePower = u64::from(val1.bonded_stake).into();
+
+
+        let mut yay_delegators = HashMap::default();
+        yay_delegators.insert(delegator1, HashMap::from([(val1.address.clone(), val1_vote_power)]));
+        yay_delegators.insert(delegator2, HashMap::from([(val1.address.clone(), val2_vote_power)]));
+        
+
+        let votes = Votes {
+            yay_validators: HashMap::default(),
+            yay_delegators: yay_delegators,
+            nay_delegators: HashMap::default(),
+        
+        };
+    
+        let result = compute_tally(&shell.wl_storage, epoch, votes);
+
+        assert_matches!(result, Ok(true));
+    }
+
+    fn spawn_delegators(num_delegators :u8, bond_amount: u64, mut shell : TestShell, validator : proof_of_stake::types::WeightedValidator, epoch : Epoch) -> Vec<Address>{
+        
+        let mut delegators = Vec::new();
+
+        for i in 1..num_delegators{
+            let del_address = gen_established_address(i.to_string());
+            token::credit_tokens(&mut shell.wl_storage, &address::nam(), &del_address, bond_amount.into()).unwrap();
+            bond_tokens(&mut shell.wl_storage, Some(&del_address), &validator.address, validator.bonded_stake.clone().into(), epoch).unwrap();
+
+            delegators.push(del_address);
+        }
+
+        return delegators;
+    
+    }
+
+    #[test]
+    fn test_vote_proposal(){
+        
+        let (mut shell, _) = test_utils::setup(3);
+        let epoch = Epoch::default();
+
+        let validator_set = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage, epoch
+        ).unwrap();
+
+        println!("active validators = {:#?}", validator_set);
+
+        let mut validator_set_iterator = validator_set.iter();
+    
+        let val1 = validator_set_iterator.next().unwrap();
+        
+        let delegator1 = gen_established_address("four-twenty");
+        let delegator2 = gen_established_address("leeeeeet");
+
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
+
+        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
+
+        let proposal_id = 1;
+
+        // delegator1 votes yes
+        let vote_proposal_data1 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Yay,
+            voter: delegator1,
+            delegations: vec![val1.address.clone()]
+        };
+
+        //delegator2 votes no
+        let vote_proposal_data2 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Nay,
+            voter: delegator2,
+            delegations: vec![val1.address.clone()]
+        };
+
+        //Validator votes yes
+        let vote_proposal_data3 = VoteProposalData {
+            id : proposal_id,
+            vote : ProposalVote::Yay,
+            voter: val1.address.clone(),
+            delegations: Vec::new(),
+        };
+
+        let vote_proposals = vec![vote_proposal_data1, vote_proposal_data2, vote_proposal_data3];
+        
+        for vote_p in vote_proposals.iter(){
+            vote_proposal(&mut shell.wl_storage, vote_p.to_owned()).unwrap();
+        }
+        
+        // TODO: Now check that keys actually changed
+
+
+    }
+
+    fn advance_epoch(s: &mut TestShell) -> Epoch {
+        let params = &proof_of_stake::read_pos_params(&s.wl_storage).unwrap();
+        s.wl_storage.storage.block.epoch = s.wl_storage.storage.block.epoch.next();
+        let current_epoch = s.wl_storage.storage.block.epoch;
+        proof_of_stake::copy_validator_sets_and_positions(
+            &mut s.wl_storage,
+            current_epoch,
+            current_epoch + params.pipeline_len,
+            &proof_of_stake::consensus_validator_set_handle(),
+            &proof_of_stake::below_capacity_validator_set_handle(),
+        )
+        .unwrap();
+        current_epoch
+    }
 }
+

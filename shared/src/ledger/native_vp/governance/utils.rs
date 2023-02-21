@@ -93,7 +93,7 @@ where
         yay_delegators,
         nay_delegators,
     } = votes;
-
+    
     let mut total_yay_staked_tokens = VotePower::from(0_u64);
     for (_, amount) in yay_validators.clone().into_iter() {
         total_yay_staked_tokens += amount;
@@ -121,7 +121,7 @@ where
 }
 
 /// Prepare Votes structure to compute proposal tally
-pub fn get_proposal_votes<S>(
+ pub fn  get_proposal_votes<S>(
     storage: &S,
     epoch: Epoch,
     proposal_id: u64,

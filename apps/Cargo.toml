@@ -160,6 +160,7 @@ proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 tempfile = "3.2.0"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tokio-test = "0.4.2"
+assert_matches = "1.5.0"
 
 [build-dependencies]
 git2 = "0.13.25"
