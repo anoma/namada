@@ -102,7 +102,7 @@ where
         }
     }
 
-    let (tally, proof, changed, confirmed, is_updated) =
+    let (tally, proof, changed, confirmed, already_present) =
         if let Some(mut proof) = maybe_proof {
             tracing::debug!(
                 %valset_upd_keys.prefix,
@@ -160,7 +160,7 @@ where
         &valset_upd_keys,
         &proof,
         &tally,
-        is_updated,
+        already_present,
     )?;
 
     if confirmed {

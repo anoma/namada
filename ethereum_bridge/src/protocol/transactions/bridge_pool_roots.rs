@@ -136,7 +136,9 @@ where
 {
     let bp_key = vote_tallies::Keys::from(&update);
     let partial_proof = votes::storage::read_body(storage, &bp_key);
-    let (vote_tracking, changed, confirmed, is_updated) = if let Ok(partial) =
+    let (vote_tracking, changed, confirmed, already_present) = if let Ok(
+        partial,
+    ) =
         partial_proof
     {
         tracing::debug!(
@@ -165,7 +167,7 @@ where
         &bp_key,
         &update,
         &vote_tracking,
-        is_updated,
+        already_present,
     )?;
     Ok((changed, confirmed))
 }

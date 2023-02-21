@@ -74,7 +74,7 @@ impl<T> Keys<T> {
             .expect("should always be able to construct this key")
     }
 
-    /// Get the `epoch` key - there should be a `Epoch` stored here.
+    /// Get the `epoch` key - there should be an `Epoch` stored here.
     pub fn epoch(&self) -> Key {
         self.prefix
             .push(&EPOCH_KEY_SEGMENT.to_owned())

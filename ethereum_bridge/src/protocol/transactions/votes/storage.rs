@@ -12,7 +12,7 @@ pub fn write<D, H, T>(
     keys: &vote_tallies::Keys<T>,
     body: &T,
     tally: &Tally,
-    is_updated: bool,
+    already_present: bool,
 ) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -23,7 +23,7 @@ where
     storage.write(&keys.seen(), &tally.seen.try_to_vec()?)?;
     storage.write(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
     storage.write(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
-    if !is_updated {
+    if !already_present {
         // add the current epoch for the inserted event
         storage.write(
             &keys.epoch(),

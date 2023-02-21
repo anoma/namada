@@ -143,35 +143,36 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (vote_tracking, changed, confirmed, is_updated) = if !exists_in_storage
-    {
-        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
-        let changed = eth_msg_keys.into_iter().collect();
-        let confirmed = vote_tracking.seen;
-        (vote_tracking, changed, confirmed, false)
-    } else {
-        tracing::debug!(
-            %eth_msg_keys.prefix,
-            "Ethereum event already exists in storage",
-        );
-        let new_votes = NewVotes::new(update.seen_by.clone(), voting_powers)?;
-        let (vote_tracking, changed) =
-            votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
-        if changed.is_empty() {
-            return Ok((changed, false));
-        }
-        let confirmed =
-            vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
-        (vote_tracking, changed, confirmed, true)
-    };
+    let (vote_tracking, changed, confirmed, already_present) =
+        if !exists_in_storage {
+            tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+            let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
+            let changed = eth_msg_keys.into_iter().collect();
+            let confirmed = vote_tracking.seen;
+            (vote_tracking, changed, confirmed, false)
+        } else {
+            tracing::debug!(
+                %eth_msg_keys.prefix,
+                "Ethereum event already exists in storage",
+            );
+            let new_votes =
+                NewVotes::new(update.seen_by.clone(), voting_powers)?;
+            let (vote_tracking, changed) =
+                votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
+            if changed.is_empty() {
+                return Ok((changed, false));
+            }
+            let confirmed =
+                vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
+            (vote_tracking, changed, confirmed, true)
+        };
 
     votes::storage::write(
         storage,
         &eth_msg_keys,
         &update.body,
         &vote_tracking,
-        is_updated,
+        already_present,
     )?;
 
     Ok((changed, confirmed))
@@ -183,7 +184,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let mut changed = ChangedKeys::new();
-    for keys in get_timeout_events(storage) {
+    for keys in get_timed_out_eth_events(storage) {
         tracing::debug!(
             %keys.prefix,
             "Ethereum event timed out",
@@ -195,7 +196,7 @@ where
     Ok(changed)
 }
 
-fn get_timeout_events<D, H>(
+fn get_timed_out_eth_events<D, H>(
     storage: &mut Storage<D, H>,
 ) -> Vec<Keys<EthereumEvent>>
 where
