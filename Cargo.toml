@@ -36,13 +36,13 @@ async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "
 # borsh-schema-derive-internal = {path = "../borsh-rs/borsh-schema-derive-internal"}
 
 # patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-config = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-proto = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-rpc = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-testgen = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-light-client = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
-tendermint-light-client-verifier = {git="https://github.com/heliaxdev/tendermint-rs.git", branch="murisi/trait-client"}
+tendermint = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-config = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-proto = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-rpc = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-testgen = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-light-client = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
+tendermint-light-client-verifier = {git="https://github.com/heliaxdev/tendermint-rs.git", rev="679227ab920dbb45cdd5acb97f49c4fe2ebb5a44"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
