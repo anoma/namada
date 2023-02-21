@@ -2001,8 +2001,6 @@ fn pos_rewards() -> Result<()> {
         None,
     )?;
 
-    println!("\nFINISHED SETUP\n");
-
     // 1. Run 3 genesis validator ledger nodes
     let mut validator_0 =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -2026,7 +2024,7 @@ fn pos_rewards() -> Result<()> {
     let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(1));
     let validator_two_rpc = get_actor_rpc(&test, &Who::Validator(2));
-    println!("\nDBG0\n");
+
     // Submit a delegation from Bertha to validator-0
     let tx_args = vec![
         "bond",
@@ -2045,7 +2043,6 @@ fn pos_rewards() -> Result<()> {
         "--ledger-address",
         &validator_zero_rpc,
     ];
-    println!("\nDBG1\n");
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2106,7 +2103,6 @@ fn pos_rewards() -> Result<()> {
         run_as!(test, Who::Validator(2), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-    println!("\nDBG7\n");
 
     // Wait some epochs
     let epoch = get_epoch(&test, &validator_zero_rpc)?;
@@ -2455,8 +2451,6 @@ fn proposal_submission() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    println!("\nDELEGATING SOME TOKENS\n");
-
     // 1.1 Delegate some token
     let tx_args = vec![
         "bond",
@@ -2479,8 +2473,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    println!("\nSUBMIT VALID PROPOSAL FROM ALBERT\n");
-
     // 2. Submit valid proposal
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path = prepare_proposal_data(&test, albert);
@@ -2497,8 +2489,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    println!("\nQUERY ALBERT'S VALID PROPOSAL\n");
-
     // 3. Query the proposal
     let proposal_query_args = vec![
         "query-proposal",
@@ -2511,8 +2501,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("Proposal: 0")?;
     client.assert_success();
-
-    println!("\nQUERY ALBERT TOKENS\n");
 
     // 4. Query token balance proposal author (submitted funds)
     let query_balance_args = vec![
@@ -2529,8 +2517,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
-    println!("\nQUERY GOV ADDRESS TOKENS\n");
-
     // 5. Query token balance governance
     let query_balance_args = vec![
         "balance",
@@ -2545,8 +2531,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 500")?;
     client.assert_success();
-
-    println!("\nSUBMIT INVALID PROPOSAL FROM ALBERT\n");
 
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
@@ -2607,8 +2591,6 @@ fn proposal_submission() -> Result<()> {
     )?;
     client.assert_failure();
 
-    println!("\nCHECK INVALID PROPOSAL WAS NOT ACCEPTED\n");
-
     // 7. Check invalid proposal was not accepted
     let proposal_query_args = vec![
         "query-proposal",
@@ -2621,8 +2603,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("No valid proposal was found with id 1")?;
     client.assert_success();
-
-    println!("\nQUERY ALBERT TOKENS\n");
 
     // 8. Query token balance (funds shall not be submitted)
     let query_balance_args = vec![
@@ -2638,8 +2618,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 999500")?;
     client.assert_success();
-
-    println!("\nSEND YAY VOTE FROM VALIDATOR-0\n");
 
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
@@ -2670,8 +2648,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    println!("\nSEND NAY VOTE FROM BERTHA\n");
-
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
         "--proposal-id",
@@ -2688,8 +2664,6 @@ fn proposal_submission() -> Result<()> {
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-
-    println!("\nSEND YAY VOTE FROM ALBERT\n");
 
     // 10. Send a yay vote from a non-validator/non-delegator user
     let submit_proposal_vote = vec![
@@ -2717,8 +2691,6 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    println!("\nQUERY PROPOSAL AND CHECK RESULT\n");
-
     let query_proposal = vec![
         "query-proposal-result",
         "--proposal-id",
@@ -2738,8 +2710,6 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    println!("\nQUERY ALBERT TOKENS\n");
-
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -2753,8 +2723,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 1000000")?;
     client.assert_success();
-
-    println!("\nQUERY GOV ADDRESS TOKENS\n");
 
     // 13. Check if governance funds are 0
     let query_balance_args = vec![
@@ -2770,8 +2738,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 0")?;
     client.assert_success();
-
-    println!("\nQUERY PROTOCOL PARAMS\n");
 
     // // 14. Query parameters
     let query_protocol_parameters = vec![

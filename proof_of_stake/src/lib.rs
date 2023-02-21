@@ -582,7 +582,6 @@ pub fn read_validator_stake<S>(
 where
     S: StorageRead,
 {
-    // println!("\nREAD VALIDATOR STAKE AT EPOCH {}", epoch);
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
@@ -811,7 +810,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    println!("BONDING TOKEN AMOUNT {}\n", amount);
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -853,26 +851,16 @@ where
     // TODO: ensure that this method of checking if the bond exists works
 
     if !bond_handle.get_data_handler().is_empty(storage)? {
-        println!("BOND EXISTS TO BEGIN WITH\n");
         let cur_remain = bond_handle
             .get_delta_val(storage, current_epoch + offset, &params)?
             .unwrap_or_default();
-        // println!(
-        //     "Bond remain at offset epoch {}: {}\n",
-        //     current_epoch + offset,
-        //     cur_remain
-        // );
         bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
     } else {
-        println!("BOND DOESNT EXIST YET\n");
         bond_handle.init(storage, amount, current_epoch, offset)?;
     }
 
-    println!("\nUPDATING VALIDATOR SET NOW\n");
-
     // Update the validator set
     update_validator_set(storage, &params, validator, amount, current_epoch)?;
-    println!("UPDATING VALIDATOR DELTAS NOW\n");
 
     // Update the validator and total deltas
     update_validator_deltas(
@@ -893,7 +881,6 @@ where
         source,
         &ADDRESS,
     )?;
-    println!("END BOND_TOKENS\n");
 
     Ok(())
 }
@@ -1012,9 +999,6 @@ where
         return Ok(());
     }
     let epoch = current_epoch + params.pipeline_len;
-    println!(
-        "Update epoch for validator set: {epoch}, validator: {validator}\n"
-    );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
@@ -1025,8 +1009,6 @@ where
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
         .unwrap_or_default();
-
-    // println!("VALIDATOR STAKE BEFORE UPDATE: {}\n", tokens_pre);
 
     let tokens_post = tokens_pre.change() + token_change;
     // TODO: handle overflow or negative vals perhaps with TryFrom
@@ -1047,7 +1029,6 @@ where
     let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
     if consensus_vals_pre.contains(storage, &position)? {
-        println!("\nTARGET VALIDATOR IS CONSENSUS\n");
         // It's initially consensus
         let val_address = consensus_vals_pre.get(storage, &position)?;
         assert!(val_address.is_some());
@@ -1061,7 +1042,6 @@ where
             )?;
 
         if tokens_post < max_below_capacity_validator_amount {
-            println!("NEED TO SWAP VALIDATORS\n");
             // Place the validator into the below-capacity set and promote the
             // lowest position max below-capacity validator.
 
@@ -1091,7 +1071,6 @@ where
                 validator,
             )?;
         } else {
-            println!("VALIDATOR REMAINS IN CONSENSUS SET\n");
             // The current validator should remain in the consensus set - place
             // it into a new position
             insert_validator_into_set(
@@ -1364,12 +1343,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
-    println!(
-        "Inserting validator {} into position {:?} at epoch {}\n",
-        address.clone(),
-        next_position.clone(),
-        epoch.clone()
-    );
     handle.insert(storage, next_position, address.clone())?;
     validator_set_positions_handle().at(epoch).insert(
         storage,
@@ -1391,14 +1364,8 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    println!("UNBONDING TOKEN AMOUNT {amount} at epoch {current_epoch}\n");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    println!(
-        "Current validator stake at pipeline: {}",
-        read_validator_stake(storage, &params, validator, pipeline_epoch)?
-            .unwrap_or_default()
-    );
 
     if let Some(source) = source {
         if source != validator
@@ -1527,7 +1494,6 @@ where
     //     )
     // }
 
-    println!("Updating validator set for unbonding");
     // Update the validator set at the pipeline offset
     update_validator_set(storage, &params, validator, -amount, current_epoch)?;
 
@@ -1633,7 +1599,6 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // println!("WITHDRAWING TOKENS IN EPOCH {current_epoch}\n");
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
 
@@ -1648,7 +1613,6 @@ where
     // TODO: use `find_unbonds`
     let unbond_iter = unbond_handle.iter(storage)?;
     for unbond in unbond_iter {
-        // println!("\nUNBOND ITER\n");
         let (
             NestedSubKey::Data {
                 key: withdraw_epoch,
@@ -1693,7 +1657,6 @@ where
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
-        // println!("Remove ({}, {}) from unbond\n", end_epoch, start_epoch);
         unbond_handle
             .at(&withdraw_epoch)
             .remove(storage, &start_epoch)?;
@@ -2008,17 +1971,11 @@ pub fn validator_set_update_tendermint<S>(
         .filter_map(|validator| {
             let (
                 NestedSubKey::Data {
-                    key: cur_stake,
+                    key: _,
                     nested_sub_key: _,
                 },
                 address,
             ) = validator.unwrap();
-            let cur_stake = token::Amount::from(cur_stake);
-
-            println!(
-                "BELOW-CAPACITY VALIDATOR ADDRESS {}, STAKE {}\n",
-                address, cur_stake
-            );
 
             if !prev_below_capacity_vals.is_empty(storage).unwrap() {
                 // Look up the previous state
@@ -2507,32 +2464,6 @@ where
     let epoch: Epoch = epoch.into();
     let params = read_pos_params(storage)?;
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
-    // dbg!(&epoch);
-
-    // let validator_set = self.read_validator_set();
-    // dbg!(&validator_set);
-    // let validators = validator_set.get(epoch).unwrap();
-    // let pos_params = self.read_pos_params();
-
-    // println!(
-    //     "VALIDATOR SET OF EPOCH {} LAST UPDATE = {}, LEN = {}:",
-    //     epoch,
-    //     validator_set.last_update(),
-    //     validator_set.data.len()
-    // );
-    // for val in &validators.active {
-    //     println!("STAKE: {}, ADDRESS: {}", val.bonded_stake, val.address);
-    //     let ck = self
-    //         .read_validator_consensus_key(&val.address)
-    //         .unwrap()
-    //         .get(epoch)
-    //         .unwrap()
-    //         .to_owned();
-    //     let hash_string1 = tm_consensus_key_raw_hash(&ck);
-    //     let bytes1 = HEXUPPER.decode(hash_string1.as_bytes()).unwrap();
-    //     dbg!(bytes1);
-    // }
-    // dbg!(votes);
 
     // Get total stake of the consensus validator set
     // TODO: this will need to account for rewards products?
