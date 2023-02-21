@@ -101,12 +101,24 @@ where
         inflation,
     } = RewardsController::run(&controller);
 
+    // inflation-per-token = inflation / locked tokens = n/100
+    // ∴ n = (inflation * 100) / locked tokens
+    // Since we must put the notes in a compatible format with the
+    // note format, we must make the inflation amount discrete.
+    let total_in = total_token_in_masp.change() as u64;
+    let noterized_inflation =
+        if 0u64 == total_in {
+            0u64
+        } else {
+            inflation * 100 / total_token_in_masp.change() as u64
+        };
+
     // Is it fine to write the inflation rate, this is accurate,
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
     wl_storage
-        .write(&token::last_inflation(addr), inflation)
+        .write(&token::last_inflation(addr), noterized_inflation)
         .expect("unable to encode new inflation rate (Decimal)");
 
     wl_storage
@@ -118,14 +130,7 @@ where
     // function This may be unneeded, as we could describe it as a
     // ratio of x/1
 
-    // inflation-per-token = inflation / locked tokens = n/100
-    // ∴ n = (inflation * 100) / locked tokens
-    let total_in = total_token_in_masp.change() as u64;
-    if 0u64 == total_in {
-        Ok((0u64, 100))
-    } else {
-        Ok((inflation * 100 / total_token_in_masp.change() as u64, 100))
-    }
+    Ok((noterized_inflation, 100))
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
