@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.14.1
+
+Namada 0.14.1 is a bugfix release addressing issues with inactive
+validator set updates in proof of stake.
+
+### BUG FIXES
+
+- Fix Tendermint validator set update to properly skip validator with no voting
+  power. ([#1146](https://github.com/anoma/namada/pull/1146))
+
 ## v0.14.0
 
 Namada 0.14.0 is a scheduled minor release with various protocol
