@@ -75,6 +75,7 @@ impl<T> EthereumProof<T> {
 }
 
 /// Sort signatures based on voting powers in descending order.
+/// Puts a dummy signature in place of invalid or missing signatures.
 pub fn sort_sigs(
     voting_powers: &VotingPowersMap,
     signatures: &HashMap<EthAddrBook, secp256k1::Signature>,
@@ -82,11 +83,18 @@ pub fn sort_sigs(
     voting_powers
         .get_sorted()
         .into_iter()
-        .filter_map(|(addr_book, _)| {
-            signatures.get(addr_book).map(|sig| {
-                let (r, s, v) = sig.clone().into_eth_rsv();
-                ethereum_structs::Signature { r, s, v }
-            })
+        .map(|(addr_book, _)| {
+            signatures
+                .get(addr_book)
+                .map(|sig| {
+                    let (r, s, v) = sig.clone().into_eth_rsv();
+                    ethereum_structs::Signature { r, s, v }
+                })
+                .unwrap_or(ethereum_structs::Signature {
+                    r: [0; 32],
+                    s: [0; 32],
+                    v: 0,
+                })
         })
         .collect()
 }

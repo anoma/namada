@@ -265,13 +265,15 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
             safe_exit(1)
         }
     };
-    let bp_proof = match AbiDecode::decode(&bp_proof) {
+
+    let bp_proof: RelayProof = match AbiDecode::decode(&bp_proof) {
         Ok(proof) => proof,
         Err(error) => {
             println!("Unable to decode the generated proof: {:?}", error);
             safe_exit(1)
         }
     };
+
     let mut relay_op = bridge.transfer_to_erc(bp_proof);
     if let Some(gas) = args.gas {
         relay_op.tx.set_gas(gas);
@@ -293,9 +295,19 @@ pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
 }
 
 mod recommendations {
+    use borsh::BorshDeserialize;
+    use namada::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use namada::eth_bridge::storage::proof::BridgePoolRootProof;
+    use namada::types::storage::BlockHeight;
+    use namada::types::vote_extensions::validator_set_update::{
+        EthAddrBook, VotingPowersMap, VotingPowersMapExt,
+    };
+    use namada::types::voting_power::FractionalVotingPower;
+
     use super::*;
-    const BASE_GAS: u64 = 800_000;
-    const TRANSFER_FEE: i64 = 50_000;
+    const TRANSFER_FEE: i64 = 37_500;
+    const SIGNATURE_FEE: u64 = 24_500;
+    const VALSET_FEE: u64 = 2000;
 
     /// The different states while trying to solve
     /// for a recommended batch of transfers.
@@ -338,6 +350,40 @@ mod recommendations {
             .map(PendingTransfer::from)
             .collect::<Vec<_>>();
 
+        // get the signed bridge pool root so we can analyze the signatures
+        // the estimate the gas cost of verifying them.
+        let (bp_root, height) =
+            <(BridgePoolRootProof, BlockHeight)>::try_from_slice(
+                &RPC.shell()
+                    .storage_value(
+                        &client,
+                        None,
+                        Some(0.into()),
+                        false,
+                        &get_signed_root_key(),
+                    )
+                    .await
+                    .unwrap()
+                    .data,
+            )
+            .unwrap();
+
+        // Get the voting powers of each of validator who signed
+        // the above root.
+        let voting_powers = RPC
+            .shell()
+            .eth_bridge()
+            .eth_voting_powers(&client, &height)
+            .await
+            .unwrap();
+        let valset_size = voting_powers.len() as u64;
+
+        // This is the gas cost for hashing the validator set and
+        // checking a quorum of signatures (in gwei).
+        let validator_gas = SIGNATURE_FEE
+            * signature_checks(voting_powers, &bp_root.signatures)
+            + VALSET_FEE * valset_size;
+        // This is the amount of gwei a single name is worth
         let gwei_per_nam =
             (10u64.pow(9) as f64 / args.nam_per_eth).floor() as u64;
 
@@ -366,13 +412,49 @@ mod recommendations {
 
         let max_gas = args.max_gas.unwrap_or(u64::MAX);
         let max_cost = args.gas.map(|x| x as i64).unwrap_or_default();
-        generate(contents, max_gas, max_cost);
+        generate(contents, validator_gas, max_gas, max_cost);
+    }
+
+    /// Given an ordered list of signatures, figure out the size of the first
+    /// subset constituting a 2 / 3 majority.
+    ///
+    /// The function is generic to make unit testing easier (otherwise a dev
+    /// dependency needs to be added).
+    fn signature_checks<T>(
+        voting_powers: VotingPowersMap,
+        sigs: &HashMap<EthAddrBook, T>,
+    ) -> u64 {
+        let voting_powers = voting_powers.get_sorted();
+        let total_power = voting_powers
+            .iter()
+            .map(|(_, y)| u64::from(**y))
+            .sum::<u64>();
+
+        // Find the total number of signature checks Ethereum will make
+        let mut power = FractionalVotingPower::new(0, 1).unwrap();
+        voting_powers
+            .iter()
+            .filter_map(|(a, p)| sigs.get(a).map(|_| (a, p)))
+            .take_while(|(_, p)| {
+                if power <= FractionalVotingPower::TWO_THIRDS {
+                    power += FractionalVotingPower::new(
+                        u64::from(***p),
+                        total_power,
+                    )
+                    .unwrap();
+                    true
+                } else {
+                    false
+                }
+            })
+            .count() as u64
     }
 
     /// Generates the actual recommendation from restrictions given by the
     /// input parameters.
     fn generate(
         contents: Vec<(String, i64, PendingTransfer)>,
+        validator_gas: u64,
         max_gas: u64,
         max_cost: i64,
     ) -> Option<Vec<String>> {
@@ -387,8 +469,8 @@ mod recommendations {
             AlgorithmMode::Generous
         };
 
-        let mut total_gas = BASE_GAS;
-        let mut total_cost = BASE_GAS as i64;
+        let mut total_gas = validator_gas;
+        let mut total_cost = validator_gas as i64;
         let mut total_fees = 0;
         let mut recommendation = vec![];
         for (hash, cost, transfer) in contents.into_iter() {
@@ -482,13 +564,53 @@ mod recommendations {
                 .collect()
         }
 
+        fn address_book(i: u8) -> EthAddrBook {
+            EthAddrBook {
+                hot_key_addr: EthAddress([i; 20]),
+                cold_key_addr: EthAddress([i; 20]),
+            }
+        }
+
+        #[test]
+        fn test_signature_count() {
+            let voting_powers = VotingPowersMap::from([
+                (address_book(1), Amount::from(5)),
+                (address_book(2), Amount::from(1)),
+                (address_book(3), Amount::from(1)),
+            ]);
+            let signatures = HashMap::from([
+                (address_book(1), 0),
+                (address_book(2), 0),
+                (address_book(3), 0),
+            ]);
+            let checks = signature_checks(voting_powers, &signatures);
+            assert_eq!(checks, 1)
+        }
+
+        #[test]
+        fn test_signature_count_with_skips() {
+            let voting_powers = VotingPowersMap::from([
+                (address_book(1), Amount::from(5)),
+                (address_book(2), Amount::from(5)),
+                (address_book(3), Amount::from(1)),
+                (address_book(4), Amount::from(1)),
+            ]);
+            let signatures = HashMap::from([
+                (address_book(1), 0),
+                (address_book(3), 0),
+                (address_book(4), 0),
+            ]);
+            let checks = signature_checks(voting_powers, &signatures);
+            assert_eq!(checks, 3)
+        }
+
         #[test]
         fn test_only_profitable() {
             let profitable = vec![transfer(100_000); 17];
             let hash = profitable[0].keccak256().to_string();
             let expected = vec![hash; 17];
             let recommendation =
-                generate(process_transfers(profitable), u64::MAX, 0)
+                generate(process_transfers(profitable), 800_000, u64::MAX, 0)
                     .expect("Test failed");
             assert_eq!(recommendation, expected);
         }
@@ -500,47 +622,71 @@ mod recommendations {
             transfers.push(transfer(0));
             let expected: Vec<_> = vec![hash; 17];
             let recommendation =
-                generate(process_transfers(transfers), u64::MAX, 0)
+                generate(process_transfers(transfers), 800_000, u64::MAX, 0)
                     .expect("Test failed");
             assert_eq!(recommendation, expected);
         }
 
         #[test]
         fn test_max_gas() {
-            let transfers = vec![transfer(100_000); 17];
+            let transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
-            let expected = vec![hash; 16];
-            let recommendation =
-                generate(process_transfers(transfers), 1_600_000, i64::MAX)
-                    .expect("Test failed");
+            let expected = vec![hash; 2];
+            let recommendation = generate(
+                process_transfers(transfers),
+                50_000,
+                150_000,
+                i64::MAX,
+            )
+            .expect("Test failed");
             assert_eq!(recommendation, expected);
         }
 
         #[test]
         fn test_net_loss() {
-            let mut transfers = vec![transfer(100_000); 16];
-            transfers.extend([transfer(25_000), transfer(25_000)]);
+            let mut transfers = vec![transfer(75_000); 4];
+            transfers.extend([transfer(17_500), transfer(17_500)]);
             let expected: Vec<_> = transfers
                 .iter()
                 .map(|t| t.keccak256().to_string())
-                .take(17)
+                .take(5)
                 .collect();
-            let recommendation =
-                generate(process_transfers(transfers), u64::MAX, 25_000)
-                    .expect("Test failed");
+            let recommendation = generate(
+                process_transfers(transfers),
+                150_000,
+                u64::MAX,
+                20_000,
+            )
+            .expect("Test failed");
             assert_eq!(recommendation, expected);
         }
 
         #[test]
         fn test_net_loss_max_gas() {
-            let mut transfers = vec![transfer(100_000); 16];
+            let mut transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
-            let expected = vec![hash; 16];
-            transfers.extend([transfer(25_000), transfer(25_000)]);
-            let recommendation =
-                generate(process_transfers(transfers), 1_600_000, 25_000)
-                    .expect("Test failed");
+            let expected = vec![hash; 4];
+            transfers.extend([transfer(17_500), transfer(17_500)]);
+            let recommendation = generate(
+                process_transfers(transfers),
+                150_000,
+                330_000,
+                20_000,
+            )
+            .expect("Test failed");
             assert_eq!(recommendation, expected);
+        }
+
+        #[test]
+        fn test_wholly_infeasible() {
+            let transfers = vec![transfer(75_000); 4];
+            let recommendation = generate(
+                process_transfers(transfers),
+                300_000,
+                u64::MAX,
+                20_000,
+            );
+            assert!(recommendation.is_none())
         }
     }
 }

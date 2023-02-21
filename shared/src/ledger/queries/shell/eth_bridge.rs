@@ -32,6 +32,7 @@ use namada_ethereum_bridge::storage::{
     bridge_contract_key, governance_contract_key, native_erc20_key,
     vote_tallies,
 };
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
@@ -90,6 +91,9 @@ router! {ETH_BRIDGE,
     // smart contract.
     ( "contracts" / "native_erc20" )
         -> EthAddress = read_native_erc20_contract,
+
+    // Read the voting powers map for the requested validator set.
+    ( "eth_voting_powers" / [height: BlockHeight]) -> VotingPowersMap = eth_voting_powers,
 }
 
 /// Helper function to read a smart contract from storage.
@@ -464,6 +468,21 @@ where
     } else {
         Ok(ctx.storage.get_validator_set_args(Some(epoch)).0.encode())
     }
+}
+
+/// The validator set in order with corresponding
+/// voting powers.
+fn eth_voting_powers<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    height: BlockHeight,
+) -> storage_api::Result<VotingPowersMap>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = ctx.storage.get_epoch(height);
+    let (_, voting_powers) = ctx.storage.get_validator_set_args(epoch);
+    Ok(voting_powers)
 }
 
 #[cfg(test)]
