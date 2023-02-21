@@ -226,7 +226,6 @@ pub mod shim {
             pub header: Header,
             pub byzantine_validators: Vec<Evidence>,
             pub txs: Vec<ProcessedTx>,
-            #[cfg(feature = "abcipp")]
             pub proposer_address: Vec<u8>,
             pub votes: Vec<VoteInfo>,
         }
@@ -246,7 +245,6 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
-                    #[cfg(feature = "abcipp")]
                     proposer_address: req.proposer_address,
                     votes: req
                         .decided_last_commit
@@ -288,6 +286,7 @@ pub mod shim {
                     },
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
+                    proposer_address: header.proposer_address,
                     votes: req
                         .last_commit_info
                         .unwrap()
