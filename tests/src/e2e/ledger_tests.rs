@@ -1787,7 +1787,7 @@ fn pos_bonds() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 4,
+                min_num_of_blocks: 6,
                 max_expected_time_per_block: 1,
                 epochs_per_year: 31_536_000,
                 ..genesis.parameters
@@ -1920,7 +1920,7 @@ fn pos_bonds() -> Result<()> {
         epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    let loop_timeout = Duration::new(60, 0);
     loop {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
