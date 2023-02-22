@@ -15,7 +15,7 @@ the form of native protocol tokens. A multi-asset shielded transfer
 wallet is provided in order to facilitate safe and private user
 interaction with the protocol.
 
-* Blogpost: [Introducing Namada: Shielded transfers with any assets](https://medium.com/namadanetwork/introducing-namada-shielded-transfers-with-any-assets-dce2e579384c)
+* Blogpost: [Introducing Namada: Interchain Asset-Agnostic Privacy](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/)
 
 ## 📓 Docs
 
