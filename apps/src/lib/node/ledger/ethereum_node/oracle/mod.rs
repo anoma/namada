@@ -25,7 +25,7 @@ use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
-const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(20);
+const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
 
 #[derive(Error, Debug)]
 pub enum Error {
