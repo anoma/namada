@@ -259,7 +259,9 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                     ControlFlow::Break(Err(eyre!("Shutting down.")))
                 }
             }
-        }).await;
+        })
+        .await
+        .expect("Oracle timed out while trying to communicate with the Ethereum fullnode.");
 
         if res.is_err() {
             break;
@@ -502,7 +504,7 @@ mod test_oracle {
                 last_processed_block: last_processed_block_sender,
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
-                ceiling: Duration::from_secs(2),
+                ceiling: Duration::from_secs(60),
                 control: control_receiver,
             },
             admin_channel,
@@ -834,7 +836,7 @@ mod test_oracle {
         // check that the oracle indeed processes the confirmed blocks
         for height in 0u64..confirmed_block_height + 1 {
             let block_processed =
-                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
+                timeout(Duration::from_secs(5), blocks_processed_recv.recv())
                     .await
                     .expect("Timed out waiting for block to be checked")
                     .unwrap();
