@@ -5,7 +5,7 @@
     "tx_init_account.wasm": "tx_init_account.17a78ac03dab6ef33a442808872e9c2a5114ce04d985584cbc4a7d1de95ae834.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.8a530c52c0c6f06756bc355c2c4be1640c4c18ac38b0e126288d3d1044cb8993.wasm",
     "tx_init_validator.wasm": "tx_init_validator.459bfa709f1179fd10ddf7fad39f8541b04251ed757208b1b34f0bad366f581d.wasm",
-    "tx_reveal_pk.wasm": "tx_reveal_pk.f6230e04a8500ad3ae6b376d57b521b83ac16449f021f01019671b0a3ba76a8b.wasm",
+    "tx_reveal_pk.wasm": "tx_reveal_pk.e086877f19be94a054a7470ee9003bde1d1510be91eb49ae637a5722b95fe508.wasm",
     "tx_transfer.wasm": "tx_transfer.749d1566d30c02de7c6e1d7ddbdc7c0f6e4978737ce0da05c3fa21c592568348.wasm",
     "tx_unbond.wasm": "tx_unbond.11bbad04508057e298c8a1437f028b6402f1815535b76e6069268c23c56cdc00.wasm",
     "tx_update_vp.wasm": "tx_update_vp.b7a277800d186c3988aac33eb646e3407872a32718773ba23e41024177b6f037.wasm",

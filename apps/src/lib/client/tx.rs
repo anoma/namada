@@ -2167,6 +2167,7 @@ pub async fn submit_reveal_pk_aux(
     } else {
         find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
     };
+    let tx = tx.sign(&keypair);
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
