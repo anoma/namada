@@ -24,7 +24,7 @@ use super::test_tools::mock_web3_client::Web3;
 use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
-const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
+const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
 
 #[derive(Error, Debug)]
