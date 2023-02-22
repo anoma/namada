@@ -331,10 +331,10 @@ pub async fn submit_init_validator(
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data));
+    let mut tx = Tx::new(tx_code, Some(data));
+    tx.extra = validator_vp_code;
     let (mut ctx, initialized_accounts) = process_tx(
         ctx,
         &tx_args,
@@ -1905,8 +1905,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
-        let init_proposal_data = if let Ok(data) = tx_data {
+        let tx_data: Result<(InitProposalData, Vec<u8>), _> =
+            proposal.clone().try_into();
+        let (init_proposal_data, proposal_code) = if let Ok(data) = tx_data {
             data
         } else {
             eprintln!("Invalid data for init proposal transaction.");
@@ -1941,7 +1942,8 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let tx = Tx::new(tx_code, Some(data));
+        let mut tx = Tx::new(tx_code, Some(data));
+        tx.extra = proposal_code;
 
         process_tx(
             ctx,

@@ -190,8 +190,6 @@ pub struct InitValidator {
     /// The maximum change allowed per epoch to the commission rate. This is
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
-    /// The VP code for validator account
-    pub validator_vp_code: Vec<u8>,
 }
 
 /// Module that includes helper functions for classifying

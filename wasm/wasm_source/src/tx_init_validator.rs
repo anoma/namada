@@ -14,7 +14,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     debug_log!("apply_tx called to init a new validator account");
 
     // Register the validator in PoS
-    match ctx.init_validator(init_validator) {
+    match ctx.init_validator(init_validator, ctx.get_tx_extra()?) {
         Ok(validator_address) => {
             debug_log!("Created validator {}", validator_address.encode(),)
         }

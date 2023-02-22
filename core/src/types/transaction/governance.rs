@@ -28,8 +28,6 @@ pub struct InitProposalData {
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
-    /// The code containing the storage changes
-    pub proposal_code: Option<Vec<u8>>,
 }
 
 /// A tx data type to hold vote proposal data
@@ -53,27 +51,29 @@ pub struct VoteProposalData {
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for InitProposalData {
+impl TryFrom<Proposal> for (InitProposalData, Vec<u8>) {
     type Error = ProposalError;
 
     fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
         let proposal_code = if let Some(path) = proposal.proposal_code_path {
             match std::fs::read(path) {
-                Ok(bytes) => Some(bytes),
+                Ok(bytes) => bytes,
                 Err(_) => return Err(Self::Error::InvalidProposalData),
             }
         } else {
-            None
+            vec![]
         };
 
-        Ok(InitProposalData {
-            id: proposal.id,
-            content: proposal.content.try_to_vec().unwrap(),
-            author: proposal.author,
-            voting_start_epoch: proposal.voting_start_epoch,
-            voting_end_epoch: proposal.voting_end_epoch,
-            grace_epoch: proposal.grace_epoch,
+        Ok((
+            InitProposalData {
+                id: proposal.id,
+                content: proposal.content.try_to_vec().unwrap(),
+                author: proposal.author,
+                voting_start_epoch: proposal.voting_start_epoch,
+                voting_end_epoch: proposal.voting_end_epoch,
+                grace_epoch: proposal.grace_epoch,
+            },
             proposal_code,
-        })
+        ))
     }
 }

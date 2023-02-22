@@ -102,8 +102,8 @@ impl Ctx {
             dkg_key,
             commission_rate,
             max_commission_rate_change,
-            validator_vp_code,
         }: InitValidator,
+        validator_vp_code: Vec<u8>,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
