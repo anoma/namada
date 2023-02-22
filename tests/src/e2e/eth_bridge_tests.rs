@@ -199,12 +199,6 @@ async fn test_bridge_pool_e2e() {
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
     );
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
-    );
     let mut namadan_ledger = run_as!(
         test,
         SOLE_VALIDATOR,
