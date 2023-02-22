@@ -1582,8 +1582,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
-    use crate::config;
-    use crate::config::TendermintMode;
+    use crate::config::{self, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1731,7 +1730,9 @@ pub mod args {
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
                      the argument takes precedence, if specified. Defaults to \
-                     `$XDG_DATA_HOME/com/anoma.namada`.",
+                     `$XDG_DATA_HOME/com.heliax.namada` or \
+                     `$HOME/.local/share/com.heliax.namada` depending on the \
+                     operating system (former is linux, latter is osx).",
                 ))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
