@@ -1582,8 +1582,8 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
-    use crate::config;
     use crate::config::TendermintMode;
+    use crate::config::{self, get_default_namada_folder};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1726,19 +1726,14 @@ pub mod args {
         /// command.
         pub fn def(app: App) -> App {
             app.arg(CHAIN_ID_OPT.def().about("The chain ID."))
-                .arg(
-                    BASE_DIR.def().about(
-                        format!(
-                            "The base directory is where the nodes, client \
+                .arg(BASE_DIR.def().about(&format!(
+                    "The base directory is where the nodes, client \
                              and wallet configuration and state is stored. \
                              This value can also be set via `NAMADA_BASE_DIR` \
                              environment variable, but the argument takes \
-                             precedence, if specified. Defaults to `{}`.",
-                            get_default_namada_folder()
-                        )
-                        .as_ref(),
-                    ),
-                )
+                             precedence, if specified. Defaults to `$XDG_DATA_HOME/com/heliax/.namada`",
+                    default_namada_folder
+                )))
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
