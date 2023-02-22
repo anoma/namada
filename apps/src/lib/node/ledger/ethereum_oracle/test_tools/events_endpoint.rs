@@ -5,7 +5,7 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::reply::WithStatus;
 use warp::Filter;
 
-use crate::node::ledger::ethereum_node::oracle;
+use crate::node::ledger::ethereum_oracle as oracle;
 
 /// The default IP address and port on which the events endpoint will listen.
 const DEFAULT_LISTEN_ADDR: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);

@@ -1,4 +1,6 @@
 pub mod control;
+pub mod events;
+pub mod test_tools;
 
 use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
@@ -18,9 +20,9 @@ use web30::client::Web3;
 #[cfg(not(test))]
 use web30::jsonrpc::error::Web3Error;
 
-use super::events::{signatures, PendingEvent};
+use self::events::{signatures, PendingEvent};
 #[cfg(test)]
-use super::test_tools::mock_web3_client::Web3;
+use self::test_tools::mock_web3_client::Web3;
 use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
@@ -450,10 +452,10 @@ mod test_oracle {
     use tokio::time::timeout;
 
     use super::*;
-    use crate::node::ledger::ethereum_node::events::{
+    use crate::node::ledger::ethereum_oracle::events::{
         ChangedContract, RawTransfersToEthereum,
     };
-    use crate::node::ledger::ethereum_node::test_tools::mock_web3_client::{
+    use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
         MockEventType, TestCmd, Web3,
     };
 

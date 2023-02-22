@@ -1,6 +1,6 @@
 mod abortable;
 mod broadcaster;
-mod ethereum_node;
+mod ethereum_oracle;
 mod shell;
 mod shims;
 pub mod storage;
@@ -23,7 +23,7 @@ use tokio::task;
 use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
-use self::ethereum_node::oracle::last_processed_block;
+use self::ethereum_oracle::last_processed_block;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
@@ -32,7 +32,7 @@ use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::config::genesis;
-use crate::node::ledger::ethereum_node::oracle;
+use crate::node::ledger::ethereum_oracle as oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
@@ -637,7 +637,7 @@ async fn maybe_start_ethereum_oracle(
 
     match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::RemoteEndpoint => {
-            let handle = ethereum_node::oracle::run_oracle(
+            let handle = oracle::run_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
@@ -661,7 +661,7 @@ async fn maybe_start_ethereum_oracle(
                 .spawn_abortable(
                     "Ethereum Events Endpoint",
                     move |aborter| async move {
-                        ethereum_node::test_tools::events_endpoint::serve(
+                        oracle::test_tools::events_endpoint::serve(
                             eth_sender,
                             control_receiver,
                             oracle_abort_recv,

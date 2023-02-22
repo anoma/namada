@@ -12,9 +12,9 @@ pub mod mock_web3_client {
     use tokio::sync::oneshot::Sender;
     use web30::types::Log;
 
+    use super::super::super::ethereum_oracle::Error;
     use super::super::events::signatures::*;
-    use super::super::Error;
-    use crate::node::ledger::ethereum_node::oracle::SyncStatus;
+    use crate::node::ledger::ethereum_oracle::SyncStatus;
 
     /// Commands we can send to the mock client
     #[derive(Debug)]
@@ -118,19 +118,18 @@ pub mod mock_web3_client {
         /// Gets the latest block number send in from the
         /// command channel if we have not set the client to
         /// act unresponsive.
-        pub async fn eth_block_number(&self) -> Result<Uint256, Error> {
+        pub async fn eth_block_number(
+            &self,
+        ) -> std::result::Result<Uint256, Error> {
             self.check_cmd_channel();
             Ok(self.0.borrow().latest_block_height.clone())
         }
 
-        pub async fn syncing(
-            &self,
-        ) -> std::result::Result<SyncStatus, super::super::oracle::Error>
-        {
+        pub async fn syncing(&self) -> std::result::Result<SyncStatus, Error> {
             self.eth_block_number()
                 .await
                 .map(SyncStatus::AtHeight)
-                .map_err(|_| super::super::oracle::Error::FallenBehind)
+                .map_err(|_| Error::FallenBehind)
         }
 
         /// Gets the events (for the appropriate signature) that
@@ -142,7 +141,7 @@ pub mod mock_web3_client {
             _: Option<Uint256>,
             _: impl Debug,
             mut events: Vec<&str>,
-        ) -> Result<Vec<Log>, Error> {
+        ) -> eyre::Result<Vec<Log>> {
             self.check_cmd_channel();
             if self.0.borrow().active {
                 let ty = match events.remove(0) {
@@ -184,7 +183,7 @@ pub mod mock_web3_client {
                 }
                 Ok(logs)
             } else {
-                Err(Error::Runtime("Uh oh, I'm not responding".into()))
+                Err(eyre::eyre!("Uh oh, I'm not responding"))
             }
         }
     }
