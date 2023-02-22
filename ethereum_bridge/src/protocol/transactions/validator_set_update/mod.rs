@@ -102,60 +102,66 @@ where
         }
     }
 
-    let (tally, proof, changed, confirmed) = if let Some(mut proof) =
-        maybe_proof
-    {
-        tracing::debug!(
-            %valset_upd_keys.prefix,
-            "Validator set update votes already in storage",
-        );
-        let new_votes = NewVotes::new(seen_by, &voting_powers)?;
-        let (tally, changed) =
-            votes::update::calculate(storage, &valset_upd_keys, new_votes)?;
-        if changed.is_empty() {
-            return Ok(changed);
-        }
-        let confirmed = tally.seen && changed.contains(&valset_upd_keys.seen());
-        proof.attach_signature_batch(ext.signatures.into_iter().map(
-            |(addr, sig)| {
-                (
-                    storage
-                        .get_eth_addr_book(&addr, Some(current_epoch))
-                        .expect("All validators should have eth keys"),
-                    sig,
-                )
-            },
-        ));
-        (tally, proof, changed, confirmed)
-    } else {
-        tracing::debug!(
-            %valset_upd_keys.prefix,
-            ?ext.voting_powers,
-            "New validator set update vote aggregation started"
-        );
-        let tally = votes::calculate_new(seen_by, &voting_powers)?;
-        let mut proof = EthereumProof::new(ext.voting_powers);
-        proof.attach_signature_batch(ext.signatures.into_iter().map(
-            |(addr, sig)| {
-                (
-                    storage
-                        .get_eth_addr_book(&addr, Some(current_epoch))
-                        .expect("All validators should have eth keys"),
-                    sig,
-                )
-            },
-        ));
-        let changed = valset_upd_keys.into_iter().collect();
-        let confirmed = tally.seen;
-        (tally, proof, changed, confirmed)
-    };
+    let (tally, proof, changed, confirmed, already_present) =
+        if let Some(mut proof) = maybe_proof {
+            tracing::debug!(
+                %valset_upd_keys.prefix,
+                "Validator set update votes already in storage",
+            );
+            let new_votes = NewVotes::new(seen_by, &voting_powers)?;
+            let (tally, changed) =
+                votes::update::calculate(storage, &valset_upd_keys, new_votes)?;
+            if changed.is_empty() {
+                return Ok(changed);
+            }
+            let confirmed =
+                tally.seen && changed.contains(&valset_upd_keys.seen());
+            proof.attach_signature_batch(ext.signatures.into_iter().map(
+                |(addr, sig)| {
+                    (
+                        storage
+                            .get_eth_addr_book(&addr, Some(current_epoch))
+                            .expect("All validators should have eth keys"),
+                        sig,
+                    )
+                },
+            ));
+            (tally, proof, changed, confirmed, true)
+        } else {
+            tracing::debug!(
+                %valset_upd_keys.prefix,
+                ?ext.voting_powers,
+                "New validator set update vote aggregation started"
+            );
+            let tally = votes::calculate_new(seen_by, &voting_powers)?;
+            let mut proof = EthereumProof::new(ext.voting_powers);
+            proof.attach_signature_batch(ext.signatures.into_iter().map(
+                |(addr, sig)| {
+                    (
+                        storage
+                            .get_eth_addr_book(&addr, Some(current_epoch))
+                            .expect("All validators should have eth keys"),
+                        sig,
+                    )
+                },
+            ));
+            let changed = valset_upd_keys.into_iter().collect();
+            let confirmed = tally.seen;
+            (tally, proof, changed, confirmed, false)
+        };
 
     tracing::debug!(
         ?tally,
         ?proof,
         "Applying validator set update state changes"
     );
-    votes::storage::write(storage, &valset_upd_keys, &proof, &tally)?;
+    votes::storage::write(
+        storage,
+        &valset_upd_keys,
+        &proof,
+        &tally,
+        already_present,
+    )?;
 
     if confirmed {
         tracing::debug!(

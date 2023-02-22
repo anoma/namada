@@ -136,7 +136,10 @@ where
 {
     let bp_key = vote_tallies::Keys::from(&update);
     let partial_proof = votes::storage::read_body(storage, &bp_key);
-    let (vote_tracking, changed, confirmed) = if let Ok(partial) = partial_proof
+    let (vote_tracking, changed, confirmed, already_present) = if let Ok(
+        partial,
+    ) =
+        partial_proof
     {
         tracing::debug!(
             %bp_key.prefix,
@@ -150,16 +153,22 @@ where
             return Ok((changed, false));
         }
         let confirmed = vote_tracking.seen && changed.contains(&bp_key.seen());
-        (vote_tracking, changed, confirmed)
+        (vote_tracking, changed, confirmed, true)
     } else {
         tracing::debug!(%bp_key.prefix, "No validator has signed this bridge pool update before.");
         let vote_tracking = calculate_new(seen_by, voting_powers)?;
         let changed = bp_key.into_iter().collect();
         let confirmed = vote_tracking.seen;
-        (vote_tracking, changed, confirmed)
+        (vote_tracking, changed, confirmed, false)
     };
 
-    votes::storage::write(storage, &bp_key, &update, &vote_tracking)?;
+    votes::storage::write(
+        storage,
+        &bp_key,
+        &update,
+        &vote_tracking,
+        already_present,
+    )?;
     Ok((changed, confirmed))
 }
 

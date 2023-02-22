@@ -5,21 +5,24 @@ mod events;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, Storage, DB};
 use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
+use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_proof_of_stake::PosBase;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};
-use crate::storage::vote_tallies;
+use crate::storage::vote_tallies::{self, Keys};
 
 impl utils::GetVoters for HashSet<EthMsgUpdate> {
     #[inline]
@@ -62,7 +65,9 @@ where
 
     let voting_powers = utils::get_voting_powers(storage, &updates)?;
 
-    let changed_keys = apply_updates(storage, updates, voting_powers)?;
+    let mut changed_keys = apply_updates(storage, updates, voting_powers)?;
+
+    changed_keys.extend(timeout_events(storage)?);
 
     Ok(TxResult {
         changed_keys,
@@ -138,36 +143,118 @@ where
     // is a less arbitrary way to do this
     let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
 
-    let (vote_tracking, changed, confirmed) = if !exists_in_storage {
-        tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-        let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
-        let changed = eth_msg_keys.into_iter().collect();
-        let confirmed = vote_tracking.seen;
-        (vote_tracking, changed, confirmed)
-    } else {
-        tracing::debug!(
-            %eth_msg_keys.prefix,
-            "Ethereum event already exists in storage",
-        );
-        let new_votes = NewVotes::new(update.seen_by.clone(), voting_powers)?;
-        let (vote_tracking, changed) =
-            votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
-        if changed.is_empty() {
-            return Ok((changed, false));
-        }
-        let confirmed =
-            vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
-        (vote_tracking, changed, confirmed)
-    };
+    let (vote_tracking, changed, confirmed, already_present) =
+        if !exists_in_storage {
+            tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
+            let vote_tracking = calculate_new(update.seen_by, voting_powers)?;
+            let changed = eth_msg_keys.into_iter().collect();
+            let confirmed = vote_tracking.seen;
+            (vote_tracking, changed, confirmed, false)
+        } else {
+            tracing::debug!(
+                %eth_msg_keys.prefix,
+                "Ethereum event already exists in storage",
+            );
+            let new_votes =
+                NewVotes::new(update.seen_by.clone(), voting_powers)?;
+            let (vote_tracking, changed) =
+                votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
+            if changed.is_empty() {
+                return Ok((changed, false));
+            }
+            let confirmed =
+                vote_tracking.seen && changed.contains(&eth_msg_keys.seen());
+            (vote_tracking, changed, confirmed, true)
+        };
 
     votes::storage::write(
         storage,
         &eth_msg_keys,
         &update.body,
         &vote_tracking,
+        already_present,
     )?;
 
     Ok((changed, confirmed))
+}
+
+fn timeout_events<D, H>(storage: &mut Storage<D, H>) -> Result<ChangedKeys>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed = ChangedKeys::new();
+    for keys in get_timed_out_eth_events(storage) {
+        tracing::debug!(
+            %keys.prefix,
+            "Ethereum event timed out",
+        );
+        votes::storage::delete(storage, &keys)?;
+        changed.extend(keys.clone().into_iter());
+    }
+
+    Ok(changed)
+}
+
+fn get_timed_out_eth_events<D, H>(
+    storage: &mut Storage<D, H>,
+) -> Vec<Keys<EthereumEvent>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let unbonding_len = storage.read_pos_params().unbonding_len;
+    let current_epoch = storage.last_epoch;
+    if current_epoch.0 <= unbonding_len {
+        return Vec::new();
+    }
+
+    let timeout_epoch = Epoch(current_epoch.0 - unbonding_len);
+    let prefix = vote_tallies::eth_msgs_prefix();
+    let mut cur_keys: Option<Keys<EthereumEvent>> = None;
+    let mut is_timed_out = false;
+    let mut is_seen = false;
+    let mut results = Vec::new();
+    for (key, val, _) in votes::storage::iter_prefix(storage, &prefix) {
+        let key = Key::parse(key).expect("The key should be parsable");
+        if let Some(keys) = vote_tallies::eth_event_keys(&key) {
+            match &cur_keys {
+                Some(prev_keys) => {
+                    if *prev_keys != keys {
+                        // check the previous keys since we found new keys
+                        if is_timed_out && !is_seen {
+                            results.push(prev_keys.clone());
+                        }
+                        is_timed_out = false;
+                        is_seen = false;
+                        cur_keys = Some(keys);
+                    }
+                }
+                None => cur_keys = Some(keys),
+            }
+
+            if vote_tallies::is_epoch_key(&key) {
+                let inserted_epoch = Epoch::try_from_slice(&val[..])
+                    .expect("Decoding Epoch failed");
+                if inserted_epoch <= timeout_epoch {
+                    is_timed_out = true;
+                }
+            }
+
+            if vote_tallies::is_seen_key(&key) {
+                is_seen = bool::try_from_slice(&val[..])
+                    .expect("Decoding boolean failed");
+            }
+        }
+    }
+    // check the last one
+    if let Some(cur_keys) = cur_keys {
+        if is_timed_out && !is_seen {
+            results.push(cur_keys);
+        }
+    }
+
+    results
 }
 
 #[cfg(test)]
@@ -230,6 +317,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
+                eth_msg_keys.epoch(),
                 wrapped_erc20_keys.balance(&receiver),
                 wrapped_erc20_keys.supply(),
             ]),
@@ -255,6 +343,10 @@ mod tests {
             storage.read(&eth_msg_keys.voting_power())?;
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
+
+        let (epoch_bytes, _) = storage.read(&eth_msg_keys.epoch())?;
+        let epoch_bytes = epoch_bytes.unwrap();
+        assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
 
         let (wrapped_erc20_balance_bytes, _) =
             storage.read(&wrapped_erc20_keys.balance(&receiver))?;
@@ -322,6 +414,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
+                eth_msg_keys.epoch(),
                 dai_keys.balance(&receiver),
                 dai_keys.supply(),
             ])
@@ -377,6 +470,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
+                eth_msg_keys.epoch(),
             ]),
             "The Ethereum event should have been recorded, but no minting \
              should have happened yet as it has only been seen by 1/2 the \
@@ -429,6 +523,7 @@ mod tests {
                 eth_msg_keys.seen(),
                 eth_msg_keys.seen_by(),
                 eth_msg_keys.voting_power(),
+                eth_msg_keys.epoch(),
             ]),
             "One vote for the Ethereum event should have been recorded",
         );
@@ -503,5 +598,87 @@ mod tests {
                 (address::testing::established_address_3(), BlockHeight(100))
             ])
         )
+    }
+
+    #[test]
+    /// Test that timed out events are deleted
+    pub fn test_timeout_events() {
+        let validator_a = address::testing::established_address_2();
+        let validator_b = address::testing::established_address_3();
+        let (mut storage, _) = test_utils::setup_storage_with_validators(
+            HashMap::from_iter(vec![
+                (validator_a.clone(), 100_u64.into()),
+                (validator_b, 100_u64.into()),
+            ]),
+        );
+        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let receiver = address::testing::established_address_1();
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: receiver.clone(),
+            }],
+        };
+        let _result = apply_derived_tx(
+            &mut storage,
+            vec![MultiSignedEthEvent {
+                event: event.clone(),
+                signers: BTreeSet::from([(
+                    validator_a.clone(),
+                    BlockHeight(100),
+                )]),
+            }],
+        );
+        let prev_keys = vote_tallies::Keys::from(&event);
+
+        // commit then update the epoch
+        storage.commit().unwrap();
+        let unbonding_len = storage.read_pos_params().unbonding_len + 1;
+        storage.last_epoch = storage.last_epoch + unbonding_len;
+        storage.block.epoch = storage.last_epoch + 1_u64;
+
+        let new_event = EthereumEvent::TransfersToNamada {
+            nonce: 2.into(),
+            transfers: vec![TransferToNamada {
+                amount: Amount::from(100),
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver,
+            }],
+        };
+        let result = apply_derived_tx(
+            &mut storage,
+            vec![MultiSignedEthEvent {
+                event: new_event.clone(),
+                signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
+            }],
+        );
+        let tx_result = match result {
+            Ok(tx_result) => tx_result,
+            Err(err) => panic!("unexpected error: {:#?}", err),
+        };
+
+        let new_keys = vote_tallies::Keys::from(&new_event);
+        assert_eq!(
+            tx_result.changed_keys,
+            BTreeSet::from_iter(vec![
+                prev_keys.body(),
+                prev_keys.seen(),
+                prev_keys.seen_by(),
+                prev_keys.voting_power(),
+                prev_keys.epoch(),
+                new_keys.body(),
+                new_keys.seen(),
+                new_keys.seen_by(),
+                new_keys.voting_power(),
+                new_keys.epoch(),
+            ]),
+            "New event should be inserted and the previous one should be \
+             deleted",
+        );
+        assert!(storage.read(&prev_keys.body()).unwrap().0.is_none());
+        assert!(storage.read(&new_keys.body()).unwrap().0.is_some());
     }
 }

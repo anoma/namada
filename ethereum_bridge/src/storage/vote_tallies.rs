@@ -1,12 +1,14 @@
 //! Functionality for accessing keys to do with tallying votes
 
 use std::io::Write;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{Epoch, Key};
+use namada_core::types::storage::{DbKeySeg, Epoch, Key};
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 
 use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
@@ -28,9 +30,11 @@ pub const BODY_KEY_SEGMENT: &str = "body";
 const SEEN_KEY_SEGMENT: &str = "seen";
 const SEEN_BY_KEY_SEGMENT: &str = "seen_by";
 pub const VOTING_POWER_KEY_SEGMENT: &str = "voting_power";
+pub const EPOCH_KEY_SEGMENT: &str = "epoch";
 
 /// Generator for the keys under which details of votes for some piece of data
 /// is stored
+#[derive(Clone, PartialEq)]
 pub struct Keys<T> {
     /// The prefix under which the details of a piece of data for which we are
     /// tallying votes is stored
@@ -69,6 +73,13 @@ impl<T> Keys<T> {
             .push(&VOTING_POWER_KEY_SEGMENT.to_owned())
             .expect("should always be able to construct this key")
     }
+
+    /// Get the `epoch` key - there should be an `Epoch` stored here.
+    pub fn epoch(&self) -> Key {
+        self.prefix
+            .push(&EPOCH_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
+    }
 }
 
 impl<T> IntoIterator for &Keys<T> {
@@ -81,6 +92,7 @@ impl<T> IntoIterator for &Keys<T> {
             self.seen(),
             self.seen_by(),
             self.voting_power(),
+            self.epoch(),
         ]
         .into_iter()
     }
@@ -92,6 +104,43 @@ pub fn eth_msgs_prefix() -> Key {
     super::prefix()
         .push(&ETH_MSGS_PREFIX_KEY_SEGMENT.to_owned())
         .expect("should always be able to construct this key")
+}
+
+/// Get the Keys from the storage key. It returns None if the storage key isn't
+/// for an Ethereum event.
+pub fn eth_event_keys(storage_key: &Key) -> Option<Keys<EthereumEvent>> {
+    match &storage_key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(hash),
+            ..,
+        ] if prefix == ETH_MSGS_PREFIX_KEY_SEGMENT => {
+            let hash = &Hash::from_str(hash).expect("Hash should be parsable");
+            Some(hash.into())
+        }
+        _ => None,
+    }
+}
+
+/// Return true if the storage key is a key to store the epoch
+pub fn is_epoch_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+                DbKeySeg::AddressSeg(ADDRESS),
+                DbKeySeg::StringSeg(_prefix),
+                DbKeySeg::StringSeg(_hash),
+                DbKeySeg::StringSeg(e),
+            ] if e == EPOCH_KEY_SEGMENT)
+}
+
+/// Return true if the storage key is a key to store the `seen`
+pub fn is_seen_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+                DbKeySeg::AddressSeg(ADDRESS),
+                DbKeySeg::StringSeg(_prefix),
+                DbKeySeg::StringSeg(_hash),
+                DbKeySeg::StringSeg(e),
+            ] if e == SEEN_KEY_SEGMENT)
 }
 
 impl From<&EthereumEvent> for Keys<EthereumEvent> {
@@ -181,8 +230,6 @@ impl From<&Epoch> for Keys<EthereumProof<VotingPowersMap>> {
 #[cfg(test)]
 mod test {
     use assert_matches::assert_matches;
-    use namada_core::ledger::eth_bridge::ADDRESS;
-    use namada_core::types::storage::DbKeySeg;
 
     use super::*;
 
@@ -259,6 +306,7 @@ mod test {
                 keys.seen(),
                 keys.seen_by(),
                 keys.voting_power(),
+                keys.epoch(),
             ]
         );
     }
