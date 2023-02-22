@@ -702,8 +702,7 @@ where
 
         let balance =
             rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
-                .await
-                .unwrap_or_default();
+                .await;
         if balance
             < token::Amount::from_uint(
                 governance_parameters.min_proposal_fund,

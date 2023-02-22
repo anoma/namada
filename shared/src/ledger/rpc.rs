@@ -36,7 +36,6 @@ use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::*;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::token::balance_key;
 use crate::types::{storage, token};
 
 /// Query the status of a given transaction.
@@ -137,9 +136,10 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
-) -> Option<token::Amount> {
-    let balance_key = balance_key(token, owner);
-    query_storage_value(client, &balance_key).await
+) -> token::Amount {
+    unwrap_client_response::<C, _>(
+        RPC.vp().token().balance(client, token, owner).await,
+    )
 }
 
 /// Get account's public key stored in its storage sub-space
