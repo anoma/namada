@@ -1,6 +1,7 @@
 mod helpers;
 
 use std::num::NonZeroU64;
+use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use namada::eth_bridge::oracle;
@@ -13,10 +14,12 @@ use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada_apps::wallet::defaults::bertha_address;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
+use namada_core::types::ethereum_events::{
+    EthereumEvent, TransferToEthereum, TransferToNamada,
+};
+use namada_core::types::token::Amount;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::{
@@ -158,8 +161,11 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
 /// 2. We can query the bridge pool and it is non-empty.
 /// 3. We request a proof of inclusion of the transfer into the
 ///    bridge pool.
-#[test]
-fn test_add_to_bridge_pool() {
+/// 4. We submit an Ethereum event indicating that the transfer
+///    has been relayed.
+/// 5. We check that the event is removed from the bridge pool.
+#[tokio::test]
+async fn test_bridge_pool_e2e() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 40;
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
     const QUERY_TIMEOUT_SECONDS: u64 = 40;
@@ -193,7 +199,12 @@ fn test_add_to_bridge_pool() {
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::EventsEndpoint,
     );
-
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::EventsEndpoint,
+    );
     let mut namadan_ledger = run_as!(
         test,
         SOLE_VALIDATOR,
@@ -209,7 +220,7 @@ fn test_add_to_bridge_pool() {
         .exp_string("Tendermint node started")
         .unwrap();
     namadan_ledger.exp_string("Committed block hash").unwrap();
-    let _bg_ledger = namadan_ledger.background();
+    let bg_ledger = namadan_ledger.background();
 
     let ledger_addr = get_actor_rpc(&test, &SOLE_VALIDATOR);
     let tx_args = vec![
@@ -281,7 +292,30 @@ fn test_add_to_bridge_pool() {
     .to_string();
     hash.remove(0);
     hash.truncate(hash.len() - 2);
-    let relayer_address = bertha_address().to_string();
+
+    // get the randomly generated address for Bertha.
+    let regex = expectrl::Regex(r#""sender": "atest[0-9a-z]+","#);
+    let mut berthas_addr = String::from_utf8(
+        namadar
+            .session
+            .expect(regex)
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap()
+    .split_ascii_whitespace()
+    .last()
+    .unwrap()
+    .trim()
+    .to_string();
+    berthas_addr.remove(0);
+    berthas_addr.pop();
+    berthas_addr.pop();
+    let berthas_addr = Address::from_str(&berthas_addr).unwrap();
+
+    let relayer_address = berthas_addr.to_string();
     let proof_args = vec![
         "ethereum-bridge-pool",
         "construct-proof",
@@ -296,6 +330,50 @@ fn test_add_to_bridge_pool() {
         run!(test, Bin::Relayer, proof_args, Some(QUERY_TIMEOUT_SECONDS),)
             .unwrap();
     namadar.exp_string(r#"{"hashes":["#).unwrap();
+
+    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
+    // address that would only work for e2e tests involving a single
+    // validator node - this should become an attribute of the validator under
+    // test once the linked issue is implemented
+    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
+    let mut client =
+        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+
+    let transfers = EthereumEvent::TransfersToEthereum {
+        nonce: 0.into(),
+        transfers: vec![TransferToEthereum {
+            amount: Amount::whole(100),
+            asset: EthAddress::from_str(&wnam_address).expect("Test failed"),
+            receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
+            gas_amount: Amount::whole(10),
+            sender: berthas_addr.clone(),
+            gas_payer: berthas_addr.clone(),
+        }],
+        relayer: berthas_addr,
+    };
+
+    client.send(&transfers).await.unwrap();
+    let mut ledger = bg_ledger.foreground();
+    ledger
+        .exp_string(
+            "Applying state updates derived from Ethereum events found in \
+             protocol transaction",
+        )
+        .unwrap();
+    let _bg_ledger = ledger.background();
+    let mut namadar = run!(
+        test,
+        Bin::Relayer,
+        [
+            "ethereum-bridge-pool",
+            "query",
+            "--ledger-address",
+            &ledger_addr,
+        ],
+        Some(QUERY_TIMEOUT_SECONDS),
+    )
+    .unwrap();
+    namadar.exp_string("Bridge pool is empty.").unwrap();
 }
 
 /// Tests transfers of wNAM ERC20s from Ethereum are treated differently to
