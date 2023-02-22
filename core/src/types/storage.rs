@@ -1306,7 +1306,7 @@ pub mod testing {
     /// Generate an arbitrary [`Key`] other than a validity predicate key.
     pub fn arb_key_no_vp() -> impl Strategy<Value = Key> {
         // a key from key segments
-        collection::vec(arb_key_seg(), 1..5)
+        collection::vec(arb_key_seg(), 2..5)
             .prop_map(|segments| Key { segments })
     }
 
