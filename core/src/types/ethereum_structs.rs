@@ -50,6 +50,12 @@ impl From<BlockHeight> for Uint256 {
     }
 }
 
+impl<'a> From<&'a BlockHeight> for &'a Uint256 {
+    fn from(height: &'a BlockHeight) -> Self {
+        &height.inner
+    }
+}
+
 impl Add for BlockHeight {
     type Output = BlockHeight;
 

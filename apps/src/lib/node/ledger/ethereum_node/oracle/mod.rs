@@ -1,25 +1,62 @@
 pub mod control;
 
-use std::ops::Deref;
+use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
 
 use clarity::Address;
-use eyre::{eyre, Result};
+use eyre::eyre;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
+use thiserror::Error;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::task::LocalSet;
+use tokio::time::Instant;
 #[cfg(not(test))]
 use web30::client::Web3;
+#[cfg(not(test))]
+use web30::jsonrpc::error::Web3Error;
 
 use super::events::{signatures, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
+use crate::timeouts::TimeoutStrategy::LinearBackoff;
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
+const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(20);
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Ethereum node has fallen out of sync")]
+    FallenBehind,
+    #[error(
+        "Couldn't get the latest synced Ethereum block height from the RPC \
+         endpoint: {0}"
+    )]
+    #[allow(dead_code)]
+    FetchHeight(String),
+    #[error(
+        "Couldn't check for events ({0} from {1}) with the RPC endpoint: {2}"
+    )]
+    CheckEvents(String, Address, String),
+    #[error("Could not send all bridge events ({0} from {1}) to the shell")]
+    Channel(String, Address),
+    #[error(
+        "Need more confirmations for oracle to continue processing blocks."
+    )]
+    MoreConfirmations,
+}
+
+/// The result of querying an Ethereum nodes syncing status.
+pub enum SyncStatus {
+    /// The fullnode is syncing.
+    #[allow(dead_code)]
+    Syncing,
+    /// The fullnode is synced up to the given block height.
+    AtHeight(Uint256),
+}
 
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
@@ -34,6 +71,8 @@ pub struct Oracle {
     last_processed_block: last_processed_block::Sender,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
+    /// How long the oracle should allow the fullnode to be unresponsive
+    ceiling: Duration,
     /// A channel for controlling and configuring the oracle.
     control: control::Receiver,
 }
@@ -54,14 +93,39 @@ impl Oracle {
         sender: BoundedSender<EthereumEvent>,
         last_processed_block: last_processed_block::Sender,
         backoff: Duration,
+        ceiling: Duration,
         control: control::Receiver,
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
             backoff,
+            ceiling,
             last_processed_block,
             control,
+        }
+    }
+
+    /// Check if the fullnode we are connected
+    /// to is syncing or is up to date with the
+    /// Ethereum (an return the block height).
+    ///
+    /// Note that the syncing call may return false
+    /// inaccurately. In that case, we must check if the block
+    /// number is 0 or not.
+    #[cfg(not(test))]
+    async fn syncing(&self) -> Result<SyncStatus, Error> {
+        match self.client.eth_block_number().await {
+            Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
+            Ok(height) => match &*self.last_processed_block.borrow() {
+                Some(last) if <&Uint256>::from(last) < &height => {
+                    Ok(SyncStatus::AtHeight(height))
+                }
+                None => Ok(SyncStatus::AtHeight(height)),
+                _ => Err(Error::FallenBehind),
+            },
+            Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
+            Err(error) => Err(Error::FetchHeight(error.to_string())),
         }
     }
 
@@ -82,10 +146,6 @@ impl Oracle {
             }
         }
         true
-    }
-
-    async fn sleep(&self) {
-        tokio::time::sleep(self.backoff).await;
     }
 }
 
@@ -126,6 +186,7 @@ pub fn run_oracle(
                         sender,
                         last_processed_block,
                         DEFAULT_BACKOFF,
+                        DEFAULT_CEILING,
                         control,
                     );
                     run_oracle_aux(oracle).await;
@@ -164,40 +225,50 @@ async fn run_oracle_aux(mut oracle: Oracle) {
         }
     };
 
-    // Initialize a queue to keep events which are awaiting a certain number of
-    // confirmations
-    let mut pending: Vec<PendingEvent> = Vec::new();
-
     let mut next_block_to_process = config.start_block.clone();
 
     loop {
+        let next_block = next_block_to_process.clone();
         tracing::info!(
             ?next_block_to_process,
             "Checking Ethereum block for bridge events"
         );
-        tokio::select! {
-            result = process(&oracle, &config, &mut pending, next_block_to_process.clone()) => {
-                match result {
-                    Ok(()) => {
-                        oracle.last_processed_block.send_replace(Some(next_block_to_process.clone()));
-                        next_block_to_process += 1.into()
-                    },
-                    Err(error) => tracing::warn!(
-                        ?error,
-                        block = ?next_block_to_process,
-                        "Error while trying to process Ethereum block"
-                    ),
+        let deadline = Instant::now() + oracle.ceiling;
+        let res = LinearBackoff {delta: oracle.backoff}.timeout(deadline, || async {
+            tokio::select! {
+                result = process(&oracle, &config, next_block.clone()) => {
+                    match result {
+                        Ok(()) => {
+                            ControlFlow::Break(Ok(()))
+                        },
+                        Err(error) => {
+                            tracing::warn!(
+                                ?error,
+                                block = ?next_block_to_process,
+                                "Error while trying to process Ethereum block"
+                            );
+                            ControlFlow::Continue(())
+                        }
+                    }
+                },
+                _ = oracle.sender.closed() => {
+                    tracing::info!(
+                        "Ethereum oracle can not send events to the ledger; the \
+                        receiver has hung up. Shutting down"
+                    );
+                    ControlFlow::Break(Err(eyre!("Shutting down.")))
                 }
-            },
-            _ = oracle.sender.closed() => {
-                tracing::info!(
-                    "Ethereum oracle can not send events to the ledger; the \
-                    receiver has hung up. Shutting down"
-                );
-                break;
             }
-        };
-        oracle.sleep().await;
+        }).await;
+
+        if res.is_err() {
+            break;
+        } else {
+            oracle
+                .last_processed_block
+                .send_replace(Some(next_block_to_process.clone()));
+            next_block_to_process += 1.into();
+        }
     }
 }
 
@@ -206,36 +277,28 @@ async fn run_oracle_aux(mut oracle: Oracle) {
 async fn process(
     oracle: &Oracle,
     config: &Config,
-    pending: &mut Vec<PendingEvent>,
     block_to_process: ethereum_structs::BlockHeight,
-) -> Result<()> {
+) -> Result<(), Error> {
+    let mut queue: Vec<PendingEvent> = vec![];
+    let pending = &mut queue;
     // update the latest block height
-    let latest_block = loop {
-        let latest_block = match oracle.eth_block_number().await {
-            Ok(height) => height.into(),
-            Err(error) => {
-                return Err(eyre!(
-                    "Couldn't get the latest synced Ethereum block height \
-                     from the RPC endpoint: {error:?}",
-                ));
-            }
-        };
-        let minimum_latest_block =
-            block_to_process.clone() + config.min_confirmations.into();
-        if minimum_latest_block > latest_block {
-            tracing::debug!(
-                ?block_to_process,
-                ?latest_block,
-                ?minimum_latest_block,
-                "Waiting for enough Ethereum blocks to be synced"
-            );
-            // this isn't an error condition, so we continue in the loop here
-            // with a back off
-            oracle.sleep().await;
-            continue;
-        }
-        break latest_block;
-    };
+
+    let latest_block = match oracle.syncing().await? {
+        SyncStatus::AtHeight(height) => height,
+        SyncStatus::Syncing => return Err(Error::FallenBehind),
+    }
+    .into();
+    let minimum_latest_block =
+        block_to_process.clone() + config.min_confirmations.into();
+    if minimum_latest_block > latest_block {
+        tracing::debug!(
+            ?block_to_process,
+            ?latest_block,
+            ?minimum_latest_block,
+            "Waiting for enough Ethereum blocks to be synced"
+        );
+        return Err(Error::MoreConfirmations);
+    }
     tracing::debug!(
         ?block_to_process,
         ?latest_block,
@@ -269,9 +332,10 @@ async fn process(
             {
                 Ok(logs) => logs,
                 Err(error) => {
-                    return Err(eyre!(
-                        "Couldn't check for events ({sig} from {addr}) with \
-                         the RPC endpoint: {error:?}",
+                    return Err(Error::CheckEvents(
+                        sig.into(),
+                        addr,
+                        error.to_string(),
                     ));
                 }
             };
@@ -332,10 +396,7 @@ async fn process(
             );
         }
         if !oracle.send(confirmed).await {
-            return Err(eyre!(
-                "Could not send all bridge events ({sig} from {addr}) to the \
-                 shell"
-            ));
+            return Err(Error::Channel(sig.into(), addr));
         }
     }
     Ok(())
@@ -441,6 +502,7 @@ mod test_oracle {
                 last_processed_block: last_processed_block_sender,
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
+                ceiling: Duration::from_secs(2),
                 control: control_receiver,
             },
             admin_channel,

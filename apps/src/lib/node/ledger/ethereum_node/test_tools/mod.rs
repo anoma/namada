@@ -14,6 +14,7 @@ pub mod mock_web3_client {
 
     use super::super::events::signatures::*;
     use super::super::{Error, Result};
+    use crate::node::ledger::ethereum_node::oracle::SyncStatus;
 
     /// Commands we can send to the mock client
     #[derive(Debug)]
@@ -120,6 +121,16 @@ pub mod mock_web3_client {
         pub async fn eth_block_number(&self) -> Result<Uint256> {
             self.check_cmd_channel();
             Ok(self.0.borrow().latest_block_height.clone())
+        }
+
+        pub async fn syncing(
+            &self,
+        ) -> std::result::Result<SyncStatus, super::super::oracle::Error>
+        {
+            self.eth_block_number()
+                .await
+                .map(SyncStatus::AtHeight)
+                .map_err(|_| super::super::oracle::Error::FallenBehind)
         }
 
         /// Gets the events (for the appropriate signature) that
