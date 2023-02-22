@@ -1582,7 +1582,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
-    use crate::config::{self, get_default_namada_folder, TendermintMode};
+    use crate::config::{self, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
