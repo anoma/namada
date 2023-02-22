@@ -31,16 +31,21 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
-
+    println!("hey one");
+    println!("{:?}", shell.proposal_data);
     for id in std::mem::take(&mut shell.proposal_data) {
+        println!("in the loop");
         let proposal_funds_key = gov_storage::get_funds_key(id);
         let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
-
+        println!("found some keys bro");
+        println!("{:?}", &proposal_funds_key);
         let funds = shell
             .read_storage_key::<token::Amount>(&proposal_funds_key)
             .ok_or_else(|| {
                 Error::BadProposal(id, "Invalid proposal funds.".to_string())
             })?;
+        println!("found some funds bro");
+
         let proposal_end_epoch = shell
             .read_storage_key::<Epoch>(&proposal_end_epoch_key)
             .ok_or_else(|| {
@@ -49,12 +54,13 @@ where
                     "Invalid proposal end_epoch.".to_string(),
                 )
             })?;
-
+        println!("looking for votes");
         let votes =
             get_proposal_votes(&shell.wl_storage, proposal_end_epoch, id);
         let is_accepted = votes.and_then(|votes| {
             compute_tally(&shell.wl_storage, proposal_end_epoch, votes)
         });
+        println!("above transfer address");
 
         let transfer_address = match is_accepted {
             Ok(true) => {
@@ -67,7 +73,7 @@ where
                             "Invalid proposal author.".to_string(),
                         )
                     })?;
-
+        println!("idk wtf is going on");             
                 let proposal_code_key = gov_storage::get_proposal_code_key(id);
                 let proposal_code =
                     shell.read_storage_key_bytes(&proposal_code_key);
@@ -223,9 +229,11 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::storage_api::governance::{vote_proposal, init_proposal};
     use namada::types::address::testing::established_address_1;
     use namada::types::governance::ProposalVote;
+    use namada::types::token::Amount;
     use namada::types::transaction::governance::{VoteProposalData, InitProposalData};    
     use std::collections::HashMap;
 
@@ -360,14 +368,15 @@ mod tests {
         let (mut shell, _) = test_utils::setup(3);
         let epoch = Epoch::default();
 
-
+        let mut gov_params = GovParams::default();
+        gov_params.init_storage(&mut shell.wl_storage.storage);
         // we don't bother setting up the shell to be at the right epoch for
         // this test
         // TODO: maybe commit blocks up here in `TestShell` up until just before
         // the first block of Epoch(9), to be more realistic? As governance
         // proposals should only happen at epoch transitions
 
-
+        println!("{:?}",shell.wl_storage.storage.read(&gov_storage::get_min_proposal_fund_key()));
         // Set up validators and delegations
         let validator_set = read_consensus_validator_set_addresses_with_stake(
             &shell.wl_storage, epoch
@@ -389,7 +398,7 @@ mod tests {
         token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
 
         // Source the proposal author with some tokens
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &established_address_1(), token::Amount::from(100_000_000_000)).unwrap();
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &established_address_1(), token::Amount::whole(10_000)).unwrap();
         
 
         bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
@@ -398,10 +407,9 @@ mod tests {
 
         // set up a proposal in storage
         // proposals must be in sequence starting from one (or zero?)
-        let proposal_id = 0;
+        let proposal_id = 1;
+        shell.proposal_data = HashSet::from([1]);
 
-        let proposal_funds = token::Amount::from(100_000_000);
-        let proposal_funds_key = gov_storage::get_funds_key(proposal_id);
 
         // delegator1 votes yes
         let vote_proposal_data1 = VoteProposalData {
@@ -428,42 +436,56 @@ mod tests {
         };
 
         let vote_proposals = vec![vote_proposal_data1, vote_proposal_data2, vote_proposal_data3];
-        
-        for vote_p in vote_proposals.iter(){
-            vote_proposal(&mut shell.wl_storage, vote_p.to_owned()).unwrap();
-        }
+
 
         let proposal_data = InitProposalData{
-            id: Some(0),
+            id: Some(1),
             /// The proposal content
             content: vec![],
             /// The proposal author address
             author: established_address_1(),
             /// The epoch from which voting is allowed
-            voting_start_epoch: Epoch(1),
+            voting_start_epoch: Epoch(2),
             /// The epoch from which voting is stopped
-            voting_end_epoch: Epoch(2),
+            voting_end_epoch: Epoch(3),
             /// The epoch from which this changes are executed
-            grace_epoch: Epoch(3),
+            grace_epoch: Epoch(4),
             /// The code containing the storage changes
             proposal_code: None,
 
         };
 
         //advance the epoch beforehand
-        // advance_epoch(&mut shell);
+        advance_epoch(&mut shell);
+        println!("{:?}", shell.wl_storage.storage.block.epoch);
         
         init_proposal(&mut shell.wl_storage, proposal_data).unwrap();
 
-        // Let validators vote on the respective proposal
+        let k = gov_storage::get_funds_key(1);
 
-        let mut resp = shim::response::FinalizeBlock::default();
+        let kk: Option<Amount> = shell.read_storage_key(&k);
+        println!("jjjj {}", kk.is_some());
 
         advance_epoch(&mut shell);
+        for vote_p in vote_proposals.iter(){
+            vote_proposal(&mut shell.wl_storage, vote_p.to_owned()).unwrap();
+        }
+        println!("{:?}", shell.wl_storage.storage.block.epoch);
+
+        // shell.proposal_data = HashSet::from([1]);
+
+        // Let validators vote on the respective proposal
+        let mut resp = shim::response::FinalizeBlock::default();
+        
         let mut proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
+        // breaks here
+
+        println!("gotten past the broken point");
 
         println!("{:?}", proposals_result.passed);
+        println!("{:?}", shell.wl_storage.storage.block.epoch);
+
         advance_epoch(&mut shell);
         proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
@@ -480,6 +502,36 @@ mod tests {
             execute_governance_proposals(&mut shell, &mut resp)?;
         println!("{:?}", proposals_result.passed);
 
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
         assert!(
             shell.proposal_data.is_empty(),
             "shell.proposal_data should always be empty after a \
@@ -487,6 +539,7 @@ mod tests {
         );
         assert!(!proposals_result.passed.is_empty());
         assert!(proposals_result.rejected.is_empty());
+        assert!(false);
     //     assert_eq!(
     //         resp.events,
     //         vec![Event {

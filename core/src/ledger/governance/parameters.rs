@@ -81,10 +81,13 @@ impl GovParams {
         } = self;
 
         let min_proposal_fund_key = gov_storage::get_min_proposal_fund_key();
+
         let amount = Amount::whole(*min_proposal_fund);
         storage
             .write(&min_proposal_fund_key, encode(&amount))
             .unwrap();
+
+        println!("{:?}", storage.read(&min_proposal_fund_key));
 
         let max_proposal_code_size_key =
             gov_storage::get_max_proposal_code_size_key();

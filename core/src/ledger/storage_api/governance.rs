@@ -52,6 +52,8 @@ where
     let funds_key = storage::get_funds_key(proposal_id);
     storage.write(&funds_key, min_proposal_funds)?;
 
+    println!("{:?}", &funds_key);
+
     // this key must always be written for each proposal
     let committing_proposals_key =
         storage::get_committing_proposals_key(proposal_id, data.grace_epoch.0);
@@ -81,6 +83,7 @@ where
             delegation,
         );
         storage.write(&vote_key, data.vote.clone())?;
+
     }
     Ok(())
 }
