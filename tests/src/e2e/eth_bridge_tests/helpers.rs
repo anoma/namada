@@ -102,7 +102,7 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
+        ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
