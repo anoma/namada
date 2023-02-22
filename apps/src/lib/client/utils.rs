@@ -267,7 +267,7 @@ pub async fn join_network(
             &tendermint_node_key.ref_to(),
             &genesis_config,
         ) {
-            println!(
+            eprintln!(
                 "The current validator is not valid for chain {}.",
                 chain_id.as_str()
             );
@@ -1072,12 +1072,12 @@ pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
 }
 
 fn is_valid_validator_for_current_chain(
-    validator_pk: &common::PublicKey,
+    tendermint_node_pk: &common::PublicKey,
     genesis_config: &GenesisConfig,
 ) -> bool {
     genesis_config.validator.iter().any(|(_alias, config)| {
         if let Some(tm_node_key) = &config.tendermint_node_key {
-            tm_node_key.0.eq(&validator_pk.to_string())
+            tm_node_key.0.eq(&tendermint_node_pk.to_string())
         } else {
             false
         }
