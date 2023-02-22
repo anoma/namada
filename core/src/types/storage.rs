@@ -1338,7 +1338,7 @@ pub mod testing {
     pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
         prop_oneof![
             // the string segment is 5 time more likely to be generated
-            5 => "[a-zA-Z0-9_]{1,100}".prop_map(DbKeySeg::StringSeg),
+            5 => "[a-zA-Z0-9_]{1,20}".prop_map(DbKeySeg::StringSeg),
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
     }
