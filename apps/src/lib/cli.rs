@@ -1577,7 +1577,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Convert a public key to a tendermint address.")
+                .about(
+                    "Convert a validator's consensus public key to a \
+                     Tendermint address.",
+                )
                 .add_args::<args::PkToTmAddress>()
         }
     }
@@ -3424,11 +3427,10 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                RAW_PUBLIC_KEY.def().about(
-                    "The public key to be converted to tendermint address.",
-                ),
-            )
+            app.arg(RAW_PUBLIC_KEY.def().about(
+                "The consensus public key to be converted to Tendermint \
+                 address.",
+            ))
         }
     }
 
