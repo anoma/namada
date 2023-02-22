@@ -39,7 +39,7 @@ cp -r backup-pregenesis/* .namada/pre-genesis/
 1. Wait for the genesis file to be ready, `CHAIN_ID`.
 2. Join the network with the `CHAIN_ID`
 ``` bash
-export CHAIN_ID="public-testnet-3.0.81edd4d6eb6"
+export CHAIN_ID="public-testnet-4.0.16a35d789f4"
 namada client utils join-network \
 --chain-id $CHAIN_ID --genesis-validator $ALIAS
 ```
