@@ -26,6 +26,7 @@ use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
+use namada_apps::config::genesis::genesis_config::TokenAccountConfig;
 use serde_json::json;
 use setup::constants::*;
 
@@ -943,8 +944,31 @@ fn masp_incentives() -> Result<()> {
                 min_num_of_blocks: 1,
                 ..genesis.parameters
             };
+            let token = genesis
+                .token
+                .into_iter()
+                .map(|(token, account_config)|
+                     (token,
+                      TokenAccountConfig {
+                          balances:
+                          Some(account_config
+                               .balances
+                               .into_iter()
+                               .flat_map(|m| m.into_keys())
+                               .map(|validator| {
+                                   if validator == ALBERT || validator == BERTHA {
+                                       (validator, 100u64)
+                                   } else {
+                                       (validator, 0u64)
+                                   }
+                          }).collect()),
+                          ..account_config
+                      },
+                     ))
+                .collect();
             GenesisConfig {
                 parameters,
+                token,
                 ..genesis
             }
         },
@@ -1047,7 +1071,10 @@ fn masp_incentives() -> Result<()> {
 
     let amt20 = token::Amount::from_str("20").unwrap();
     let amt30 = token::Amount::from_str("30").unwrap();
-
+    print!("---------------------------------------------------------");
+    let str = client.exp_string(&format!("NAM:"));
+    print!("{:?}", str);
+    print!("---------------------------------------------------------");
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
         test,
@@ -1063,6 +1090,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    // 200 BTC in total, 20 in the shielded pool
+    // 10% locked
     client.exp_string(&format!(
         "NAM: {}",
         (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
