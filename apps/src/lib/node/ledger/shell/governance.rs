@@ -442,34 +442,50 @@ mod tests {
             /// The epoch from which voting is allowed
             voting_start_epoch: Epoch(1),
             /// The epoch from which voting is stopped
-            voting_end_epoch: Epoch(1),
+            voting_end_epoch: Epoch(2),
             /// The epoch from which this changes are executed
-            grace_epoch: Epoch(1),
+            grace_epoch: Epoch(3),
             /// The code containing the storage changes
             proposal_code: None,
 
         };
 
         //advance the epoch beforehand
-        advance_epoch(&mut shell);
+        // advance_epoch(&mut shell);
         
         init_proposal(&mut shell.wl_storage, proposal_data).unwrap();
 
         // Let validators vote on the respective proposal
-        return Ok(());
 
         let mut resp = shim::response::FinalizeBlock::default();
 
-        return Ok(());
-        let proposals_result =
+        advance_epoch(&mut shell);
+        let mut proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
+
+        println!("{:?}", proposals_result.passed);
+        advance_epoch(&mut shell);
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
+
+        advance_epoch(&mut shell);
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}",proposals_result.passed);
+
+        advance_epoch(&mut shell);
+
+        proposals_result =
+            execute_governance_proposals(&mut shell, &mut resp)?;
+        println!("{:?}", proposals_result.passed);
 
         assert!(
             shell.proposal_data.is_empty(),
             "shell.proposal_data should always be empty after a \
              `execute_governance_proposals` call"
         );
-        assert!(proposals_result.passed.is_empty());
+        assert!(!proposals_result.passed.is_empty());
         assert!(proposals_result.rejected.is_empty());
     //     assert_eq!(
     //         resp.events,
