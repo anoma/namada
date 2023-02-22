@@ -199,8 +199,6 @@ async fn test_bridge_pool_e2e() {
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::EventsEndpoint,
     );
-    // TODO(namada#1061): need to start up a fake Ethereum node here for the
-    // oracle to connect to, to avoid errors in the ledger logs
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
