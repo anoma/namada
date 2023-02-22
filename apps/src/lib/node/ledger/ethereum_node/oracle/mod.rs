@@ -21,7 +21,7 @@ use web30::jsonrpc::error::Web3Error;
 use super::events::{signatures, PendingEvent};
 #[cfg(test)]
 use super::test_tools::mock_web3_client::Web3;
-use crate::timeouts::TimeoutStrategy::LinearBackoff;
+use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
@@ -234,7 +234,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             "Checking Ethereum block for bridge events"
         );
         let deadline = Instant::now() + oracle.ceiling;
-        let res = LinearBackoff {delta: oracle.backoff}.timeout(deadline, || async {
+        let res = TimeoutStrategy::Constant(oracle.backoff).timeout(deadline, || async {
             tokio::select! {
                 result = process(&oracle, &config, next_block.clone()) => {
                     match result {
@@ -836,7 +836,7 @@ mod test_oracle {
         // check that the oracle indeed processes the confirmed blocks
         for height in 0u64..confirmed_block_height + 1 {
             let block_processed =
-                timeout(Duration::from_secs(5), blocks_processed_recv.recv())
+                timeout(Duration::from_secs(3), blocks_processed_recv.recv())
                     .await
                     .expect("Timed out waiting for block to be checked")
                     .unwrap();
