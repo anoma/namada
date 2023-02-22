@@ -13,19 +13,14 @@ pub const ORACLE_CHANNEL_BUFFER_SIZE: usize = 1000;
 /// The mode in which to run the Ethereum bridge.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mode {
-    /// Run `geth` in a subprocess, exposing an Ethereum
-    /// JSON-RPC endpoint at [`DEFAULT_ORACLE_RPC_ENDPOINT`]. By default, the
-    /// oracle is configured to listen for events from the Ethereum bridge
-    /// smart contracts using this endpoint.
-    Managed,
-    /// Do not run `geth`. The oracle will listen to the Ethereum JSON-RPC
-    /// endpoint as specified in the `oracle_rpc_endpoint` setting.
-    Remote,
-    /// Do not start a managed `geth` subprocess. Instead of the oracle
-    /// listening for events using a Ethereum JSON-RPC endpoint, an endpoint
-    /// will be exposed by the ledger itself for submission of Borsh-
-    /// serialized [`EthereumEvent`]s. Mostly useful for testing purposes.
-    EventsEndpoint,
+    /// The oracle will listen to the Ethereum JSON-RPC endpoint as
+    /// specified in the `oracle_rpc_endpoint` setting.
+    RemoteEndpoint,
+    /// Instead of the oracle listening for events using an Ethereum
+    /// JSON-RPC endpoint, an endpoint will be exposed by the ledger
+    /// itself for submission of Borsh-serialized [`EthereumEvent`]
+    /// instances. Mostly useful for testing purposes.
+    SelfHostedEndpoint,
     /// Do not run any components of the Ethereum bridge.
     Off,
 }
@@ -47,7 +42,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            mode: Mode::Managed,
+            mode: Mode::RemoteEndpoint,
             oracle_rpc_endpoint: DEFAULT_ORACLE_RPC_ENDPOINT.to_owned(),
             channel_buffer_size: ORACLE_CHANNEL_BUFFER_SIZE,
         }

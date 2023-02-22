@@ -53,7 +53,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use super::ethereum_node::oracle::{self, last_processed_block};
+use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -95,7 +95,7 @@ pub enum Error {
     #[error("{0}")]
     Tendermint(tendermint_node::Error),
     #[error("{0}")]
-    Ethereum(super::ethereum_node::Error),
+    Ethereum(super::ethereum_oracle::Error),
     #[error("Server error: {0}")]
     TowerServer(String),
     #[error("{0}")]

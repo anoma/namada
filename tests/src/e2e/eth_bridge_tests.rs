@@ -137,7 +137,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
+        ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
     );
 
     // Start the ledger as a validator
@@ -197,13 +197,7 @@ async fn test_bridge_pool_e2e() {
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
-    );
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
+        ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
     );
     let mut namadan_ledger = run_as!(
         test,
@@ -427,7 +421,7 @@ async fn test_wnam_transfer() -> Result<()> {
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::EventsEndpoint,
+        ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
@@ -528,7 +522,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Remote,
+        ethereum_bridge::ledger::Mode::RemoteEndpoint,
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
