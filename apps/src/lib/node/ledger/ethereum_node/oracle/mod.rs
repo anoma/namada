@@ -504,7 +504,7 @@ mod test_oracle {
                 last_processed_block: last_processed_block_sender,
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
-                ceiling: Duration::from_secs(60),
+                ceiling: DEFAULT_CEILING,
                 control: control_receiver,
             },
             admin_channel,
