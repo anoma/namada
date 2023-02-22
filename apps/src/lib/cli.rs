@@ -1726,13 +1726,19 @@ pub mod args {
         /// command.
         pub fn def(app: App) -> App {
             app.arg(CHAIN_ID_OPT.def().about("The chain ID."))
-                .arg(BASE_DIR.def().about(
-                    "The base directory is where the nodes, client and wallet \
-                     configuration and state is stored. This value can also \
-                     be set via `NAMADA_BASE_DIR` environment variable, but \
-                     the argument takes precedence, if specified. Defaults to \
-                     `$XDG_DATA_HOME/com/anoma.namada`.",
-                ))
+                .arg(
+                    BASE_DIR.def().about(
+                        format!(
+                            "The base directory is where the nodes, client \
+                             and wallet configuration and state is stored. \
+                             This value can also be set via `NAMADA_BASE_DIR` \
+                             environment variable, but the argument takes \
+                             precedence, if specified. Defaults to `{}`.",
+                            get_default_namada_folder()
+                        )
+                        .as_ref(),
+                    ),
+                )
                 .arg(WASM_DIR.def().about(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
