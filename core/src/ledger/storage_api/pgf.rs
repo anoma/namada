@@ -3,8 +3,12 @@
 use crate::ledger::pgf::{storage as pgf_storage, CounsilData};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
+use crate::types::token::{self, Transfer};
 use crate::types::transaction::pgf::{InitCounsil, PgfProjectsUpdate};
 
+use crate::ledger::storage_api::token::transfer as token_transfer;
+
+use super::Error;
 use super::token::Amount;
 
 /// A counsil creation transaction.
@@ -21,7 +25,7 @@ where
         epoch: data.epoch,
         data: data.data,
     };
-    storage.write(&counsil_key, counsil_data);
+    storage.write(&counsil_key, counsil_data)?;
     Ok(())
 }
 
@@ -29,14 +33,21 @@ where
 pub fn update_projects<S>(
     storage: &mut S,
     data: PgfProjectsUpdate,
-) -> storage_api::Result<()>
+) -> storage_api::Result<Address>
 where
     S: StorageRead + StorageWrite,
 {
-    let project_key = pgf_storage::get_cpgf_recipient_key();
-    storage.write(&project_key, data);
+    let pgf_active_counsil = get_current_counsil_address(storage)?;
+    let spent_amount = get_current_spent_amount(storage)?;
+    let (counsil_address, spent_amount) = match (pgf_active_counsil, spent_amount) {
+        (Some(address), Some(amount)) => (address, amount),
+        _ => return Err(storage_api::Error::new_const("There is no active counsil"))
+    };
 
-    Ok(())
+    let project_key = pgf_storage::get_cpgf_recipient_key();
+    storage.write(&project_key, data)?;
+
+    Ok(counsil_address)
 }
 
 /// Check if the provided address is a validator address
@@ -48,7 +59,6 @@ where
 {
     let counsil_key = pgf_storage::get_active_counsil_key();
     let counsil_address: Option<Address> = storage.read(&counsil_key)?;
-    
 
     if let Some(counsil_address) = counsil_address {
         let spending_cap_key = pgf_storage::get_spending_cap_key();
@@ -75,6 +85,16 @@ where
     S: StorageRead + StorageWrite,
 {
     let counsil_key = pgf_storage::get_active_counsil_key();
+    storage.read(&counsil_key)
+}
+
+pub fn get_current_spent_amount<S>(
+    storage: &S,
+) -> storage_api::Result<Option<Amount>>
+where
+    S: StorageRead + StorageWrite,
+{
+    let counsil_key = pgf_storage::get_spent_amount_key();
     storage.read(&counsil_key)
 }
 
@@ -121,4 +141,38 @@ where
 {
     let receipients = pgf_storage::get_cpgf_recipient_key();
     storage.read(&receipients)
+}
+
+pub fn pgf_transfer<S>(
+    storage: &mut S,
+    transfer: Transfer,
+) -> storage_api::Result<Option<Address>> 
+where
+    S: StorageRead + StorageWrite,
+{
+    let pgf_active_counsil = get_current_counsil_address(storage)?;
+    let spent_amount = get_current_spent_amount(storage)?;
+    let (counsil_address, spent_amount) = match (pgf_active_counsil, spent_amount) {
+        (Some(address), Some(amount)) => (address, amount),
+        _ => return Err(Error::SimpleMessage("There is no active counsil"))
+    };
+    
+    let token::Transfer {
+        source,
+        target,
+        token,
+        sub_prefix,
+        amount,
+        key,
+        shielded,
+    } = transfer;
+    
+    token_transfer(
+        storage, &token, &source, &target, amount
+    )?;
+
+    let spent_amount_key = pgf_storage::get_spent_amount_key();
+    storage.write(&spent_amount_key, spent_amount + amount)?;
+    
+    return Ok(Some(counsil_address));
 }

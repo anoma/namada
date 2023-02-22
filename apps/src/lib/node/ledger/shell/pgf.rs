@@ -55,6 +55,7 @@ where
                 )
                 .into();
                 response.events.push(pgf_event);
+                tracing::info!("PGF active transfer with amount {} has been sent to {}.", project.address, project.amount);
             },
             Err(msg) => {
                 tracing::info!("PGF active transfer to {}, failed: {}", &project.address, msg);

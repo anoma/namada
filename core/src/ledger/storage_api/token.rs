@@ -50,7 +50,7 @@ where
             }
         }
         None => {
-            Err(storage_api::Error::new_const("Insufficient source balance"))
+        Err(storage_api::Error::new_const("Insufficient source balance"))
         }
     }
 }
