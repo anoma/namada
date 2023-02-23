@@ -7,7 +7,7 @@ use masp_primitives::transaction::components::{Amount, TxOut};
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
 use namada_vp_prelude::*;
-use ripemd160::{Digest, Ripemd160};
+use ripemd::{Digest, Ripemd160};
 
 /// Generates the current asset type given the current epoch and an
 /// unique token address
