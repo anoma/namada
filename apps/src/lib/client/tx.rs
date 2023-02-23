@@ -1653,7 +1653,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .await;
 
         match result {
-            ProcessTxResponse::Submit(resp) if
+            ProcessTxResponse::Applied(resp) if
             // If a transaction is shielded
                 shielded_tx_epoch.is_some() &&
             // And it is rejected by a VP
@@ -2588,7 +2588,7 @@ pub async fn submit_validator_commission_change(
 /// Capture the result of running a transaction
 enum ProcessTxResponse {
     /// Result of submitting a transaction to the blockchain
-    Submit(TxResponse),
+    Applied(TxResponse),
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
@@ -2599,7 +2599,7 @@ impl ProcessTxResponse {
     /// Get the the accounts that were reported to be initialized
     fn initialized_accounts(&self) -> Vec<Address> {
         match self {
-            Self::Submit(result) => result.initialized_accounts.clone(),
+            Self::Applied(result) => result.initialized_accounts.clone(),
             _ => vec![],
         }
     }
@@ -2660,7 +2660,7 @@ async fn process_tx(
             }
         } else {
             match submit_tx(args.ledger_address.clone(), to_broadcast).await {
-                Ok(result) => (ctx, ProcessTxResponse::Submit(result)),
+                Ok(result) => (ctx, ProcessTxResponse::Applied(result)),
                 Err(err) => {
                     eprintln!(
                         "Encountered error while broadcasting transaction: {}",

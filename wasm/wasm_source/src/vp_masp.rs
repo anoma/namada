@@ -132,9 +132,9 @@ fn validate_tx(
             // 1. One transparent output
             // 2. Asset type must be properly derived
             // 3. Value from the output must be the same as the containing
-            // transfer 
+            // transfer
             // 4. Public key must be the hash of the target
-            
+
             // Satisfies 1.
             if shielded_tx.vout.len() != 1 {
                 debug_log!(
