@@ -642,6 +642,7 @@ async fn maybe_start_ethereum_oracle(
                 eth_sender,
                 control_receiver,
                 last_processed_block_sender,
+                spawner,
             );
 
             EthereumOracleTask::Enabled {
