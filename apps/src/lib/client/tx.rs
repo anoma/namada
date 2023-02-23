@@ -1471,6 +1471,7 @@ async fn gen_shielded_transfer(
 }
 
 /// Unzip an option of a pair into a pair of options
+/// TODO: use `Option::unzip` stabilized in Rust 1.66.0
 fn unzip_option<T, U>(opt: Option<(T, U)>) -> (Option<T>, Option<U>) {
     match opt {
         Some((a, b)) => (Some(a), Some(b)),
