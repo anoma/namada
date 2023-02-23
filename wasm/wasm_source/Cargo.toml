@@ -42,10 +42,12 @@ wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c", optional = true }
+ripemd = "0.1.3"
 
 [dev-dependencies]
 namada = {path = "../../shared"}
 namada_tests = {path = "../../tests"}
+namada_test_utils = {path = "../../test_utils"}
 namada_tx_prelude = {path = "../../tx_prelude"}
 namada_vp_prelude = {path = "../../vp_prelude"}
 # A fork with state machine testing
