@@ -30,6 +30,8 @@ pub struct ValidationMeta {
     /// This field will only evaluate to true if a block
     /// proposer didn't include all decrypted txs in a block.
     pub decrypted_queue_has_remaining_txs: bool,
+    /// Check if a block has decrypted txs.
+    pub has_decrypted_txs: bool,
 }
 
 impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
@@ -45,6 +47,7 @@ where
         let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
             decrypted_queue_has_remaining_txs: false,
+            has_decrypted_txs: false,
             encrypted_txs_bin,
             txs_bin,
         }
@@ -232,41 +235,55 @@ where
                        coming soon to a blockchain near you. Patience."
                     .into(),
             },
-            TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                Some(WrapperTxInQueue {
-                    tx: wrapper,
-                    #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: _,
-                }) => {
-                    if wrapper.tx_hash != tx.hash_commitment() {
-                        TxResult {
-                            code: ErrorCodes::InvalidOrder.into(),
-                            info: "Process proposal rejected a decrypted \
-                                   transaction that violated the tx order \
-                                   determined in the previous block"
-                                .into(),
-                        }
-                    } else if verify_decrypted_correctly(&tx, privkey) {
-                        TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
-                        }
-                    } else {
-                        TxResult {
-                            code: ErrorCodes::InvalidTx.into(),
-                            info: "The encrypted payload of tx was \
-                                   incorrectly marked as un-decryptable"
-                                .into(),
+            TxType::Decrypted(tx) => {
+                metadata.has_decrypted_txs = true;
+                match tx_queue_iter.next() {
+                    Some(WrapperTxInQueue {
+                        tx: wrapper,
+                        #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: _,
+                    }) => {
+                        if wrapper.tx_hash != tx.hash_commitment() {
+                            TxResult {
+                                code: ErrorCodes::InvalidOrder.into(),
+                                info: "Process proposal rejected a decrypted \
+                                       transaction that violated the tx order \
+                                       determined in the previous block"
+                                    .into(),
+                            }
+                        } else if verify_decrypted_correctly(&tx, privkey) {
+                            TxResult {
+                                code: ErrorCodes::Ok.into(),
+                                info: "Process Proposal accepted this \
+                                       transaction"
+                                    .into(),
+                            }
+                        } else {
+                            TxResult {
+                                code: ErrorCodes::InvalidTx.into(),
+                                info: "The encrypted payload of tx was \
+                                       incorrectly marked as un-decryptable"
+                                    .into(),
+                            }
                         }
                     }
+                    None => TxResult {
+                        code: ErrorCodes::ExtraTxs.into(),
+                        info: "Received more decrypted txs than expected"
+                            .into(),
+                    },
                 }
-                None => TxResult {
-                    code: ErrorCodes::ExtraTxs.into(),
-                    info: "Received more decrypted txs than expected".into(),
-                },
-            },
+            }
             TxType::Wrapper(tx) => {
+                // decrypted txs shouldn't show up before wrapper txs
+                if metadata.has_decrypted_txs {
+                    return TxResult {
+                        code: ErrorCodes::InvalidTx.into(),
+                        info: "Decrypted txs should not be proposed before \
+                               wrapper txs"
+                            .into(),
+                    };
+                }
                 // try to allocate space for this encrypted tx
                 if let Err(e) = metadata.encrypted_txs_bin.try_dump(tx_bytes) {
                     return TxResult {
