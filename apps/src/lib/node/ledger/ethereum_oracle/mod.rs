@@ -23,6 +23,7 @@ use web30::jsonrpc::error::Web3Error;
 use self::events::{signatures, PendingEvent};
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
+use super::abortable::AbortableSpawner;
 use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
@@ -172,11 +173,12 @@ pub fn run_oracle(
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
     last_processed_block: last_processed_block::Sender,
+    spawner: &mut AbortableSpawner,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
     // we have to run the oracle in a [`LocalSet`] due to the web30
     // crate
-    tokio::task::spawn_blocking(move || {
+    let blocking_handle = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async move {
             LocalSet::new()
@@ -200,7 +202,13 @@ pub fn run_oracle(
                 })
                 .await
         });
-    })
+    });
+    spawner
+        .spawn_abortable("Ethereum Oracle", move |aborter| async move {
+            blocking_handle.await.unwrap();
+            drop(aborter);
+        })
+        .with_no_cleanup()
 }
 
 /// Given an oracle, watch for new Ethereum events, processing
