@@ -360,10 +360,6 @@ where
             response.validators.push(abci_validator);
         }
 
-        self.wl_storage
-            .commit_genesis()
-            .expect("Must be able to commit genesis state");
-
         Ok(response)
     }
 }
