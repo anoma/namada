@@ -386,7 +386,7 @@ pub async fn submit_init_validator(
                 (validator_address_alias, validator_address.clone())
             }
             _ => {
-                eprintln!("Expected two accounts to be created");
+                eprintln!("Expected one account to be created");
                 safe_exit(1)
             }
         };
