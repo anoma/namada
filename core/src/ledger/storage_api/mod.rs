@@ -40,6 +40,7 @@ pub trait StorageRead {
         &self,
         key: &storage::Key,
     ) -> Result<Option<T>> {
+        tracing::info!("Reading from storage key: {}", key.clone());
         let bytes = self.read_bytes(key)?;
         match bytes {
             Some(bytes) => {
@@ -102,6 +103,7 @@ pub trait StorageWrite {
         key: &storage::Key,
         val: T,
     ) -> Result<()> {
+        tracing::info!("Writing to storage key: {}", key.clone());
         let bytes = val.try_to_vec().into_storage_result()?;
         self.write_bytes(key, bytes)
     }
