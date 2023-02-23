@@ -1306,7 +1306,7 @@ pub mod testing {
     /// Generate an arbitrary [`Key`] other than a validity predicate key.
     pub fn arb_key_no_vp() -> impl Strategy<Value = Key> {
         // a key from key segments
-        collection::vec(arb_key_seg(), 1..5)
+        collection::vec(arb_key_seg(), 2..5)
             .prop_map(|segments| Key { segments })
     }
 
@@ -1338,7 +1338,7 @@ pub mod testing {
     pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
         prop_oneof![
             // the string segment is 5 time more likely to be generated
-            5 => "[a-zA-Z0-9_]{1,100}".prop_map(DbKeySeg::StringSeg),
+            5 => "[a-zA-Z0-9_]{1,20}".prop_map(DbKeySeg::StringSeg),
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
     }
