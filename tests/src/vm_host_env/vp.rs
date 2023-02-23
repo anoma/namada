@@ -49,6 +49,8 @@ pub struct TestVpEnv {
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
+    #[cfg(not(feature = "mainnet"))]
+    pub has_valid_pow: bool,
 }
 
 impl Default for TestVpEnv {
@@ -75,6 +77,8 @@ impl Default for TestVpEnv {
             result_buffer: None,
             vp_wasm_cache,
             vp_cache_dir,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
         }
     }
 }
@@ -246,14 +250,16 @@ mod native_vp_host_env {
                                 write_log,
                                 iterators,
                                 gas_meter,
-                            tx,
-                            tx_index,
+                                tx,
+                                tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -269,6 +275,8 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
+                                #[cfg(not(feature = "mainnet"))]
+                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -290,14 +298,16 @@ mod native_vp_host_env {
                                 write_log,
                                 iterators,
                                 gas_meter,
-                            tx,
-                            tx_index,
+                                tx,
+                                tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -313,6 +323,8 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
+                                #[cfg(not(feature = "mainnet"))]
+                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -332,7 +344,6 @@ mod native_vp_host_env {
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-    native_host_fn!(vp_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(vp_iter_pre_next(iter_id: u64) -> i64);
     native_host_fn!(vp_iter_post_next(iter_id: u64) -> i64);
     native_host_fn!(vp_get_chain_id(result_ptr: u64));
@@ -354,5 +365,6 @@ mod native_vp_host_env {
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64);
+    native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
 }

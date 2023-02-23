@@ -1,15 +1,13 @@
 //! A "faucet" account for testnet.
 //!
-//! This VP allows anyone to withdraw up to [`MAX_FREE_DEBIT`] tokens without
-//! the faucet's signature.
+//! This VP allows anyone to withdraw up to
+//! [`testnet_pow::read_withdrawal_limit`] tokens without the faucet's
+//! signature, but with a valid PoW challenge solution that cannot be replayed.
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::{SignedTxData, *};
+use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
-
-/// Allows anyone to withdraw up to 1_000 tokens in a single tx
-pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
 
 #[validity_predicate]
 fn validate_tx(
@@ -58,10 +56,27 @@ fn validate_tx(
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-                // Debit over `MAX_FREE_DEBIT` has to signed, credit doesn't
-                change >= -MAX_FREE_DEBIT || change >= 0 || *valid_sig
+
+                if change < 0 {
+                    // Allow to withdraw without a sig if there's a valid PoW
+                    if ctx.has_valid_pow() {
+                        let max_free_debit =
+                            testnet_pow::read_withdrawal_limit(
+                                &ctx.pre(),
+                                &addr,
+                            )?;
+                        change >= -max_free_debit.change()
+                    } else {
+                        debug_log!("No PoW solution, a signature is required");
+                        // Debit without a solution has to signed
+                        *valid_sig
+                    }
+                } else {
+                    // credit is permissive
+                    true
+                }
             } else {
-                // If this is not the owner, allow any change
+                // balance changes of other accounts
                 true
             }
         } else if let Some(owner) = key.is_validity_predicate() {
@@ -81,11 +96,13 @@ fn validate_tx(
             // Allow any other key change if authorized by a signature
             *valid_sig
         };
+
         if !is_valid {
             debug_log!("key {} modification failed vp", key);
             return reject();
         }
     }
+
     accept()
 }
 
@@ -98,7 +115,7 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
-    use namada_vp_prelude::key::RefTo;
+    use namada_vp_prelude::key::{RefTo, SigScheme};
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -106,6 +123,9 @@ mod tests {
 
     const VP_ALWAYS_TRUE_WASM: &str =
         "../../wasm_for_tests/vp_always_true.wasm";
+
+    /// Allows anyone to withdraw up to 1_000 tokens in a single tx
+    pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
 
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
@@ -267,7 +287,12 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
+        // Init the VP
         let vp_owner = address::testing::established_address_1();
+        let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
+        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+
         let target = address::testing::established_address_2();
         let token = address::nam();
         let amount = token::Amount::from(amount);
@@ -294,14 +319,21 @@ mod tests {
         assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
     }
 
-    /// Test that a debit of less than or equal to [`MAX_FREE_DEBIT`] tokens without a valid signature is accepted.
+    /// Test that a debit of less than or equal to [`MAX_FREE_DEBIT`] tokens
+    /// without a valid signature but with a valid PoW solution is accepted.
     #[test]
     fn test_unsigned_debit_under_limit_accepted(amount in (..MAX_FREE_DEBIT as u64 + 1)) {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
+        // Init the VP
         let vp_owner = address::testing::established_address_1();
+        let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
+        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+        testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+
         let target = address::testing::established_address_2();
+        let target_key = key::testing::keypair_1();
         let token = address::nam();
         let amount = token::Amount::from(amount);
 
@@ -312,14 +344,32 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
+        // Construct a PoW solution like a client would
+        let challenge = testnet_pow::Challenge::new(&mut tx_env.storage, &vp_owner, target.clone()).unwrap();
+        let solution = challenge.solve();
+        let solution_bytes = solution.try_to_vec().unwrap();
+        // The signature itself doesn't matter and is not being checked in this
+        // test, it's just used to construct `SignedTxData`
+        let sig = key::common::SigScheme::sign(&target_key, &solution_bytes);
+        let signed_solution = SignedTxData {
+            data: Some(solution_bytes),
+            sig,
+        };
+
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-        // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
+            // Don't call `Solution::invalidate_if_valid` - this is done by the
+            // shell's finalize_block.
+            let valid = solution.validate(tx::ctx(), address, target.clone()).unwrap();
+            assert!(valid);
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None).unwrap();
         });
 
-        let vp_env = vp_host_env::take();
-        let tx_data: Vec<u8> = vec![];
+        let mut vp_env = vp_host_env::take();
+        // This is set by the protocol when the wrapper tx has a valid PoW
+        vp_env.has_valid_pow = true;
+        let tx_data: Vec<u8> = signed_solution.try_to_vec().unwrap();
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -337,6 +387,11 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+
+            // Init the VP
+            let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
+            let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
+            testnet_pow::init_faucet_storage(&mut tx_env.storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();

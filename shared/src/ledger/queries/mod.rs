@@ -1,13 +1,17 @@
 //! Ledger read-only queries can be handled and dispatched via the [`RPC`]
 //! defined via `router!` macro.
 
-use shell::{Shell, SHELL};
+// Re-export to show in rustdoc!
+pub use shell::Shell;
+use shell::SHELL;
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
-use vp::{Vp, VP};
+use vp::VP;
+// Re-export to show in rustdoc!
+pub use vp::{Pos, Vp};
 
 use super::storage::{DBIter, StorageHasher, DB};
 use super::storage_api;

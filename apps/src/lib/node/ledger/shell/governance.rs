@@ -74,7 +74,11 @@ where
                     Some(proposal_code) => {
                         let tx = Tx::new(proposal_code, Some(encode(&id)));
                         let tx_type =
-                            TxType::Decrypted(DecryptedTx::Decrypted(tx));
+                            TxType::Decrypted(DecryptedTx::Decrypted {
+                                tx,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow: false,
+                            });
                         let pending_execution_key =
                             gov_storage::get_proposal_execution_key(id);
                         shell

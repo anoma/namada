@@ -6,12 +6,15 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+#[cfg(not(feature = "mainnet"))]
+use namada::core::ledger::testnet_pow;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{GenesisValidator, PosParams};
 use namada::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use namada::types::chain::ChainId;
+use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -28,10 +31,13 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    #[cfg(not(feature = "mainnet"))]
+    use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::address::Address;
+    use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
@@ -109,6 +115,12 @@ pub mod genesis_config {
         // Name of the native token - this must one of the tokens included in
         // the `token` field
         pub native_token: String,
+        #[cfg(not(feature = "mainnet"))]
+        /// Testnet faucet PoW difficulty - defaults to `0` when not set
+        pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+        #[cfg(not(feature = "mainnet"))]
+        /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
+        pub faucet_withdrawal_limit: Option<token::Amount>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -222,17 +234,30 @@ pub mod genesis_config {
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ParametersConfig {
-        // Minimum number of blocks per epoch.
+        /// Max payload size, in bytes, for a tx batch proposal.
+        ///
+        /// Block proposers may never return a `PrepareProposal`
+        /// response containing `txs` with a byte length greater
+        /// than whatever is configured through this parameter.
+        ///
+        /// Note that this parameter's value will always be strictly
+        /// smaller than a Tendermint block's `MaxBytes` consensus
+        /// parameter. Currently, we hard cap `max_proposal_bytes`
+        /// at 90 MiB in Namada, which leaves at least 10 MiB of
+        /// room for header data, evidence and protobuf
+        /// serialization overhead in Tendermint blocks.
+        pub max_proposal_bytes: ProposalBytes,
+        /// Minimum number of blocks per epoch.
         // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
-        // Maximum duration per block (in seconds).
+        /// Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
         pub max_expected_time_per_block: i64,
-        // Hashes of whitelisted vps array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted vps array. `None` value or an empty array
+        /// disables whitelisting.
         pub vp_whitelist: Option<Vec<String>>,
-        // Hashes of whitelisted txs array. `None` value or an empty array
-        // disables whitelisting.
+        /// Hashes of whitelisted txs array. `None` value or an empty array
+        /// disables whitelisting.
         pub tx_whitelist: Option<Vec<String>>,
         /// Filename of implicit accounts validity predicate WASM code
         pub implicit_vp: String,
@@ -242,6 +267,9 @@ pub mod genesis_config {
         pub pos_gain_p: Decimal,
         /// PoS gain d
         pub pos_gain_d: Decimal,
+        #[cfg(not(feature = "mainnet"))]
+        /// Fix wrapper tx fees
+        pub wrapper_tx_fees: Option<token::Amount>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -495,6 +523,10 @@ pub mod genesis_config {
         let GenesisConfig {
             genesis_time,
             native_token,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_pow_difficulty,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_withdrawal_limit,
             validator,
             token,
             established,
@@ -574,6 +606,7 @@ pub mod genesis_config {
                     parameters.max_expected_time_per_block,
                 )
                 .into(),
+            max_proposal_bytes: parameters.max_proposal_bytes,
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
@@ -583,6 +616,7 @@ pub mod genesis_config {
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Decimal::ZERO,
             pos_inflation_amount: 0,
+            wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
         let GovernanceParamsConfig {
@@ -630,6 +664,10 @@ pub mod genesis_config {
         let mut genesis = Genesis {
             genesis_time: genesis_time.try_into().unwrap(),
             native_token,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_pow_difficulty,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_withdrawal_limit,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -678,6 +716,10 @@ pub mod genesis_config {
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
+    #[cfg(not(feature = "mainnet"))]
+    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+    #[cfg(not(feature = "mainnet"))]
+    pub faucet_withdrawal_limit: Option<token::Amount>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -796,6 +838,8 @@ pub struct ImplicitAccount {
     BorshDeserialize,
 )]
 pub struct Parameters {
+    // Max payload size, in bytes, for a tx batch proposal.
+    pub max_proposal_bytes: ProposalBytes,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
@@ -818,6 +862,9 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Fixed Wrapper tx fees
+    #[cfg(not(feature = "mainnet"))]
+    pub wrapper_tx_fees: Option<token::Amount>,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -867,6 +914,7 @@ pub fn genesis() -> Genesis {
             min_duration: namada::types::time::Duration::seconds(600).into(),
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
+        max_proposal_bytes: Default::default(),
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
@@ -877,6 +925,7 @@ pub fn genesis() -> Genesis {
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
+        wrapper_tx_fees: Some(token::Amount::whole(0)),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -952,6 +1001,10 @@ pub fn genesis() -> Genesis {
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
         native_token: address::nam(),
+        #[cfg(not(feature = "mainnet"))]
+        faucet_pow_difficulty: None,
+        #[cfg(not(feature = "mainnet"))]
+        faucet_withdrawal_limit: None,
     }
 }
 

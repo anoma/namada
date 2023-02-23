@@ -5,12 +5,21 @@ use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
+use borsh::BorshSerialize;
+use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 
 use crate::cli::args;
+use super::rpc;
+use crate::cli::context::{WalletAddress, WalletKeypair};
+use crate::cli::{self, args, Context};
+use crate::client::tendermint_rpc_types::TxBroadcastData;
+use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::facade::tendermint_rpc::HttpClient;
+use crate::wallet::Wallet;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
@@ -73,6 +82,7 @@ pub async fn sign_wrapper(
     epoch: Epoch,
     tx: Tx,
     keypair: &common::SecretKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
     namada::ledger::signing::sign_wrapper(args, epoch, tx, keypair).await
 }

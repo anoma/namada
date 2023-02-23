@@ -1,6 +1,7 @@
 //! Namada node CLI.
 
 use eyre::{Context, Result};
+use namada::types::time::Utc;
 use namada_apps::cli::{self, cmds};
 use namada_apps::node::ledger;
 
@@ -11,8 +12,25 @@ pub fn main() -> Result<()> {
     }
     match cmd {
         cmds::NamadaNode::Ledger(sub) => match sub {
-            cmds::Ledger::Run(_) => {
+            cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let wasm_dir = ctx.wasm_dir();
+
+                // Sleep until start time if needed
+                if let Some(time) = args.0 {
+                    if let Ok(sleep_time) =
+                        time.0.signed_duration_since(Utc::now()).to_std()
+                    {
+                        if !sleep_time.is_zero() {
+                            tracing::info!(
+                                "Waiting ledger start time: {:?}, time left: \
+                                 {:?}",
+                                time,
+                                sleep_time
+                            );
+                            std::thread::sleep(sleep_time)
+                        }
+                    }
+                }
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {

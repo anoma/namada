@@ -3,8 +3,10 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::ops::{Add, Sub};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
 
 /// Check if the given `duration` has passed since the given `start.
@@ -106,6 +108,14 @@ impl DateTimeUtc {
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
         chrono::DateTime::to_rfc3339(&self.0)
+    }
+}
+
+impl FromStr for DateTimeUtc {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.parse::<DateTime<Utc>>()?))
     }
 }
 

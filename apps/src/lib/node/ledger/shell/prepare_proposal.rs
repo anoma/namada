@@ -2,6 +2,7 @@
 
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proto::Tx;
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -13,6 +14,13 @@ use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
+// TODO: remove this hard-coded value; Tendermint, and thus
+// Namada uses 20 MiB max block sizes by default; 5 MiB leaves
+// plenty of room for header data, evidence and protobuf serialization
+// overhead
+const MAX_PROPOSAL_SIZE: usize = 5 << 20;
+const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -20,9 +28,10 @@ where
 {
     /// Begin a new block.
     ///
-    /// We include half of the new wrapper txs given to us from the mempool
-    /// by tendermint. The rest of the block is filled with decryptions
-    /// of the wrapper txs from the previously committed block.
+    /// We fill half the block space with new wrapper txs given to us
+    /// from the mempool by tendermint. The rest of the block is filled
+    /// with decryptions of the wrapper txs from the previously
+    /// committed block.
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
@@ -38,12 +47,11 @@ where
             // TODO: Craft the Ethereum state update tx
             // filter in half of the new txs from Tendermint, only keeping
             // wrappers
-            let number_of_new_txs = 1 + req.txs.len() / 2;
+            let mut total_proposal_size = 0;
             #[cfg(feature = "abcipp")]
             let mut txs: Vec<TxRecord> = req
                 .txs
                 .into_iter()
-                .take(number_of_new_txs)
                 .map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -53,12 +61,22 @@ where
                         record::remove(tx_bytes)
                     }
                 })
+                .take_while(|tx_record| {
+                    let new_size = total_proposal_size + tx_record.tx.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE
+                        || tx_record.action != TxAction::Unmodified as i32
+                    {
+                        false
+                    } else {
+                        total_proposal_size = new_size;
+                        true
+                    }
+                })
                 .collect();
             #[cfg(not(feature = "abcipp"))]
             let mut txs: Vec<TxBytes> = req
                 .txs
                 .into_iter()
-                .take(number_of_new_txs)
                 .filter_map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
                         Tx::try_from(tx_bytes.as_slice()).map(process_tx)
@@ -68,16 +86,35 @@ where
                         None
                     }
                 })
+                .take_while(|tx_bytes| {
+                    let new_size = total_proposal_size + tx_bytes.len();
+                    if new_size > HALF_MAX_PROPOSAL_SIZE {
+                        false
+                    } else {
+                        total_proposal_size = new_size;
+                        true
+                    }
+                })
                 .collect();
 
             // decrypt the wrapper txs included in the previous block
-            let decrypted_txs = self.storage.tx_queue.iter().map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
-                })
-                .to_bytes()
-            });
+            let decrypted_txs = self.storage.tx_queue.iter().map(
+                |WrapperTxInQueue {
+                     tx,
+                     #[cfg(not(feature = "mainnet"))]
+                     has_valid_pow,
+                 }| {
+                    Tx::from(match tx.decrypt(privkey) {
+                        Ok(tx) => DecryptedTx::Decrypted {
+                            tx,
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: *has_valid_pow,
+                        },
+                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                    })
+                    .to_bytes()
+                },
+            );
             #[cfg(feature = "abcipp")]
             let mut decrypted_txs: Vec<_> =
                 decrypted_txs.map(record::add).collect();
@@ -195,6 +232,8 @@ mod test_prepare_proposal {
                     0.into(),
                     tx,
                     Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
                 )
                 .try_to_vec()
                 .expect("Test failed"),
@@ -238,8 +277,11 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            expected_decrypted
-                .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
+            expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
+                tx: tx.clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
@@ -250,6 +292,8 @@ mod test_prepare_proposal {
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
             shell.enqueue_tx(wrapper_tx);

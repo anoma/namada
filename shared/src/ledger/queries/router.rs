@@ -250,7 +250,7 @@ macro_rules! try_match_segments {
         $end = $request.path.len();
         match $request.path[$start..$end].parse::<$arg_ty>() {
             Ok(parsed) => {
-                println!("Parsed {}", parsed);
+                // println!("Parsed {}", parsed);
                 $arg = parsed
             },
             Err(_) =>

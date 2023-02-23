@@ -5,6 +5,8 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub use namada;
+
 mod vm_host_env;
 pub use vm_host_env::{ibc, tx, vp};
 #[cfg(test)]

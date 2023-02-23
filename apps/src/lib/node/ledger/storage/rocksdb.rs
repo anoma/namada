@@ -891,11 +891,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
         &'iter self,
         prefix: &Key,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_prefix(self, prefix, Direction::Forward)
-    }
-
-    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter {
-        iter_prefix(self, prefix, Direction::Reverse)
+        iter_prefix(self, prefix)
     }
 
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
@@ -922,7 +918,6 @@ impl<'iter> DBIter<'iter> for RocksDB {
 fn iter_prefix<'iter>(
     db: &'iter RocksDB,
     prefix: &Key,
-    direction: Direction,
 ) -> PersistentPrefixIterator<'iter> {
     let db_prefix = "subspace/".to_owned();
     let prefix = format!("{}{}", db_prefix, prefix);
@@ -937,7 +932,7 @@ fn iter_prefix<'iter>(
     read_opts.set_iterate_upper_bound(upper_prefix);
 
     let iter = db.0.iterator_opt(
-        IteratorMode::From(prefix.as_bytes(), direction),
+        IteratorMode::From(prefix.as_bytes(), Direction::Forward),
         read_opts,
     );
     PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))

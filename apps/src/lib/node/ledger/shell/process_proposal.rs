@@ -1,6 +1,8 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
+use namada::types::internal::WrapperTxInQueue;
+
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
@@ -70,7 +72,7 @@ where
     pub(crate) fn process_single_tx<'a>(
         &self,
         tx_bytes: &[u8],
-        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTx>,
+        tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
     ) -> TxResult {
         let tx = match Tx::try_from(tx_bytes) {
             Ok(tx) => tx,
@@ -106,7 +108,11 @@ where
                         .into(),
                 },
                 TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                    Some(wrapper) => {
+                    Some(WrapperTxInQueue {
+                        tx: wrapper,
+                        #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: _,
+                    }) => {
                         if wrapper.tx_hash != tx.hash_commitment() {
                             TxResult {
                                 code: ErrorCodes::InvalidOrder.into(),
@@ -162,7 +168,14 @@ where
                         let balance =
                             self.get_balance(&tx.fee.token, &fee_payer);
 
-                        if tx.fee.amount <= balance {
+                        // In testnets, tx is allowed to skip fees if it
+                        // includes a valid PoW
+                        #[cfg(not(feature = "mainnet"))]
+                        let has_valid_pow = self.has_valid_pow_solution(&tx);
+                        #[cfg(feature = "mainnet")]
+                        let has_valid_pow = false;
+
+                        if has_valid_pow || Amount::from(MIN_FEE) <= balance {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process proposal accepted this \
@@ -202,7 +215,7 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee};
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::RequestInitChain;
@@ -231,6 +244,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         let tx = Tx::new(
             vec![],
@@ -278,6 +293,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -360,6 +377,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -398,6 +417,15 @@ mod test_process_proposal {
             ..Default::default()
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
+        // reduce address balance to match the 100 token fee
+        let balance_key = token::balance_key(
+            &shell.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .storage
+            .write(&balance_key, Amount::from(99).try_to_vec().unwrap())
+            .unwrap();
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -413,6 +441,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed");
@@ -461,9 +491,15 @@ mod test_process_proposal {
                 0.into(),
                 tx.clone(),
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx))));
+            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            })));
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
@@ -525,6 +561,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         shell.enqueue_tx(wrapper.clone());
 
@@ -584,6 +622,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
         wrapper.tx_hash = Hash([0; 32]);
 
@@ -637,6 +677,8 @@ mod test_process_proposal {
             gas_limit: 0.into(),
             inner_tx,
             tx_hash: hash_tx(&tx),
+            #[cfg(not(feature = "mainnet"))]
+            pow_solution: None,
         };
 
         shell.enqueue_tx(wrapper.clone());
@@ -670,7 +712,11 @@ mod test_process_proposal {
             Some("transaction data".as_bytes().to_owned()),
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted(tx)));
+        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        }));
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
