@@ -36,7 +36,7 @@ pub fn read_data<ENV, T>(
     key: &storage::Key,
 ) -> Result<Option<Data<T>>, storage_api::Error>
 where
-    T: BorshDeserialize,
+    T: BorshDeserialize + std::fmt::Debug,
     ENV: for<'a> VpEnv<'a>,
 {
     let pre = env.read_pre(key)?;

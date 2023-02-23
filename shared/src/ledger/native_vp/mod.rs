@@ -519,7 +519,7 @@ where
             .into_storage_result()
     }
 
-    fn read_pre<T: borsh::BorshDeserialize>(
+    fn read_pre<T: borsh::BorshDeserialize + std::fmt::Debug>(
         &self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
@@ -533,7 +533,7 @@ where
         self.pre().read_bytes(key).map_err(Into::into)
     }
 
-    fn read_post<T: borsh::BorshDeserialize>(
+    fn read_post<T: borsh::BorshDeserialize + std::fmt::Debug>(
         &self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {

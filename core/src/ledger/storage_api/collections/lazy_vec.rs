@@ -391,7 +391,7 @@ impl<T> LazyVec<T> {
 // `LazyVec` methods with borsh encoded values `T`
 impl<T> LazyVec<T>
 where
-    T: BorshSerialize + BorshDeserialize + 'static,
+    T: BorshSerialize + BorshDeserialize + 'static + Debug,
 {
     /// Appends an element to the back of a collection.
     pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>

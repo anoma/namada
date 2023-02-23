@@ -292,7 +292,7 @@ pub fn init_genesis<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::debug!("Initializing PoS genesis");
+    tracing::info!("Initializing PoS genesis\n");
     write_pos_params(storage, params.clone())?;
 
     let mut total_bonded = token::Amount::default();
@@ -300,6 +300,7 @@ where
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
 
+    let mut num_validators = 0;
     for GenesisValidator {
         address,
         tokens,
@@ -309,6 +310,7 @@ where
     } in validators
     {
         total_bonded += tokens;
+        num_validators += 1;
 
         // Insert the validator into a validator set and write its epoched
         // validator data
@@ -370,7 +372,10 @@ where
         )?;
     }
 
-    println!("FINISHED GENESIS\n");
+    tracing::info!(
+        "Finished initializing PoS genesis with {} validators\n",
+        num_validators
+    );
 
     Ok(())
 }
@@ -838,6 +843,7 @@ where
             storage,
             &target_epoch,
             address,
+            "consensus",
         )?;
         validator_state_handle(address).init(
             storage,
@@ -871,6 +877,7 @@ where
                 storage,
                 &target_epoch,
                 &removed,
+                "below-capacity",
             )?;
             validator_state_handle(&removed).set(
                 storage,
@@ -884,6 +891,7 @@ where
                 storage,
                 &target_epoch,
                 address,
+                "consensus",
             )?;
             validator_state_handle(address).init(
                 storage,
@@ -899,6 +907,7 @@ where
                 storage,
                 &target_epoch,
                 address,
+                "below-capacity",
             )?;
             validator_state_handle(address).init(
                 storage,
@@ -997,6 +1006,7 @@ where
                 storage,
                 &epoch,
                 &removed_max_below_capacity,
+                "consensus",
             )?;
             validator_state_handle(&removed_max_below_capacity).set(
                 storage,
@@ -1011,6 +1021,7 @@ where
                 storage,
                 &epoch,
                 validator,
+                "below-capacity",
             )?;
             validator_state_handle(validator).set(
                 storage,
@@ -1027,6 +1038,7 @@ where
                 storage,
                 &epoch,
                 validator,
+                "consensus",
             )?;
         }
     } else {
@@ -1066,6 +1078,7 @@ where
                 storage,
                 &epoch,
                 &removed_min_consensus,
+                "below-capacity",
             )?;
             validator_state_handle(&removed_min_consensus).set(
                 storage,
@@ -1080,6 +1093,7 @@ where
                 storage,
                 &epoch,
                 validator,
+                "consensus",
             )?;
             validator_state_handle(validator).set(
                 storage,
@@ -1094,6 +1108,7 @@ where
                 storage,
                 &epoch,
                 validator,
+                "below-capacity",
             )?;
             validator_state_handle(validator).set(
                 storage,
@@ -1312,17 +1327,26 @@ fn insert_validator_into_set<S>(
     storage: &mut S,
     epoch: &Epoch,
     address: &Address,
+    set_str: &str,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
-    println!(
-        "Inserting validator {} into position {:?} at epoch {}\n",
+    tracing::info!(
+        "Inserting validator {} into position {:?} of the {} set at epoch {}\n",
         address.clone(),
         next_position.clone(),
+        set_str,
         epoch.clone()
     );
+
+    // println!(
+    //     "Inserting validator {} into position {:?} at epoch {}\n",
+    //     address.clone(),
+    //     next_position.clone(),
+    //     epoch.clone()
+    // );
     handle.insert(storage, next_position, address.clone())?;
     validator_set_positions_handle().at(epoch).insert(
         storage,

@@ -51,8 +51,14 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         let current_epoch = self.wl_storage.storage.block.epoch;
+        tracing::info!(
+            "\nFinalizing block height {} in epoch {}",
+            height,
+            current_epoch
+        );
 
         if new_epoch {
+            tracing::info!("Epoch {} is a new epoch\n", current_epoch.0);
             namada::ledger::storage::update_allowed_conversions(
                 &mut self.wl_storage,
             )?;
@@ -367,7 +373,9 @@ where
             .map_err(|_| Error::GasOverflow)?;
 
         self.event_log_mut().log_events(response.events.clone());
-        tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
+        tracing::info!(
+            "\nEnd finalize_block {height} of epoch {current_epoch}\n"
+        );
 
         Ok(response)
     }

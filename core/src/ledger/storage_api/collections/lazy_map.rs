@@ -397,7 +397,7 @@ where
 impl<K, V> LazyMap<K, V, super::Simple>
 where
     K: storage::KeySeg,
-    V: BorshDeserialize + BorshSerialize + 'static,
+    V: BorshDeserialize + BorshSerialize + 'static + Debug,
 {
     /// Inserts a key-value pair into the map.
     ///

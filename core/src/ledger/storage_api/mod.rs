@@ -8,6 +8,8 @@ pub mod key;
 pub mod token;
 pub mod validation;
 
+use std::fmt::Debug;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
@@ -36,18 +38,22 @@ pub trait StorageRead {
 
     /// Storage read Borsh encoded value. It will try to read from the storage
     /// and decode it if found.
-    fn read<T: BorshDeserialize>(
+    fn read<T: BorshDeserialize + Debug>(
         &self,
         key: &storage::Key,
     ) -> Result<Option<T>> {
-        tracing::info!("Reading from storage key: {}", key.clone());
+        tracing::info!("\nReading from storage key: {}", key.clone());
         let bytes = self.read_bytes(key)?;
         match bytes {
             Some(bytes) => {
                 let val = T::try_from_slice(&bytes).into_storage_result()?;
+                tracing::info!("Found value {:?}\n", val);
                 Ok(Some(val))
             }
-            None => Ok(None),
+            None => {
+                tracing::info!("Found value None\n");
+                Ok(None)
+            }
         }
     }
 
@@ -98,12 +104,16 @@ pub trait StorageRead {
 /// Common storage write interface
 pub trait StorageWrite {
     /// Write a value to be encoded with Borsh at the given key to storage.
-    fn write<T: BorshSerialize>(
+    fn write<T: BorshSerialize + Debug>(
         &mut self,
         key: &storage::Key,
         val: T,
     ) -> Result<()> {
-        tracing::info!("Writing to storage key: {}", key.clone());
+        tracing::info!(
+            "\nWriting value {:?} to storage key: {}\n",
+            val,
+            key.clone()
+        );
         let bytes = val.try_to_vec().into_storage_result()?;
         self.write_bytes(key, bytes)
     }

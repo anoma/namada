@@ -105,7 +105,7 @@ where
 
     /// Storage read prior state Borsh encoded value (before tx execution). It
     /// will try to read from the storage and decode it if found.
-    fn read_pre<T: BorshDeserialize>(
+    fn read_pre<T: BorshDeserialize + std::fmt::Debug>(
         &'view self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
@@ -124,7 +124,7 @@ where
     /// Storage read posterior state Borsh encoded value (after tx execution).
     /// It will try to read from the write log first and if no entry found
     /// then from the storage and then decode it if found.
-    fn read_post<T: BorshDeserialize>(
+    fn read_post<T: BorshDeserialize + std::fmt::Debug>(
         &'view self,
         key: &Key,
     ) -> Result<Option<T>, storage_api::Error> {
