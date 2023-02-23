@@ -7,7 +7,6 @@ use thiserror::Error;
 
 use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics05_port::capabilities::Capability;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
@@ -112,7 +111,7 @@ pub fn is_capability_index_key(key: &Key) -> bool {
 }
 
 /// Returns a key of the IBC-related data
-fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
+pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
     let path = Key::parse(path).map_err(Error::StorageKey)?;
     let addr = Address::Internal(InternalAddress::Ibc);
     let key = Key::from(addr.to_db_key());
@@ -164,8 +163,8 @@ pub fn client_state_key(client_id: &ClientId) -> Key {
 pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
     let path = Path::ClientConsensusState(ClientConsensusStatePath {
         client_id: client_id.clone(),
-        epoch: height.revision_number,
-        height: height.revision_height,
+        epoch: height.revision_number(),
+        height: height.revision_height(),
     });
     ibc_key(path.to_string())
         .expect("Creating a key for the consensus state shouldn't fail")
@@ -459,33 +458,6 @@ pub fn port_id(key: &Key) -> Result<PortId> {
         }
         _ => Err(Error::InvalidKey(format!(
             "The key doesn't have a port ID: Key {}",
-            key
-        ))),
-    }
-}
-
-/// Returns a capability from the given capability key
-/// `#IBC/capabilities/<index>`
-pub fn capability(key: &Key) -> Result<Capability> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::StringSeg(index),
-            ..,
-        ] if addr == &Address::Internal(InternalAddress::Ibc)
-            && prefix == "capabilities" =>
-        {
-            let index: u64 = index.raw().parse().map_err(|e| {
-                Error::InvalidPortCapability(format!(
-                    "The key has a non-number index: Key {}, {}",
-                    key, e
-                ))
-            })?;
-            Ok(Capability::from(index))
-        }
-        _ => Err(Error::InvalidPortCapability(format!(
-            "The key doesn't have a capability index: Key {}",
             key
         ))),
     }

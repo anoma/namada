@@ -60,7 +60,7 @@ ark-ec = {version = "0.3", optional = true}
 ark-serialize = {version = "0.3"}
 # We switch off "blake2b" because it cannot be compiled to wasm
 # branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "04ad1eeb28901b57a7599bbe433b3822965dabe8", default-features = false, features = ["std", "borsh"]}
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "e086b235ed6e68929bf73f617dd61cd17b000a56", default-features = false, features = ["std", "borsh"]}
 bech32 = "0.8.0"
 bellman = "0.11.2"
 borsh = "0.9.0"
@@ -72,9 +72,9 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {version = "0.28.0", default-features = false, features = ["std", "serde"], optional = true}
+ibc = {version = "0.28.0", features = ["serde"], optional = true}
 ibc-proto = {version = "0.25.0", default-features = false, optional = true}
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "4faae3b3a1a199df97222fceda936caf844c0b76", default-features = false, features = ["std", "serde"], optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "4faae3b3a1a199df97222fceda936caf844c0b76", features = ["serde"], optional = true}
 ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-proto-rs", rev = "f03c628efab24f606628bac1f901ffc6d9c31da4", default-features = false, optional = true}
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}

@@ -137,6 +137,12 @@ impl StorageRead for Ctx {
             .expect("Cannot convert the ID string"))
     }
 
+    fn get_block_header(
+        &self,
+    ) -> Result<namada_core::types::storage::Header, Error> {
+        Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
+    }
+
     fn get_block_height(
         &self,
     ) -> Result<namada_core::types::storage::BlockHeight, Error> {

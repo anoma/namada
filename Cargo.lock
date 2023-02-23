@@ -824,7 +824,6 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
- "block-padding 0.2.1",
  "generic-array 0.14.6",
 ]
 
@@ -2991,7 +2990,7 @@ dependencies = [
  "dyn-clone",
  "erased-serde",
  "ibc-proto 0.25.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=f03c628efab24f606628bac1f901ffc6d9c31da4)",
- "ics23 0.9.0",
+ "ics23",
  "num-traits 0.2.15",
  "parking_lot 0.12.1",
  "primitive-types",
@@ -3023,7 +3022,7 @@ dependencies = [
  "dyn-clone",
  "erased-serde",
  "ibc-proto 0.25.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=8a4ab6b42e978d5258943c8686d8354781eb43e7)",
- "ics23 0.9.0",
+ "ics23",
  "num-traits 0.2.15",
  "parking_lot 0.12.1",
  "primitive-types",
@@ -3161,7 +3160,7 @@ dependencies = [
  "erased-serde",
  "flex-error",
  "ibc-proto 0.24.1",
- "ics23 0.9.0",
+ "ics23",
  "itertools",
  "num-rational",
  "primitive-types",
@@ -3182,22 +3181,6 @@ dependencies = [
 
 [[package]]
 name = "ics23"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d454cc0a22bd556cc3d3c69f9d75a392a36244634840697a4b9eb81bc5c8ae0"
-dependencies = [
- "anyhow",
- "bytes 1.4.0",
- "hex",
- "prost 0.9.0",
- "ripemd160",
- "sha2 0.9.9",
- "sha3 0.9.1",
- "sp-std",
-]
-
-[[package]]
-name = "ics23"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca44b684ce1859cff746ff46f5765ab72e12e3c06f76a8356db8f9a2ecf43f17"
@@ -3208,7 +3191,7 @@ dependencies = [
  "prost 0.11.6",
  "ripemd",
  "sha2 0.10.6",
- "sha3 0.10.6",
+ "sha3",
 ]
 
 [[package]]
@@ -4130,7 +4113,7 @@ dependencies = [
  "ibc 0.28.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=c6902650d6e5a454d56c5921db90aef2c9bdee9e)",
  "ibc-proto 0.25.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=8a4ab6b42e978d5258943c8686d8354781eb43e7)",
  "ibc-proto 0.25.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=f03c628efab24f606628bac1f901ffc6d9c31da4)",
- "ics23 0.9.0",
+ "ics23",
  "index-set",
  "itertools",
  "libsecp256k1",
@@ -6342,18 +6325,6 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
-dependencies = [
- "block-buffer 0.9.0",
- "digest 0.9.0",
- "keccak",
- "opaque-debug 0.3.0",
-]
-
-[[package]]
-name = "sha3"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bdf0c33fae925bdc080598b84bc15c55e7b9a4a43b3c704da051f977469691c9"
@@ -6462,20 +6433,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp-std"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35391ea974fa5ee869cb094d5b437688fbf3d8127d64d1b9fed5822a1ed39b12"
-
-[[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=04ad1eeb28901b57a7599bbe433b3822965dabe8#04ad1eeb28901b57a7599bbe433b3822965dabe8"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=e086b235ed6e68929bf73f617dd61cd17b000a56#e086b235ed6e68929bf73f617dd61cd17b000a56"
 dependencies = [
  "blake2b-rs",
  "borsh 0.9.4",
  "cfg-if 1.0.0",
- "ics23 0.7.0",
+ "ics23",
  "sha2 0.9.9",
 ]
 
@@ -8928,8 +8893,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "tendermint-light-client"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=a2cd889ae706854e7bf476880a37408d75b4a8e1#a2cd889ae706854e7bf476880a37408d75b4a8e1"

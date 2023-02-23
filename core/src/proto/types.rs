@@ -32,7 +32,7 @@ pub enum Error {
     #[error("Timestamp is empty")]
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
-    InvalidTimestamp(prost_types::TimestampOutOfSystemRangeError),
+    InvalidTimestamp(prost_types::TimestampError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

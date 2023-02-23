@@ -457,35 +457,6 @@ pub enum TransferError {
     NoToken,
 }
 
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
-    type Error = TransferError;
-
-    fn try_from(
-        data: crate::ledger::ibc::data::FungibleTokenPacketData,
-    ) -> Result<Self, Self::Error> {
-        let source =
-            Address::decode(&data.sender).map_err(TransferError::Address)?;
-        let target =
-            Address::decode(&data.receiver).map_err(TransferError::Address)?;
-        let token_str =
-            data.denom.split('/').last().ok_or(TransferError::NoToken)?;
-        let token =
-            Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount =
-            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
-        Ok(Self {
-            source,
-            target,
-            token,
-            sub_prefix: None,
-            amount,
-            key: None,
-            shielded: None,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

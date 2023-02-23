@@ -42,7 +42,6 @@ tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev
 tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "a2cd889ae706854e7bf476880a37408d75b4a8e1"}
 tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "a2cd889ae706854e7bf476880a37408d75b4a8e1"}
 tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "a2cd889ae706854e7bf476880a37408d75b4a8e1"}
-tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "a2cd889ae706854e7bf476880a37408d75b4a8e1"}
 tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "a2cd889ae706854e7bf476880a37408d75b4a8e1"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork

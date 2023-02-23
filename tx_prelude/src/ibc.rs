@@ -11,10 +11,10 @@ use namada_core::types::token::Amount;
 use crate::token::transfer_with_keys;
 use crate::Ctx;
 
-impl IbcActions for Ctx {
+impl IbcStorageContext for Ctx {
     type Error = crate::Error;
 
-    fn read_ibc_data(
+    fn read(
         &self,
         key: &Key,
     ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
@@ -22,7 +22,7 @@ impl IbcActions for Ctx {
         Ok(data)
     }
 
-    fn write_ibc_data(
+    fn write(
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
@@ -31,10 +31,7 @@ impl IbcActions for Ctx {
         Ok(())
     }
 
-    fn delete_ibc_data(
-        &mut self,
-        key: &Key,
-    ) -> std::result::Result<(), Self::Error> {
+    fn delete(&mut self, key: &Key) -> std::result::Result<(), Self::Error> {
         self.delete(key)?;
         Ok(())
     }
@@ -68,4 +65,8 @@ impl IbcActions for Ctx {
         let val = self.get_block_time()?;
         Ok(val)
     }
+}
+
+pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
+    IbcActions::new(ctx)
 }
