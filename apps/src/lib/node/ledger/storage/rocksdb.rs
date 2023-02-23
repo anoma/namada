@@ -242,10 +242,14 @@ impl RocksDB {
     }
 
     /// Dump last known block
-    pub fn dump_last_block(&self, out_file_path: std::path::PathBuf) {
+    pub fn dump_last_block(
+        &self,
+        out_file_path: std::path::PathBuf,
+        historic: bool,
+    ) {
         use std::io::Write;
 
-        // Fine the last block height
+        // Find the last block height
         let height: BlockHeight = types::decode(
             self.0
                 .get("height")
@@ -295,10 +299,15 @@ impl RocksDB {
             }
         };
 
-        // Dump accounts subspace and block height data
-        dump_it("subspace".to_string());
-        let block_prefix = format!("{}/", height.raw());
-        dump_it(block_prefix);
+        let prefix = if historic {
+            // Dump subspace and diffs from last block height
+            height.raw()
+        } else {
+            // Dump only accounts subspace
+            "subspace".to_string()
+        };
+
+        dump_it(prefix);
 
         println!("Done writing to {}", full_path.to_string_lossy());
     }

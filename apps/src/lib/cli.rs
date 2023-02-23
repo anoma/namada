@@ -1631,6 +1631,7 @@ pub mod args {
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
+    const HISTORIC: ArgFlag = flag("historic");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1769,6 +1770,7 @@ pub mod args {
         // TODO: allow to specify height
         // pub block_height: Option<BlockHeight>,
         pub out_file_path: PathBuf,
+        pub historic: bool,
     }
 
     impl Args for LedgerDumpDb {
@@ -1777,9 +1779,12 @@ pub mod args {
             let out_file_path = OUT_FILE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
+            let historic = HISTORIC.parse(matches);
+
             Self {
                 // block_height,
                 out_file_path,
+                historic,
             }
         }
 
@@ -1792,6 +1797,9 @@ pub mod args {
                     "Path for the output file (omitting file extension). \
                      Defaults to \"db_dump.{block_height}.toml\" in the \
                      current working directory.",
+                ))
+                .arg(HISTORIC.def().about(
+                    "If provided, dump also the diff of the last height",
                 ))
         }
     }
