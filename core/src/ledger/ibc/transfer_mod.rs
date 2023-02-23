@@ -1,6 +1,6 @@
 //! IBC module for token transfer
 
-use super::{IbcActions, IbcStorageContext};
+use super::IbcStorageContext;
 use crate::ibc::applications::transfer::context::{
     BankKeeper, TokenTransferContext, TokenTransferKeeper, TokenTransferReader,
 };

@@ -2,7 +2,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use super::{IbcActions, IbcStorageContext};
+use super::super::{IbcActions, IbcStorageContext};
 use crate::ibc::core::context::Router;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};

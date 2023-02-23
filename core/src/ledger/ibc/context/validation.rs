@@ -3,7 +3,7 @@
 use prost::Message;
 use sha2::Digest;
 
-use super::{decode_consensus_state, IbcActions, IbcStorageContext};
+use super::super::{IbcActions, IbcStorageContext};
 use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics02_client::client_state::{
@@ -27,6 +27,8 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::{ContextError, ValidationContext};
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::MockClientState;
+#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc::timestamp::Timestamp;
 use crate::ibc::Height;
 use crate::ibc_proto::google::protobuf::Any;
@@ -619,4 +621,77 @@ where
             _ => unreachable!("The parameter should be initialized"),
         }
     }
+}
+
+/// Helper functions
+impl<C> IbcActions<C>
+where
+    C: IbcStorageContext,
+{
+    fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
+        match self.ctx.read(&key) {
+            Ok(Some(value)) => {
+                let value: [u8; 8] = value.try_into().map_err(|_| {
+                    ContextError::ClientError(ClientError::Other {
+                        description: format!(
+                            "The counter value wasn't u64: Key {}",
+                            key
+                        ),
+                    })
+                })?;
+                Ok(u64::from_be_bytes(value))
+            }
+            Ok(None) => unreachable!("the counter should be initialized"),
+            Err(_) => Err(ContextError::ClientError(ClientError::Other {
+                description: format!("Reading the counter failed: Key {}", key),
+            })),
+        }
+    }
+
+    fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
+        match self.ctx.read(&key) {
+            Ok(Some(value)) => {
+                let value: [u8; 8] = value.try_into().map_err(|_| {
+                    ContextError::ChannelError(ChannelError::Other {
+                        description: format!(
+                            "The counter value wasn't u64: Key {}",
+                            key
+                        ),
+                    })
+                })?;
+                Ok(u64::from_be_bytes(value).into())
+            }
+            // when the sequence has never been used, returns the initial value
+            Ok(None) => Ok(1.into()),
+            Err(_) => {
+                let sequence = storage::port_channel_sequence_id(&key)
+                    .expect("The key should have sequence")
+                    .2;
+                Err(ContextError::ChannelError(ChannelError::Other {
+                    description: format!(
+                        "Reading the next sequence send failed: Sequence {}",
+                        sequence
+                    ),
+                }))
+            }
+        }
+    }
+}
+
+/// Decode ConsensusState from Any
+pub fn decode_consensus_state(
+    consensus_state: Any,
+) -> Result<Box<dyn ConsensusState>, ContextError> {
+    if let Ok(cs) = TmConsensusState::try_from(consensus_state.clone()) {
+        return Ok(cs.into_box());
+    }
+
+    #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+    if let Ok(cs) = MockConsensusState::try_from(consensus_state) {
+        return Ok(cs.into_box());
+    }
+
+    Err(ContextError::ClientError(ClientError::ClientSpecific {
+        description: format!("Unknown consensus state"),
+    }))
 }

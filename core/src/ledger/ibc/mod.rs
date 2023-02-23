@@ -17,16 +17,11 @@ use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL,
 };
 use crate::ibc::applications::transfer::MODULE_ID_STR;
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
-use crate::ibc::core::ics02_client::error::ClientError;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
 use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
-use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::consensus_state::MockConsensusState;
+use crate::ibc::core::{ExecutionContext, ValidationContext};
 use crate::ibc_proto::google::protobuf::Any;
 
 #[allow(missing_docs)]
@@ -108,22 +103,4 @@ where
             }
         }
     }
-}
-
-/// Decode ConsensusState from Any
-pub fn decode_consensus_state(
-    consensus_state: Any,
-) -> Result<Box<dyn ConsensusState>, ContextError> {
-    if let Ok(cs) = TmConsensusState::try_from(consensus_state.clone()) {
-        return Ok(cs.into_box());
-    }
-
-    #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-    if let Ok(cs) = MockConsensusState::try_from(consensus_state) {
-        return Ok(cs.into_box());
-    }
-
-    Err(ContextError::ClientError(ClientError::ClientSpecific {
-        description: format!("Unknown consensus state"),
-    }))
 }
