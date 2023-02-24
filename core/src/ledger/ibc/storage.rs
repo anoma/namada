@@ -16,6 +16,7 @@ use crate::ibc::core::ics24_host::path::{
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
+use crate::ibc::signer::Signer;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
@@ -39,6 +40,8 @@ pub enum Error {
     InvalidPortCapability(String),
     #[error("Denom error: {0}")]
     Denom(String),
+    #[error("IBS signer error: {0}")]
+    IbcSigner(String),
 }
 
 /// IBC storage functions result
@@ -477,18 +480,10 @@ pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
 }
 
 /// Key's prefix for the escrow, burn, or mint account
-pub fn ibc_account_prefix(
-    port_id: &PortId,
-    channel_id: &ChannelId,
-    token: &Address,
-) -> Key {
-    Key::from(token.to_db_key())
-        .push(&MULTITOKEN_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&port_id.to_string().to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&channel_id.to_string().to_db_key())
-        .expect("Cannot obtain a storage key")
+pub fn ibc_account_sub_prefix(port_id: &PortId, channel_id: &ChannelId) -> Key {
+    let sub_prefix =
+        format!("{}/{}/{}", MULTITOKEN_STORAGE_KEY, port_id, channel_id);
+    Key::parse(sub_prefix).expect("Cannot obtain a storage key")
 }
 
 /// Token address from the denom string
@@ -553,4 +548,25 @@ pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
 pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
     matches!(&sub_prefix.segments[0],
              DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
+}
+
+/// Returns true if the key is for IBC_ESCROW
+pub fn is_ibc_escrow_key(key: &Key) -> bool {
+    match key.segments.last() {
+        Some(owner) => {
+            *owner == Address::Internal(InternalAddress::IbcEscrow).to_db_key()
+        }
+        None => false,
+    }
+}
+
+/// Convert IBC signer to a key
+impl TryFrom<Signer> for Key {
+    type Error = Error;
+
+    fn try_from(signer: Signer) -> Result<Self> {
+        let address = Address::decode(signer.as_ref())
+            .map_err(|e| Error::IbcSigner(e.to_string()))?;
+        Ok(Key::from(address.to_db_key()))
+    }
 }

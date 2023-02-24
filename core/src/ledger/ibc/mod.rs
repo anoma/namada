@@ -37,6 +37,7 @@ pub enum Error {
     TokenTransfer(TokenTransferError),
 }
 
+#[derive(Debug)]
 pub struct IbcActions<C>
 where
     C: IbcStorageContext + 'static,
@@ -51,16 +52,20 @@ where
     C: IbcStorageContext + Sync + core::fmt::Debug,
 {
     pub fn new(ctx: &C) -> Self {
-        let mut modules = HashMap::new();
-        let id = ModuleId::from_str(MODULE_ID_STR).expect("should be parsable");
-        let module = TransferModule { ctx };
-        modules.insert(id, Box::new(module) as Box<dyn Module>);
-
-        Self {
+        let mut actions = Self {
             ctx,
-            modules,
+            modules: HashMap::new(),
             ports: HashMap::new(),
-        }
+        };
+        let module_id =
+            ModuleId::from_str(MODULE_ID_STR).expect("should be parsable");
+        let module = TransferModule { ctx: &actions };
+        actions
+            .modules
+            .insert(module_id.clone(), Box::new(module) as Box<dyn Module>);
+        actions.ports.insert(PortId::transfer(), module_id);
+
+        actions
     }
 
     /// Execute according to the message in an IBC transaction or VP

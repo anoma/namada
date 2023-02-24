@@ -1,6 +1,9 @@
 //! IBC module for token transfer
 
-use super::super::IbcStorageContext;
+use core::str::FromStr;
+
+use super::super::{IbcActions, IbcStorageContext};
+use crate::ibc::applications::transfer::coin::PrefixedCoin;
 use crate::ibc::applications::transfer::context::{
     on_acknowledgement_packet, on_acknowledgement_packet_execute,
     on_acknowledgement_packet_validate, on_chan_close_confirm,
@@ -15,26 +18,40 @@ use crate::ibc::applications::transfer::context::{
     on_timeout_packet_execute, on_timeout_packet_validate, BankKeeper,
     TokenTransferContext, TokenTransferKeeper, TokenTransferReader,
 };
+use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
-use crate::ibc::core::ics04_channel::channel::{Counterparty, Order};
+use crate::ibc::core::ics02_client::client_state::ClientState;
+use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
+use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
+use crate::ibc::core::ics04_channel::channel::{
+    ChannelEnd, Counterparty, Order,
+};
 use crate::ibc::core::ics04_channel::context::SendPacketReader;
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::handler::ModuleExtras;
 use crate::ibc::core::ics04_channel::msgs::acknowledgement::Acknowledgement;
-use crate::ibc::core::ics04_channel::packet::Packet;
+use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ConnectionId, PortId,
+    ChannelId, ClientId, ConnectionId, PortId,
+};
+use crate::ibc::core::ics24_host::path::{
+    ChannelEndPath, ClientConsensusStatePath, SeqSendPath,
 };
 use crate::ibc::core::ics26_routing::context::{Module, ModuleOutputBuilder};
+use crate::ibc::core::{ContextError, ValidationContext};
 use crate::ibc::signer::Signer;
+use crate::ledger::ibc::storage;
+use crate::types::address::{Address, InternalAddress};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::token;
 
 #[derive(Debug)]
 pub struct TransferModule<C>
 where
     C: IbcStorageContext + 'static,
 {
-    pub ctx: &'static C,
+    pub ctx: &'static IbcActions<C>,
 }
 
 impl<C> Module for TransferModule<C>
@@ -389,15 +406,177 @@ where
     }
 }
 
-impl<C> SendPacketReader for TransferModule<C> where C: IbcStorageContext {}
+impl<C> SendPacketReader for TransferModule<C>
+where
+    C: IbcStorageContext,
+{
+    fn channel_end(
+        &self,
+        channel_end_path: &ChannelEndPath,
+    ) -> Result<ChannelEnd, ContextError> {
+        ValidationContext::channel_end(self.ctx, channel_end_path)
+    }
 
-impl<C> TokenTransferReader for TransferModule<C> where C: IbcStorageContext {}
+    fn connection_end(
+        &self,
+        connection_id: &ConnectionId,
+    ) -> Result<ConnectionEnd, ContextError> {
+        ValidationContext::connection_end(self.ctx, connection_id)
+    }
 
-impl<C> BankKeeper for TransferModule<C> where C: IbcStorageContext {}
+    fn client_state(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Box<dyn ClientState>, ContextError> {
+        ValidationContext::client_state(self.ctx, client_id)
+    }
+
+    fn client_consensus_state(
+        &self,
+        client_cons_state_path: &ClientConsensusStatePath,
+    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+        ValidationContext::consensus_state(self.ctx, client_cons_state_path)
+    }
+
+    fn get_next_sequence_send(
+        &self,
+        seq_send_path: &SeqSendPath,
+    ) -> Result<Sequence, ContextError> {
+        ValidationContext::get_next_sequence_send(self.ctx, seq_send_path)
+    }
+
+    fn hash(&self, value: &[u8]) -> Vec<u8> {
+        ValidationContext::hash(self.ctx, value)
+    }
+}
+
+impl<C> TokenTransferReader for TransferModule<C>
+where
+    C: IbcStorageContext,
+{
+    type AccountId = Key;
+
+    fn get_port(&self) -> Result<PortId, TokenTransferError> {
+        Ok(PortId::transfer())
+    }
+
+    /// Returns the sub key of the escrow account. The caller needs to prefix
+    /// the token address.
+    fn get_channel_escrow_address(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Self::AccountId, TokenTransferError> {
+        let sub_prefix = storage::ibc_account_sub_prefix(port_id, channel_id);
+        let sub_key = sub_prefix
+            .push(&token::BALANCE_STORAGE_KEY.to_owned())
+            .expect("Creating an escrow key shouldn't fail")
+            .push(&Address::Internal(InternalAddress::IbcEscrow))
+            .expect("Creating an escrow key shouldn't fail");
+        Ok(sub_key)
+    }
+
+    fn is_send_enabled(&self) -> bool {
+        true
+    }
+
+    fn is_receive_enabled(&self) -> bool {
+        true
+    }
+
+    fn denom_hash_string(&self, denom: &PrefixedDenom) -> Option<String> {
+        Some(storage::calc_hash(denom.to_string()))
+    }
+}
+
+impl<C> BankKeeper for TransferModule<C>
+where
+    C: IbcStorageContext,
+{
+    type AccountId = Key;
+
+    fn send_coins(
+        &mut self,
+        from: &Self::AccountId,
+        to: &Self::AccountId,
+        amt: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        let token =
+            Address::decode(amt.denom.base_denom.as_str()).map_err(|_| {
+                TokenTransferError::InvalidCoin {
+                    coin: amt.denom.base_denom.to_string(),
+                }
+            })?;
+
+        // TODO: https://github.com/anoma/namada/issues/1089
+        let amount = if amt.amount > u64::MAX.into() {
+            return Err(TokenTransferError::InvalidCoin {
+                coin: amt.to_string(),
+            });
+        } else {
+            token::Amount::from_str(&amt.amount.to_string())
+                .expect("invalid amount")
+        };
+
+        let src = if storage::is_ibc_escrow_key(from) {
+            Key::from(token.to_db_key()).join(from)
+        } else {
+            // TODO: sending from multitoken address
+            let sender = match from.segments.first() {
+                Some(DbKeySeg::AddressSeg(addr)) => addr,
+                _ => return Err(TokenTransferError::ParseAccountFailure),
+            };
+            token::balance_key(&token, &sender)
+        };
+
+        let dest = if storage::is_ibc_escrow_key(to) {
+            Key::from(token.to_db_key()).join(to)
+        } else {
+            let receiver = match to.segments.first() {
+                Some(DbKeySeg::AddressSeg(addr)) => addr,
+                _ => return Err(TokenTransferError::ParseAccountFailure),
+            };
+            token::balance_key(&token, &receiver)
+        };
+
+        self.ctx
+            .ctx
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
+    }
+
+    fn mint_coins(
+        &mut self,
+        account: &Self::AccountId,
+        amt: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+    }
+
+    /// This function should enable burning of minted tokens in a user account
+    fn burn_coins(
+        &mut self,
+        account: &Self::AccountId,
+        amt: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError>;
+}
 
 impl<C> TokenTransferKeeper for TransferModule<C> where C: IbcStorageContext {}
 
-impl<C> TokenTransferContext for TransferModule<C> where C: IbcStorageContext {}
+impl<C> TokenTransferContext for TransferModule<C>
+where
+    C: IbcStorageContext,
+{
+    type AccountId = Key;
+}
 
 fn into_channel_error(error: TokenTransferError) -> ChannelError {
     ChannelError::AppModule {
