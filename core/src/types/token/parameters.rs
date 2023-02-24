@@ -28,13 +28,13 @@ use crate::types::storage::{Key, KeySeg};
 )]
 pub struct Parameters {
     /// Maximum reward rate
-    max_reward_rate: Decimal,
+    pub max_reward_rate: Decimal,
     /// Shielded Pool nominal derivative gain
-    kd_gain_nom: Decimal,
+    pub kd_gain_nom: Decimal,
     /// Shielded Pool nominal proportional gain for the given token
-    kp_gain_nom: Decimal,
+    pub kp_gain_nom: Decimal,
     /// Locked ratio for the given token
-    locked_ratio_target_key: Decimal,
+    pub locked_ratio_target_key: Decimal,
 }
 
 /// The key for the nominal proportional gain of a shielded pool for a given

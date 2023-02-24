@@ -9,7 +9,6 @@ use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply,
 };
-use namada::ledger::storage::types;
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
 use rust_decimal::Decimal;
@@ -257,16 +256,10 @@ where
             // Init token parameters and last inflation and caching rates
             parameters.init_storage(&address, &mut self.wl_storage);
             self.wl_storage
-                .write(
-                    &token::last_inflation(&address),
-                    last_inflation,
-                )
+                .write(&token::last_inflation(&address), last_inflation)
                 .unwrap();
             self.wl_storage
-                .write(
-                    &token::last_locked_ratio(&address),
-                    last_locked_ratio,
-                )
+                .write(&token::last_locked_ratio(&address), last_locked_ratio)
                 .unwrap();
 
             let vp_code =

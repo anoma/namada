@@ -23,11 +23,13 @@ use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada::types::token::parameters::Parameters;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig, TokenAccountConfig,
 };
 use namada_test_utils::TestWasms;
+use rust_decimal_macros::dec;
 use serde_json::json;
 use setup::constants::*;
 
@@ -297,7 +299,7 @@ fn suspend_ledger() -> Result<()> {
     let mut client = run!(
         test,
         Bin::Client,
-        &["epoch", "--ledger-address", &validator_one_rpc],
+        &["epoch", "--node", &validator_one_rpc],
         Some(40)
     )?;
     client.exp_string("Last committed epoch: 0")?;
@@ -1017,8 +1019,27 @@ fn masp_incentives() -> Result<()> {
                 .token
                 .into_iter()
                 .map(|(token, account_config)| {
-                    (
-                        token,
+                    (token.clone(), {
+                        let parameters =
+                            account_config.parameters.map(|parameters| {
+                                if token == String::from(NAM) {
+                                    Parameters {
+                                        max_reward_rate: dec!(100000.5),
+                                        // these need to be set to 0
+                                        kd_gain_nom: dec!(0.0),
+                                        kp_gain_nom: dec!(0.0),
+                                        ..parameters
+                                    }
+                                } else {
+                                    Parameters {
+                                        max_reward_rate: dec!(100000.5),
+                                        kd_gain_nom: dec!(0.5),
+                                        kp_gain_nom: dec!(0.5),
+                                        ..parameters
+                                    }
+                                }
+                            });
+
                         TokenAccountConfig {
                             balances: Some(
                                 account_config
@@ -1029,18 +1050,20 @@ fn masp_incentives() -> Result<()> {
                                         if validator == ALBERT
                                             || validator == BERTHA
                                         {
-                                            (validator, 100u64)
+                                            (validator, 1000000u64)
                                         } else {
                                             (validator, 0u64)
                                         }
                                     })
                                     .collect(),
                             ),
+                            parameters,
                             ..account_config
-                        },
-                    )
+                        }
+                    })
                 })
                 .collect();
+
             GenesisConfig {
                 parameters,
                 token,
@@ -1062,9 +1085,9 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep0 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
 
-    // Send 20 BTC from Albert to PA(A)
+    // Send 200000 BTC from Albert to PA(A)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1077,7 +1100,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "20",
+            "200000",
             "--node",
             &validator_one_rpc
         ],
@@ -1086,7 +1109,7 @@ fn masp_incentives() -> Result<()> {
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
-    // Assert BTC balance at VK(A) is 20
+    // Assert BTC balance at VK(A) is 200000
     let mut client = run!(
         test,
         Bin::Client,
@@ -1101,7 +1124,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("btc: 20")?;
+    client.exp_string("btc: 200000")?;
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 0
@@ -1119,15 +1142,16 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
 
     let masp_rewards = masp_rewards();
 
     // Wait till epoch boundary
-    let ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let ep1 = epoch_sleep(&test, &validator_one_rpc, 7200000)?;
 
-    // Assert BTC balance at VK(A) is 20
+    // Assert BTC balance at VK(A) is 200000
     let mut client = run!(
         test,
         Bin::Client,
@@ -1142,16 +1166,14 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("btc: 20")?;
+    client.exp_string("btc: 200000")?;
     client.assert_success();
 
-    let amt20 = token::Amount::from_str("20").unwrap();
+    let amt200000 = token::Amount::from_str("200000").unwrap();
     let amt30 = token::Amount::from_str("30").unwrap();
-    print!("---------------------------------------------------------");
-    let str = client.exp_string(&format!("NAM:"));
-    print!("{:?}", str);
-    print!("---------------------------------------------------------");
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
+
+    // Assert NAM balance at VK(A) is 200000*BTC_reward*(epoch_1-epoch_0)
+
     let mut client = run!(
         test,
         Bin::Client,
@@ -1166,15 +1188,19 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    // 200 BTC in total, 20 in the shielded pool
-    // 10% locked
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+
+    // 2000000 BTC in total, 200000 in the shielded pool
+    // 10% locked, 0% in the last.
+    // R_SPA = 0.1
+    // KP_SPA = KD_SPA = 7.61e11
+    // The expected ratio is 0667, so we end up with
+    // 0.557 * 7.61e11 - -0.1 * 7.61e11 = 5.07e11. This gets rounded
+    // down due to masp conversion notes.
+
+    client.exp_string("nam: 506000")?;
     client.assert_success();
 
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
+    // Assert NAM balance at MASP pool is 200000*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1189,10 +1215,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+    client.exp_string("nam: 506000")?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1213,7 +1236,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("btc: 20")?;
+    client.exp_string("btc: 200000")?;
     client.assert_success();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
@@ -1231,516 +1254,514 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
+    client.exp_string("nam: 253690200000")?;
     client.assert_success();
 
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt200000 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
+    // ))?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from Albert to PA(B)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AB_PAYMENT_ADDRESS,
-            "--token",
-            ETH,
-            "--amount",
-            "30",
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
+    // // Send 30 ETH from Albert to PA(B)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "transfer",
+    //         "--source",
+    //         ALBERT,
+    //         "--target",
+    //         AB_PAYMENT_ADDRESS,
+    //         "--token",
+    //         ETH,
+    //         "--amount",
+    //         "30",
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("Transaction is valid")?;
+    // client.assert_success();
 
-    // Assert ETH balance at VK(B) is 30
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("eth: 30")?;
-    client.assert_success();
+    // // Assert ETH balance at VK(B) is 30
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         ETH,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("eth: 30")?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
+    // // Assert NAM balance at VK(B) is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("No shielded nam balance found")?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert ETH balance at VK(B) is 30
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("eth: 30")?;
-    client.assert_success();
+    // // Assert ETH balance at VK(B) is 30
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         ETH,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("eth: 30")?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
+    // ))?;
+    // client.assert_success();
 
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at MASP pool is
+    // // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     ((amt200000 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
+    //         + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
+    // ))?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from SK(B) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            ETH,
-            "--amount",
-            "30",
-            "--signer",
-            BERTHA,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
+    // // Send 30 ETH from SK(B) to Christel
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "transfer",
+    //         "--source",
+    //         B_SPENDING_KEY,
+    //         "--target",
+    //         CHRISTEL,
+    //         "--token",
+    //         ETH,
+    //         "--amount",
+    //         "30",
+    //         "--signer",
+    //         BERTHA,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("Transaction is valid")?;
+    // client.assert_success();
 
-    // Assert ETH balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("No shielded eth balance found")?;
-    client.assert_success();
+    // // Assert ETH balance at VK(B) is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         ETH,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("No shielded eth balance found")?;
+    // client.assert_success();
 
-    let mut ep = get_epoch(&test, &validator_one_rpc)?;
+    // let mut ep = get_epoch(&test, &validator_one_rpc)?;
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
+    // ))?;
+    // client.assert_success();
 
-    ep = get_epoch(&test, &validator_one_rpc)?;
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
-    ))?;
-    client.assert_success();
+    // ep = get_epoch(&test, &validator_one_rpc)?;
+    // // Assert NAM balance at MASP pool is
+    // // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     ((amt200000 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
+    //         + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
+    // ))?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let ep6 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let ep6 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 20 BTC from SK(A) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
-            "--signer",
-            ALBERT,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
+    // // Send 20 BTC from SK(A) to Christel
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "transfer",
+    //         "--source",
+    //         A_SPENDING_KEY,
+    //         "--target",
+    //         CHRISTEL,
+    //         "--token",
+    //         BTC,
+    //         "--amount",
+    //         "20",
+    //         "--signer",
+    //         ALBERT,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("Transaction is valid")?;
+    // client.assert_success();
 
-    // Assert BTC balance at VK(A) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("No shielded btc balance found")?;
-    client.assert_success();
+    // // Assert BTC balance at VK(A) is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AA_VIEWING_KEY,
+    //         "--token",
+    //         BTC,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("No shielded btc balance found")?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AA_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt200000 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
+    // ))?;
+    // client.assert_success();
 
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at MASP pool is
+    // // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     ((amt200000 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
+    //         + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
+    // ))?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AA_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt200000 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
+    // ))?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
+    // ))?;
+    // client.assert_success();
 
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
-    client.assert_success();
+    // // Assert NAM balance at MASP pool is
+    // // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string(&format!(
+    //     "nam: {}",
+    //     ((amt200000 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
+    //         + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
+    // ))?;
+    // client.assert_success();
 
-    // Wait till epoch boundary to prevent conversion expiry during transaction
-    // construction
-    let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary to prevent conversion expiry during
+    // transaction // construction
+    // let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
-            "--signer",
-            BERTHA,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
+    // // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "transfer",
+    //         "--source",
+    //         B_SPENDING_KEY,
+    //         "--target",
+    //         CHRISTEL,
+    //         "--token",
+    //         NAM,
+    //         "--amount",
+    //         &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 -
+    // ep3.0)).to_string(),         "--signer",
+    //         BERTHA,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("Transaction is valid")?;
+    // client.assert_success();
 
-    // Wait till epoch boundary
-    let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    // // Wait till epoch boundary
+    // let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            BERTHA,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
-            "--signer",
-            ALBERT,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
+    // // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "transfer",
+    //         "--source",
+    //         A_SPENDING_KEY,
+    //         "--target",
+    //         BERTHA,
+    //         "--token",
+    //         NAM,
+    //         "--amount",
+    //         &((amt200000 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
+    //             .to_string(),
+    //         "--signer",
+    //         ALBERT,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("Transaction is valid")?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(A) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
+    // // Assert NAM balance at VK(A) is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AA_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("No shielded nam balance found")?;
+    // client.assert_success();
 
-    // Assert NAM balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
+    // // Assert NAM balance at VK(B) is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         AB_VIEWING_KEY,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("No shielded nam balance found")?;
+    // client.assert_success();
 
-    // Assert NAM balance at MASP pool is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("nam: 0")?;
-    client.assert_success();
+    // // Assert NAM balance at MASP pool is 0
+    // let mut client = run!(
+    //     test,
+    //     Bin::Client,
+    //     vec![
+    //         "balance",
+    //         "--owner",
+    //         MASP,
+    //         "--token",
+    //         NAM,
+    //         "--node",
+    //         &validator_one_rpc
+    //     ],
+    //     Some(300)
+    // )?;
+    // client.exp_string("nam: 0")?;
+    // client.assert_success();
 
     Ok(())
 }

@@ -46,7 +46,7 @@ where
     // total staked amount in the Shielded pool
     let total_token_in_masp: token::Amount = wl_storage
         .read(&token::balance_key(addr, &masp_addr))?
-        .expect("");
+        .unwrap_or_default();
 
     let epochs_per_year: u64 = wl_storage
         .read(&parameters::storage::get_epochs_per_year_key())?
@@ -106,19 +106,45 @@ where
     // Since we must put the notes in a compatible format with the
     // note format, we must make the inflation amount discrete.
     let total_in = total_token_in_masp.change() as u64;
-    let noterized_inflation =
-        if 0u64 == total_in {
-            0u64
-        } else {
-            inflation * 100 / total_token_in_masp.change() as u64
-        };
+    let noterized_inflation = if 0u64 == total_in {
+        0u64
+    } else {
+        ((100 * inflation as u128) / (total_token_in_masp.change() as u128))
+            .try_into()
+            .unwrap()
+    };
+
+    tracing::debug!(
+        "Controller, call: total_in_masp {:?}, total_tokens {:?}, \
+         locked_target_ratio {:?}, last_locked_ratio {:?}, max_reward_rate \
+         {:?}, last_inflation {:?}, kp_gain_nom {:?}, kd_gain_nom {:?}, \
+         epochs_per_year {:?}",
+        total_token_in_masp,
+        total_tokens,
+        locked_target_ratio,
+        last_locked_ratio,
+        max_reward_rate,
+        token::Amount::from(last_inflation),
+        kp_gain_nom,
+        kd_gain_nom,
+        epochs_per_year,
+    );
+    tracing::debug!("Please give me: {:?}", addr);
+    tracing::debug!("Ratio {:?}", locked_ratio);
+    tracing::debug!("inflation from the pd controller {:?}", inflation);
+    tracing::debug!("total in the masp {:?}", total_in);
+    tracing::debug!("Please give me inflation: {:?}", noterized_inflation);
 
     // Is it fine to write the inflation rate, this is accurate,
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
     wl_storage
-        .write(&token::last_inflation(addr), noterized_inflation)
+        .write(
+            &token::last_inflation(addr),
+            (noterized_inflation / 100u64)
+                * total_token_in_masp.change() as u64,
+        )
         .expect("unable to encode new inflation rate (Decimal)");
 
     wl_storage
