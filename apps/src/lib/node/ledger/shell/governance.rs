@@ -224,7 +224,6 @@ mod tests {
     use namada::ledger::storage_api::governance::{vote_proposal, init_proposal};
     use namada::types::address::testing::established_address_1;
     use namada::types::governance::ProposalVote;
-    use namada::types::token::Amount;
     use namada::types::transaction::governance::{VoteProposalData, InitProposalData};    
     use std::collections::HashMap;
 
@@ -281,12 +280,6 @@ mod tests {
         // TODO: maybe commit blocks up here in `TestShell` up until just before
         // the first block of Epoch(9), to be more realistic? As governance
         // proposals should only happen at epoch transitions
-
-        // set up validators in storage (no delegations yet)
-
-        let validator_set = read_consensus_validator_set_addresses(
-            &shell.wl_storage, epoch
-        ).unwrap();
 
         // set up a proposal in storage
         // proposals must be in sequence starting from one (or zero?)
@@ -379,66 +372,25 @@ mod tests {
         let val2 = validator_set_iterator.next().unwrap();
         let val3 = validator_set_iterator.next().unwrap();
         
-        let delegator1 = gen_established_address("mad-hatter");
-        let delegator2 = gen_established_address("leeeeeet");
+        let mut yay_voters = spawn_delegators(1, val1.bonded_stake.clone(), &mut shell, val1, epoch);
+        yay_voters.push(val1.address.clone());
+        yay_voters.push(val2.address.clone());
+        yay_voters.push(val3.address.clone());
 
-        // Source the delegators with some tokens
+        let nay_voters = spawn_delegators(1, val1.bonded_stake.clone(), &mut shell, val1, epoch);
         
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
-
-        // Source the proposal author with some tokens
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &established_address_1(), token::Amount::whole(10_000)).unwrap();
-        
-
-        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
-        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
-
-
-        // set up a proposal in storage
-        // proposals must be in sequence starting from one (or zero?)
         let proposal_id = 1;
         shell.proposal_data = HashSet::from([1]);
 
-
-        // delegator1 votes yes
-        let vote_proposal_data1 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: delegator1,
-            delegations: vec![val1.address.clone()]
-        };
-
-        //delegator2 votes no
-        let vote_proposal_data2 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Nay,
-            voter: delegator2,
-            delegations: vec![val1.address.clone()]
-        };
-
-        //Validator votes yes
-        let vote_proposal_data3 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: val1.address.clone(),
-            delegations: vec![val1.address.clone()]
-        };
-        let vote_proposal_data4 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: val2.address.clone(),
-            delegations: vec![val2.address.clone()]
-        };
-        let vote_proposal_data5 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: val3.address.clone(),
-            delegations: vec![val3.address.clone()]
-        };
-
-        let vote_proposals = vec![vote_proposal_data1, vote_proposal_data2, vote_proposal_data3, vote_proposal_data4, vote_proposal_data5];
-
+        let mut vote_proposals = Vec::new();
+        let mut yay_vote_proposals = vote_on_proposal(&mut shell, proposal_id, yay_voters, ProposalVote::Yay);
+        let mut nay_vote_proposals = vote_on_proposal(&mut shell, proposal_id, nay_voters, ProposalVote::Nay);
+        vote_proposals.append(&mut yay_vote_proposals);
+        vote_proposals.append(&mut nay_vote_proposals);
+        
+        
+        // Source the proposal author with some tokens
+        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &established_address_1(), token::Amount::whole(10_000)).unwrap();
 
         let proposal_data = InitProposalData{
             id: Some(1),
@@ -463,9 +415,6 @@ mod tests {
         init_proposal(&mut shell.wl_storage, proposal_data).unwrap();
         shell.wl_storage.commit_block().unwrap();
 
-        let k = gov_storage::get_funds_key(1);
-        let kk: Option<Amount> = shell.read_storage_key(&k);
-
 
         advance_epoch(&mut shell);
         for vote_p in vote_proposals.iter(){
@@ -476,7 +425,7 @@ mod tests {
         // Let validators vote on the respective proposal
         let mut resp = shim::response::FinalizeBlock::default();
         
-        let mut proposals_result =
+        let proposals_result =
             execute_governance_proposals(&mut shell, &mut resp)?;
 
         assert!(
@@ -612,25 +561,16 @@ mod tests {
         let mut validator_set_iterator = validator_set.iter();
     
         let val1 = validator_set_iterator.next().unwrap();
-        
-        let delegator1 = gen_established_address("leeroy");
-        let delegator2 = gen_established_address("leeeeeet");
-
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
-
-        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
-        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
 
         let val1_vote_power : VotePower = u64::from(val1.bonded_stake).into();
-        let val2_vote_power : VotePower = u64::from(val1.bonded_stake).into();
 
-
+        let delegators = spawn_delegators(2, val1.bonded_stake.clone(), &mut shell, val1, epoch);
         let mut yay_delegators = HashMap::default();
-        yay_delegators.insert(delegator1, HashMap::from([(val1.address.clone(), val1_vote_power)]));
-        yay_delegators.insert(delegator2, HashMap::from([(val1.address.clone(), val2_vote_power)]));
-        
 
+        for delegator in delegators{
+            yay_delegators.insert(delegator, HashMap::from([(val1.address.clone(), val1_vote_power)]));
+        
+        };
         let votes = Votes {
             yay_validators: HashMap::default(),
             yay_delegators: yay_delegators,
@@ -641,22 +581,6 @@ mod tests {
         let result = compute_tally(&shell.wl_storage, epoch, votes);
 
         assert_matches!(result, Ok(true));
-    }
-
-    fn spawn_delegators(num_delegators :u8, bond_amount: u64, mut shell : TestShell, validator : proof_of_stake::types::WeightedValidator, epoch : Epoch) -> Vec<Address>{
-        
-        let mut delegators = Vec::new();
-
-        for i in 1..num_delegators{
-            let del_address = gen_established_address(i.to_string());
-            token::credit_tokens(&mut shell.wl_storage, &address::nam(), &del_address, bond_amount.into()).unwrap();
-            bond_tokens(&mut shell.wl_storage, Some(&del_address), &validator.address, validator.bonded_stake.clone().into(), epoch).unwrap();
-
-            delegators.push(del_address);
-        }
-
-        return delegators;
-    
     }
 
     #[test]
@@ -674,42 +598,18 @@ mod tests {
     
         let val1 = validator_set_iterator.next().unwrap();
         
-        let delegator1 = gen_established_address("jenkins");
-        let delegator2 = gen_established_address("leeeeeet");
+        let yay_delegators = spawn_delegators(2, val1.bonded_stake.clone(), &mut shell, val1, epoch);
 
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator1, val1.bonded_stake.clone().into()).unwrap();
-        token::credit_tokens(&mut shell.wl_storage, &address::nam(), &delegator2, val1.bonded_stake.clone().into()).unwrap();
-
-        bond_tokens(&mut shell.wl_storage, Some(&delegator1), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
-        bond_tokens(&mut shell.wl_storage, Some(&delegator2), &val1.address, val1.bonded_stake.clone().into(), epoch).unwrap();
-
+        let nay_delegators = spawn_delegators(1, val1.bonded_stake.clone(), &mut shell, val1, epoch);
+        
         let proposal_id = 1;
 
-        // delegator1 votes yes
-        let vote_proposal_data1 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: delegator1,
-            delegations: vec![val1.address.clone()]
-        };
+        let mut vote_proposals = Vec::new();
+        let mut yay_vote_proposals = vote_on_proposal(&mut shell, proposal_id, yay_delegators, ProposalVote::Yay);
+        let mut nay_vote_proposals = vote_on_proposal(&mut shell, proposal_id, nay_delegators, ProposalVote::Nay);
 
-        //delegator2 votes no
-        let vote_proposal_data2 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Nay,
-            voter: delegator2,
-            delegations: vec![val1.address.clone()]
-        };
-
-        //Validator votes yes
-        let vote_proposal_data3 = VoteProposalData {
-            id : proposal_id,
-            vote : ProposalVote::Yay,
-            voter: val1.address.clone(),
-            delegations: Vec::new(),
-        };
-
-        let vote_proposals = vec![vote_proposal_data1, vote_proposal_data2, vote_proposal_data3];
+        vote_proposals.append(&mut nay_vote_proposals);
+        vote_proposals.append(&mut nay_vote_proposals);
         
         for vote_p in vote_proposals.iter(){
             vote_proposal(&mut shell.wl_storage, vote_p.to_owned()).unwrap();
@@ -733,6 +633,42 @@ mod tests {
         )
         .unwrap();
         current_epoch
+    }
+
+    fn spawn_delegators(num_delegators :u8, bond_amount: token::Amount, shell : &mut TestShell, validator : &proof_of_stake::types::WeightedValidator, epoch : Epoch) -> Vec<Address>{
+        
+        let mut delegators = Vec::new();
+
+        for i in 0..num_delegators{
+            let del_address = gen_established_address(i.to_string());
+            token::credit_tokens(&mut shell.wl_storage, &address::nam(), &del_address, bond_amount.into()).unwrap();
+            bond_tokens(&mut shell.wl_storage, Some(&del_address), &validator.address, bond_amount.into(), epoch).unwrap();
+
+            delegators.push(del_address);
+        }
+
+        return delegators;
+    
+    }
+
+    /// Creates n votes from n delegators, all voting on some proposal id 
+    fn vote_on_proposal(shell: &mut TestShell, proposal_id : u64, delegators: Vec<Address>, vote_type : ProposalVote) -> Vec<VoteProposalData> {
+
+        let mut vote_proposals: Vec<VoteProposalData> = Vec::new();
+        for delegator in delegators{
+            let delegations : Vec<Address>= proof_of_stake::find_delegation_validators(&shell.wl_storage, &delegator).unwrap().into_iter().collect();
+            let vote_proposal_data = VoteProposalData {
+                id : proposal_id,
+                vote : vote_type.clone(),
+                voter: delegator,
+                delegations: delegations
+            };
+            vote_proposals.push(vote_proposal_data);
+
+        };
+
+        return vote_proposals
+
     }
 }
 

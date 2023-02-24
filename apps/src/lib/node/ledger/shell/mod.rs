@@ -394,7 +394,6 @@ where
         T: Clone + BorshDeserialize,
     {
         let result = self.wl_storage.storage.read(key);
-        println!("{:?}", result);
         match result {
             Ok((bytes, _gas)) => match bytes {
                 Some(bytes) => match T::try_from_slice(&bytes) {

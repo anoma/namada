@@ -2,7 +2,6 @@
 
 use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
-use crate::ledger::storage_api::token::Amount;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,

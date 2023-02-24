@@ -121,7 +121,7 @@ where
 }
 
 /// Prepare Votes structure to compute proposal tally
- pub fn  get_proposal_votes<S>(
+pub fn  get_proposal_votes<S>(
     storage: &S,
     epoch: Epoch,
     proposal_id: u64,
