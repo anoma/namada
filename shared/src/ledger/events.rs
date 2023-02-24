@@ -51,7 +51,7 @@ pub enum EventType {
     /// The proposal that has been executed
     Proposal,
     /// The Pgf transfer that has been executed
-    Pgf
+    Pgf,
 }
 
 impl Display for EventType {
@@ -61,7 +61,7 @@ impl Display for EventType {
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
-            EventType::Pgf => write!(f, "pgf")
+            EventType::Pgf => write!(f, "pgf"),
         }?;
         Ok(())
     }
@@ -170,7 +170,7 @@ impl From<PgfEvent> for Event {
         Self {
             event_type: EventType::Pgf,
             level: EventLevel::Block,
-            attributes: pgf_event.attributes
+            attributes: pgf_event.attributes,
         }
     }
 }

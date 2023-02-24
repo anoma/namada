@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as pgf_storage;
 use crate::ledger::storage::types::encode;
-use crate::ledger::storage::{self, Storage};
+use crate::ledger::storage_api::{self, StorageWrite};
 
 #[derive(
     Clone,
@@ -25,11 +25,7 @@ pub struct PgfParams {
 
 impl Display for PgfParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Candidacy expiration: {}",
-            self.candidacy_expiration
-        )
+        write!(f, "Candidacy expiration: {}", self.candidacy_expiration)
     }
 }
 
@@ -43,18 +39,16 @@ impl Default for PgfParams {
 
 impl PgfParams {
     /// Initialize pgf parameters into storage
-    pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
+    pub fn init_storage<S>(&self, storage: &mut S) -> storage_api::Result<()>
     where
-        DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: storage::StorageHasher,
+        S: StorageWrite,
     {
         let Self {
-            candidacy_expiration
+            candidacy_expiration,
         } = self;
 
-        let candidaci_expiraton_key = pgf_storage::get_candidacy_expiration_key();
-        storage
-            .write(&candidaci_expiraton_key, encode(&candidacy_expiration))
-            .unwrap();
+        let candidaci_expiraton_key =
+            pgf_storage::get_candidacy_expiration_key();
+        storage.write(&candidaci_expiraton_key, encode(&candidacy_expiration))
     }
 }

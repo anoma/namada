@@ -5,6 +5,7 @@ use std::panic;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use super::pgf::vp::PgfVp;
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
@@ -22,8 +23,6 @@ use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
-
-use super::pgf::vp::PgfVp;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -400,7 +399,7 @@ where
                                 .map_err(Error::PgfNativeVpError);
                             gas_meter = pgf.ctx.gas_meter.into_inner();
                             result
-                        },
+                        }
                     };
 
                     accepted

@@ -1,3 +1,5 @@
+//! Public good fundings integration as a native validity predicate
+//!  
 use namada_core::types::address::{Address, InternalAddress};
 
 pub mod utils;

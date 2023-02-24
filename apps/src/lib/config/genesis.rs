@@ -169,7 +169,7 @@ pub mod genesis_config {
     pub struct PgfParamsConfig {
         // Max number of epoch for which a candidacy is valid
         // XXX: u64 doesn't work with toml-rs!
-        pub candidacy_expiration: u64
+        pub candidacy_expiration: u64,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -654,11 +654,11 @@ pub mod genesis_config {
         };
 
         let PgfParamsConfig {
-            candidacy_expiration
+            candidacy_expiration,
         } = pgf_params;
 
         let pgf_params = PgfParams {
-            candidacy_expiration
+            candidacy_expiration,
         };
 
         let PosParamsConfig {
@@ -700,7 +700,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
-            pgf_params
+            pgf_params,
         };
         genesis.init();
         genesis
@@ -753,7 +753,7 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
-    pub pgf_params: PgfParams
+    pub pgf_params: PgfParams,
 }
 
 impl Genesis {

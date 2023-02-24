@@ -154,7 +154,8 @@ where
 
         genesis
             .pgf_params
-            .init_storage(&mut self.wl_storage.storage);
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing pgf parameters must not fail");
 
         // Depends on parameters being initialized
         self.wl_storage

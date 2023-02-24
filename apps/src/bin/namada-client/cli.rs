@@ -2,7 +2,6 @@
 
 use color_eyre::eyre::Result;
 use namada_apps::cli;
-use namada_apps::cli::args::{CreateCouncil, UpdatePgfProjects};
 use namada_apps::cli::cmds::*;
 use namada_apps::client::{rpc, tx, utils};
 
@@ -40,8 +39,8 @@ pub async fn main() -> Result<()> {
                 Sub::TxRevealPk(TxRevealPk(args)) => {
                     tx::submit_reveal_pk(ctx, args).await;
                 }
-                Sub::TxUpdatePgfProjects(TxUpdatePgfProjects(args)) => {
-                    tx::submit_update_pgf_projects(ctx, args).await;
+                Sub::TxPgfReceipients(TxPgfReceipients(args)) => {
+                    tx::submit_pgf_receipients(ctx, args).await;
                 }
                 Sub::Bond(Bond(args)) => {
                     tx::submit_bond(ctx, args).await;

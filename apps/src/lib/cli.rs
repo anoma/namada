@@ -167,7 +167,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 // Pgf transactions
                 .subcommand(TxCreateCouncil::def().display_order(3))
-                .subcommand(TxUpdatePgfProjects::def().display_order(3))
+                .subcommand(TxPgfReceipients::def().display_order(3))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(4))
                 .subcommand(QueryTransfers::def().display_order(4))
@@ -206,8 +206,10 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
-            let tx_counsil_crate = Self::parse_with_ctx(matches, TxCreateCouncil);
-            let tx_update_pgf_projects = Self::parse_with_ctx(matches, TxUpdatePgfProjects);
+            let tx_counsil_crate =
+                Self::parse_with_ctx(matches, TxCreateCouncil);
+            let tx_pgf_receipients =
+                Self::parse_with_ctx(matches, TxPgfReceipients);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -231,8 +233,10 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
-            let query_pgf_counsil = Self::parse_with_ctx(matches, QueryPgfCounsil);
-            let query_pgf_candidates = Self::parse_with_ctx(matches, QueryPgfCandidates);
+            let query_pgf_counsil =
+                Self::parse_with_ctx(matches, QueryPgfCounsil);
+            let query_pgf_candidates =
+                Self::parse_with_ctx(matches, QueryPgfCandidates);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
@@ -245,7 +249,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_counsil_crate)
-                .or(tx_update_pgf_projects)
+                .or(tx_pgf_receipients)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -312,7 +316,7 @@ pub mod cmds {
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxCreateCouncil(TxCreateCouncil),
-        TxUpdatePgfProjects(TxUpdatePgfProjects),
+        TxPgfReceipients(TxPgfReceipients),
         TxRevealPk(TxRevealPk),
         Bond(Bond),
         Unbond(Unbond),
@@ -1008,9 +1012,7 @@ pub mod cmds {
             Self: Sized,
         {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryPgfCounsil(args::QueryPgfCounsil::parse(
-                    matches,
-                ))
+                QueryPgfCounsil(args::QueryPgfCounsil::parse(matches))
             })
         }
 
@@ -1032,9 +1034,7 @@ pub mod cmds {
             Self: Sized,
         {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryPgfCandidates(args::QueryPgfCandidates::parse(
-                    matches,
-                ))
+                QueryPgfCandidates(args::QueryPgfCandidates::parse(matches))
             })
         }
 
@@ -1516,41 +1516,40 @@ pub mod cmds {
         where
             Self: Sized,
         {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxCreateCouncil(args::CreateCouncil::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxCreateCouncil(args::CreateCouncil::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "Submit a tx to create a new pgf counsil.",
-                )
+                .about("Submit a tx to create a new pgf counsil.")
                 .add_args::<args::CreateCouncil>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdatePgfProjects(pub args::UpdatePgfProjects);
+    pub struct TxPgfReceipients(pub args::PgfReceipients);
 
-    impl SubCmd for TxUpdatePgfProjects {
-        const CMD: &'static str = "update-pgf-projects";
+    impl SubCmd for TxPgfReceipients {
+        const CMD: &'static str = "pgf-receipients";
 
         fn parse(matches: &ArgMatches) -> Option<Self>
         where
             Self: Sized,
         {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdatePgfProjects(args::UpdatePgfProjects::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxPgfReceipients(args::PgfReceipients::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Submit a tx to update the activily founded projects on pgf.",
+                    "Submit a tx to updaate the activily founded receipients \
+                     on pgf.",
                 )
-                .add_args::<args::UpdatePgfProjects>()
+                .add_args::<args::PgfReceipients>()
         }
     }
 
@@ -2095,7 +2094,7 @@ pub mod args {
         /// Transferred token amount
         pub amount: token::Amount,
         /// The enstablish address
-        pub address: Option<WalletAddress>
+        pub address: Option<WalletAddress>,
     }
 
     impl TxTransfer {
@@ -2129,7 +2128,7 @@ pub mod args {
                 token,
                 sub_prefix,
                 amount,
-                address
+                address,
             }
         }
 
@@ -2613,7 +2612,9 @@ pub mod args {
                     PROPOSAL_VOTE_PGF_OPT
                         .def()
                         .about(
-                            "The path to the JSON file carrying a map between address (bech32m encoded) and spending cap (in NAMs).",
+                            "The path to the JSON file carrying a map between \
+                             address (bech32m encoded) and spending cap (in \
+                             NAMs).",
                         )
                         .requires(PROPOSAL_ID.name)
                         .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
@@ -2678,7 +2679,7 @@ pub mod args {
         /// The spending cap of the candidate counsil
         pub spending_cap: Amount,
         /// The data attached to the candidated counsil.
-        pub data: Option<String>
+        pub data: Option<String>,
     }
 
     impl Args for CreateCouncil {
@@ -2688,40 +2689,64 @@ pub mod args {
             let spending_cap = AMOUNT.parse(matches);
             let data = PGF_COUNSIL_DATA.parse(matches);
 
-            Self { tx, address, spending_cap, data }
+            Self {
+                tx,
+                address,
+                spending_cap,
+                data,
+            }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
-                .arg(ADDRESS.def().about("The enstablished address of the new counsil candidate."))
-                .arg(AMOUNT.def().about("The spending cap amount of the candidated counsil."))
-                .arg(PGF_COUNSIL_DATA.def().about("Some arbitrary data to attach to the candidacy. Limited to 4096 characters."))
+                .arg(ADDRESS.def().about(
+                    "The enstablished address of the new counsil candidate.",
+                ))
+                .arg(AMOUNT.def().about(
+                    "The spending cap amount of the candidated counsil.",
+                ))
+                .arg(PGF_COUNSIL_DATA.def().about(
+                    "Some arbitrary data to attach to the candidacy. Limited \
+                     to 4096 characters.",
+                ))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct UpdatePgfProjects {
+    pub struct PgfReceipients {
         /// Common tx arguments
         pub tx: Tx,
         /// The pgf active counsil address
         pub address: WalletAddress,
-        /// Path to a json file containing the relations project address - amount
+        /// Path to a json file containing the relations project address -
+        /// amount
         pub data_path: PathBuf,
     }
 
-    impl Args for UpdatePgfProjects {
+    impl Args for PgfReceipients {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let address = ADDRESS.parse(matches);
             let data_path = DATA_PATH.parse(matches);
 
-            Self { tx, address, data_path }
+            Self {
+                tx,
+                address,
+                data_path,
+            }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
-                .arg(ADDRESS.def().about("The enstablished address of the activ counsil."))
-                .arg(DATA_PATH.def().about("Path to the json file containing the relation between project address - amount."))
+                .arg(
+                    ADDRESS.def().about(
+                        "The enstablished address of the activ counsil.",
+                    ),
+                )
+                .arg(DATA_PATH.def().about(
+                    "Path to the json file containing the relation between \
+                     project address - amount.",
+                ))
         }
     }
 

@@ -61,7 +61,7 @@ where
             let _proposals_result =
                 execute_governance_proposals(self, &mut response)?;
 
-            execute_active_pgf_funding(self, &mut response);
+            execute_active_pgf_funding(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len

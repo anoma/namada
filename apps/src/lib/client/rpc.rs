@@ -21,7 +21,6 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::ledger::pgf::storage as pgf_storage;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::key;
@@ -29,7 +28,6 @@ use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
@@ -50,7 +48,6 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
-use namada::types::transaction::pgf::PgfProjectsUpdate;
 use namada::types::transaction::pgf::{Candidate, Counsil, PgfReceipients};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
@@ -60,7 +57,7 @@ use namada::types::{address, storage, token};
 use tokio::time::{Duration, Instant};
 
 use super::signing::{tx_signers, OfflineSignature};
-use crate::cli::args::UpdatePgfProjects;
+// use crate::cli::args::PgfReceipients;
 use crate::cli::{self, args, safe_exit, Context};
 use crate::client::tendermint_rpc_types::TxResponse;
 use crate::client::tx::{
@@ -723,7 +720,7 @@ fn print_balances(
                         format!(
                             ": {}, owned by {}",
                             balance,
-                            lookup_alias(ctx, &owner)
+                            lookup_alias(ctx, owner)
                         ),
                     )
                 }),
@@ -1471,7 +1468,11 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
             if let Some(receipients) = receipients {
                 println!("{:4}Receipients:", "");
                 for receipient in receipients {
-                    println!("{:8}Project address {} is founded with {}nam every epoch", "", receipient.address, receipient.amount);
+                    println!(
+                        "{:8}Project address {} is founded with {}nam every \
+                         epoch",
+                        "", receipient.address, receipient.amount
+                    );
                 }
             } else {
                 println!("{:8} No pgf receipients present.", "")

@@ -12,14 +12,12 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("failed to decode token::Transfer")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
-    
+
     match pgf::pgf_transfer(ctx, transfer) {
         Ok(Some(counsil_address)) => ctx.insert_verifier(&counsil_address),
         _ => {
             debug_log!("Invalid pgf transfer.");
             panic!()
         }
-    };
-
-    Ok(())
+    }
 }

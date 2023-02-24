@@ -1,7 +1,6 @@
 use namada_core::ledger::storage_api::pgf::{
     get_candidates, get_current_counsil, get_receipients,
 };
-use namada_core::types::transaction::pgf::PgfProjectsUpdate;
 use namada_core::types::transaction::pgf::{
     Candidate, Counsil, PgfReceipients,
 };
@@ -13,7 +12,7 @@ use crate::ledger::storage_api;
 router! {PGF,
     ( "current_counsil" ) -> Option<Counsil> = current_counsil,
     ( "candidates"  ) -> Vec<Candidate> = candidates,
-    ( "receipients"  ) -> Option<PgfProjectsUpdate> = receipients,
+    ( "receipients"  ) -> Option<PgfReceipients> = receipients,
 }
 
 /// Get the current counsil info
@@ -41,7 +40,7 @@ where
 /// Get the current counsil receipients
 fn receipients<D, H>(
     ctx: RequestCtx<'_, D, H>,
-) -> storage_api::Result<Option<PgfProjectsUpdate>>
+) -> storage_api::Result<Option<PgfReceipients>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

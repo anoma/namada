@@ -1,13 +1,12 @@
 //! Pfg
 
+use super::token::Amount;
+use super::Error;
 use crate::ledger::pgf::{storage as pgf_storage, CounsilData};
 use crate::ledger::storage_api::token::transfer as token_transfer;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::token::{self, Transfer};
-
-use super::token::Amount;
-use super::Error;
 use crate::types::transaction::pgf::{
     Candidate, Counsil, InitCounsil, PgfReceipients,
 };
@@ -30,8 +29,8 @@ where
     Ok(())
 }
 
-/// A pgf projects update transaction.
-pub fn update_projects<S>(
+/// A pgf transaction to update the pgf receipients.
+pub fn update_pgf_receipients<S>(
     storage: &mut S,
     data: PgfReceipients,
 ) -> storage_api::Result<Address>
@@ -40,13 +39,13 @@ where
 {
     let pgf_active_counsil = get_current_counsil_address(storage)?;
     let spent_amount = get_current_spent_amount(storage)?;
-    let (counsil_address, spent_amount) =
+    let (counsil_address, _spent_amount) =
         match (pgf_active_counsil, spent_amount) {
             (Some(address), Some(amount)) => (address, amount),
             _ => {
                 return Err(storage_api::Error::new_const(
                     "There is no active counsil",
-                ))
+                ));
             }
         };
 
@@ -89,6 +88,7 @@ where
     }
 }
 
+/// Get the active counsil address
 pub fn get_current_counsil_address<S>(
     storage: &S,
 ) -> storage_api::Result<Option<Address>>
@@ -99,6 +99,7 @@ where
     storage.read(&counsil_key)
 }
 
+/// Get the current counsil spent amount
 pub fn get_current_spent_amount<S>(
     storage: &S,
 ) -> storage_api::Result<Option<Amount>>
@@ -134,7 +135,7 @@ where
                 let candidate_spending_cap =
                     pgf_storage::get_candidate_spending_cap(&key);
                 if counsil_data.epoch + candidates_expiration < current_epoch {
-                    return None;
+                    None
                 } else {
                     match (candidate_address, candidate_spending_cap) {
                         (Some(address), Some(spending_cap)) => {
@@ -142,6 +143,7 @@ where
                                 address: address.to_owned(),
                                 spending_cap,
                                 data: counsil_data.data,
+                                epoch: counsil_data.epoch,
                             };
                             Some(candidate)
                         }
@@ -156,9 +158,10 @@ where
     Ok(candidates)
 }
 
+/// Get the current receipients added by the counsil
 pub fn get_receipients<S>(
     storage: &S,
-) -> storage_api::Result<Option<PgfProjectsUpdate>>
+) -> storage_api::Result<Option<PgfReceipients>>
 where
     S: StorageRead + StorageWrite,
 {
@@ -166,6 +169,7 @@ where
     storage.read(&receipients)
 }
 
+/// Transfer some token from pgf address to an anddress
 pub fn pgf_transfer<S>(
     storage: &mut S,
     transfer: Transfer,
@@ -179,7 +183,7 @@ where
         match (pgf_active_counsil, spent_amount) {
             (Some(address), Some(amount)) => (address, amount),
             _ => {
-                return Err(Error::SimpleMessage("There is no active counsil"))
+                return Err(Error::SimpleMessage("There is no active counsil"));
             }
         };
 
@@ -187,10 +191,10 @@ where
         source,
         target,
         token,
-        sub_prefix,
+        sub_prefix: _,
         amount,
-        key,
-        shielded,
+        key: _,
+        shielded: _,
     } = transfer;
 
     token_transfer(storage, &token, &source, &target, amount)?;
@@ -198,5 +202,5 @@ where
     let spent_amount_key = pgf_storage::get_spent_amount_key();
     storage.write(&spent_amount_key, spent_amount + amount)?;
 
-    return Ok(Some(counsil_address));
+    Ok(Some(counsil_address))
 }

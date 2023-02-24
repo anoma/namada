@@ -1,13 +1,14 @@
-use super::*;
 use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::core::ledger::storage_api::token;
-use namada::core::types::address;
 use namada::core::types::token::Amount;
-use namada::core::types::transaction::pgf::PgfProjectsUpdate;
+use namada::core::types::transaction::pgf::PgfReceipients;
 use namada::ledger::pgf::utils::PgfEvent;
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::address::InternalAddress;
 
+use super::*;
+
+/// Executing the payments from pgf accounts to the pgf projects
 pub fn execute_active_pgf_funding<D, H>(
     shell: &mut Shell<D, H>,
     response: &mut shim::response::FinalizeBlock,
@@ -19,7 +20,7 @@ where
     // Read recipients map from storage
     let recipients_key = pgf_storage::get_cpgf_recipient_key();
 
-    let recipients: PgfProjectsUpdate =
+    let recipients: PgfReceipients =
         match shell.read_storage_key(&recipients_key) {
             Some(r) => r,
             None => {
@@ -74,20 +75,6 @@ where
 
                 let pgf_event: Event =
                     PgfEvent::new(&project.address, &project.amount).into();
-                response.events.push(pgf_event);
-                tracing::info!(
-                    "PGF active transfer with amount {} has been sent to {}.",
-                    project.amount,
-                    project.address
-                );
-            }
-            Err(msg) => {
-                tracing::info!(
-                    "PGF active transfer to {}, failed: {}",
-                    &project.address,
-                    &project.amount
-                )
-                .into();
                 response.events.push(pgf_event);
                 tracing::info!(
                     "PGF active transfer with amount {} has been sent to {}.",

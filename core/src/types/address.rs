@@ -199,7 +199,7 @@ impl Address {
                     InternalAddress::IbcMint => internal::IBC_MINT.to_string(),
                     InternalAddress::EthBridge => {
                         internal::ETH_BRIDGE.to_string()
-                    },
+                    }
                     InternalAddress::Pgf => internal::PGF.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
@@ -254,9 +254,7 @@ impl Address {
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
-                internal::PGF => {
-                    Ok(Address::Internal(InternalAddress::Pgf))
-                }
+                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -473,7 +471,7 @@ pub enum InternalAddress {
     /// Bridge to Ethereum
     EthBridge,
     /// Public Goods Funding
-    Pgf
+    Pgf,
 }
 
 impl InternalAddress {
@@ -794,7 +792,7 @@ pub mod testing {
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
             InternalAddress::Pgf => {} /* Add new addresses in the
-                                              * `prop_oneof` below. */
+                                        * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),

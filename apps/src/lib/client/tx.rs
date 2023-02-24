@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -11,8 +11,7 @@ use std::{env, fs};
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER;
-use data_encoding::HEXLOWER_PERMISSIVE;
+use data_encoding::{HEXLOWER, HEXLOWER_PERMISSIVE};
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -60,9 +59,7 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::pgf::{
-    InitCounsil, PgfProject, PgfProjectsUpdate,
-};
+use namada::types::transaction::pgf::{InitCounsil, PgfReceipients};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::vm;
@@ -2382,18 +2379,18 @@ pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
     }
 }
 
-pub async fn submit_update_pgf_projects(
-    mut ctx: Context,
-    args::UpdatePgfProjects {
+pub async fn submit_pgf_receipients(
+    ctx: Context,
+    args::PgfReceipients {
         tx: tx_args,
         address,
         data_path,
-    }: args::UpdatePgfProjects,
+    }: args::PgfReceipients,
 ) {
     let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
 
     let file = File::open(data_path).expect("File must exist.");
-    let pgf_projects: PgfProjectsUpdate =
+    let pgf_receipients: PgfReceipients =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let counsil_address = ctx.get(&address);
@@ -2411,7 +2408,7 @@ pub async fn submit_update_pgf_projects(
         eprintln!("There is no active counsil yet.");
     }
 
-    let data = pgf_projects
+    let data = pgf_receipients
         .try_to_vec()
         .expect("Encoding proposal data shouldn't fail");
     let tx_code = ctx.read_wasm(TX_UPDATE_PGF_PROJECTS);
@@ -2672,7 +2669,7 @@ pub async fn submit_init_counsil(
     let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) = process_tx(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &tx_args,
         tx,
