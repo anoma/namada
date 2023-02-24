@@ -113,7 +113,7 @@ pub fn mint_red_tokens(
     let tx_code_path = tx_code_path.to_string_lossy().to_string();
     let tx_args = vec![
         "tx",
-        "--signer",
+        "--signers",
         ARBITRARY_SIGNER,
         "--code-path",
         &tx_code_path,
@@ -149,7 +149,7 @@ pub fn attempt_red_tokens_transfer(
         from,
         "--target",
         to,
-        "--signer",
+        "--signers",
         signer,
         "--amount",
         &amount,

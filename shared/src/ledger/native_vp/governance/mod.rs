@@ -249,7 +249,7 @@ where
                                             + expiration
                                             > pre_voting_end_epoch =>
                                         {
-                                            ()
+                                            
                                         }
                                         _ => return Ok(false),
                                     };

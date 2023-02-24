@@ -2095,7 +2095,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     let signer = if let Some(addr) = args.tx.signers.get(0) {
         addr
     } else {
-        eprintln!("Missing mandatory argument --signer.");
+        eprintln!("Missing mandatory argument --signers.");
         safe_exit(1)
     };
 
