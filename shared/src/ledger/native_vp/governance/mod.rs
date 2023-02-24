@@ -243,6 +243,7 @@ where
                     } else if let VoteType::ETHBridge(_sig) = vote_type {
                         // TODO: Check the validity of the signature with the
                         // governance ETH key in storage for the given validator
+                        // <https://github.com/anoma/namada/issues/1166>
                     }
                 }
 
