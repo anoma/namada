@@ -54,43 +54,10 @@ where
                 .txs
                 .into_iter()
                 .map(|tx_bytes| {
-                    match Tx::try_from(tx_bytes.as_slice()) {
-                         Ok(tx) => {
-                            let tx_expiration = tx.expiration;
-                            if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
-                                // Check tx expiration against proposed block
-                                match tx_expiration {
-                                    Some(exp) => {
-                                        match &req.time {
-                                            Some(block_time) => {
-                                                match TryInto::<DateTimeUtc>::try_into(block_time.to_owned()) {
-                                                    Ok(datetime) => {
-                                                        if datetime > exp {
-                                                            record::remove(tx_bytes)
-                                                        } else {
-                                                            record::keep(tx_bytes)
-                                                        }
-                                                    },
-                                                    Err(_) => {
-                                                        // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                                        record::keep(tx_bytes)
-                                                    }
-                                                }
-                                            },
-                                            None => {
-                                                // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                                record::keep(tx_bytes)
-                                            }
-                                        }
-                                    },
-                                    None => record::keep(tx_bytes)
-                                }
-                           } else {
-                                record::remove(tx_bytes)
-                            }
-                        }
-                        Err(_) => record::remove(tx_bytes),
-                                        }
+                    match validate_tx_bytes(&tx_bytes, req.time.clone()) {
+                        Ok(()) => record::keep(tx_bytes),
+                        Err(()) => record::remove(tx_bytes),
+                    }
                 })
                 .take_while(|tx_record| {
                     let new_size = total_proposal_size + tx_record.tx.len();
@@ -109,43 +76,9 @@ where
                 .txs
                 .into_iter()
                 .filter_map(|tx_bytes| {
-                    match Tx::try_from(tx_bytes.as_slice()) {
-                        Ok(tx) => {
-                            let tx_expiration = tx.expiration;
-                            if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
-                                // Check tx expiration against proposed block
-                                match tx_expiration {
-                                    Some(exp) => {
-                                        match &req.time {
-                                            Some(block_time) => {
-                                                match TryInto::<DateTimeUtc>::try_into(block_time.to_owned()) {
-                                                    Ok(datetime) => {
-                                                        if datetime > exp {
-                                                             None
-                                                        } else {
-                                                            Some(tx_bytes)
-                                                        }
-                                                    },
-                                                    Err(_) => {
-                                                // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                                Some(tx_bytes)
-                                                    }
-                                                }
-                                            },
-                                            None => {
-                                            // Default to last block datetime which has already been checked by mempool_validate, so accept the tx
-                                            Some(tx_bytes)
-                                            }
-                                        }
-                                    },
-                                    None => Some(tx_bytes)
-                                }
-                           } else {
-                                None
-                            }
-                        }
-                        Err(_) => None,
-                    }
+                    validate_tx_bytes(&tx_bytes, req.time.clone())
+                        .ok()
+                        .map(|_| tx_bytes)
                 })
                 .take_while(|tx_bytes| {
                     let new_size = total_proposal_size + tx_bytes.len();
@@ -199,6 +132,30 @@ where
         {
             response::PrepareProposal { txs }
         }
+    }
+}
+
+fn validate_tx_bytes(
+    tx_bytes: &[u8],
+    block_time: Option<tendermint_proto::google::protobuf::Timestamp>,
+) -> Result<(), ()> {
+    let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+    let tx_expiration = tx.expiration;
+
+    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+        // Check tx expiration against proposed block
+        match (block_time, tx_expiration) {
+            (Some(block_time), Some(exp)) => {
+                match TryInto::<DateTimeUtc>::try_into(block_time) {
+                    Ok(datetime) if datetime > exp => Err(()),
+                    _ => Ok(()), // If error in conversion, default to last block datetime, it's valid because of mempool check
+                }
+            }
+            // If tx doesn't have an expiration it is valid. If time cannot be retrieved from block default to last block datetime which has already been checked by mempool_validate, so it's valid
+            _ => Ok(()),
+        }
+    } else {
+        return Err(());
     }
 }
 

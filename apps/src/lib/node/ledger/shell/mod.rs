@@ -400,27 +400,16 @@ where
         &self,
         tendermint_block_time: Option<Timestamp>,
     ) -> DateTimeUtc {
-        match tendermint_block_time {
-            Some(t) => {
-                match t.try_into() {
-                    Ok(t) => t,
-                    Err(_) => {
-                        // Default to last committed block time
-                        self.wl_storage
-                            .storage
-                            .get_last_block_timestamp()
-                            .expect("Failed to retrieve last block timestamp")
-                    }
-                }
-            }
-            None => {
-                // Default to last committed block time
-                self.wl_storage
-                    .storage
-                    .get_last_block_timestamp()
-                    .expect("Failed to retrieve last block timestamp")
+        if let Some(t) = tendermint_block_time {
+            if let Ok(t) = t.try_into() {
+                return t;
             }
         }
+        // Default to last committed block time
+        self.wl_storage
+            .storage
+            .get_last_block_timestamp()
+            .expect("Failed to retrieve last block timestamp")
     }
 
     /// Read the value for a storage key dropping any error
