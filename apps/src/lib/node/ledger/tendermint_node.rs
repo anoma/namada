@@ -190,6 +190,26 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+    let tendermint_path = from_env_or_default()?;
+    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
+
+    // Rollback tendermint state
+    std::process::Command::new(tendermint_path)
+        .args([
+            "rollback",
+            "unsafe-all",
+            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
+            // "--log-level=\"*debug\"",
+            "--home",
+            &tendermint_dir,
+        ])
+        .output()
+        .expect("Failed to rollback tendermint node");
+
+    Ok(())
+}
+
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
 fn validator_key_to_json(

@@ -761,6 +761,7 @@ pub mod cmds {
         Run(LedgerRun),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        RollBack(LedgerRollBack),
     }
 
     impl SubCmd for Ledger {
@@ -843,6 +844,22 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRollBack;
+
+    impl SubCmd for LedgerRollBack {
+        const CMD: &'static str = "rollback";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Roll Namada state back to the previous height.")
         }
     }
 
