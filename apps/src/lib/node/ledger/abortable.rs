@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 
 /// Serves to identify an aborting async task, which is spawned
@@ -11,8 +11,8 @@ pub type AbortingTask = &'static str;
 /// An [`AbortableSpawner`] will spawn abortable tasks into the asynchronous
 /// runtime.
 pub struct AbortableSpawner {
-    abort_send: UnboundedSender<AbortingTask>,
-    abort_recv: UnboundedReceiver<AbortingTask>,
+    abort_send: Sender<AbortingTask>,
+    abort_recv: Receiver<AbortingTask>,
     cleanup_jobs: Vec<Pin<Box<dyn Future<Output = ()>>>>,
 }
 
@@ -26,7 +26,7 @@ pub struct WithCleanup<'a, A> {
 impl AbortableSpawner {
     /// Creates a new [`AbortableSpawner`].
     pub fn new() -> Self {
-        let (abort_send, abort_recv) = mpsc::unbounded_channel();
+        let (abort_send, abort_recv) = broadcast::channel(1);
         Self {
             abort_send,
             abort_recv,
@@ -98,6 +98,10 @@ impl AbortableSpawner {
         };
         tokio::spawn(abortable(abort))
     }
+
+    pub fn subscribe(&self) -> Receiver<AbortingTask> {
+        self.abort_send.subscribe()
+    }
 }
 
 impl<'a, A> WithCleanup<'a, A> {
@@ -129,7 +133,7 @@ impl<'a, A> WithCleanup<'a, A> {
 /// A panic-proof handle for aborting a future. Will abort during stack
 /// unwinding and its drop method sends abort message with `who` inside it.
 pub struct Aborter {
-    sender: mpsc::UnboundedSender<AbortingTask>,
+    sender: Sender<AbortingTask>,
     who: AbortingTask,
 }
 
@@ -142,7 +146,7 @@ impl Drop for Aborter {
 
 #[cfg(unix)]
 async fn wait_for_abort(
-    mut abort_recv: UnboundedReceiver<AbortingTask>,
+    mut abort_recv: Receiver<AbortingTask>,
 ) -> AborterStatus {
     use tokio::signal::unix::{signal, SignalKind};
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
@@ -176,7 +180,7 @@ async fn wait_for_abort(
         msg = abort_recv.recv() => {
             // When the msg is `None`, there are no more abort senders, so both
             // Tendermint and the shell must have already exited
-            if let Some(who) = msg {
+            if let Ok(who) = msg {
                  tracing::info!("{} has exited, shutting down...", who);
             }
             return AborterStatus::ChildProcessTerminated;

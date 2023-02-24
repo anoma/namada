@@ -759,6 +759,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Ledger {
         Run(LedgerRun),
+        RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
         RollBack(LedgerRollBack),
@@ -786,6 +787,7 @@ pub mod cmds {
                      defaults to run the node.",
                 )
                 .subcommand(LedgerRun::def())
+                .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
         }
@@ -807,6 +809,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Run Namada ledger node.")
                 .add_args::<args::LedgerRun>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil(pub args::LedgerRunUntil);
+
+    impl SubCmd for LedgerRunUntil {
+        const CMD: &'static str = "run-until";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerRunUntil::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Run Namada ledger node until a given height. Then halt \
+                     or suspend.",
+                )
+                .add_args::<args::LedgerRunUntil>()
         }
     }
 
@@ -1588,7 +1612,7 @@ pub mod args {
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
-    use namada::types::storage::{self, Epoch};
+    use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::transaction::GasLimit;
@@ -1598,7 +1622,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::config;
-    use crate::config::TendermintMode;
+    use crate::config::{Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1616,6 +1640,7 @@ pub mod args {
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
+    const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
@@ -1694,6 +1719,7 @@ pub mod args {
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    const SUSPEND_ACTION: ArgFlag = flag("suspend");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -1781,6 +1807,44 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil {
+        pub time: Option<DateTimeUtc>,
+        pub action_at_height: ActionAtHeight,
+    }
+
+    impl Args for LedgerRunUntil {
+        fn parse(matches: &ArgMatches) -> Self {
+            Self {
+                time: NAMADA_START_TIME.parse(matches),
+                action_at_height: ActionAtHeight {
+                    height: BLOCK_HEIGHT.parse(matches),
+                    action: if HALT_ACTION.parse(matches) {
+                        Action::Halt
+                    } else {
+                        Action::Suspend
+                    },
+                },
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                NAMADA_START_TIME
+                    .def()
+                    .about("The start time of the ledger."),
+            )
+            .arg(BLOCK_HEIGHT.def().about("The block height to run until."))
+            .arg(HALT_ACTION.def().about("Halt at the given block height"))
+            .arg(SUSPEND_ACTION.def().about("Suspend consensus at the given block height"))
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
+                    .required(true),
+            )
         }
     }
 

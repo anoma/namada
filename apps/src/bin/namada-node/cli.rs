@@ -33,6 +33,28 @@ pub fn main() -> Result<()> {
                 }
                 ledger::run(ctx.config.ledger, wasm_dir);
             }
+            cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
+                let wasm_dir = ctx.wasm_dir();
+                // Sleep until start time if needed
+                if let Some(time) = args.time {
+                    if let Ok(sleep_time) =
+                        time.0.signed_duration_since(Utc::now()).to_std()
+                    {
+                        if !sleep_time.is_zero() {
+                            tracing::info!(
+                                "Waiting ledger start time: {:?}, time left: \
+                                 {:?}",
+                                time,
+                                sleep_time
+                            );
+                            std::thread::sleep(sleep_time)
+                        }
+                    }
+                }
+                ctx.config.ledger.shell.action_at_height =
+                    Some(args.action_at_height);
+                ledger::run(ctx.config.ledger, wasm_dir);
+            }
             cmds::Ledger::Reset(_) => {
                 ledger::reset(ctx.config.ledger)
                     .wrap_err("Failed to reset Namada node")?;
