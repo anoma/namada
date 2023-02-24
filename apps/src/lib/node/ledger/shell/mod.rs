@@ -204,6 +204,20 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
+pub fn rollback(config: config::Ledger) -> Result<()> {
+    let chain_id = config.chain_id.clone();
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let mut db = storage::PersistentDB::open(db_path, None);
+    db.rollback();
+
+    // Rollback Tendermint state
+    tendermint_node::rollback(config.tendermint_dir())
+        .map_err(Error::Tendermint)?;
+
+    Ok(())
+}
+
 #[derive(Debug)]
 #[allow(dead_code, clippy::large_enum_variant)]
 pub(super) enum ShellMode {

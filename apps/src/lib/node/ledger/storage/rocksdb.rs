@@ -303,6 +303,69 @@ impl RocksDB {
 
         println!("Done writing to {}", full_path.to_string_lossy());
     }
+
+    /// Rollback to previous block
+    pub fn rollback(&mut self) -> Result<()> {
+        let last_block = self.read_last_block()?.expect("No block was found");
+        let mut batch = WriteBatch::default();
+
+        // Revert the non-height-prepended metadata storage keys
+        for metadata_key in [
+            "next_epoch_min_start_height",
+            "next_epoch_min_start_time",
+            "tx_queue",
+        ] {
+            let key = Key::from(metadata_key.to_owned().to_db_key());
+            let previous_key =
+                Key::from(format!("pred/{}", metadata_key).to_db_key());
+            let previous_value = self.read_subspace_val(&previous_key)?.expect(
+                format!("Missing {} metadata key in storage", metadata_key)
+                    .as_str(),
+            );
+            batch.put(key.to_string(), previous_value);
+        }
+
+        // Delete all the subspace diff keys prepended with the previous last height and restore values to previous diffs
+        let previous_height =
+            BlockHeight::from(u64::from(last_block.height) - 1);
+
+        for (key, _value, _gas) in
+            self.iter_prefix(&Key::from("subspace".to_string().to_db_key()))
+        {
+            // Get any previous value
+            let previous_value = self.read_subspace_val_with_height(
+                &Key::from(key.to_db_key()),
+                previous_height,
+                last_block.height,
+            )?;
+
+            // Delete diff keys
+            let diff_key = Key::from(last_block.height.to_db_key())
+                .push(&"diffs".to_owned())
+                .map_err(|e| Error::KeyError(e))?;
+            for diff in ["old", "new"] {
+                let key = diff_key
+                    .clone()
+                    .push(&diff.to_owned())
+                    .map_err(|e| Error::KeyError(e))?
+                    .push(&key)
+                    .map_err(|e| Error::KeyError(e))?;
+                batch.delete(&key.to_string());
+            }
+
+            // Restore previous height diff if present, otherwise delete the subspace key
+            match previous_value {
+                Some(value) => batch.put(&key, value),
+                None => batch.delete(&key),
+            }
+        }
+
+        // FIXME: Delete any non-subspace key prepended with the last height
+
+        // Write the batch and persist changes to disk
+        self.exec_batch(batch)?;
+        self.flush(true)
+    }
 }
 
 impl DB for RocksDB {
@@ -515,6 +578,7 @@ impl DB for RocksDB {
                 .get("next_epoch_min_start_height")
                 .map_err(|e| Error::DBError(e.into_string()))?
         {
+            //FIXME:
             // Write the predecessor value for rollback
             batch.put("pred/next_epoch_min_start_height", current_value);
         }
