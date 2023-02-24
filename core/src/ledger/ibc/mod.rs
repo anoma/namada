@@ -2,15 +2,14 @@
 
 mod context;
 pub mod storage;
-mod transfer_mod;
 
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use context::storage::IbcStorageContext;
+use context::transfer_mod::TransferModule;
 use prost::Message;
 use thiserror::Error;
-use transfer_mod::TransferModule;
 
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
