@@ -2,6 +2,7 @@
 
 use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
+use crate::ledger::storage_api::token::Amount;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -51,8 +52,6 @@ where
 
     let funds_key = storage::get_funds_key(proposal_id);
     storage.write(&funds_key, min_proposal_funds)?;
-
-    println!("{:?}", &funds_key);
 
     // this key must always be written for each proposal
     let committing_proposals_key =
