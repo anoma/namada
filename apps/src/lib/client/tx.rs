@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -11,8 +11,7 @@ use std::{env, fs};
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER_PERMISSIVE;
-use data_encoding::HEXLOWER;
+use data_encoding::{HEXLOWER, HEXLOWER_PERMISSIVE};
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -45,7 +44,7 @@ use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address, InternalAddress};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType, Council,
+    Council, OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
@@ -59,7 +58,7 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada::types::transaction::pgf::{InitCounsil, PgfProject, PgfProjectsUpdate};
+use namada::types::transaction::pgf::{InitCounsil, PgfReceipients};
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::vm;
@@ -1789,7 +1788,8 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let data = transfer
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
-    let tx_code = if transfer.source == Address::Internal(InternalAddress::Pgf)  {
+    let tx_code = if transfer.source == Address::Internal(InternalAddress::Pgf)
+    {
         ctx.read_wasm(TX_TRANSFER_PGF_WASM)
     } else {
         ctx.read_wasm(TX_TRANSFER_WASM)
@@ -1797,8 +1797,10 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let tx = Tx::new(tx_code, Some(data));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
-    let pks_map = if transfer.source == Address::Internal(InternalAddress::Pgf) {
-        let account_address = ctx.get(&args.address.expect("Need to specify the account address."));
+    let pks_map = if transfer.source == Address::Internal(InternalAddress::Pgf)
+    {
+        let account_address = ctx
+            .get(&args.address.expect("Need to specify the account address."));
         rpc::get_address_pks_map(&client, &account_address).await
     } else {
         rpc::get_address_pks_map(&client, &source).await
@@ -2101,8 +2103,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
         "yay" => {
             if let Some(vote_path) = args.proposal_pgf {
-                let counsil_data_content = tokio::fs::read(vote_path).await.expect("Could not read PGF votes file");
-                let counsil_data: HashSet<Council> = serde_json::from_slice(&counsil_data_content).expect("Should be able to parse pgf file.");        
+                let counsil_data_content = tokio::fs::read(vote_path)
+                    .await
+                    .expect("Could not read PGF votes file");
+                let counsil_data: HashSet<Council> =
+                    serde_json::from_slice(&counsil_data_content)
+                        .expect("Should be able to parse pgf file.");
                 ProposalVote::Yay(VoteType::PGFCouncil(counsil_data))
             } else if let Some(eth) = args.proposal_eth {
                 let mut splits = eth.trim().split_ascii_whitespace();
@@ -2235,14 +2241,15 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                 for counsil in councils {
                     match counsil.address {
                         Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(&counsil.address);
+                            let vp_key =
+                                Key::validity_predicate(&counsil.address);
                             if !rpc::query_has_storage_key(&client, &vp_key)
                                 .await
                             {
                                 eprintln!(
                                     "Proposed PGF council {} cannot be found \
                                      in storage",
-                                     counsil.address
+                                    counsil.address
                                 );
                                 safe_exit(1);
                             }
@@ -2251,7 +2258,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                             eprintln!(
                                 "PGF council vote contains a non-established \
                                  address: {}",
-                                 counsil.address
+                                counsil.address
                             );
                             safe_exit(1);
                         }
@@ -2353,23 +2360,23 @@ pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
     }
 }
 
-pub async fn submit_update_pgf_projects(
-    mut ctx: Context,
-    args::UpdatePgfProjects {
+pub async fn submit_pgf_receipients(
+    ctx: Context,
+    args::PgfReceipients {
         tx: tx_args,
         address,
         data_path,
-    }: args::UpdatePgfProjects,
+    }: args::PgfReceipients,
 ) {
     let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
 
     let file = File::open(data_path).expect("File must exist.");
-    let pgf_projects: PgfProjectsUpdate =
+    let pgf_receipients: PgfReceipients =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let counsil_address = ctx.get(&address);
 
-    let data = pgf_projects
+    let data = pgf_receipients
         .try_to_vec()
         .expect("Encoding proposal data shouldn't fail");
     let tx_code = ctx.read_wasm(TX_UPDATE_PGF_PROJECTS);
@@ -2594,7 +2601,7 @@ pub async fn submit_init_counsil(
     let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
 
     let tx = Tx::new(tx_code, Some(data));
-    let (ctx, initialized_accounts) = process_tx(
+    let (_ctx, _initialized_accounts) = process_tx(
         ctx,
         &tx_args,
         tx,

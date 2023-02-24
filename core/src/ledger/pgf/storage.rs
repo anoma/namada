@@ -17,46 +17,31 @@ pub fn is_pgf_key(key: &Key) -> bool {
 
 /// Check if a key is a PGF candidate key
 pub fn is_candidates_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [
+    matches!(
+        &key.segments[..], [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(address),
-            DbKeySeg::StringSeg(spending_cap),
-        ] if addr == &ADDRESS
-            && prefix == CANDIDATES =>
-        {
-            true
-        }
-        _ => false,
-    }
+            DbKeySeg::AddressSeg(_address),
+            DbKeySeg::StringSeg(_spending_cap),
+        ] if addr == &ADDRESS && prefix == CANDIDATES)
 }
 
 /// Check if key is PGF spent amount key
 pub fn is_spent_amount_key(key: &Key) -> bool {
-    match &key.segments[..] {
+    matches!(&key.segments[..],
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix)
-        ] if addr == &ADDRESS && prefix == SPENT_AMOUNT => {
-            true
-        }
-        _ => false
-    }
+        ] if addr == &ADDRESS && prefix == SPENT_AMOUNT)
 }
-
 
 /// Check if key is cPGF key
 pub fn is_cpgf_recipient_key(key: &Key) -> bool {
-    match &key.segments[..] {
+    matches!(&key.segments[..],
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix)
-        ] if addr == &ADDRESS && prefix == CPGF_RECIPIENTS => {
-            true
-        }
-        _ => false
-    }
+        ] if addr == &ADDRESS && prefix == CPGF_RECIPIENTS)
 }
 
 /// Get continuous PGF recipients addresses key
@@ -73,7 +58,6 @@ pub fn get_spending_cap_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-
 /// Get PGF council spent amount key
 pub fn get_spent_amount_key() -> Key {
     Key::from(ADDRESS.to_db_key())
@@ -81,14 +65,12 @@ pub fn get_spent_amount_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-
 /// Get PGF candidacy expiration
 pub fn get_candidacy_expiration_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&CANDIDACY_EXPIRATION.to_owned())
         .expect("Cannot obtain a storage key")
 }
-
 
 /// Get PGF candidate key
 pub fn get_candidate_key(address: &Address, spending_cap: Amount) -> Key {
@@ -125,13 +107,15 @@ pub fn get_candidate_spending_cap(key: &Key) -> Option<Amount> {
     match key.get_at(3) {
         Some(addr) => match addr {
             DbKeySeg::AddressSeg(_) => None,
-            DbKeySeg::StringSeg(amount) => Amount::parse(amount.to_owned()).ok(),
+            DbKeySeg::StringSeg(amount) => {
+                Amount::parse(amount.to_owned()).ok()
+            }
         },
         None => None,
     }
 }
 
-/// Get candidates prefix 
+/// Get candidates prefix
 pub fn candidates_prefix_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&CANDIDATES.to_owned())

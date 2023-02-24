@@ -2,7 +2,6 @@ use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
-use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::ledger::governance::{
     storage as gov_storage, ADDRESS as gov_address,
 };
@@ -14,17 +13,10 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
-<<<<<<< HEAD
 use namada::types::address::{Address, InternalAddress};
-use namada::types::governance::{Tally, TallyResult, VotePower};
-use namada::types::storage::Epoch;
-use namada::types::token::{ZERO_AMOUNT, balance_key};
-=======
-use namada::types::address::Address;
 use namada::types::governance::{Council, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
-use namada::types::token::ZERO_AMOUNT;
->>>>>>> bc8fc4b2704ca68bae285b06e8f014e66b5b829e
+use namada::types::token::{balance_key, ZERO_AMOUNT};
 
 use super::*;
 
@@ -269,8 +261,14 @@ where
     {
         // Load some tokens to PGF for testing
         let native_token = shell.wl_storage.storage.native_token.clone();
-        let balance_key = balance_key(&native_token, &Address::Internal(InternalAddress::Pgf));
-        shell.wl_storage.write(&balance_key, token::Amount::whole(100000)).expect("Should be able to write to storage");
+        let balance_key = balance_key(
+            &native_token,
+            &Address::Internal(InternalAddress::Pgf),
+        );
+        shell
+            .wl_storage
+            .write(&balance_key, token::Amount::whole(100000))
+            .expect("Should be able to write to storage");
     }
 
     (

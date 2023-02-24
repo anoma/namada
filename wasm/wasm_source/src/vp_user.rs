@@ -30,7 +30,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
         if token::is_pgf_balance_key(key) {
             Self::PgfTransfer
         } else if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(&address)
+            Self::Token(address)
         } else if let Some((_, address)) =
             token::is_any_multitoken_balance_key(key)
         {
@@ -44,13 +44,15 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
-        } else if pgf_storage::is_candidates_key(&key) {
-            let candidate_address = pgf_storage::get_candidate_address(&key);
+        } else if pgf_storage::is_candidates_key(key) {
+            let candidate_address = pgf_storage::get_candidate_address(key);
             if let Some(address) = candidate_address {
                 Self::PgfCandidate(address)
             } else {
                 Self::Unknown
             }
+        } else if pgf_storage::is_cpgf_recipient_key(key) {
+            Self::PgfReceipients
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
         } else if token::is_masp_key(key) {

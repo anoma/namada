@@ -1,4 +1,4 @@
-use std::collections::{HashSet, BTreeSet};
+use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -25,11 +25,11 @@ pub struct InitCounsil {
     /// The current epoch
     pub epoch: Epoch,
     /// The arbitrary data
-    pub data: String
+    pub data: String,
 }
 
 /// List of pgf projects for continous founding
-pub type PgfProjectsUpdate = BTreeSet<PgfProject>;
+pub type PgfReceipients = BTreeSet<PgfReceipient>;
 
 /// A pgf project
 #[derive(
@@ -43,11 +43,11 @@ pub type PgfProjectsUpdate = BTreeSet<PgfProject>;
     BorshSerialize,
     BorshDeserialize,
     Serialize,
-    Deserialize
+    Deserialize,
 )]
-pub struct PgfProject {
+pub struct PgfReceipient {
     /// The pgf project address
     pub address: Address,
     /// THe amoun of token to be given each epoch
-    pub amount: Amount
+    pub amount: Amount,
 }

@@ -29,11 +29,13 @@ pub type VotePower = u128;
     Serialize,
     Deserialize,
     Eq,
-    PartialOrd
+    PartialOrd,
 )]
 pub struct Council {
+    /// The enstablished address of a counsil
     pub address: Address,
-    pub spending_cap: Amount
+    /// The spending cap of a counsil
+    pub spending_cap: Amount,
 }
 
 /// The type of a governance vote with the optional associated Memo

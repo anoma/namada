@@ -10,10 +10,9 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::address::InternalAddress;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
-
-use super::address::InternalAddress;
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -43,6 +42,7 @@ pub const SCALE: u64 = 1_000_000;
 /// The largest value that can be represented by this integer type
 pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
 
+/// The zero amount
 pub const ZERO_AMOUNT: Amount = Amount { micro: 0 };
 
 /// A change in tokens amount
@@ -92,6 +92,7 @@ impl Amount {
             .map(|result| Self { micro: result })
     }
 
+    /// Check if an amount is equal to zero
     pub fn is_greater_than_zero(&self) -> bool {
         self.micro > 0
     }
@@ -370,14 +371,12 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
 
 /// Check if the given storage key is a pgf balance
 pub fn is_pgf_balance_key(key: &Key) -> bool {
-    match &key.segments[..] {
+    matches!(&key.segments[..],
         [
             DbKeySeg::AddressSeg(_),
             DbKeySeg::StringSeg(key),
             DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY && owner.eq(&Address::Internal(InternalAddress::Pgf)) => true,
-        _ => false,
-    }
+        ] if key == BALANCE_STORAGE_KEY && owner.eq(&Address::Internal(InternalAddress::Pgf)))
 }
 
 /// Check if the given storage key is a masp key

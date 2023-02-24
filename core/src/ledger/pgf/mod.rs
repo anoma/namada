@@ -1,14 +1,9 @@
 //! Pgf library code
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use serde::{Deserialize, Serialize};
 
-use crate::types::{
-    address::{Address, InternalAddress},
-    storage::Epoch,
-};
-
-use super::storage_api::token::Amount;
+use crate::types::address::{Address, InternalAddress};
+use crate::types::storage::Epoch;
 
 /// pgf parameters
 pub mod parameters;
@@ -33,12 +28,15 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::Pgf);
     BorshSchema,
 )]
 pub struct CounsilData {
+    /// The epoch during which the counsil was candidated
     pub epoch: Epoch,
+    /// The extra data added to the counsil
     pub data: String,
 }
 
 impl CounsilData {
+    /// Checks that the data associateed with a counsil is within limit
     pub fn data_is_less_than(&self, max_characters: u64) -> bool {
-        return self.data.len() as u64 <= max_characters;
+        self.data.len() as u64 <= max_characters
     }
 }

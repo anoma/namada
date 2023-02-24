@@ -1,10 +1,10 @@
 // Re-export to show in rustdoc!
-pub use pos::Pos;
 pub use pgf::Pgf;
-use pos::POS;
 use pgf::PGF;
-mod pos;
+pub use pos::Pos;
+use pos::POS;
 mod pgf;
+mod pos;
 
 // Validity predicate queries
 router! {VP,

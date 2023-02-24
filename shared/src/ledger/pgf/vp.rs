@@ -1,18 +1,16 @@
 //! Governance VP
 use std::collections::BTreeSet;
 
-use ibc::core::ics04_channel::handler::verify;
 use namada_core::ledger::pgf::{storage as pgf_storage, CounsilData};
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::types::token::Amount;
-use sha2::digest::generic_array::typenum::private::IsLessOrEqualPrivate;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, storage};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Epoch, Key};
+use crate::types::storage::Key;
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
@@ -49,11 +47,10 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        _tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        println!("ok");
         let native_token = self.ctx.pre().get_native_token()?;
         let res = self
             .is_valid_key_set(keys_changed, &native_token)
@@ -62,20 +59,20 @@ where
             return Ok(false);
         }
 
-        println!("o2k");
-
         let result = keys_changed.iter().all(|key| {
             let key_type = KeyType::from_key(key, &native_token);
 
-            println!("{:?}", key_type);
-
             let result: Result<bool> = match key_type {
-                KeyType::BALANCE => self.is_valid_transfer(verifiers, &native_token),
+                KeyType::BALANCE => {
+                    self.is_valid_transfer(verifiers, &native_token)
+                }
                 KeyType::SPENT_AMOUNT => {
                     self.is_valid_spent_amount(key, &native_token)
                 }
                 KeyType::CANDIDACY => self.is_valid_candidacy(key, verifiers),
-                KeyType::PROJECTS => self.is_valid_project(verifiers, &native_token),
+                KeyType::RECEIPIENTS => {
+                    self.is_valid_project(verifiers, &native_token)
+                }
                 KeyType::UNKNOWN_PGF => Ok(false),
                 KeyType::UNKNOWN => Ok(true),
             };
@@ -100,7 +97,7 @@ where
         let condidate_address = pgf_storage::get_candidate_address(key);
         let candidate_spending_cap =
             pgf_storage::get_candidate_spending_cap(key);
-        let counsil_data: Option<CounsilData> = self.ctx.post().read(&key)?;
+        let counsil_data: Option<CounsilData> = self.ctx.post().read(key)?;
 
         match (
             counsil_data,
@@ -118,7 +115,8 @@ where
                 let is_valid_amount = spending_cap.is_greater_than_zero();
                 let is_valid_data = data.data_is_less_than(4096)
                     && data.epoch.eq(&current_epoch);
-                let is_valid_address = self.is_valid_counsil_address(address, verifiers)?;
+                let is_valid_address =
+                    self.is_valid_counsil_address(address, verifiers)?;
                 Ok(is_valid_address && is_valid_data && is_valid_amount)
             }
             _ => Ok(false),
@@ -131,12 +129,12 @@ where
         address: &Address,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let address_exist_key = Key::validity_predicate(&address);
+        let address_exist_key = Key::validity_predicate(address);
         let address_exist = self.ctx.has_key_pre(&address_exist_key)?;
-        Ok(address_exist && verifiers.contains(&address))
+        Ok(address_exist && verifiers.contains(address))
     }
 
-    // Validate transfer from pgf
+    /// Validate transfer from pgf
     pub fn is_valid_transfer(
         &self,
         verifiers: &BTreeSet<Address>,
@@ -145,10 +143,10 @@ where
         self.is_signed_by_active_counsil(native_token, verifiers)
     }
 
-    // Validate spent amount
+    /// Validate spent amount
     pub fn is_valid_spent_amount(
         &self,
-        key: &Key,
+        _key: &Key,
         native_token: &Address,
     ) -> Result<bool> {
         let pgf_balance_amount =
@@ -157,7 +155,6 @@ where
             self.ctx.pre().read(&pgf_balance_amount)?;
         let post_balance: Option<Amount> =
             self.ctx.post().read(&pgf_balance_amount)?;
-
 
         let spending_cap_key = pgf_storage::get_spending_cap_key();
         let pre_spending_cap: Option<Amount> =
@@ -188,11 +185,9 @@ where
                         post_spent_amount == pre_spent_amount + amount;
                     let is_not_over_spending_cap =
                         post_spent_amount <= spending_cap;
-                    return Ok(
-                        is_valid_post_spent_amount && is_not_over_spending_cap
-                    );
+                    Ok(is_valid_post_spent_amount && is_not_over_spending_cap)
                 } else {
-                    return Ok(false);
+                    Ok(false)
                 }
             }
             _ => Ok(false),
@@ -209,30 +204,31 @@ where
             token::balance_key(native_token, self.ctx.address),
             pgf_storage::get_spent_amount_key(),
         ]);
-        let total_sets_diff = mandatory_transfer_group
-            .difference(&keys)
-            .count();
+        let total_sets_diff = mandatory_transfer_group.difference(keys).count();
         Ok(total_sets_diff == 0
             || total_sets_diff == mandatory_transfer_group.len())
     }
 
     // Validate project key
-    fn is_valid_project(&self, verifiers: &BTreeSet<Address>, native_token: &Address) -> Result<bool> {
+    fn is_valid_project(
+        &self,
+        verifiers: &BTreeSet<Address>,
+        native_token: &Address,
+    ) -> Result<bool> {
         self.is_signed_by_active_counsil(native_token, verifiers)
     }
 
+    // Check if thesignature is valid for the active counsil
     fn is_signed_by_active_counsil(
         &self,
-        native_token: &Address,
-        verifiers: &BTreeSet<Address>
+        _native_token: &Address,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let active_counsil_address_key = pgf_storage::get_active_counsil_key();
         let active_counsil_address: Option<Address> =
             self.ctx.pre().read(&active_counsil_address_key)?;
-        println!("{}", active_counsil_address.is_some());
         match active_counsil_address {
             Some(address) => {
-                println!("{}", address.to_pretty_string());
                 let is_signed_by_active_counsil = verifiers.contains(&address);
                 Ok(is_signed_by_active_counsil)
             }
@@ -251,7 +247,7 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     CANDIDACY,
     #[allow(non_camel_case_types)]
-    PROJECTS,
+    RECEIPIENTS,
     #[allow(non_camel_case_types)]
     UNKNOWN_PGF,
     #[allow(non_camel_case_types)]
@@ -267,7 +263,7 @@ impl KeyType {
         } else if token::is_balance_key(native_token, key).is_some() {
             Self::BALANCE
         } else if pgf_storage::is_cpgf_recipient_key(key) {
-            Self::PROJECTS
+            Self::RECEIPIENTS
         } else if pgf_storage::is_pgf_key(key) {
             Self::UNKNOWN_PGF
         } else {

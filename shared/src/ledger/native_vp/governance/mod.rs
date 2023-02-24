@@ -5,10 +5,10 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use namada_core::ledger::governance::storage as gov_storage;
+use namada_core::ledger::pgf::{storage as pgf_storage, CounsilData};
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::types::governance::{ProposalVote, VoteType};
-use namada_core::ledger::pgf::{storage as pgf_storage, CounsilData};
 use namada_core::types::transaction::governance::ProposalType;
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
@@ -225,16 +225,33 @@ where
                         for council in councils {
                             match council.address {
                                 Address::Established(_) => {
-                                    let candidate_key = pgf_storage::get_candidate_key(&council.address, council.spending_cap);
+                                    let candidate_key =
+                                        pgf_storage::get_candidate_key(
+                                            &council.address,
+                                            council.spending_cap,
+                                        );
                                     if !self.ctx.has_key_pre(&candidate_key)? {
                                         return Ok(false);
                                     }
                                     let candidacy_expiration_key = pgf_storage::get_candidacy_expiration_key();
-                                    let candidacy_expiration: Option<u64> = self.ctx.read_pre(&candidacy_expiration_key)?;
-                                    let candidate_data: Option<CounsilData> = self.ctx.read_pre(&candidate_key)?;
-                                    match (candidacy_expiration, candidate_data) {
-                                        (Some(expiration), Some(candidate_data)) if candidate_data.epoch + expiration > pre_voting_end_epoch => (),
-                                        _ => return Ok(false)
+                                    let candidacy_expiration: Option<u64> =
+                                        self.ctx.read_pre(
+                                            &candidacy_expiration_key,
+                                        )?;
+                                    let candidate_data: Option<CounsilData> =
+                                        self.ctx.read_pre(&candidate_key)?;
+                                    match (candidacy_expiration, candidate_data)
+                                    {
+                                        (
+                                            Some(expiration),
+                                            Some(candidate_data),
+                                        ) if candidate_data.epoch
+                                            + expiration
+                                            > pre_voting_end_epoch =>
+                                        {
+                                            ()
+                                        }
+                                        _ => return Ok(false),
                                     };
                                 }
                                 _ => return Ok(false),

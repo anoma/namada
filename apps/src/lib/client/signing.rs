@@ -158,7 +158,6 @@ pub async fn tx_signers(
             .map(|signing_key| TxSigningKey::WalletKeypair(signing_key.clone()))
             .collect();
     } else if !args.signers.is_empty() {
-        println!("{}",  args.signers.len());
         default = args
             .signers
             .iter()

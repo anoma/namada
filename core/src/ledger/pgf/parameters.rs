@@ -25,11 +25,7 @@ pub struct PgfParams {
 
 impl Display for PgfParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Candidacy expiration: {}",
-            self.candidacy_expiration
-        )
+        write!(f, "Candidacy expiration: {}", self.candidacy_expiration)
     }
 }
 
@@ -49,10 +45,11 @@ impl PgfParams {
         H: storage::StorageHasher,
     {
         let Self {
-            candidacy_expiration
+            candidacy_expiration,
         } = self;
 
-        let candidaci_expiraton_key = pgf_storage::get_candidacy_expiration_key();
+        let candidaci_expiraton_key =
+            pgf_storage::get_candidacy_expiration_key();
         storage
             .write(&candidaci_expiraton_key, encode(&candidacy_expiration))
             .unwrap();
