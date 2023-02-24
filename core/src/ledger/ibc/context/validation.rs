@@ -24,7 +24,11 @@ use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+    ChannelId, ClientId, ConnectionId, PortId,
+};
+use crate::ibc::core::ics24_host::path::{
+    AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::{ContextError, ValidationContext};
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
@@ -94,10 +98,11 @@ where
 
     fn consensus_state(
         &self,
-        client_id: &ClientId,
-        height: &Height,
+        client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        let key = storage::consensus_state_key(client_id, height.clone());
+        let path = Path::ClientConsensusState(client_cons_state_path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         match self.ctx.read(&key) {
             Ok(Some(value)) => {
                 let any = Any::decode(&value[..]).map_err(|e| {
@@ -105,16 +110,18 @@ where
                 })?;
                 decode_consensus_state(any)
             }
-            Ok(None) => Err(ContextError::ClientError(
-                ClientError::ConsensusStateNotFound {
-                    client_id: *client_id,
-                    height: *height,
-                },
-            )),
+            Ok(None) => {
+                let client_id = storage::client_id(&key).expect("invalid key");
+                let height =
+                    storage::consensus_height(&key).expect("invalid key");
+                Err(ContextError::ClientError(
+                    ClientError::ConsensusStateNotFound { client_id, height },
+                ))
+            }
             Err(_) => Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
-                    "Reading the consensus state failed: ID {}",
-                    client_id,
+                    "Reading the consensus state failed: Key {}",
+                    key,
                 ),
             })),
         }
@@ -223,22 +230,29 @@ where
     fn host_height(&self) -> Result<Height, ContextError> {
         let height = self.ctx.get_height().map_err(|_| {
             ContextError::ClientError(ClientError::Other {
-                description: format!("Getting the host height failed",),
+                description: "Getting the host height failed".to_string(),
             })
         })?;
         // the revision number is always 0
         Height::new(0, height.0).map_err(ContextError::ClientError)
     }
 
-    fn pending_host_consensus_state(
-        &self,
-    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         let height = self.host_height()?;
-        self.host_consensus_state(&height)
+        let height = BlockHeight(height.revision_height());
+        let header = self.ctx.get_header(height).map_err(|_| {
+            ContextError::ClientError(ClientError::Other {
+                description: "Getting the host header failed".to_string(),
+            })
+        })?;
+        let time = TmTime::try_from(header.time).map_err(|_| {
+            ContextError::ClientError(ClientError::Other {
+                description: "Converting to Tenderming time failed".to_string(),
+            })
+        })?;
+        Ok(time.into())
     }
 
-    /// Returns the `ConsensusState` of the host (local) chain at a specific
-    /// height.
     fn host_consensus_state(
         &self,
         height: &Height,
@@ -308,7 +322,7 @@ where
         &self,
         counterparty_client_state: Any,
     ) -> Result<(), ConnectionError> {
-        // TODO: fix returned error to ContextError
+        // TODO: should return ContextError
         let client_state = self
             .decode_client_state(counterparty_client_state)
             .map_err(|_| ConnectionError::Other {
@@ -398,33 +412,32 @@ where
 
     fn channel_end(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::channel_key(&port_channel_id);
+        let path = Path::ChannelEnd(channel_end_path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         match self.ctx.read(&key) {
             Ok(Some(value)) => ChannelEnd::decode_vec(&value).map_err(|_| {
                 ContextError::ChannelError(ChannelError::Other {
                     description: format!(
-                        "Decoding the channel end failed: Port ID {}, Channel \
-                         ID {}",
-                        port_id, channel_id,
+                        "Decoding the channel end failed: Key {}",
+                        key,
                     ),
                 })
             }),
             Ok(None) => {
+                let port_channel_id =
+                    storage::port_channel_id(&key).expect("invalid key");
                 Err(ContextError::ChannelError(ChannelError::ChannelNotFound {
-                    channel_id,
-                    port_id,
+                    channel_id: port_channel_id.channel_id,
+                    port_id: port_channel_id.port_id,
                 }))
             }
             Err(_) => Err(ContextError::ChannelError(ChannelError::Other {
                 description: format!(
-                    "Reading the channel end failed: Port ID {}, Channel ID {}",
-                    port_id, channel_id,
+                    "Reading the channel end failed: Key {}",
+                    key,
                 ),
             })),
         }
@@ -463,55 +476,58 @@ where
 
     fn get_next_sequence_send(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_send_key(&port_channel_id);
+        let path = Path::SeqSend(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.read_sequence(&key)
     }
 
     fn get_next_sequence_recv(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        path: &SeqRecvPath,
     ) -> Result<Sequence, ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_recv_key(&port_channel_id);
+        let path = Path::SeqRecv(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.read_sequence(&key)
     }
 
     fn get_next_sequence_ack(
         &self,
-        port_channel_id: &(PortId, ChannelId),
+        path: &SeqAckPath,
     ) -> Result<Sequence, ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_ack_key(&port_channel_id);
+        let path = Path::SeqAck(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.read_sequence(&key)
     }
 
     fn get_packet_commitment(
         &self,
-        key: &(PortId, ChannelId, Sequence),
+        path: &CommitmentPath,
     ) -> Result<PacketCommitment, ContextError> {
-        let commitment_key = storage::commitment_key(&key.0, &key.1, key.2);
-        match self.ctx.read(&commitment_key) {
+        let path = Path::Commitment(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
+        match self.ctx.read(&key) {
             Ok(Some(value)) => Ok(value.into()),
-            Ok(None) => Err(ContextError::PacketError(
-                PacketError::PacketCommitmentNotFound { sequence: key.2 },
-            )),
+            Ok(None) => {
+                let port_channel_sequence_id =
+                    storage::port_channel_sequence_id(&key)
+                        .expect("invalid key");
+                Err(ContextError::PacketError(
+                    PacketError::PacketCommitmentNotFound {
+                        sequence: port_channel_sequence_id.2,
+                    },
+                ))
+            }
             Err(e) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
-                        "Reading commitment failed: sequence {}",
-                        key.2
+                        "Reading commitment failed: Key {}",
+                        key,
                     ),
                 },
             ))),
@@ -520,19 +536,28 @@ where
 
     fn get_packet_receipt(
         &self,
-        key: &(PortId, ChannelId, Sequence),
+        path: &ReceiptPath,
     ) -> Result<Receipt, ContextError> {
-        let receipt_key = storage::receipt_key(&key.0, &key.1, key.2);
-        match self.ctx.read(&receipt_key) {
+        let path = Path::Receipt(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
+        match self.ctx.read(&key) {
             Ok(Some(_)) => Ok(Receipt::Ok),
-            Ok(None) => Err(ContextError::PacketError(
-                PacketError::PacketReceiptNotFound { sequence: key.2 },
-            )),
+            Ok(None) => {
+                let port_channel_sequence_id =
+                    storage::port_channel_sequence_id(&key)
+                        .expect("invalid key");
+                Err(ContextError::PacketError(
+                    PacketError::PacketReceiptNotFound {
+                        sequence: port_channel_sequence_id.2,
+                    },
+                ))
+            }
             Err(e) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
-                        "Reading the receipt failed: sequence {}",
-                        key.2
+                        "Reading the receipt failed: Key {}",
+                        key,
                     ),
                 },
             ))),
@@ -541,19 +566,28 @@ where
 
     fn get_packet_acknowledgement(
         &self,
-        key: &(PortId, ChannelId, Sequence),
+        path: &AckPath,
     ) -> Result<AcknowledgementCommitment, ContextError> {
-        let ack_key = storage::ack_key(&key.0, &key.1, key.2);
-        match self.ctx.read(&ack_key) {
+        let path = Path::Ack(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
+        match self.ctx.read(&key) {
             Ok(Some(value)) => Ok(value.into()),
-            Ok(None) => Err(ContextError::PacketError(
-                PacketError::PacketAcknowledgementNotFound { sequence: key.2 },
-            )),
+            Ok(None) => {
+                let port_channel_sequence_id =
+                    storage::port_channel_sequence_id(&key)
+                        .expect("invalid key");
+                Err(ContextError::PacketError(
+                    PacketError::PacketAcknowledgementNotFound {
+                        sequence: port_channel_sequence_id.2,
+                    },
+                ))
+            }
             Err(e) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
-                        "Reading the ack commitment failed: sequence {}",
-                        key.2
+                        "Reading the ack commitment failed: Key {}",
+                        key
                     ),
                 },
             ))),

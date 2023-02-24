@@ -13,12 +13,11 @@ use crate::ibc::core::ics04_channel::commitment::{
 };
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
-};
+use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ibc::core::ics24_host::path::{
-    ClientConnectionsPath, ClientConsensusStatePath, ClientStatePath,
-    ClientTypePath, CommitmentsPath, ConnectionsPath, Path, ReceiptsPath,
+    AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
+    ClientStatePath, ClientTypePath, CommitmentPath, ConnectionPath, Path,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
 use crate::ibc::events::IbcEvent;
@@ -151,10 +150,10 @@ where
 
     fn store_connection(
         &mut self,
-        connections_path: ConnectionsPath,
+        connection_path: &ConnectionPath,
         connection_end: ConnectionEnd,
     ) -> Result<(), ContextError> {
-        let path = Path::Connections(connections_path);
+        let path = Path::Connection(connection_path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = connection_end
@@ -172,10 +171,10 @@ where
 
     fn store_connection_to_client(
         &mut self,
-        client_connections_path: ClientConnectionsPath,
+        client_connection_path: &ClientConnectionPath,
         conn_id: ConnectionId,
     ) -> Result<(), ContextError> {
-        let path = Path::ClientConnections(client_connections_path);
+        let path = Path::ClientConnection(client_connection_path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let list = match self.ctx.read(&key) {
@@ -220,10 +219,10 @@ where
 
     fn store_packet_commitment(
         &mut self,
-        path: CommitmentsPath,
+        path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        let path = Path::Commitments(path);
+        let path = Path::Commitment(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = commitment.into_vec();
@@ -241,9 +240,9 @@ where
 
     fn delete_packet_commitment(
         &mut self,
-        path: CommitmentsPath,
+        path: &CommitmentPath,
     ) -> Result<(), ContextError> {
-        let path = Path::Commitments(path);
+        let path = Path::Commitment(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         self.ctx.delete(&key).map_err(|e| {
@@ -260,10 +259,10 @@ where
 
     fn store_packet_receipt(
         &mut self,
-        path: ReceiptsPath,
+        path: &ReceiptPath,
         receipt: Receipt,
     ) -> Result<(), ContextError> {
-        let path = Path::Receipts(path);
+        let path = Path::Receipt(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         // the value is the same as ibc-go
@@ -282,17 +281,19 @@ where
 
     fn store_packet_acknowledgement(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        path: &AckPath,
         ack_commitment: AcknowledgementCommitment,
     ) -> Result<(), ContextError> {
-        let ack_key = storage::ack_key(&key.0, &key.1, key.2);
+        let path = Path::Ack(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         let bytes = ack_commitment.into_vec();
-        self.ctx.write(&ack_key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|e| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
                         "Writing the packet ack failed: Key {}",
-                        ack_key
+                        key
                     ),
                 },
             ))
@@ -301,57 +302,31 @@ where
 
     fn delete_packet_acknowledgement(
         &mut self,
-        key: (PortId, ChannelId, Sequence),
+        path: &AckPath,
     ) -> Result<(), ContextError> {
-        let ack_key = storage::ack_key(&key.0, &key.1, key.2);
-        self.ctx.delete(&ack_key).map_err(|e| {
+        let path = Path::Ack(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
+        self.ctx.delete(&key).map_err(|e| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
                         "Deleting the packet ack failed: Key {}",
-                        ack_key
+                        key
                     ),
                 },
             ))
         })
     }
 
-    fn store_connection_channels(
-        &mut self,
-        conn_id: ConnectionId,
-        port_channel_id: (PortId, ChannelId),
-    ) -> Result<(), ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let key = storage::connection_channels_key(&conn_id);
-        let mut list = self.connection_channels(&conn_id)?;
-        list.push((port_id, channel_id));
-        let bytes = list
-            .iter()
-            .fold("".to_string(), |acc, (p, c)| {
-                format!("{},{}", acc, format!("{}/{}", p, c))
-            })
-            .as_bytes();
-        self.ctx.write(&key, bytes).map_err(|e| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!(
-                    "Writing the port/channel list failed: Key {}",
-                    key
-                ),
-            })
-        })
-    }
-
     fn store_channel(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        path: &ChannelEndPath,
         channel_end: ChannelEnd,
     ) -> Result<(), ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::channel_key(&port_channel_id);
+        let path = Path::ChannelEnd(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         let bytes = channel_end.encode_vec().expect("encoding shouldn't fail");
         self.ctx.write(&key, bytes).map_err(|e| {
             ContextError::ChannelError(ChannelError::Other {
@@ -365,40 +340,34 @@ where
 
     fn store_next_sequence_send(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_send_key(&port_channel_id);
+        let path = Path::SeqSend(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.store_sequence(&key, seq)
     }
 
     fn store_next_sequence_recv(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        path: &SeqRecvPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_recv_key(&port_channel_id);
+        let path = Path::SeqRecv(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.store_sequence(&key, seq)
     }
 
     fn store_next_sequence_ack(
         &mut self,
-        port_channel_id: (PortId, ChannelId),
+        path: &SeqAckPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let port_id = port_channel_id.0;
-        let channel_id = port_channel_id.1;
-        let port_channel_id =
-            PortChannelId::new(channel_id.clone(), port_id.clone());
-        let key = storage::next_sequence_ack_key(&port_channel_id);
+        let path = Path::SeqAck(path.clone());
+        let key = storage::ibc_key(path.to_string())
+            .expect("Creating a key for the client state shouldn't fail");
         self.store_sequence(&key, seq)
     }
 

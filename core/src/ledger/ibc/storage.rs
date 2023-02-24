@@ -11,9 +11,9 @@ use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 use crate::ibc::core::ics24_host::path::{
-    AcksPath, ChannelEndsPath, ClientConsensusStatePath, ClientStatePath,
-    ClientTypePath, CommitmentsPath, ConnectionsPath, PortsPath, ReceiptsPath,
-    SeqAcksPath, SeqRecvsPath, SeqSendsPath,
+    AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath,
+    ClientTypePath, CommitmentPath, ConnectionPath, PortPath, ReceiptPath,
+    SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
@@ -186,14 +186,14 @@ pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
 
 /// Returns a key for the connection end
 pub fn connection_key(conn_id: &ConnectionId) -> Key {
-    let path = Path::Connections(ConnectionsPath(conn_id.clone()));
+    let path = Path::Connection(ConnectionPath(conn_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the connection shouldn't fail")
 }
 
 /// Returns a key for the channel end
 pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::ChannelEnds(ChannelEndsPath(
+    let path = Path::ChannelEnd(ChannelEndPath(
         port_channel_id.port_id.clone(),
         port_channel_id.channel_id,
     ));
@@ -210,7 +210,7 @@ pub fn connection_channels_key(conn_id: &ConnectionId) -> Key {
 
 /// Returns a key for the port
 pub fn port_key(port_id: &PortId) -> Key {
-    let path = Path::Ports(PortsPath(port_id.clone()));
+    let path = Path::Ports(PortPath(port_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the port shouldn't fail")
 }
@@ -223,7 +223,7 @@ pub fn capability_key(index: u64) -> Key {
 
 /// Returns a key for nextSequenceSend
 pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqSends(SeqSendsPath(
+    let path = Path::SeqSend(SeqSendPath(
         port_channel_id.port_id.clone(),
         port_channel_id.channel_id,
     ));
@@ -233,7 +233,7 @@ pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
 
 /// Returns a key for nextSequenceRecv
 pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqRecvs(SeqRecvsPath(
+    let path = Path::SeqRecv(SeqRecvPath(
         port_channel_id.port_id.clone(),
         port_channel_id.channel_id,
     ));
@@ -243,7 +243,7 @@ pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
 
 /// Returns a key for nextSequenceAck
 pub fn next_sequence_ack_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqAcks(SeqAcksPath(
+    let path = Path::SeqAck(SeqAckPath(
         port_channel_id.port_id.clone(),
         port_channel_id.channel_id,
     ));
@@ -257,7 +257,7 @@ pub fn commitment_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Commitments(CommitmentsPath {
+    let path = Path::Commitment(CommitmentPath {
         port_id: port_id.clone(),
         channel_id: *channel_id,
         sequence,
@@ -272,7 +272,7 @@ pub fn receipt_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Receipts(ReceiptsPath {
+    let path = Path::Receipt(ReceiptPath {
         port_id: port_id.clone(),
         channel_id: *channel_id,
         sequence,
@@ -287,7 +287,7 @@ pub fn ack_key(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = Path::Acks(AcksPath {
+    let path = Path::Ack(AckPath {
         port_id: port_id.clone(),
         channel_id: *channel_id,
         sequence,
