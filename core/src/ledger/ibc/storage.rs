@@ -201,6 +201,13 @@ pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
         .expect("Creating a key for the channel shouldn't fail")
 }
 
+/// Returns a key for the channel list
+pub fn connection_channels_key(conn_id: &ConnectionId) -> Key {
+    let path = format!("clients/{}/connections", conn_id);
+    ibc_key(path.to_string())
+        .expect("Creating a key for the channel shouldn't fail")
+}
+
 /// Returns a key for the port
 pub fn port_key(port_id: &PortId) -> Key {
     let path = Path::Ports(PortsPath(port_id.clone()));

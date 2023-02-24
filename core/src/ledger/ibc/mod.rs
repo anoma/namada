@@ -20,8 +20,7 @@ use crate::ibc::applications::transfer::MODULE_ID_STR;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
-use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
-use crate::ibc::core::{ExecutionContext, ValidationContext};
+use crate::ibc::core::{execute, validate};
 use crate::ibc_proto::google::protobuf::Any;
 
 #[allow(missing_docs)]
@@ -76,12 +75,7 @@ where
                 // TODO: write results and emit the event
                 Ok(())
             }
-            _ => {
-                let envelope = MsgEnvelope::try_from(msg)
-                    .map_err(Error::DecodingMessage)?;
-                ExecutionContext::execute(self, envelope)
-                    .map_err(Error::Execution)
-            }
+            _ => execute(self, msg).map_err(Error::Execution),
         }
     }
 
@@ -95,12 +89,7 @@ where
                 // TODO: validate transfer and a sent packet
                 Ok(())
             }
-            _ => {
-                let envelope = MsgEnvelope::try_from(msg)
-                    .map_err(Error::DecodingMessage)?;
-                ValidationContext::validate(self, envelope)
-                    .map_err(Error::Execution)
-            }
+            _ => validate(self, msg).map_err(Error::Execution),
         }
     }
 }

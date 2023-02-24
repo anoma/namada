@@ -39,7 +39,7 @@ mod ibc_rs_conversion {
 
     use super::IbcEvent;
     use crate::ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
-    use crate::tendermint::abci::Event as AbciEvent;
+    use crate::tendermint_proto::abci::Event as AbciEvent;
 
     #[allow(missing_docs)]
     #[derive(Error, Debug)]

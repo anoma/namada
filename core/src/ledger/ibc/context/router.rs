@@ -1,6 +1,6 @@
 //! Functions to handle IBC modules
 
-use std::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut};
 
 use super::super::{IbcActions, IbcStorageContext};
 use crate::ibc::core::context::Router;

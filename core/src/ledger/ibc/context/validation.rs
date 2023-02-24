@@ -1,5 +1,7 @@
 //! ValidationContext implementation for IBC
 
+use core::str::FromStr;
+
 use prost::Message;
 use sha2::Digest;
 
@@ -430,9 +432,33 @@ where
 
     fn connection_channels(
         &self,
-        cid: &ConnectionId,
+        conn_id: &ConnectionId,
     ) -> Result<Vec<(PortId, ChannelId)>, ContextError> {
-        todo!("");
+        let key = storage::connection_channels_key(conn_id);
+        match self.ctx.read(&key) {
+            Ok(Some(value)) => {
+                let list = String::from_utf8(value).map_err(|e| {
+                    ContextError::ConnectionError(ConnectionError::Other {
+                        description: format!(
+                            "Decoding the connection list failed: Key {}, \
+                             error {}",
+                            key, e
+                        ),
+                    })
+                })?;
+                parse_port_channel_list(list)
+            }
+            Ok(None) => Ok(Vec::new()),
+            Err(_) => {
+                Err(ContextError::ConnectionError(ConnectionError::Other {
+                    description: format!(
+                        "Reading the port/channel list failed: Connection ID \
+                         {},",
+                        conn_id,
+                    ),
+                }))
+            }
+        }
     }
 
     fn get_next_sequence_send(
@@ -628,7 +654,7 @@ impl<C> IbcActions<C>
 where
     C: IbcStorageContext,
 {
-    fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
+    pub fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
         match self.ctx.read(&key) {
             Ok(Some(value)) => {
                 let value: [u8; 8] = value.try_into().map_err(|_| {
@@ -648,7 +674,7 @@ where
         }
     }
 
-    fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
+    pub fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
         match self.ctx.read(&key) {
             Ok(Some(value)) => {
                 let value: [u8; 8] = value.try_into().map_err(|_| {
@@ -694,4 +720,52 @@ pub fn decode_consensus_state(
     Err(ContextError::ClientError(ClientError::ClientSpecific {
         description: format!("Unknown consensus state"),
     }))
+}
+
+/// Parse a port/channel list, e.g. "my-port/channel-0,my-port/channel-1"
+fn parse_port_channel_list(
+    list: impl AsRef<str>,
+) -> Result<Vec<(PortId, ChannelId)>, ContextError> {
+    let mut port_channel_list = Vec::new();
+    for pair in list.as_ref().split(',') {
+        let port_channel = pair.split('/');
+        let port_id_str = port_channel.next().ok_or_else(|| {
+            ContextError::ConnectionError(ConnectionError::Other {
+                description: format!("No port ID in the entry: {}", pair),
+            })
+        })?;
+        let port_id = PortId::from_str(port_id_str).map_err(|_| {
+            ContextError::ConnectionError(ConnectionError::Other {
+                description: format!(
+                    "Parsing the port ID failed: {}",
+                    port_id_str
+                ),
+            })
+        })?;
+        let channel_id_str = port_channel.next().ok_or_else(|| {
+            ContextError::ConnectionError(ConnectionError::Other {
+                description: format!("No channel ID in the entry: {}", pair),
+            })
+        })?;
+        let channel_id = ChannelId::from_str(channel_id_str).map_err(|_| {
+            ContextError::ConnectionError(ConnectionError::Other {
+                description: format!(
+                    "Parsing the channel ID failed: {}",
+                    channel_id_str
+                ),
+            })
+        })?;
+        if port_channel.next().is_some() {
+            return Err(ContextError::ConnectionError(
+                ConnectionError::Other {
+                    description: format!(
+                        "The port/channel pair has an unexpected entry: {}",
+                        pair
+                    ),
+                },
+            ));
+        }
+        port_channel_list.push((port_id, channel_id));
+    }
+    Ok(port_channel_list)
 }
