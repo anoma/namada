@@ -12,6 +12,7 @@ pub mod write_log;
 
 use core::fmt::Debug;
 
+use borsh::BorshSerialize;
 use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,

@@ -4906,6 +4906,7 @@ dependencies = [
  "borsh",
  "derivative",
  "namada_core",
+ "once_cell",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",

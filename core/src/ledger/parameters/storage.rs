@@ -129,14 +129,6 @@ pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
     ] if addr == &ADDRESS && max_proposal_bytes == Keys::VALUES.max_proposal_bytes)
 }
 
-/// Returns if the key is the max proposal bytes key.
-pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [
-        DbKeySeg::AddressSeg(addr),
-        DbKeySeg::StringSeg(max_proposal_bytes),
-    ] if addr == &ADDRESS && max_proposal_bytes == MAX_PROPOSAL_BYTES_KEY)
-}
-
 /// Storage key used for epoch parameter.
 pub fn get_epoch_duration_storage_key() -> Key {
     Key {
@@ -265,16 +257,6 @@ pub fn get_wrapper_tx_fees_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.wrapper_tx_fees.to_string()),
-        ],
-    }
-}
-
-/// Storage key used for the max proposal bytes.
-pub fn get_max_proposal_bytes_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(MAX_PROPOSAL_BYTES_KEY.to_string()),
         ],
     }
 }

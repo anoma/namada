@@ -81,7 +81,7 @@ impl Amount {
             .map(|result| Self { micro: result })
     }
 
-    /// Checked subtraction. Returns `None` on underflow
+    /// Checked subtraction. Returns `None` on underflow.
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
         self.micro
             .checked_sub(amount.micro)
@@ -97,20 +97,6 @@ impl Amount {
         Self {
             micro: change as u64,
         }
-    }
-
-    /// Checked addition on amounts
-    pub fn checked_add(&self, amount: &Amount) -> Option<Self> {
-        self.micro
-            .checked_add(amount.micro)
-            .map(|micro| Self { micro })
-    }
-
-    /// Checked subtraction on amounts
-    pub fn checked_sub(&self, amount: &Amount) -> Option<Self> {
-        self.micro
-            .checked_sub(amount.micro)
-            .map(|micro| Self { micro })
     }
 }
 
