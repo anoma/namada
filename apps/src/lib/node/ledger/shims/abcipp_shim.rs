@@ -1,15 +1,19 @@
 use std::convert::TryFrom;
 use std::future::Future;
+use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use futures::future::FutureExt;
+use tokio::sync::broadcast;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
+use namada::types::storage::BlockHeight;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
@@ -21,9 +25,21 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
+use crate::config::ActionAtHeight;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::node::ledger::abortable::AbortingTask;
+
+/// An action to be performed at a
+/// certain block height.
+#[derive(Debug)]
+pub enum Action {
+    /// Stop the chain.
+    Halt(BlockHeight),
+    /// Suspend consensus indefinitely.
+    Suspend(BlockHeight, broadcast::Receiver<AbortingTask>),
+}
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -39,6 +55,7 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    action_at_height: Option<Action>,
 }
 
 impl AbcippShim {
@@ -52,9 +69,16 @@ impl AbcippShim {
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
         native_token: Address,
+        abortable: broadcast::Receiver<AbortingTask>,
     ) -> (Self, AbciService) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
+        let action_at_height = match config.shell.action_at_height {
+            Some(ActionAtHeight{height, action: config::Action::Suspend}) => Some(Action::Suspend(height, abortable)),
+            Some(ActionAtHeight{height, action: config::Action::Halt}) => Some(Action::Halt(height)),
+            None => None,
+        };
+
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         (
             Self {
@@ -72,6 +96,7 @@ impl AbcippShim {
                 #[cfg(not(feature = "abcipp"))]
                 delivered_txs: vec![],
                 shell_recv,
+                action_at_height,
             },
             AbciService { shell_send },
         )
@@ -85,21 +110,49 @@ impl AbcippShim {
         hash_tx(bytes.as_slice())
     }
 
+    /// Check if we are at a block height with a scheduled action.
+    /// If so, perform the action.
+    fn maybe_take_action(&mut self, hght: i64) -> ControlFlow<()> {
+        let hght = BlockHeight::from(hght as u64);
+        match &mut self.action_at_height {
+            Some(Action::Suspend(ref height, recv)) if *height == hght => {
+                tracing::info!("Reached block height {}, suspending.", height);
+                loop {
+                    std::thread::sleep(Duration::from_millis(5));
+                    if recv.try_recv().is_ok() {
+                        break;
+                    }
+                }
+               ControlFlow::Break(())
+            }
+            Some(Action::Halt(height)) if *height == hght => {
+                tracing::info!("Reached block height {}, halting chain.", height);
+                ControlFlow::Break(())
+            }
+            _ => ControlFlow::Continue(())
+        }
+    }
+
     /// Run the shell's blocking loop that receives messages from the
     /// [`AbciService`].
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => self
-                    .service
-                    .call(Request::ProcessProposal(proposal))
-                    .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::ProcessProposal(resp) => {
-                            Ok(Resp::ProcessProposal((&resp).into()))
-                        }
-                        _ => unreachable!(),
-                    }),
+                Req::ProcessProposal(proposal) => {
+                    match self.maybe_take_action(proposal.height) {
+                        ControlFlow::Continue(_) => {}
+                        ControlFlow::Break(_) => return,
+                    }
+                    self.service
+                        .call(Request::ProcessProposal(proposal))
+                        .map_err(Error::from)
+                        .and_then(|res| match res {
+                            Response::ProcessProposal(resp) => {
+                                Ok(Resp::ProcessProposal((&resp).into()))
+                            }
+                            _ => unreachable!(),
+                        })
+                }
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let unprocessed_txs = block.txs.clone();
@@ -162,6 +215,21 @@ impl AbcippShim {
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
+                }
+                ref req @ Req::PrepareProposal(ref prepare) => {
+                    match self.maybe_take_action(prepare.height) {
+                        ControlFlow::Continue(_) => {}
+                        ControlFlow::Break(_) => return,
+                    }
+                    match Request::try_from(req.clone()) {
+                        Ok(request) => self
+                            .service
+                            .call(request)
+                            .map(Resp::try_from)
+                            .map_err(Error::Shell)
+                            .and_then(|inner| inner),
+                        Err(err) => Err(err),
+                    }
                 }
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self

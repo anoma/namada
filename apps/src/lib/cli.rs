@@ -759,6 +759,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Ledger {
         Run(LedgerRun),
+        RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
     }
@@ -771,8 +772,10 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
+                    .or(run_until)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -785,6 +788,7 @@ pub mod cmds {
                      defaults to run the node.",
                 )
                 .subcommand(LedgerRun::def())
+                .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
         }
@@ -806,6 +810,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Run Namada ledger node.")
                 .add_args::<args::LedgerRun>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil(pub args::LedgerRunUntil);
+
+    impl SubCmd for LedgerRunUntil {
+        const CMD: &'static str = "run-until";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerRunUntil::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Run Namada ledger node until a given height. Then halt \
+                     or suspend.",
+                )
+                .add_args::<args::LedgerRunUntil>()
         }
     }
 
@@ -1572,7 +1598,7 @@ pub mod args {
     use namada::types::governance::ProposalVote;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
-    use namada::types::storage::{self, Epoch};
+    use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::transaction::GasLimit;
@@ -1583,7 +1609,7 @@ pub mod args {
     use super::{ArgGroup, ArgMatches};
     use crate::client::types::{ParsedTxArgs, ParsedTxTransferArgs};
     use crate::config;
-    use crate::config::TendermintMode;
+    use crate::config::{Action, ActionAtHeight, TendermintMode};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
@@ -1601,6 +1627,7 @@ pub mod args {
             Err(_) => config::DEFAULT_BASE_DIR.into(),
         }),
     );
+    const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     // const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     const CHAIN_ID: Arg<ChainId> = arg("chain-id");
@@ -1631,6 +1658,7 @@ pub mod args {
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
+    const HALT_ACTION: ArgFlag = flag("halt");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1677,6 +1705,7 @@ pub mod args {
     const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
+    const SUSPEND_ACTION: ArgFlag = flag("suspend");
     const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
@@ -1760,6 +1789,44 @@ pub mod args {
                 NAMADA_START_TIME
                     .def()
                     .about("The start time of the ledger."),
+            )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerRunUntil {
+        pub time: Option<DateTimeUtc>,
+        pub action_at_height: ActionAtHeight,
+    }
+
+    impl Args for LedgerRunUntil {
+        fn parse(matches: &ArgMatches) -> Self {
+            Self {
+                time: NAMADA_START_TIME.parse(matches),
+                action_at_height: ActionAtHeight {
+                    height: BLOCK_HEIGHT.parse(matches),
+                    action: if HALT_ACTION.parse(matches) {
+                        Action::Halt
+                    } else {
+                        Action::Suspend
+                    },
+                },
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                NAMADA_START_TIME
+                    .def()
+                    .about("The start time of the ledger."),
+            )
+            .arg(BLOCK_HEIGHT.def().about("The block height to run until."))
+            .arg(HALT_ACTION.def().about("Halt at the given block height"))
+            .arg(SUSPEND_ACTION.def().about("Suspend consensus at the given block height"))
+            .group(
+                ArgGroup::new("find_flags")
+                    .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
+                    .required(true),
             )
         }
     }
