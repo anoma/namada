@@ -19,8 +19,13 @@ use super::block_space_alloc::states::{
 };
 use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
+<<<<<<< HEAD
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+=======
+use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+>>>>>>> e30bd99a8 (Misc adjustments)
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
@@ -259,10 +264,8 @@ where
 mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
-    use namada::{
-        proof_of_stake::Epoch,
-        types::transaction::{Fee, WrapperTx},
-    };
+    use namada::proof_of_stake::Epoch;
+    use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{self, gen_keypair};
@@ -420,6 +423,7 @@ mod test_prepare_proposal {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
+            Epoch(0),
             0.into(),
             tx,
             Default::default(),

@@ -76,7 +76,6 @@ where
         &self,
         req: RequestProcessProposal,
     ) -> ProcessProposal {
-<<<<<<< HEAD
         let (tx_results, metadata) = self.process_txs(&req.txs);
 
         // Erroneous transactions were detected when processing
@@ -117,10 +116,6 @@ where
         } else {
             ProposalStatus::Accept
         };
-=======
-        let tx_results =
-            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
->>>>>>> d73aaec46 (Refactors block time retrieval)
 
         ProcessProposal {
             status: status as i32,
@@ -293,9 +288,8 @@ where
                                         .into(),
                                 }
                             } else {
-                                // Wrong inner tx commitment
                                 TxResult {
-                                    code: ErrorCodes::Undecryptable.into(),
+                                    code: ErrorCodes::InvalidTx.into(),
                                     info: "The encrypted payload of tx was \
                                            incorrectly marked as \
                                            un-decryptable"
@@ -770,7 +764,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that a tx incorrectly labelled as undecryptable
+    /// Test that a block containing a tx incorrectly labelled as undecryptable
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
@@ -806,23 +800,22 @@ mod test_process_proposal {
             txs: vec![tx.to_bytes()],
         };
 
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::Undecryptable));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "The encrypted payload of tx was incorrectly marked as \
-                 un-decryptable"
-            ),
-        )
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidTx)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    String::from(
+                        "The encrypted payload of tx was incorrectly marked \
+                         as un-decryptable"
+                    ),
+                )
+            }
+        }
     }
 
     /// Test that a wrapper tx whose inner_tx does not have
