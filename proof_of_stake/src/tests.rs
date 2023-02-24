@@ -15,6 +15,7 @@ use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
+use namada_core::types::key::{secp256k1, RefTo};
 use namada_core::types::storage::Epoch;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
@@ -637,11 +638,15 @@ fn test_become_validator_aux(
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
+    let eth_hot_key = gen_secp256k1_keypair().ref_to();
+    let eth_cold_key = gen_secp256k1_keypair().ref_to();
     become_validator(
         &mut s,
         &params,
         &new_validator,
         &consensus_key,
+        &eth_cold_key,
+        &eth_hot_key,
         current_epoch,
         Decimal::new(5, 2),
         Decimal::new(5, 2),
@@ -1579,16 +1584,30 @@ fn arb_genesis_validators(
                 let consensus_sk = common_sk_from_simple_seed(seed);
                 let consensus_key = consensus_sk.to_public();
 
+                let eth_hot_key = gen_secp256k1_keypair().ref_to();
+                let eth_cold_key = gen_secp256k1_keypair().ref_to();
+
                 let commission_rate = Decimal::new(5, 2);
                 let max_commission_rate_change = Decimal::new(1, 3);
                 GenesisValidator {
                     address,
                     tokens,
                     consensus_key,
+                    eth_hot_key,
+                    eth_cold_key,
                     commission_rate,
                     max_commission_rate_change,
                 }
             })
             .collect()
     })
+}
+
+fn gen_secp256k1_keypair() -> SecretKey {
+    use rand::prelude::ThreadRng;
+    use rand::thread_rng;
+    let mut rng: ThreadRng = thread_rng();
+    secp256k1::SigScheme::generate(&mut rng)
+        .try_to_sk()
+        .unwrap()
 }

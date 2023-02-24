@@ -39,5 +39,7 @@ tracing = "0.1.30"
 namada_core = {path = "../core", features = ["testing"]}
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+rand = "0.8"
+rand_core = "0.6"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}

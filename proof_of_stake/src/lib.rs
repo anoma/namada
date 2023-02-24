@@ -1555,6 +1555,8 @@ pub fn become_validator<S>(
     params: &PosParams,
     address: &Address,
     consensus_key: &common::PublicKey,
+    eth_cold_key: &common::PublicKey,
+    eth_hot_key: &common::PublicKey,
     current_epoch: Epoch,
     commission_rate: Decimal,
     max_commission_rate_change: Decimal,
@@ -1574,6 +1576,18 @@ where
     validator_consensus_key_handle(address).init(
         storage,
         consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_eth_hot_key_handle(&address).init(
+        storage,
+        eth_hot_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_eth_cold_key_handle(&address).init(
+        storage,
+        eth_cold_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
