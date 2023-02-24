@@ -51,13 +51,6 @@ pub mod tx {
         // keys.
         pub fn namada_tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
 
-        // Get an ID of a data iterator with key prefix, reverse ordered by
-        // storage keys.
-        pub fn namada_tx_rev_iter_prefix(
-            prefix_ptr: u64,
-            prefix_len: u64,
-        ) -> u64;
-
         // Returns the size of the value (can be 0), or -1 if there's no next
         // value. If a value is found, it will be placed in the read
         // cache, because we cannot allocate a buffer for it before we know
@@ -146,30 +139,26 @@ pub mod vp {
         // Returns 1 if the key is present in posterior state, -1 otherwise.
         pub fn namada_vp_has_key_post(key_ptr: u64, key_len: u64) -> i64;
 
-        // Get an ID of a data iterator with key prefix, ordered by storage
-        // keys.
-        pub fn namada_vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64;
-
-        // Get an ID of a data iterator with key prefix, reverse ordered by
-        // storage keys.
-        pub fn namada_vp_rev_iter_prefix(
+        // Get an ID of a data iterator with key prefix in prior state, ordered
+        // by storage keys.
+        pub fn namada_vp_iter_prefix_pre(
             prefix_ptr: u64,
             prefix_len: u64,
         ) -> u64;
 
-        // Read variable-length prior state when we don't know the size
-        // up-front, returns the size of the value (can be 0), or -1 if
-        // the key is not present. If a value is found, it will be placed in the
-        // result buffer, because we cannot allocate a buffer for it before
-        // we know its size.
-        pub fn namada_vp_iter_pre_next(iter_id: u64) -> i64;
+        // Get an ID of a data iterator with key prefix in posterior state,
+        // ordered by storage keys.
+        pub fn namada_vp_iter_prefix_post(
+            prefix_ptr: u64,
+            prefix_len: u64,
+        ) -> u64;
 
-        // Read variable-length posterior state when we don't know the size
-        // up-front, returns the size of the value (can be 0), or -1 if the
-        // key is not present. If a value is found, it will be placed in the
-        // result buffer, because we cannot allocate a buffer for it before
-        // we know its size.
-        pub fn namada_vp_iter_post_next(iter_id: u64) -> i64;
+        // Read variable-length iterator's next value when we don't know the
+        // size up-front, returns the size of the value (can be 0), or
+        // -1 if the key is not present. If a value is found, it will be
+        // placed in the result buffer, because we cannot allocate a
+        // buffer for it before we know its size.
+        pub fn namada_vp_iter_next(iter_id: u64) -> i64;
 
         // Get the chain ID
         pub fn namada_vp_get_chain_id(result_ptr: u64);
@@ -211,6 +200,8 @@ pub mod vp {
         ) -> i64;
 
         pub fn namada_vp_verify_masp(tx_ptr: u64, tx_len: u64) -> i64;
+
+        pub fn namada_vp_has_valid_pow() -> i64;
     }
 }
 

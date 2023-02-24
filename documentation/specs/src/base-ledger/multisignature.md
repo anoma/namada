@@ -45,7 +45,7 @@ To verify the correctness of the signatures, this VP will proceed with a two-ste
 
 Step 1 allows us to short-circuit the validation process and avoid unnecessary processing and storage access. Each signature will be validated **only** against the public key found in the list at the specified index. Step 2 will halt as soon as it retrieves enough valid signatures to match the threshold, meaning that the remaining signatures will not be verified.
 
-## Addresses
+## Addresses
 
 The vp introduced in the previous section is available for `established` addresses. To generate a multisig account we need to modify the `InitAccount` struct to support multiple public keys and a threshold, as follows:
 

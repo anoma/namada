@@ -1,41 +1,36 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
 pub mod ics23_specs;
+mod masp_conversions;
 pub mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod traits;
 pub mod types;
+mod wl_storage;
+pub mod write_log;
 
 use core::fmt::Debug;
-use std::collections::BTreeMap;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::convert::AllowedConversion;
-use masp_primitives::merkle_tree::FrozenCommitmentTree;
-use masp_primitives::sapling::Node;
 use merkle_tree::StorageBytes;
 pub use merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
-#[cfg(feature = "wasm-runtime")]
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
-};
-#[cfg(feature = "wasm-runtime")]
-use rayon::prelude::ParallelSlice;
 use thiserror::Error;
 pub use traits::{DummyHasher, KeccakHasher, Sha256Hasher, StorageHasher};
+pub use wl_storage::{
+    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage,
+};
 
+#[cfg(feature = "wasm-runtime")]
+pub use self::masp_conversions::update_allowed_conversions;
+pub use self::masp_conversions::{encode_asset_type, ConversionState};
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-use crate::ledger::storage_api;
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
@@ -53,16 +48,6 @@ use crate::types::{ethereum_structs, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
-/// A representation of the conversion state
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
-pub struct ConversionState {
-    /// The merkle root from the previous epoch
-    pub prev_root: Node,
-    /// The tree currently containing all the conversions
-    pub tree: FrozenCommitmentTree<Node>,
-    /// Map assets to their latest conversion and position in Merkle tree
-    pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
-}
 
 /// The storage data
 #[derive(Debug)]
@@ -309,13 +294,13 @@ pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
-
-    /// Read account subspace key value pairs with the given prefix from the DB,
-    /// reverse ordered by the storage keys.
-    fn rev_iter_prefix(&'iter self, prefix: &Key) -> Self::PrefixIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
@@ -444,7 +429,7 @@ where
     }
 
     /// Persist the current block's state to the database
-    pub fn commit(&mut self) -> Result<()> {
+    pub fn commit_block(&mut self) -> Result<()> {
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
@@ -519,21 +504,16 @@ where
         }
     }
 
-    /// Returns a prefix iterator, ordered by storage keys, and the gas cost
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Returns a prefix iterator, ordered by storage keys, and the gas cost.
     pub fn iter_prefix(
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (self.db.iter_prefix(prefix), prefix.len() as _)
-    }
-
-    /// Returns a prefix iterator, reverse ordered by storage keys, and the gas
-    /// cost
-    pub fn rev_iter_prefix(
-        &self,
-        prefix: &Key,
-    ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db.rev_iter_prefix(prefix), prefix.len() as _)
     }
 
     /// Returns a prefix iterator and the gas cost
@@ -767,7 +747,6 @@ where
 
     /// Initialize a new epoch when the current epoch is finished. Returns
     /// `true` on a new epoch.
-    #[cfg(feature = "wasm-runtime")]
     pub fn update_epoch(
         &mut self,
         height: BlockHeight,
@@ -795,7 +774,6 @@ where
                 .pred_epochs
                 .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
-            self.update_allowed_conversions()?;
         }
         self.update_epoch_in_merkle_tree()?;
         Ok(new_epoch)
@@ -804,172 +782,6 @@ where
     /// Get the current conversions
     pub fn get_conversion_state(&self) -> &ConversionState {
         &self.conversion_state
-    }
-
-    // Construct MASP asset type with given timestamp for given token
-    #[cfg(feature = "wasm-runtime")]
-    fn encode_asset_type(addr: Address, epoch: Epoch) -> AssetType {
-        let new_asset_bytes = (addr, epoch.0)
-            .try_to_vec()
-            .expect("unable to serialize address and epoch");
-        AssetType::new(new_asset_bytes.as_ref())
-            .expect("unable to derive asset identifier")
-    }
-
-    #[cfg(feature = "wasm-runtime")]
-    /// Update the MASP's allowed conversions
-    fn update_allowed_conversions(&mut self) -> Result<()> {
-        use masp_primitives::ff::PrimeField;
-        use masp_primitives::transaction::components::Amount as MaspAmount;
-
-        use crate::types::address::{masp_rewards, nam};
-
-        // The derived conversions will be placed in MASP address space
-        let masp_addr = masp();
-        let key_prefix: Key = masp_addr.to_db_key().into();
-
-        let masp_rewards = masp_rewards();
-        // The total transparent value of the rewards being distributed
-        let mut total_reward = token::Amount::from(0);
-
-        // Construct MASP asset type for rewards. Always timestamp reward tokens
-        // with the zeroth epoch to minimize the number of convert notes clients
-        // have to use. This trick works under the assumption that reward tokens
-        // from different epochs are exactly equivalent.
-        let reward_asset_bytes = (nam(), 0u64)
-            .try_to_vec()
-            .expect("unable to serialize address and epoch");
-        let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
-            .expect("unable to derive asset identifier");
-        // Conversions from the previous to current asset for each address
-        let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
-        // Reward all tokens according to above reward rates
-        for (addr, reward) in &masp_rewards {
-            // Dispence a transparent reward in parallel to the shielded rewards
-            let token_key = self.read(&token::balance_key(addr, &masp_addr));
-            if let Ok((Some(addr_balance), _)) = token_key {
-                // The reward for each reward.1 units of the current asset is
-                // reward.0 units of the reward token
-                let addr_bal: token::Amount =
-                    types::decode(addr_balance).expect("invalid balance");
-                // Since floor(a) + floor(b) <= floor(a+b), there will always be
-                // enough rewards to reimburse users
-                total_reward += (addr_bal * *reward).0;
-            }
-            // Provide an allowed conversion from previous timestamp. The
-            // negative sign allows each instance of the old asset to be
-            // cancelled out/replaced with the new asset
-            let old_asset =
-                Self::encode_asset_type(addr.clone(), self.last_epoch);
-            let new_asset =
-                Self::encode_asset_type(addr.clone(), self.block.epoch);
-            current_convs.insert(
-                addr.clone(),
-                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
-                    + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
-                .into(),
-            );
-            // Add a conversion from the previous asset type
-            self.conversion_state.assets.insert(
-                old_asset,
-                (addr.clone(), self.last_epoch, MaspAmount::zero().into(), 0),
-            );
-        }
-
-        // Try to distribute Merkle leaf updating as evenly as possible across
-        // multiple cores
-        let num_threads = rayon::current_num_threads();
-        // Put assets into vector to enable computation batching
-        let assets: Vec<_> = self
-            .conversion_state
-            .assets
-            .values_mut()
-            .enumerate()
-            .collect();
-        // ceil(assets.len() / num_threads)
-        let notes_per_thread_max = (assets.len() - 1) / num_threads + 1;
-        // floor(assets.len() / num_threads)
-        let notes_per_thread_min = assets.len() / num_threads;
-        // Now on each core, add the latest conversion to each conversion
-        let conv_notes: Vec<Node> = assets
-            .into_par_iter()
-            .with_min_len(notes_per_thread_min)
-            .with_max_len(notes_per_thread_max)
-            .map(|(idx, (addr, _epoch, conv, pos))| {
-                // Use transitivity to update conversion
-                *conv += current_convs[addr].clone();
-                // Update conversion position to leaf we are about to create
-                *pos = idx;
-                // The merkle tree need only provide the conversion commitment,
-                // the remaining information is provided through the storage API
-                Node::new(conv.cmu().to_repr())
-            })
-            .collect();
-
-        // Update the MASP's transparent reward token balance to ensure that it
-        // is sufficiently backed to redeem rewards
-        let reward_key = token::balance_key(&nam(), &masp_addr);
-        if let Ok((Some(addr_bal), _)) = self.read(&reward_key) {
-            // If there is already a balance, then add to it
-            let addr_bal: token::Amount =
-                types::decode(addr_bal).expect("invalid balance");
-            let new_bal = types::encode(&(addr_bal + total_reward));
-            self.write(&reward_key, new_bal)
-                .expect("unable to update MASP transparent balance");
-        } else {
-            // Otherwise the rewards form the entirity of the reward token
-            // balance
-            self.write(&reward_key, types::encode(&total_reward))
-                .expect("unable to update MASP transparent balance");
-        }
-        // Try to distribute Merkle tree construction as evenly as possible
-        // across multiple cores
-        // Merkle trees must have exactly 2^n leaves to be mergeable
-        let mut notes_per_thread_rounded = 1;
-        while notes_per_thread_max > notes_per_thread_rounded * 4 {
-            notes_per_thread_rounded *= 2;
-        }
-        // Make the sub-Merkle trees in parallel
-        let tree_parts: Vec<_> = conv_notes
-            .par_chunks(notes_per_thread_rounded)
-            .map(FrozenCommitmentTree::new)
-            .collect();
-
-        // Keep the merkle root from the old tree for transactions constructed
-        // close to the epoch boundary
-        self.conversion_state.prev_root = self.conversion_state.tree.root();
-
-        // Convert conversion vector into tree so that Merkle paths can be
-        // obtained
-        self.conversion_state.tree = FrozenCommitmentTree::merge(&tree_parts);
-
-        // Add purely decoding entries to the assets map. These will be
-        // overwritten before the creation of the next commitment tree
-        for addr in masp_rewards.keys() {
-            // Add the decoding entry for the new asset type. An uncommited
-            // node position is used since this is not a conversion.
-            let new_asset =
-                Self::encode_asset_type(addr.clone(), self.block.epoch);
-            self.conversion_state.assets.insert(
-                new_asset,
-                (
-                    addr.clone(),
-                    self.block.epoch,
-                    MaspAmount::zero().into(),
-                    self.conversion_state.tree.size(),
-                ),
-            );
-        }
-
-        // Save the current conversion state in order to avoid computing
-        // conversion commitments from scratch in the next epoch
-        let state_key = key_prefix
-            .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-            .map_err(Error::KeyError)?;
-        self.write(&state_key, types::encode(&self.conversion_state))
-            .expect("unable to save current conversion state");
-        Ok(())
     }
 
     /// Update the merkle tree with epoch data
@@ -1048,158 +860,6 @@ where
     }
 }
 
-impl<'iter, D, H> StorageRead<'iter> for Storage<D, H>
-where
-    D: DB + for<'iter_> DBIter<'iter_>,
-    H: StorageHasher,
-{
-    type PrefixIter = <D as DBIter<'iter>>::PrefixIter;
-
-    fn read_bytes(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
-        self.db.read_subspace_val(key).into_storage_result()
-    }
-
-    fn has_key(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> std::result::Result<bool, storage_api::Error> {
-        self.block.tree.has_key(key).into_storage_result()
-    }
-
-    fn iter_prefix(
-        &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
-        Ok(self.db.iter_prefix(prefix))
-    }
-
-    fn rev_iter_prefix(
-        &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> std::result::Result<Self::PrefixIter, storage_api::Error> {
-        Ok(self.db.rev_iter_prefix(prefix))
-    }
-
-    fn iter_next(
-        &self,
-        iter: &mut Self::PrefixIter,
-    ) -> std::result::Result<Option<(String, Vec<u8>)>, storage_api::Error>
-    {
-        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
-    }
-
-    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.chain_id.to_string())
-    }
-
-    fn get_block_height(
-        &self,
-    ) -> std::result::Result<BlockHeight, storage_api::Error> {
-        Ok(self.block.height)
-    }
-
-    fn get_block_hash(
-        &self,
-    ) -> std::result::Result<BlockHash, storage_api::Error> {
-        Ok(self.block.hash.clone())
-    }
-
-    fn get_block_epoch(
-        &self,
-    ) -> std::result::Result<Epoch, storage_api::Error> {
-        Ok(self.block.epoch)
-    }
-
-    fn get_tx_index(&self) -> std::result::Result<TxIndex, storage_api::Error> {
-        Ok(self.tx_index)
-    }
-
-    fn get_native_token(
-        &self,
-    ) -> std::result::Result<Address, storage_api::Error> {
-        Ok(self.native_token.clone())
-    }
-}
-
-impl<D, H> StorageWrite for Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    fn write_bytes(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::write`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        let val = val.as_ref();
-        self.block.tree.update(key, val).into_storage_result()?;
-        let _ = self
-            .db
-            .write_subspace_val(self.block.height, key, val)
-            .into_storage_result()?;
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &crate::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        // Note that this method is the same as `Storage::delete`, but without
-        // gas and storage bytes len diff accounting, because it can only be
-        // used by the protocol that has a direct mutable access to storage
-        self.block.tree.delete(key).into_storage_result()?;
-        let _ = self
-            .db
-            .delete_subspace_val(self.block.height, key)
-            .into_storage_result()?;
-        Ok(())
-    }
-}
-
-impl<D, H> StorageWrite for &mut Storage<D, H>
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    fn write<T: borsh::BorshSerialize>(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: T,
-    ) -> storage_api::Result<()> {
-        let val = val.try_to_vec().unwrap();
-        self.write_bytes(key, val)
-    }
-
-    fn write_bytes(
-        &mut self,
-        key: &crate::types::storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        let _ = self
-            .db
-            .write_subspace_val(self.block.height, key, val)
-            .into_storage_result()?;
-        Ok(())
-    }
-
-    fn delete(
-        &mut self,
-        key: &crate::types::storage::Key,
-    ) -> storage_api::Result<()> {
-        let _ = self
-            .db
-            .delete_subspace_val(self.block.height, key)
-            .into_storage_result()?;
-        Ok(())
-    }
-}
-
 impl From<MerkleTreeError> for Error {
     fn from(error: MerkleTreeError) -> Self {
         Self::MerkleTreeError(error)
@@ -1213,7 +873,15 @@ pub mod testing {
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::types::address;
-    /// Storage with a mock DB for testing
+
+    /// `WlStorage` with a mock DB for testing
+    pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
+
+    /// Storage with a mock DB for testing.
+    ///
+    /// Prefer to use [`TestWlStorage`], which implements
+    /// `storage_api::StorageRead + StorageWrite` with properly working
+    /// `prefix_iter`.
     pub type TestStorage = Storage<MockDB, Sha256Hasher>;
 
     impl Default for TestStorage {
@@ -1249,12 +917,23 @@ pub mod testing {
             }
         }
     }
+
+    #[allow(clippy::derivable_impls)]
+    impl Default for TestWlStorage {
+        fn default() -> Self {
+            Self {
+                write_log: Default::default(),
+                storage: Default::default(),
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
+    use proptest::test_runner::Config;
     use rust_decimal_macros::dec;
 
     use super::testing::*;
@@ -1303,6 +982,10 @@ mod tests {
     }
 
     proptest! {
+        #![proptest_config(Config {
+            cases: 10,
+            .. Config::default()
+        })]
         /// Test that:
         /// 1. When the minimum blocks have been created since the epoch
         ///    start height and minimum time passed since the epoch start time,
@@ -1334,6 +1017,10 @@ mod tests {
                 pos_gain_d: dec!(0.1),
                 staked_ratio: dec!(0.1),
                 pos_inflation_amount: 0,
+                #[cfg(not(feature = "mainnet"))]
+                faucet_account: None,
+                #[cfg(not(feature = "mainnet"))]
+                wrapper_tx_fees: None,
             };
             parameters.init_storage(&mut storage);
 

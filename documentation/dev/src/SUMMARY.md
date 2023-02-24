@@ -17,6 +17,7 @@
       - [Storage](./explore/design/ledger/storage.md)
         - [Data schema](./explore/design/ledger/storage/data-schema.md)
       - [PoS integration](./explore/design/ledger/pos-integration.md)
+      - [IBC integration](./explore/design/ledger/ibc.md)
     - [Crypto primitives](./explore/design/crypto-primitives.md)
     - [Actors](./explore/design/actors.md)
     - [Testnet setup](./explore/design/testnet-setup.md)

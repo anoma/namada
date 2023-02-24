@@ -109,7 +109,11 @@ where
 {
     match tx_type {
         TxType::Raw(_) => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted(tx)) => apply_wasm_tx(
+        TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+        }) => apply_wasm_tx(
             tx,
             tx_length,
             &tx_index,
@@ -304,6 +308,7 @@ where
 }
 
 /// Check the acceptance of a transaction by validity predicates
+#[allow(clippy::too_many_arguments)]
 fn check_vps<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
@@ -312,6 +317,10 @@ fn check_vps<D, H, CA>(
     write_log: &WriteLog,
     verifiers_from_tx: &BTreeSet<Address>,
     vp_wasm_cache: &mut VpCache<CA>,
+    #[cfg(not(feature = "mainnet"))]
+    // This is true when the wrapper of this tx contained a valid
+    // `testnet_pow::Solution`
+    has_valid_pow: bool,
 ) -> Result<VpsResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -332,6 +341,8 @@ where
         write_log,
         initial_gas,
         vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
@@ -353,6 +364,10 @@ fn execute_vps<D, H, CA>(
     write_log: &WriteLog,
     initial_gas: u64,
     vp_wasm_cache: &mut VpCache<CA>,
+    #[cfg(not(feature = "mainnet"))]
+    // This is true when the wrapper of this tx contained a valid
+    // `testnet_pow::Solution`
+    has_valid_pow: bool,
 ) -> Result<VpsResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -387,6 +402,8 @@ where
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow,
                     )
                     .map_err(Error::VpRunnerError)
                 }

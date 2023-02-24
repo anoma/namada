@@ -158,6 +158,13 @@ impl<'de> Deserialize<'de> for SecretKey {
     }
 }
 
+impl SecretKey {
+    /// Derive public key from this secret key
+    pub fn to_public(&self) -> PublicKey {
+        self.ref_to()
+    }
+}
+
 impl super::SecretKey for SecretKey {
     type PublicKey = PublicKey;
 

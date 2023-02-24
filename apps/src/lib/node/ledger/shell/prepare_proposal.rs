@@ -9,6 +9,7 @@ use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Tx;
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::storage::BlockHeight;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
@@ -32,6 +33,13 @@ use crate::node::ledger::shell::block_space_alloc;
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
+
+// TODO: remove this hard-coded value; Tendermint, and thus
+// Namada uses 20 MiB max block sizes by default; 5 MiB leaves
+// plenty of room for header data, evidence and protobuf serialization
+// overhead
+const MAX_PROPOSAL_SIZE: usize = 5 << 20;
+const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
 
 impl<D, H> Shell<D, H>
 where
@@ -1237,13 +1245,15 @@ mod test_prepare_proposal {
                 WrapperTx::new(
                     Fee {
                         amount: 0.into(),
-                        token: shell.storage.native_token.clone(),
+                        token: shell.wl_storage.storage.native_token.clone(),
                     },
                     &keypair,
                     Epoch(0),
                     0.into(),
                     tx,
                     Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
                 )
                 .try_to_vec()
                 .expect("Test failed"),
@@ -1284,18 +1294,23 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            expected_decrypted
-                .push(Tx::from(DecryptedTx::Decrypted(tx.clone())));
+            expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
+                tx: tx.clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }));
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
-                    token: shell.storage.native_token.clone(),
+                    token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
                 Epoch(0),
                 0.into(),
                 tx,
                 Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
             );
             let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
             shell.enqueue_tx(wrapper_tx);

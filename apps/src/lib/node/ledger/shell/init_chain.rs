@@ -2,11 +2,14 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+#[cfg(not(feature = "mainnet"))]
+use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::{into_tm_voting_power, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
+use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -36,7 +39,6 @@ where
         &mut self,
         init: request::InitChain,
     ) -> Result<response::InitChain> {
-        let (current_chain_id, _) = self.storage.get_chain_id();
         if current_chain_id != init.chain_id {
             return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
@@ -44,11 +46,13 @@ where
             )));
         }
         #[cfg(not(feature = "dev"))]
-        let genesis = genesis::genesis(&self.base_dir, &self.storage.chain_id);
+        let genesis =
+            genesis::genesis(&self.base_dir, &self.wl_storage.storage.chain_id);
         #[cfg(not(feature = "dev"))]
         {
             let genesis_bytes = genesis.try_to_vec().unwrap();
-            let errors = self.storage.chain_id.validate(genesis_bytes);
+            let errors =
+                self.wl_storage.storage.chain_id.validate(genesis_bytes);
             use itertools::Itertools;
             assert!(
                 errors.is_empty(),
@@ -85,6 +89,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            wrapper_tx_fees,
         } = genesis.parameters;
         // borrow necessary for release build, annoys clippy on dev build
         #[allow(clippy::needless_borrow)]
@@ -106,6 +111,24 @@ where
                 implicit_vp_code_path
             );
         }
+        #[cfg(not(feature = "mainnet"))]
+        // Try to find a faucet account
+        let faucet_account = {
+            genesis.established_accounts.iter().find_map(
+                |genesis::EstablishedAccount {
+                     address,
+                     vp_code_path,
+                     ..
+                 }| {
+                    if vp_code_path == "vp_testnet_faucet.wasm" {
+                        Some(address.clone())
+                    } else {
+                        None
+                    }
+                },
+            )
+        };
+
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
@@ -118,27 +141,18 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
         };
-        parameters.init_storage(&mut self.storage);
+        parameters.init_storage(&mut self.wl_storage.storage);
 
         // Initialize governance parameters
-        genesis.gov_params.init_storage(&mut self.storage);
-        // configure the Ethereum bridge if the configuration is set.
-        if let Some(config) = genesis.ethereum_bridge_params {
-            tracing::debug!("Initializing Ethereum bridge storage.");
-            config.init_storage(&mut self.storage);
-            self.start_ethereum_oracle_if_necessary();
-        } else {
-            self.storage
-                .write(
-                    &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.try_to_vec().unwrap(),
-                )
-                .unwrap();
-        }
 
         // Depends on parameters being initialized
-        self.storage
+        self.wl_storage
+            .storage
             .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
 
@@ -212,19 +226,37 @@ where
                 );
             }
 
-            self.storage
-                .write(&Key::validity_predicate(&address), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
 
             if let Some(pk) = public_key {
                 let pk_storage_key = pk_key(&address);
-                self.storage
-                    .write(&pk_storage_key, pk.try_to_vec().unwrap())
+                self.wl_storage
+                    .write_bytes(&pk_storage_key, pk.try_to_vec().unwrap())
                     .unwrap();
             }
 
             for (key, value) in storage {
-                self.storage.write(&key, value).unwrap();
+                self.wl_storage.write_bytes(&key, value).unwrap();
+            }
+
+            // When using a faucet WASM, initialize its PoW challenge storage
+            #[cfg(not(feature = "mainnet"))]
+            if vp_code_path == "vp_testnet_faucet.wasm" {
+                let difficulty =
+                    genesis.faucet_pow_difficulty.unwrap_or_default();
+                // withdrawal limit defaults to 1000 NAM when not set
+                let withdrawal_limit = genesis
+                    .faucet_withdrawal_limit
+                    .unwrap_or_else(|| token::Amount::whole(1_000));
+                testnet_pow::init_faucet_storage(
+                    &mut self.wl_storage,
+                    &address,
+                    difficulty,
+                    withdrawal_limit,
+                )
+                .expect("Couldn't init faucet storage")
             }
         }
         Ok(())
@@ -239,9 +271,7 @@ where
         for genesis::ImplicitAccount { public_key } in accounts {
             let address: Address = (&public_key).into();
             let pk_storage_key = pk_key(&address);
-            self.storage
-                .write(&pk_storage_key, public_key.try_to_vec().unwrap())
-                .unwrap();
+            self.wl_storage.write(&pk_storage_key, public_key).unwrap();
         }
     }
 
@@ -281,16 +311,13 @@ where
                 );
             }
 
-            self.storage
-                .write(&Key::validity_predicate(&address), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(&address), vp_code)
                 .unwrap();
 
             for (owner, amount) in balances {
-                self.storage
-                    .write(
-                        &token::balance_key(&address, &owner),
-                        amount.try_to_vec().unwrap(),
-                    )
+                self.wl_storage
+                    .write(&token::balance_key(&address, &owner), amount)
                     .unwrap();
             }
         }
@@ -329,47 +356,32 @@ where
             }
 
             let addr = &validator.pos_data.address;
-            self.storage
-                .write(&Key::validity_predicate(addr), vp_code)
+            self.wl_storage
+                .write_bytes(&Key::validity_predicate(addr), vp_code)
                 .expect("Unable to write user VP");
             // Validator account key
             let pk_key = pk_key(addr);
-            self.storage
-                .write(
-                    &pk_key,
-                    validator
-                        .account_key
-                        .try_to_vec()
-                        .expect("encode public key"),
-                )
+            self.wl_storage
+                .write(&pk_key, &validator.account_key)
                 .expect("Unable to set genesis user public key");
-            // Account balance (tokens not staked in PoS)
-            self.storage
+            // Account balance (tokens no staked in PoS)
+            self.wl_storage
                 .write(
-                    &token::balance_key(&self.storage.native_token, addr),
-                    validator
-                        .non_staked_balance
-                        .try_to_vec()
-                        .expect("encode token amount"),
+                    &token::balance_key(
+                        &self.wl_storage.storage.native_token,
+                        addr,
+                    ),
+                    validator.non_staked_balance,
                 )
                 .expect("Unable to set genesis balance");
-            self.storage
-                .write(
-                    &protocol_pk_key(addr),
-                    validator
-                        .protocol_key
-                        .try_to_vec()
-                        .expect("encode protocol public key"),
-                )
+            self.wl_storage
+                .write(&protocol_pk_key(addr), &validator.protocol_key)
                 .expect("Unable to set genesis user protocol public key");
 
-            self.storage
+            self.wl_storage
                 .write(
                     &dkg_session_keys::dkg_pk_key(addr),
-                    validator
-                        .dkg_public_key
-                        .try_to_vec()
-                        .expect("encode public DKG session key"),
+                    &validator.dkg_public_key,
                 )
                 .expect("Unable to set genesis user public DKG session key");
         }
@@ -383,14 +395,18 @@ where
     ) -> response::InitChain {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized
-        let (current_epoch, _gas) = self.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         pos::init_genesis_storage(
-            &mut self.storage,
-            pos_params,
-            validators.iter().map(|validator| &validator.pos_data),
+            &mut self.wl_storage,
+            &genesis.pos_params,
+            genesis
+                .validators
+                .clone()
+                .into_iter()
+                .map(|validator| validator.pos_data),
             current_epoch,
         );
-        ibc::init_genesis_storage(&mut self.storage);
+        ibc::init_genesis_storage(&mut self.wl_storage.storage);
 
         // Set the initial validator set
         for validator in validators {

@@ -20,6 +20,7 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::{btc, eth, masp_rewards, Address};
+use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::ethereum_bridge;
@@ -152,7 +153,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // 4. Check that all the nodes processed the tx with the same result
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;
@@ -260,6 +261,9 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    // Wait for a new epoch
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    epoch_sleep(&test, &validator_one_rpc, 30)?;
 
     // 2. Shut it down
     ledger.send_control('c')?;
@@ -312,8 +316,10 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 3. Submit a transaction to update an account's validity predicate
 /// 4. Submit a custom tx
 /// 5. Submit a tx to initialize a new account
-/// 6. Query token balance
-/// 7. Query the raw bytes of a storage key
+/// 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+///    solution)
+/// 7. Query token balance
+/// 8. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
@@ -371,7 +377,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--fee-amount",
+            "--gas-amount",
             "0",
             "--gas-limit",
             "0",
@@ -436,6 +442,24 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--ledger-address",
             &validator_one_rpc,
         ],
+    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+    //    solution)
+        vec![
+            "transfer",
+            "--source",
+            "faucet",
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            // Faucet withdrawal requires an explicit signer
+            "--signer",
+            ALBERT,
+            "--ledger-address",
+            &validator_one_rpc,
+        ],
     ];
 
     for tx_args in &txs_args {
@@ -457,7 +481,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
 
     let query_args_and_expected_response = vec![
-        // 6. Query token balance
+        // 7. Query token balance
         (
             vec![
                 "balance",
@@ -484,7 +508,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
-        // 7. Query storage key and get hex-encoded raw bytes
+        // 8. Query storage key and get hex-encoded raw bytes
         (
             vec![
                 "query-bytes",
@@ -1759,7 +1783,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
-    ledger.exp_string("some VPs rejected transaction")?;
+    ledger.exp_string("rejected txs: 1")?;
 
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
@@ -1833,7 +1857,8 @@ fn invalid_transactions() -> Result<()> {
 /// 8. Submit a withdrawal of the delegation
 #[test]
 fn pos_bonds() -> Result<()> {
-    let unbonding_len = 2;
+    let pipeline_len = 2;
+    let unbonding_len = 4;
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
@@ -1843,7 +1868,7 @@ fn pos_bonds() -> Result<()> {
                 ..genesis.parameters
             };
             let pos_params = PosParamsConfig {
-                pipeline_len: 1,
+                pipeline_len,
                 unbonding_len,
                 ..genesis.pos_params
             };
@@ -1878,7 +1903,7 @@ fn pos_bonds() -> Result<()> {
         "--validator",
         "validator-0",
         "--amount",
-        "10.1",
+        "100",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1902,7 +1927,7 @@ fn pos_bonds() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "10.1",
+        "200",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1923,7 +1948,7 @@ fn pos_bonds() -> Result<()> {
         "--validator",
         "validator-0",
         "--amount",
-        "5.1",
+        "51",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1935,8 +1960,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
+    client.exp_string("Amount 51 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -1947,7 +1971,7 @@ fn pos_bonds() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "3.2",
+        "32",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1958,16 +1982,26 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
+    let expected = "Amount 32 withdrawable starting from epoch ";
+    let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
+    let epoch_raw = matched
+        .trim()
+        .split_once(expected)
+        .unwrap()
+        .1
+        .split_once('.')
+        .unwrap()
+        .0;
+    let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
     client.assert_success();
 
-    // 6. Wait for the unbonding epoch
+    // 6. Wait for the delegation withdrawable epoch (the self-bond was unbonded
+    // before it)
     let epoch = get_epoch(&test, &validator_one_rpc)?;
-    let earliest_withdrawal_epoch = epoch + unbonding_len;
+
     println!(
         "Current epoch: {}, earliest epoch for withdrawal: {}",
-        epoch, earliest_withdrawal_epoch
+        epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
     let loop_timeout = Duration::new(20, 0);
@@ -1975,11 +2009,11 @@ fn pos_bonds() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
                 "Timed out waiting for epoch: {}",
-                earliest_withdrawal_epoch
+                delegation_withdrawable_epoch
             );
         }
         let epoch = get_epoch(&test, &validator_one_rpc)?;
-        if epoch >= earliest_withdrawal_epoch {
+        if epoch >= delegation_withdrawable_epoch {
             break;
         }
     }
@@ -2223,7 +2257,7 @@ fn pos_init_validator() -> Result<()> {
     // 7. Check the new validator's bonded stake
     let bonded_stake =
         find_bonded_stake(&test, new_validator, &validator_one_rpc)?;
-    assert_eq!(bonded_stake, 11_000_500_000);
+    assert_eq!(bonded_stake, token::Amount::from_str("11_000.5").unwrap());
 
     Ok(())
 }
@@ -2269,7 +2303,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "10.1",
+        "1.01",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2282,7 +2316,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // 2. Spawn threads each submitting token transfer tx
     // We collect to run the threads in parallel.
     #[allow(clippy::needless_collect)]
-    let tasks: Vec<std::thread::JoinHandle<_>> = (0..3)
+    let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
         .into_iter()
         .map(|_| {
             let test = Arc::clone(&test);
@@ -2379,6 +2413,8 @@ fn proposal_submission() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    println!("\nDELEGATING SOME TOKENS\n");
+
     // 1.1 Delegate some token
     let tx_args = vec![
         "bond",
@@ -2402,6 +2438,8 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    println!("\nSUBMIT VALID PROPOSAL FROM ALBERT\n");
+
     // 2. Submit valid proposal
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path = prepare_proposal_data(&test, albert);
@@ -2419,6 +2457,8 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    println!("\nQUERY ALBERT'S VALID PROPOSAL\n");
+
     // 3. Query the proposal
     let proposal_query_args = vec![
         "query-proposal",
@@ -2431,6 +2471,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("Proposal: 0")?;
     client.assert_success();
+
+    println!("\nQUERY ALBERT TOKENS\n");
 
     // 4. Query token balance proposal author (submitted funds)
     let query_balance_args = vec![
@@ -2447,6 +2489,8 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
+    println!("\nQUERY GOV ADDRESS TOKENS\n");
+
     // 5. Query token balance governance
     let query_balance_args = vec![
         "balance",
@@ -2461,6 +2505,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 500")?;
     client.assert_success();
+
+    println!("\nSUBMIT INVALID PROPOSAL FROM ALBERT\n");
 
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
@@ -2521,6 +2567,8 @@ fn proposal_submission() -> Result<()> {
     )?;
     client.assert_failure();
 
+    println!("\nCHECK INVALID PROPOSAL WAS NOT ACCEPTED\n");
+
     // 7. Check invalid proposal was not accepted
     let proposal_query_args = vec![
         "query-proposal",
@@ -2533,6 +2581,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("No valid proposal was found with id 1")?;
     client.assert_success();
+
+    println!("\nQUERY ALBERT TOKENS\n");
 
     // 8. Query token balance (funds shall not be submitted)
     let query_balance_args = vec![
@@ -2548,6 +2598,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 999500")?;
     client.assert_success();
+
+    println!("\nSEND YAY VOTE FROM VALIDATOR-0\n");
 
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
@@ -2579,6 +2631,8 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    println!("\nSEND NAY VOTE FROM BERTHA\n");
+
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
         "--proposal-id",
@@ -2596,6 +2650,8 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    println!("\nSEND YAY VOTE FROM ALBERT\n");
 
     // 10. Send a yay vote from a non-validator/non-delegator user
     let submit_proposal_vote = vec![
@@ -2624,6 +2680,8 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
+    println!("\nQUERY PROPOSAL AND CHECK RESULT\n");
+
     let query_proposal = vec![
         "query-proposal-result",
         "--proposal-id",
@@ -2643,6 +2701,8 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
+    println!("\nQUERY ALBERT TOKENS\n");
+
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -2656,6 +2716,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 1000000")?;
     client.assert_success();
+
+    println!("\nQUERY GOV ADDRESS TOKENS\n");
 
     // 13. Check if governance funds are 0
     let query_balance_args = vec![
@@ -2671,6 +2733,8 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 0")?;
     client.assert_success();
+
+    println!("\nQUERY PROTOCOL PARAMS\n");
 
     // // 14. Query parameters
     let query_protocol_parameters = vec![
@@ -3198,7 +3262,7 @@ fn test_genesis_validators() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     let mut validator_1 = bg_validator_1.foreground();
 
-    let expected_result = "all VPs accepted transaction";
+    let expected_result = "successful txs: 1";
     // We cannot check this on non-validator node as it might sync without
     // applying the tx itself, but its state should be the same, checked below.
     validator_0.exp_string(expected_result)?;

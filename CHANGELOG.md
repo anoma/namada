@@ -1,5 +1,213 @@
 # CHANGELOG
 
+## v0.14.1
+
+Namada 0.14.1 is a bugfix release addressing issues with inactive
+validator set updates in proof of stake.
+
+### BUG FIXES
+
+- Fix Tendermint validator set update to properly skip validator with no voting
+  power. ([#1146](https://github.com/anoma/namada/pull/1146))
+
+## v0.14.0
+
+Namada 0.14.0 is a scheduled minor release with various protocol
+stability improvements.
+
+### BUG
+
+- Add validation for balances with IBC sub prefix
+  ([#354](https://github.com/anoma/namada/issues/354))
+
+### BUG FIXES
+
+- Fixed the prefix iterator method to respect modifications in the write log.
+  ([#913](https://github.com/anoma/namada/pull/913))
+
+### DOCS
+
+- Update specs for Ethereum bridge and block allocator
+  ([#1058](https://github.com/anoma/namada/pull/1058))
+
+### IMPROVEMENTS
+
+- Refactored PoS storage using lazy data collections, that allow to implement
+  PoS state changes for collections with variable size with a bounded gas cost.
+  ([#16](https://github.com/anoma/namada/issues/16))
+- The unbonding action has been updated to affect validator voting power at
+  `pipeline` offset and become withdrawable starting from `pipeline + unbonding`
+  offset. ([#366](https://github.com/anoma/namada/issues/366))
+- The PoS `client bonds` query has been improved to show all delegations to a
+  validator, when only the `--validator` argument is specified.
+  ([#43](https://github.com/anoma/namada/issues/43))
+- Removed PoS validator `Pending` state.
+  ([#157](https://github.com/anoma/namada/issues/157))
+- Renamed PoS `active` and `inactive` validator sub-sets to `consensus` and
+  `below_capacity` sets.
+  ([#787](https://github.com/anoma/namada/issues/787))
+- Renamed PoS variables that look-up a sum of delta values from `total_deltas`
+  to `total_stake`.  ([#158](https://github.com/anoma/namada/issues/158))
+- Added PoS validator sets tests.
+  ([#15](https://github.com/anoma/namada/issues/15))
+- Added PoS genesis initialization tests.
+  ([#13](https://github.com/anoma/namada/issues/13))
+- Complete checked arithmetic for Amount type
+  ([#748](https://github.com/anoma/namada/issues/748))
+- Allow to dump a last committed block's state with `namada node dump-db`
+  command. ([#1095](https://github.com/anoma/namada/pull/1095))
+- Improved the `WlStorage` to write protocol changes via block-level write log.
+  This is then used to make sure that no storage changes are committed in ABCI
+  `FinalizeBlock` request handler and only in the `Commit` handler.
+  ([#1108](https://github.com/anoma/namada/pull/1108))
+
+### MISCELLANEOUS
+
+- Add command line option to dump transactions while signing them.
+  ([#1054](https://github.com/anoma/namada/pull/1054))
+
+### TESTING
+
+- Add e2e tests for multitoken transfers
+  ([#886](https://github.com/anoma/namada/pull/886))
+- Modify tx_write_storage_key test wasm to be able to modify any arbitrary value
+  ([#894](https://github.com/anoma/namada/pull/894))
+- Avoid lowercase inputs in tests, so they test whether
+  lowercasing is properly performed on those inputs.
+  ([#1065](https://github.com/anoma/namada/pull/1065))
+
+## v0.13.3
+
+Namada 0.13.3 is a bugfix release addressing issues with voting power
+calculation logic.
+
+### BUG FIXES
+
+- Fixed Tendermint validator set update check to
+  respect the PoS tm_votes_per_token parameter.
+  ([#1083](https://github.com/anoma/namada/pull/1083))
+
+## v0.13.2
+
+Namada 0.13.2 is a bugfix release addressing issues with the 0.13
+release series.
+
+### BUG FIXES
+
+- Fixes testnet wrapper fee checks
+  ([#1019](https://github.com/anoma/namada/pull/1019))
+
+### CI
+
+- Correctly report e2e test failures in CI.
+  ([#1045](https://github.com/anoma/namada/pull/1045))
+
+### IMPROVEMENTS
+
+- Append Namada version number to tendermint moniker.
+  ([#1057](https://github.com/anoma/namada/pull/1057))
+
+### TESTING
+
+- Correct the whitelist test in vp_implicit to use case-insensitive whitelist
+  hashes. ([#1037](https://github.com/anoma/namada/pull/1037))
+- Address failing e2e tests which were not caught earlier.
+  ([#1062](https://github.com/anoma/namada/pull/1062))
+
+## v0.13.1
+
+Namada 0.13.1 is a maintenance release fixing an error in the tx and vp
+whitelists.
+
+### BUG FIXES
+
+- Handle the tx and vp hash whitelists case-insensitively.
+  ([#1018](https://github.com/anoma/namada/pull/1018))
+
+### IMPROVEMENTS
+
+- More information in transaction logging
+  ([#1035](https://github.com/anoma/namada/pull/1035))
+
+## v0.13.0
+
+Namada 0.13.0 is a scheduled minor release.
+
+### BUG FIXES
+
+- Fix the commission rate change wasm test, which failed because an arbitrary
+  value for a new rate was allowed that could be equal to the previous rate.
+  ([#965](https://github.com/anoma/namada/pull/965))
+
+### BUGS
+
+- Removed 'rev_iter_prefix' from storage API as its implementation
+  depends on RocksDB and it doesn't work as expected.
+  ([#912](https://github.com/anoma/namada/pull/912))
+
+### FEATURES
+
+- Add a --time argument to the node to specify the time the node should start.
+  ([#973](https://github.com/anoma/namada/pull/973))
+- Reduce the block size for transactions to 5 MiB.
+  ([#974](https://github.com/anoma/namada/pull/974))
+
+### IMPROVEMENTS
+
+- Disable 'Send' on async traits that don't need 'Send'
+  futures. This allows to use them with 'wasm-bindgen'.
+  ([#900](https://github.com/anoma/namada/pull/900))
+- Binary search ledger storage keys to match faster.
+  ([#903](https://github.com/anoma/namada/pull/903))
+- Make queries data structures public for inclusion in rustdoc.
+  ([#909](https://github.com/anoma/namada/pull/909))
+- Add a macro to derive storage keys from a struct.
+  ([#926](https://github.com/anoma/namada/pull/926))
+- Added a basic fee implementation for testnet.
+  ([#962](https://github.com/anoma/namada/pull/962))
+- Hide the explicit lifetime from StorageRead trait.
+  ([#966](https://github.com/anoma/namada/pull/966))
+- Allow to set the tracing format with NAMADA_LOG_FMT env var to either full
+  (default), json or pretty. ([#968](https://github.com/anoma/namada/pull/968))
+- Added an optional PoW challenge to the wrapper transactions for testnets,
+  to allow to submit transactions without having enough balance to cover
+  the minimum transaction fee and to withdraw tokens from a faucet account.
+  ([#969](https://github.com/anoma/namada/pull/969))
+- Add genesis parameter to control wrapper transaction fees.
+  ([#972](https://github.com/anoma/namada/pull/972))
+- Add a max_proposal_bytes parameter to the ledger.
+  ([#975](https://github.com/anoma/namada/pull/975))
+
+### MISCELLANEOUS
+
+- Update tendermint to v0.1.4-abciplus.
+  ([#667](https://github.com/anoma/namada/pull/667))
+
+### TESTING
+
+- Run fewer cases on update_epoch_after_its_duration, for a faster test suite.
+  ([#876](https://github.com/anoma/namada/pull/876))
+- Use the correct options (--gas-amount, --gas-
+  token) in the ledger_txs_and_queries E2E test.
+  ([#911](https://github.com/anoma/namada/pull/911))
+
+## v0.12.2
+
+Namada 0.12.2 is a hotfix release, limiting transactions included in a
+block by size.
+
+### BUG FIXES
+
+- Limit block space to under Tendermint's limit, and limit transactions included
+  in a block by their size. ([#952](https://github.com/anoma/namada/pull/952))
+
+### MISCELLANEOUS
+
+- Don't attempt to include matchmaker DLLs, which no longer exist, in release
+  packages. ([#943](https://github.com/anoma/namada/pull/943))
+- Include license information in release binary tarballs.
+  ([#945](https://github.com/anoma/namada/pull/945))
+
 ## v0.12.1
 
 Namada 0.12.1 is a hotfix release, fixing a node crash on malformed

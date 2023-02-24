@@ -1,13 +1,17 @@
 //! Ledger read-only queries can be handled and dispatched via the [`RPC`]
 //! defined via `router!` macro.
 
-use shell::{Shell, SHELL};
+// Re-export to show in rustdoc!
+pub use shell::Shell;
+use shell::SHELL;
 #[cfg(any(test, feature = "async-client"))]
 pub use types::Client;
 pub use types::{
     EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery, Router,
 };
-use vp::{Vp, VP};
+use vp::VP;
+// Re-export to show in rustdoc!
+pub use vp::{Pos, Vp};
 
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
@@ -55,7 +59,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if request.height != BlockHeight(0)
-        && request.height != ctx.storage.last_height
+        && request.height != ctx.wl_storage.storage.last_height
     {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
@@ -109,7 +113,7 @@ pub mod tm {
         InvalidHeight(BlockHeight),
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl Client for crate::tendermint_rpc::HttpClient {
         type Error = Error;
 
@@ -156,7 +160,7 @@ mod testing {
 
     use super::*;
     use crate::ledger::events::log::EventLog;
-    use crate::ledger::storage::testing::TestStorage;
+    use crate::ledger::storage::testing::TestWlStorage;
     use crate::types::storage::BlockHeight;
     use crate::vm::wasm::{self, TxCache, VpCache};
     use crate::vm::WasmCacheRoAccess;
@@ -169,7 +173,7 @@ mod testing {
         /// RPC router
         pub rpc: RPC,
         /// storage
-        pub storage: TestStorage,
+        pub wl_storage: TestWlStorage,
         /// event log
         pub event_log: EventLog,
         /// VP wasm compilation cache
@@ -190,7 +194,7 @@ mod testing {
         /// Initialize a test client for the given root RPC router
         pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
-            let storage = TestStorage::default();
+            let wl_storage = TestWlStorage::default();
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();
@@ -198,7 +202,7 @@ mod testing {
                 wasm::compilation_cache::common::testing::cache();
             Self {
                 rpc,
-                storage,
+                wl_storage,
                 event_log,
                 vp_wasm_cache: vp_wasm_cache.read_only(),
                 tx_wasm_cache: tx_wasm_cache.read_only(),
@@ -208,7 +212,7 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait]
+    #[async_trait::async_trait(?Send)]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,
@@ -233,7 +237,7 @@ mod testing {
                 prove,
             };
             let ctx = RequestCtx {
-                storage: &self.storage,
+                wl_storage: &self.wl_storage,
                 event_log: &self.event_log,
                 vp_wasm_cache: self.vp_wasm_cache.clone(),
                 tx_wasm_cache: self.tx_wasm_cache.clone(),

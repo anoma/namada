@@ -162,9 +162,14 @@ pub fn network(
     let test_dir = TestDir::new();
 
     // Open the source genesis file
-    let genesis = genesis_config::open_genesis_config(
+    let mut genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     )?;
+
+    genesis.parameters.vp_whitelist =
+        Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
+    genesis.parameters.tx_whitelist =
+        Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -868,8 +873,7 @@ pub mod constants {
     pub const VP_USER_WASM: &str = "wasm/vp_user.wasm";
     pub const TX_NO_OP_WASM: &str = "wasm_for_tests/tx_no_op.wasm";
     pub const TX_INIT_PROPOSAL: &str = "wasm_for_tests/tx_init_proposal.wasm";
-    pub const TX_WRITE_STORAGE_KEY_WASM: &str =
-        "wasm_for_tests/tx_write_storage_key.wasm";
+    pub const TX_WRITE_WASM: &str = "wasm_for_tests/tx_write.wasm";
     pub const TX_IBC_WASM: &str = "wasm/tx_ibc.wasm";
     pub const VP_ALWAYS_TRUE_WASM: &str = "wasm_for_tests/vp_always_true.wasm";
     pub const VP_ALWAYS_FALSE_WASM: &str =

@@ -10,7 +10,7 @@ use thiserror::Error;
 /// governance
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct PosParams {
-    /// A maximum number of active validators
+    /// A maximum number of consensus validators
     pub max_validator_slots: u64,
     /// Any change applied during an epoch `n` will become active at the
     /// beginning of epoch `n + pipeline_len`.
@@ -149,7 +149,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_validate_arb_pos_params(pos_params in arb_pos_params()) {
+        fn test_validate_arb_pos_params(pos_params in arb_pos_params(None)) {
             let errors = pos_params.validate();
             assert!(
                 errors.is_empty(),
@@ -172,9 +172,9 @@ pub mod testing {
 
     prop_compose! {
         /// Generate arbitrary valid ([`PosParams::validate`]) PoS parameters.
-        pub fn arb_pos_params()
+        pub fn arb_pos_params(num_max_validator_slots: Option<u64>)
             (pipeline_len in 2..8_u64)
-            (max_validator_slots in 1..128_u64,
+            (max_validator_slots in 1..num_max_validator_slots.unwrap_or(128),
             // `unbonding_len` > `pipeline_len`
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),

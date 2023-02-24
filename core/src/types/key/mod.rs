@@ -493,6 +493,12 @@ pub mod testing {
             .prop_map(|keypair| keypair.try_to_sk().unwrap())
     }
 
+    /// Derive an ed25519 [`common::SecretKey`] from a simple seed (`u64`).
+    pub fn common_sk_from_simple_seed(seed: u64) -> common::SecretKey {
+        let mut rng = StdRng::seed_from_u64(seed);
+        common::SecretKey::Ed25519(ed25519::SigScheme::generate(&mut rng))
+    }
+
     /// Generate a new random [`super::SecretKey`].
     pub fn gen_keypair<S: SigScheme>() -> S::SecretKey {
         let mut rng: ThreadRng = thread_rng();

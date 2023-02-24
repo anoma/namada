@@ -705,6 +705,11 @@ pub mod testing {
         super::gen_established_address(seed)
     }
 
+    /// Derive an established address from a simple seed (`u64`).
+    pub fn address_from_simple_seed(seed: u64) -> Address {
+        super::gen_established_address(seed.to_string())
+    }
+
     /// Generate a new implicit address.
     pub fn gen_implicit_address() -> Address {
         let keypair: common::SecretKey =

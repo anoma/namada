@@ -166,6 +166,15 @@ impl Display for BlockHeight {
     }
 }
 
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let raw: u64 = FromStr::from_str(s)?;
+        Ok(Self(raw))
+    }
+}
+
 impl Add<u64> for BlockHeight {
     type Output = BlockHeight;
 
@@ -867,6 +876,24 @@ impl_int_key_seg!(u16, i16, 2);
 impl_int_key_seg!(u32, i32, 4);
 impl_int_key_seg!(u64, i64, 8);
 impl_int_key_seg!(u128, i128, 16);
+
+impl KeySeg for Epoch {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Epoch(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.0.to_db_key()
+    }
+}
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(

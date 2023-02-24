@@ -59,13 +59,16 @@ pub mod main {
 }
 
 /// A tx that attempts to write arbitrary data to the given key
-#[cfg(feature = "tx_write_storage_key")]
+#[cfg(feature = "tx_write")]
 pub mod main {
-    use namada_tx_prelude::*;
+    use borsh::BorshDeserialize;
+    use namada_test_utils::tx_data::TxWriteData;
+    use namada_tx_prelude::{
+        log_string, transaction, Ctx, ResultExt, SignedTxData, StorageRead,
+        StorageWrite, TxResult,
+    };
 
     const TX_NAME: &str = "tx_write";
-
-    const ARBITRARY_VALUE: &str = "arbitrary value";
 
     fn log(msg: &str) {
         log_string(format!("[{}] {}", TX_NAME, msg))
@@ -94,28 +97,31 @@ pub mod main {
                 fatal_msg("no data provided");
             }
         };
-        let key = match String::from_utf8(data) {
-            Ok(key) => {
-                let key = storage::Key::parse(key).unwrap();
-                log(&format!("parsed key from data: {}", key));
-                key
-            }
-            Err(error) => fatal("getting key", error),
-        };
-        let val: Option<String> = ctx.read(&key)?;
-        match val {
-            Some(val) => {
-                log(&format!("preexisting val is {}", val));
+        let TxWriteData { key, value } =
+            match TxWriteData::try_from_slice(&data[..]) {
+                Ok(write_op) => {
+                    log(&format!(
+                        "parsed WriteOp to key {} ({} bytes)",
+                        &write_op.key,
+                        &write_op.value.len(),
+                    ));
+                    write_op
+                }
+                Err(error) => fatal("deserializing WriteOp", error),
+            };
+        let existing_value: Option<String> = ctx.read(&key)?;
+        match existing_value {
+            Some(existing_value) => {
+                log(&format!("already present value is {}", existing_value));
             }
             None => {
-                log("no preexisting val");
+                log("no already present value");
             }
         }
-        log(&format!(
-            "attempting to write new value {} to key {}",
-            ARBITRARY_VALUE, key
-        ));
-        ctx.write(&key, ARBITRARY_VALUE)?;
+        log(&format!("attempting to write new value to key {}", key));
+        // using `ctx.write_bytes` instead of `ctx.write` here, as we want to
+        // write the actual bytes, not a Borsh-serialization of a `Vec<u8>`
+        ctx.write_bytes(&key, &value[..])?;
         Ok(())
     }
 }

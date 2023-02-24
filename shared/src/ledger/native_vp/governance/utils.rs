@@ -1,19 +1,20 @@
 //! Governance utility functions
 
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-use namada_proof_of_stake::PosReadOnly;
+use namada_proof_of_stake::{
+    bond_amount, read_all_validator_addresses, read_pos_params,
+    read_total_stake, read_validator_stake,
+};
 use thiserror::Error;
 
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos::BondId;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};
-use crate::types::storage::{Epoch, Key};
+use crate::types::storage::Epoch;
 use crate::types::token;
 
 /// Proposal structure holding votes information necessary to compute the
@@ -75,16 +76,17 @@ impl ProposalEvent {
 }
 
 /// Return a proposal result - accepted only when the result is `Ok(true)`.
-pub fn compute_tally<D, H>(
-    storage: &Storage<D, H>,
+pub fn compute_tally<S>(
+    storage: &S,
     epoch: Epoch,
     votes: Votes,
 ) -> storage_api::Result<bool>
 where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
+    S: storage_api::StorageRead,
 {
-    let total_stake: VotePower = storage.total_stake(epoch)?.into();
+    let params = read_pos_params(storage)?;
+    let total_stake = read_total_stake(storage, &params, epoch)?;
+    let total_stake = VotePower::from(u64::from(total_stake));
 
     let Votes {
         yay_validators,
@@ -119,20 +121,21 @@ where
 }
 
 /// Prepare Votes structure to compute proposal tally
-pub fn get_proposal_votes<D, H>(
-    storage: &Storage<D, H>,
+pub fn get_proposal_votes<S>(
+    storage: &S,
     epoch: Epoch,
     proposal_id: u64,
 ) -> storage_api::Result<Votes>
 where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
+    S: storage_api::StorageRead,
 {
-    let validators = storage.validator_addresses(epoch)?;
+    let params = read_pos_params(storage)?;
+    let validators = read_all_validator_addresses(storage, epoch)?;
 
     let vote_prefix_key =
         gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let (vote_iter, _) = storage.iter_prefix(&vote_prefix_key);
+    let vote_iter =
+        storage_api::iter_prefix::<ProposalVote>(storage, &vote_prefix_key)?;
 
     let mut yay_validators = HashMap::new();
     let mut yay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
@@ -140,59 +143,60 @@ where
     let mut nay_delegators: HashMap<Address, HashMap<Address, VotePower>> =
         HashMap::new();
 
-    for (key, vote_bytes, _) in vote_iter {
-        let vote_key = Key::from_str(key.as_str()).ok();
-        let vote = ProposalVote::try_from_slice(&vote_bytes[..]).ok();
-        match (vote_key, vote) {
-            (Some(key), Some(vote)) => {
-                let voter_address = gov_storage::get_voter_address(&key);
-                match voter_address {
-                    Some(voter_address) => {
-                        if vote.is_yay() && validators.contains(voter_address) {
-                            let amount: VotePower = storage
-                                .validator_stake(voter_address, epoch)?
-                                .into();
-                            yay_validators
-                                .insert(voter_address.clone(), amount);
-                        } else if !validators.contains(voter_address) {
-                            let validator_address =
-                                gov_storage::get_vote_delegation_address(&key);
-                            match validator_address {
-                                Some(validator) => {
-                                    let bond_id = BondId {
-                                        source: voter_address.clone(),
-                                        validator: validator.clone(),
-                                    };
-                                    let amount =
-                                        storage.bond_amount(&bond_id, epoch)?;
-                                    if amount != token::Amount::default() {
-                                        if vote.is_yay() {
-                                            let entry = yay_delegators
-                                                .entry(voter_address.to_owned())
-                                                .or_default();
-                                            entry.insert(
-                                                validator.to_owned(),
-                                                VotePower::from(amount),
-                                            );
-                                        } else {
-                                            let entry = nay_delegators
-                                                .entry(voter_address.to_owned())
-                                                .or_default();
-                                            entry.insert(
-                                                validator.to_owned(),
-                                                VotePower::from(amount),
-                                            );
-                                        }
-                                    }
+    for next_vote in vote_iter {
+        let (vote_key, vote) = next_vote?;
+        let voter_address = gov_storage::get_voter_address(&vote_key);
+        match voter_address {
+            Some(voter_address) => {
+                if vote.is_yay() && validators.contains(voter_address) {
+                    let amount: VotePower = read_validator_stake(
+                        storage,
+                        &params,
+                        voter_address,
+                        epoch,
+                    )?
+                    .unwrap_or_default()
+                    .into();
+
+                    yay_validators.insert(voter_address.clone(), amount);
+                } else if !validators.contains(voter_address) {
+                    let validator_address =
+                        gov_storage::get_vote_delegation_address(&vote_key);
+                    match validator_address {
+                        Some(validator) => {
+                            let bond_id = BondId {
+                                source: voter_address.clone(),
+                                validator: validator.clone(),
+                            };
+                            let amount =
+                                bond_amount(storage, &params, &bond_id, epoch)?
+                                    .1;
+
+                            if amount != token::Amount::default() {
+                                if vote.is_yay() {
+                                    let entry = yay_delegators
+                                        .entry(voter_address.to_owned())
+                                        .or_default();
+                                    entry.insert(
+                                        validator.to_owned(),
+                                        VotePower::from(amount),
+                                    );
+                                } else {
+                                    let entry = nay_delegators
+                                        .entry(voter_address.to_owned())
+                                        .or_default();
+                                    entry.insert(
+                                        validator.to_owned(),
+                                        VotePower::from(amount),
+                                    );
                                 }
-                                None => continue,
                             }
                         }
+                        None => continue,
                     }
-                    None => continue,
                 }
             }
-            _ => continue,
+            None => continue,
         }
     }
 
@@ -220,7 +224,7 @@ pub fn is_proposal_accepted<S>(
     tx_data: &[u8],
 ) -> storage_api::Result<bool>
 where
-    S: for<'iter> storage_api::StorageRead<'iter>,
+    S: storage_api::StorageRead,
 {
     let proposal_id = u64::try_from_slice(tx_data).ok();
     match proposal_id {

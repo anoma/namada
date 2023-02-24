@@ -1,43 +1,147 @@
 //! Proof of Stake data types
 
+mod rev_order;
+
 use core::fmt::Debug;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::Add;
+use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
+use namada_core::ledger::storage_api::collections::{LazyMap, LazyVec};
+use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
+pub use rev_order::ReverseOrdTokenAmount;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 
-use crate::epoched::{
-    Epoched, EpochedDelta, OffsetPipelineLen, OffsetUnbondingLen,
-};
 use crate::parameters::PosParams;
 
-/// Epoched validator's consensus key.
-pub type ValidatorConsensusKeys = Epoched<common::PublicKey, OffsetPipelineLen>;
-/// Epoched validator's state.
-pub type ValidatorStates = Epoched<ValidatorState, OffsetPipelineLen>;
-/// Epoched validator's total deltas.
-pub type ValidatorDeltas = EpochedDelta<token::Change, OffsetUnbondingLen>;
-/// Epoched validator's eth key.
-pub type ValidatorEthKey = Epoched<common::PublicKey, OffsetPipelineLen>;
+// const U64_MAX: u64 = u64::MAX;
 
-/// Epoched bond.
-pub type Bonds = EpochedDelta<Bond, OffsetUnbondingLen>;
-/// Epoched unbond.
-pub type Unbonds = EpochedDelta<Unbond, OffsetUnbondingLen>;
-/// Epoched validator set.
-pub type ValidatorSets = Epoched<ValidatorSet, OffsetUnbondingLen>;
+// TODO: add this to the spec
+/// Stored positions of validators in validator sets
+pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
+    LazyMap<Address, Position>,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+impl ValidatorSetPositions {
+    /// TODO
+    pub fn get_position<S>(
+        &self,
+        storage: &S,
+        epoch: &Epoch,
+        address: &Address,
+        params: &PosParams,
+    ) -> storage_api::Result<Option<Position>>
+    where
+        S: StorageRead,
+    {
+        let last_update = self.get_last_update(storage)?;
+        // dbg!(&last_update);
+        if last_update.is_none() {
+            return Ok(None);
+        }
+        let last_update = last_update.unwrap();
+        let future_most_epoch: Epoch = last_update + params.pipeline_len;
+        // dbg!(future_most_epoch);
+        let mut epoch = std::cmp::min(*epoch, future_most_epoch);
+        loop {
+            // dbg!(epoch);
+            match self.at(&epoch).get(storage, address)? {
+                Some(val) => return Ok(Some(val)),
+                None => {
+                    if epoch.0 > 0 && epoch > Self::sub_past_epochs(last_update)
+                    {
+                        epoch = Epoch(epoch.0 - 1);
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// TODO: check the offsets for each epoched type!!
+
+/// Epoched validator's consensus key.
+pub type ValidatorConsensusKeys = crate::epoched::Epoched<
+    common::PublicKey,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+/// Epoched validator's state.
+pub type ValidatorStates =
+    crate::epoched::Epoched<ValidatorState, crate::epoched::OffsetPipelineLen>;
+
+/// A map from a position to an address in a Validator Set
+pub type ValidatorPositionAddresses = LazyMap<Position, Address>;
+
+/// New validator set construction, keyed by staked token amount
+pub type ConsensusValidatorSet =
+    NestedMap<token::Amount, ValidatorPositionAddresses>;
+
+/// New validator set construction, keyed by staked token amount
+pub type BelowCapacityValidatorSet =
+    NestedMap<ReverseOrdTokenAmount, ValidatorPositionAddresses>;
+
+/// Epoched consensus validator sets.
+pub type ConsensusValidatorSets = crate::epoched::NestedEpoched<
+    ConsensusValidatorSet,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+/// Epoched below-capacity validator sets.
+pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
+    BelowCapacityValidatorSet,
+    crate::epoched::OffsetPipelineLen,
+>;
+
+/// Epoched validator's deltas.
+pub type ValidatorDeltas = crate::epoched::EpochedDelta<
+    token::Change,
+    crate::epoched::OffsetUnbondingLen,
+    23,
+>;
+
 /// Epoched total deltas.
-pub type TotalDeltas = EpochedDelta<token::Change, OffsetUnbondingLen>;
+pub type TotalDeltas = crate::epoched::EpochedDelta<
+    token::Change,
+    crate::epoched::OffsetUnbondingLen,
+    23,
+>;
+
 /// Epoched validator commission rate
-pub type CommissionRates = Epoched<Decimal, OffsetPipelineLen>;
+pub type CommissionRates =
+    crate::epoched::Epoched<Decimal, crate::epoched::OffsetPipelineLen>;
+
+/// Epoched validator's bonds
+pub type Bonds = crate::epoched::EpochedDelta<
+    token::Change,
+    crate::epoched::OffsetPipelineLen,
+    23,
+>;
+
+/// Epochs validator's unbonds
+pub type Unbonds = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
+
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+/// Commission rate and max commission rate change per epoch for a validator
+pub struct CommissionPair {
+    /// Validator commission rate
+    pub commission_rate: Decimal,
+    /// Validator max commission rate change per epoch
+    pub max_commission_change_per_epoch: Decimal,
+}
+
+// --------------------------------------------------------------------------------------------
 
 /// A genesis validator definition.
 #[derive(
@@ -58,29 +162,25 @@ pub struct GenesisValidator {
     pub tokens: token::Amount,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
-    /// An Eth bridge governance public key
-    pub eth_cold_key: common::PublicKey,
-    /// An Eth bridge hot signing public key used for validator set updates and
-    /// cross-chain transactions
-    pub eth_hot_key: common::PublicKey,
     /// Commission rate charged on rewards for delegators (bounded inside 0-1)
     pub commission_rate: Decimal,
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Decimal,
 }
 
-/// An update of the active and inactive validator set.
-#[derive(Debug, Clone)]
+/// An update of the consensus and below-capacity validator set.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValidatorSetUpdate {
-    /// A validator is active
-    Active(ActiveValidator),
-    /// A validator who was active in the last update and is now inactive
+    /// A validator is consensus-participating
+    Consensus(ConsensusValidator),
+    /// A validator who was consensus-participating in the last update but now
+    /// is not
     Deactivated(common::PublicKey),
 }
 
-/// Active validator's consensus key and its bonded stake.
-#[derive(Debug, Clone)]
-pub struct ActiveValidator {
+/// Consensus validator's consensus key and its bonded stake.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConsensusValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Total bonded stake of the validator
@@ -113,6 +213,7 @@ pub struct BondId {
     Clone,
     PartialEq,
     Eq,
+    Hash,
     PartialOrd,
     Ord,
     BorshDeserialize,
@@ -124,7 +225,7 @@ pub struct WeightedValidator {
     /// is based on the top-to-bottom declaration order and in the
     /// `ValidatorSet` the `WeightedValidator`s these need to be sorted by
     /// the `total_stake`.
-    pub bonded_stake: u64,
+    pub bonded_stake: token::Amount,
     /// Validator's address
     pub address: Address,
 }
@@ -139,24 +240,57 @@ impl Display for WeightedValidator {
     }
 }
 
-/// Active and inactive validator sets.
+/// A position in a validator set
 #[derive(
-    Debug,
-    Clone,
     PartialEq,
-    Eq,
     PartialOrd,
     Ord,
+    Debug,
+    Default,
+    Eq,
+    Hash,
+    Clone,
+    Copy,
     BorshDeserialize,
-    BorshSerialize,
     BorshSchema,
+    BorshSerialize,
 )]
-pub struct ValidatorSet {
-    /// Active validator set with maximum size equal to `max_validator_slots`
-    /// in [`PosParams`].
-    pub active: BTreeSet<WeightedValidator>,
-    /// All the other validators that are not active
-    pub inactive: BTreeSet<WeightedValidator>,
+pub struct Position(pub u64);
+
+impl KeySeg for Position {
+    fn parse(string: String) -> namada_core::types::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = u64::parse(string)?;
+        Ok(Self(raw))
+    }
+
+    fn raw(&self) -> String {
+        self.0.raw()
+    }
+
+    fn to_db_key(&self) -> namada_core::types::storage::DbKeySeg {
+        self.0.to_db_key()
+    }
+}
+
+impl Sub<Position> for Position {
+    type Output = Self;
+
+    fn sub(self, rhs: Position) -> Self::Output {
+        Position(self.0 - rhs.0)
+    }
+}
+
+impl Position {
+    /// Position value of 1
+    pub const ONE: Position = Position(1_u64);
+
+    /// Get the next Position (+1)
+    pub fn next(&self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
 }
 
 /// Validator's state.
@@ -171,51 +305,30 @@ pub struct ValidatorSet {
     Eq,
 )]
 pub enum ValidatorState {
-    /// Inactive validator may not participate in the consensus.
+    /// A validator who may participate in the consensus
+    Consensus,
+    /// A validator who does not have enough stake to be considered in the
+    /// `Consensus` validator set but still may have active bonds and unbonds
+    BelowCapacity,
+    /// A validator who is deactivated via a tx when a validator no longer
+    /// wants to be one (not implemented yet)
     Inactive,
-    /// A `Pending` validator will become `Candidate` in a future epoch.
-    Pending,
-    /// A `Candidate` validator may participate in the consensus. It is either
-    /// in the active or inactive validator set.
-    Candidate,
-    // TODO consider adding `Jailed`
-}
-
-/// A bond is either a validator's self-bond or a delegation from a regular
-/// account to a validator.
-#[derive(
-    Debug, Clone, Default, BorshDeserialize, BorshSerialize, BorshSchema,
-)]
-pub struct Bond {
-    /// Bonded positive deltas. A key is the epoch set for the bond. This is
-    /// used in unbonding, where it's needed for slash epoch range check.
-    ///
-    /// TODO: For Bonds, there's unnecessary redundancy with this hash map.
-    /// We only need to keep the start `Epoch` for the Epoched head element
-    /// (i.e. the current epoch data), the rest of the array can be calculated
-    /// from the offset from the head
-    pub pos_deltas: HashMap<Epoch, token::Amount>,
-    /// Unbonded negative deltas. The values are recorded as positive, but
-    /// should be subtracted when we're finding the total for some given
-    /// epoch.
-    pub neg_deltas: token::Amount,
-}
-
-/// An unbond contains unbonded tokens from a validator's self-bond or a
-/// delegation from a regular account to a validator.
-#[derive(
-    Debug, Clone, Default, BorshDeserialize, BorshSerialize, BorshSchema,
-)]
-pub struct Unbond {
-    /// A key is a pair of the epoch of the bond from which a unbond was
-    /// created the epoch of unbonding. This is needed for slash epoch range
-    /// check.
-    pub deltas: HashMap<(Epoch, Epoch), token::Amount>,
 }
 
 /// A slash applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub struct Slash {
     /// Epoch at which the slashable event occurred.
     pub epoch: Epoch,
@@ -223,21 +336,74 @@ pub struct Slash {
     pub block_height: u64,
     /// A type of slashsable event.
     pub r#type: SlashType,
-    /// A rate is the portion of staked tokens that are slashed.
-    pub rate: Decimal,
 }
 
 /// Slashes applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
-pub type Slashes = Vec<Slash>;
+pub type Slashes = LazyVec<Slash>;
 
 /// A type of slashsable event.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub enum SlashType {
     /// Duplicate block vote.
     DuplicateVote,
     /// Light client attack.
     LightClientAttack,
+}
+
+/// Bonds and unbonds with all details (slashes and rewards, if any)
+/// grouped by their bond IDs.
+pub type BondsAndUnbondsDetails = HashMap<BondId, BondsAndUnbondsDetail>;
+
+/// Bonds and unbonds with all details (slashes and rewards, if any)
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct BondsAndUnbondsDetail {
+    /// Bonds
+    pub bonds: Vec<BondDetails>,
+    /// Unbonds
+    pub unbonds: Vec<UnbondDetails>,
+    /// Slashes applied to any of the bonds and/or unbonds
+    pub slashes: HashSet<Slash>,
+}
+
+/// Bond with all its details
+#[derive(
+    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
+)]
+pub struct BondDetails {
+    /// The first epoch in which this bond contributed to a stake
+    pub start: Epoch,
+    /// Token amount
+    pub amount: token::Amount,
+    /// Token amount that has been slashed, if any
+    pub slashed_amount: Option<token::Amount>,
+}
+
+/// Unbond with all its details
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub struct UnbondDetails {
+    /// The first epoch in which the source bond of this unbond contributed to
+    /// a stake
+    pub start: Epoch,
+    /// The first epoch in which this unbond can be withdrawn. Note that the
+    /// epoch in which the unbond stopped contributing to the stake is
+    /// `unbonding_len` param value before this epoch
+    pub withdraw: Epoch,
+    /// Token amount
+    pub amount: token::Amount,
+    /// Token amount that has been slashed, if any
+    pub slashed_amount: Option<token::Amount>,
 }
 
 impl Display for BondId {
@@ -247,80 +413,6 @@ impl Display for BondId {
             "{{source: {}, validator: {}}}",
             self.source, self.validator
         )
-    }
-}
-
-impl Bond {
-    /// Find the sum of all the bonds amounts.
-    pub fn sum(&self) -> token::Amount {
-        let pos_deltas_sum: token::Amount = self
-            .pos_deltas
-            .iter()
-            .fold(Default::default(), |acc, (_epoch, amount)| acc + *amount);
-        pos_deltas_sum - self.neg_deltas
-    }
-}
-
-impl Add for Bond {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
-        // This is almost the same as `self.pos_deltas.extend(rhs.pos_deltas);`,
-        // except that we add values where a key is present on both
-        // sides.
-        let iter = rhs.pos_deltas.into_iter();
-        let reserve = if self.pos_deltas.is_empty() {
-            iter.size_hint().0
-        } else {
-            (iter.size_hint().0 + 1) / 2
-        };
-        self.pos_deltas.reserve(reserve);
-        iter.for_each(|(k, v)| {
-            // Add or insert
-            match self.pos_deltas.get_mut(&k) {
-                Some(value) => *value += v,
-                None => {
-                    self.pos_deltas.insert(k, v);
-                }
-            }
-        });
-        self.neg_deltas += rhs.neg_deltas;
-        self
-    }
-}
-
-impl Unbond {
-    /// Find the sum of all the unbonds amounts.
-    pub fn sum(&self) -> token::Amount {
-        self.deltas
-            .iter()
-            .fold(Default::default(), |acc, (_epoch, amount)| acc + *amount)
-    }
-}
-
-impl Add for Unbond {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
-        // This is almost the same as `self.deltas.extend(rhs.deltas);`, except
-        // that we add values where a key is present on both sides.
-        let iter = rhs.deltas.into_iter();
-        let reserve = if self.deltas.is_empty() {
-            iter.size_hint().0
-        } else {
-            (iter.size_hint().0 + 1) / 2
-        };
-        self.deltas.reserve(reserve);
-        iter.for_each(|(k, v)| {
-            // Add or insert
-            match self.deltas.get_mut(&k) {
-                Some(value) => *value += v,
-                None => {
-                    self.deltas.insert(k, v);
-                }
-            }
-        });
-        self
     }
 }
 
@@ -360,6 +452,25 @@ pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
     let prod = dec * Decimal::from(int);
     // truncate the number to the floor
     prod.to_i128().expect("Product is out of bounds")
+}
+
+/// Multiply a value of type Decimal with one of type i128 and then convert it
+/// to an Amount type
+pub fn mult_change_to_amount(
+    dec: Decimal,
+    change: token::Change,
+) -> token::Amount {
+    let prod = dec * Decimal::from(change);
+    // truncate the number to the floor
+    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
+}
+
+/// Multiply a value of type Decimal with one of type Amount and then return the
+/// truncated Amount
+pub fn mult_amount(dec: Decimal, amount: token::Amount) -> token::Amount {
+    let prod = dec * Decimal::from(amount);
+    // truncate the number to the floor
+    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
 }
 
 /// Calculate voting power in the tendermint context (which is stored as i64)

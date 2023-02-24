@@ -1,0 +1,17 @@
+accepted = [
+    "MIT",
+    "0BSD",
+    "ISC",
+    "Unlicense",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "MPL-2.0",
+    "GPL-3.0",
+    "OSL-3.0",
+    "OpenSSL",
+    "Unicode-DFS-2016",
+    "Apache-2.0 WITH LLVM-exception",
+    "Apache-2.0",
+    "NOASSERTION",
+]
