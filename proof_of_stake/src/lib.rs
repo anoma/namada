@@ -60,8 +60,8 @@ use types::{
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
     ConsensusValidatorSets, GenesisValidator, Position, Slash, SlashType,
     Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates,
+    ValidatorEthColdKeys, ValidatorEthHotKeys, ValidatorPositionAddresses,
+    ValidatorSetPositions, ValidatorSetUpdate, ValidatorState, ValidatorStates,
 };
 
 use crate::types::{decimal_mult_i128, decimal_mult_u64, BondId};
@@ -222,6 +222,22 @@ pub fn validator_consensus_key_handle(
     ValidatorConsensusKeys::open(key)
 }
 
+/// Get the storage handle to a PoS validator's eth hot key.
+pub fn validator_eth_hot_key_handle(
+    validator: &Address,
+) -> ValidatorEthHotKeys {
+    let key = storage::validator_eth_hot_key_key(validator);
+    ValidatorEthHotKeys::open(key)
+}
+
+/// Get the storage handle to a PoS validator's eth cold key.
+pub fn validator_eth_cold_key_handle(
+    validator: &Address,
+) -> ValidatorEthColdKeys {
+    let key = storage::validator_eth_cold_key_key(validator);
+    ValidatorEthColdKeys::open(key)
+}
+
 /// Get the storage handle to a PoS validator's state
 pub fn validator_state_handle(validator: &Address) -> ValidatorStates {
     let key = storage::validator_state_key(validator);
@@ -304,6 +320,8 @@ where
         address,
         tokens,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         commission_rate,
         max_commission_rate_change,
     } in validators
@@ -332,6 +350,16 @@ where
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
+            current_epoch,
+        )?;
+        validator_eth_hot_key_handle(&address).init_at_genesis(
+            storage,
+            eth_hot_key,
+            current_epoch,
+        )?;
+        validator_eth_cold_key_handle(&address).init_at_genesis(
+            storage,
+            eth_cold_key,
             current_epoch,
         )?;
         let delta = token::Change::from(tokens);
