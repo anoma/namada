@@ -40,18 +40,10 @@ where
             self.process_txs(&req.txs, self.get_block_timestamp(req.time));
 
         ProcessProposal {
-            status: if tx_results.iter().all(|res| {
-                matches!(
-                    ErrorCodes::from_u32(res.code).unwrap(),
-                    ErrorCodes::Ok
-                        | ErrorCodes::Undecryptable
-                        | ErrorCodes::InvalidDecryptedChainId
-                        | ErrorCodes::ExpiredDecryptedTx
-                )
-            }) {
-                ProposalStatus::Accept as i32
-            } else {
+            status: if tx_results.iter().any(|res| res.code > 3) {
                 ProposalStatus::Reject as i32
+            } else {
+                ProposalStatus::Accept as i32
             },
 
             tx_results,
@@ -215,7 +207,7 @@ where
                                                 code: ErrorCodes::ExpiredDecryptedTx
                                                     .into(),
                                                 info: format!(
-                    "Dercrypted tx expired at {:#?}, block time: {:#?}",
+                    "Decrypted tx expired at {:#?}, block time: {:#?}",
                     exp, block_time
                 ),
                                             };
@@ -230,9 +222,8 @@ where
                                         .into(),
                                 }
                             } else {
-                                // Wrong inner tx commitment
                                 TxResult {
-                                    code: ErrorCodes::Undecryptable.into(),
+                                    code: ErrorCodes::InvalidTx.into(),
                                     info: "The encrypted payload of tx was \
                                            incorrectly marked as \
                                            un-decryptable"
@@ -739,7 +730,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that a tx incorrectly labelled as undecryptable
+    /// Test that a block containing a tx incorrectly labelled as undecryptable
     /// is rejected by [`process_proposal`]
     #[test]
     fn test_incorrectly_labelled_as_undecryptable() {
@@ -775,23 +766,22 @@ mod test_process_proposal {
             txs: vec![tx.to_bytes()],
         };
 
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::Undecryptable));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "The encrypted payload of tx was incorrectly marked as \
-                 un-decryptable"
-            ),
-        )
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidTx)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    String::from(
+                        "The encrypted payload of tx was incorrectly marked \
+                         as un-decryptable"
+                    ),
+                )
+            }
+        }
     }
 
     /// Test that a wrapper tx whose inner_tx does not have
@@ -1418,6 +1408,7 @@ mod test_process_proposal {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
+            Epoch(0),
             0.into(),
             tx,
             Default::default(),
@@ -1468,6 +1459,7 @@ mod test_process_proposal {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
+            Epoch(0),
             0.into(),
             tx,
             Default::default(),

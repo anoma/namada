@@ -10,7 +10,6 @@ use namada::types::address::Address;
 use namada::types::hash::Hash;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::storage::BlockHash;
-use namada::types::time::DateTimeUtc;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
@@ -103,9 +102,8 @@ impl AbcippShim {
                     }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
-                    let block_time = self
-                        .service
-                        .get_block_timestamp_from_tendermint(&block.time);
+                    let block_time =
+                        self.service.get_block_timestamp(block.time.clone());
                     let unprocessed_txs = block.txs.clone();
                     let processing_results =
                         self.service.process_txs(&block.txs, block_time);
@@ -147,8 +145,7 @@ impl AbcippShim {
                         begin_block_request
                             .header
                             .as_ref()
-                            .map(|header| header.time.to_owned())
-                            .flatten(),
+                            .and_then(|header| header.time.to_owned()),
                     );
 
                     let processing_results = self

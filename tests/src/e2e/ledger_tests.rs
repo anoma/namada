@@ -1704,7 +1704,7 @@ fn invalid_transactions() -> Result<()> {
     client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
-    client.exp_string(r#""code": "1"#)?;
+    client.exp_string(r#""code": "4"#)?;
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();

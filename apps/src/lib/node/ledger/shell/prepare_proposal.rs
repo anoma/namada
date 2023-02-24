@@ -12,6 +12,7 @@ use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -137,7 +138,7 @@ where
 
 fn validate_tx_bytes(
     tx_bytes: &[u8],
-    block_time: Option<tendermint_proto::google::protobuf::Timestamp>,
+    block_time: Option<Timestamp>,
 ) -> Result<(), ()> {
     let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
     let tx_expiration = tx.expiration;
@@ -148,14 +149,18 @@ fn validate_tx_bytes(
             (Some(block_time), Some(exp)) => {
                 match TryInto::<DateTimeUtc>::try_into(block_time) {
                     Ok(datetime) if datetime > exp => Err(()),
-                    _ => Ok(()), // If error in conversion, default to last block datetime, it's valid because of mempool check
+                    _ => Ok(()), /* If error in conversion, default to last
+                                  * block datetime, it's valid because of
+                                  * mempool check */
                 }
             }
-            // If tx doesn't have an expiration it is valid. If time cannot be retrieved from block default to last block datetime which has already been checked by mempool_validate, so it's valid
+            // If tx doesn't have an expiration it is valid. If time cannot be
+            // retrieved from block default to last block datetime which has
+            // already been checked by mempool_validate, so it's valid
             _ => Ok(()),
         }
     } else {
-        return Err(());
+        Err(())
     }
 }
 
@@ -196,10 +201,8 @@ pub(super) mod record {
 mod test_prepare_proposal {
 
     use borsh::BorshSerialize;
-    use namada::{
-        proof_of_stake::Epoch,
-        types::transaction::{Fee, WrapperTx},
-    };
+    use namada::proof_of_stake::Epoch;
+    use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -404,6 +407,7 @@ mod test_prepare_proposal {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
+            Epoch(0),
             0.into(),
             tx,
             Default::default(),

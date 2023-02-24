@@ -42,16 +42,17 @@ use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
+#[cfg(not(feature = "mainnet"))]
+use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxError, TxType, MIN_FEE,
+    EllipticCurve, PairingEngine, TxType,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use tendermint_proto::google::protobuf::Timestamp;
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -62,6 +63,7 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -124,17 +126,17 @@ impl From<Error> for TxResult {
 #[derive(Debug, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
-    InvalidTx = 1,
-    InvalidSig = 2,
+    InvalidDecryptedChainId = 1,
+    ExpiredDecryptedTx = 2,
     WasmRuntimeError = 3,
-    InvalidOrder = 4,
-    ExtraTxs = 5,
-    Undecryptable = 6,
-    ReplayTx = 7,
-    InvalidChainId = 8,
-    InvalidDecryptedChainId = 9,
-    ExpiredTx = 10,
-    ExpiredDecryptedTx = 11,
+    InvalidTx = 4,
+    InvalidSig = 5,
+    InvalidOrder = 6,
+    ExtraTxs = 7,
+    Undecryptable = 8,
+    ReplayTx = 9,
+    InvalidChainId = 10,
+    ExpiredTx = 11,
 }
 
 impl From<ErrorCodes> for u32 {
@@ -394,8 +396,9 @@ where
         response
     }
 
-    /// Takes the optional tendermint timestamp of the block: if it's Some than converts it to
-    /// a [`DateTimeUtc`], otherwise retrieve from self the time of the last block committed
+    /// Takes the optional tendermint timestamp of the block: if it's Some than
+    /// converts it to a [`DateTimeUtc`], otherwise retrieve from self the
+    /// time of the last block committed
     pub fn get_block_timestamp(
         &self,
         tendermint_block_time: Option<Timestamp>,
@@ -1183,6 +1186,7 @@ mod test_utils {
 /// Test the failure cases of [`mempool_validate`]
 #[cfg(test)]
 mod test_mempool_validate {
+    use namada::proof_of_stake::Epoch;
     use namada::proto::SignedTxData;
     use namada::types::transaction::{Fee, WrapperTx};
 
