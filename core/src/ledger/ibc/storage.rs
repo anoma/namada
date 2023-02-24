@@ -16,7 +16,6 @@ use crate::ibc::core::ics24_host::path::{
     SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
-use crate::ibc::signer::Signer;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
@@ -548,25 +547,4 @@ pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
 pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
     matches!(&sub_prefix.segments[0],
              DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
-}
-
-/// Returns true if the key is for IBC_ESCROW
-pub fn is_ibc_escrow_key(key: &Key) -> bool {
-    match key.segments.last() {
-        Some(owner) => {
-            *owner == Address::Internal(InternalAddress::IbcEscrow).to_db_key()
-        }
-        None => false,
-    }
-}
-
-/// Convert IBC signer to a key
-impl TryFrom<Signer> for Key {
-    type Error = Error;
-
-    fn try_from(signer: Signer) -> Result<Self> {
-        let address = Address::decode(signer.as_ref())
-            .map_err(|e| Error::IbcSigner(e.to_string()))?;
-        Ok(Key::from(address.to_db_key()))
-    }
 }

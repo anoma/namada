@@ -26,6 +26,7 @@ use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
 use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, Order,
 };
+use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
 use crate::ibc::core::ics04_channel::context::SendPacketReader;
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::handler::ModuleExtras;
@@ -36,14 +37,13 @@ use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
 };
 use crate::ibc::core::ics24_host::path::{
-    ChannelEndPath, ClientConsensusStatePath, SeqSendPath,
+    ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
 use crate::ibc::core::ics26_routing::context::{Module, ModuleOutputBuilder};
-use crate::ibc::core::{ContextError, ValidationContext};
+use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
 use crate::ibc::signer::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
 
 #[derive(Debug)]
@@ -454,26 +454,18 @@ impl<C> TokenTransferReader for TransferModule<C>
 where
     C: IbcStorageContext,
 {
-    type AccountId = Key;
+    type AccountId = Address;
 
     fn get_port(&self) -> Result<PortId, TokenTransferError> {
         Ok(PortId::transfer())
     }
 
-    /// Returns the sub key of the escrow account. The caller needs to prefix
-    /// the token address.
     fn get_channel_escrow_address(
         &self,
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<Self::AccountId, TokenTransferError> {
-        let sub_prefix = storage::ibc_account_sub_prefix(port_id, channel_id);
-        let sub_key = sub_prefix
-            .push(&token::BALANCE_STORAGE_KEY.to_owned())
-            .expect("Creating an escrow key shouldn't fail")
-            .push(&Address::Internal(InternalAddress::IbcEscrow))
-            .expect("Creating an escrow key shouldn't fail");
-        Ok(sub_key)
+        Ok(Address::Internal(InternalAddress::IbcEscrow))
     }
 
     fn is_send_enabled(&self) -> bool {
@@ -493,51 +485,48 @@ impl<C> BankKeeper for TransferModule<C>
 where
     C: IbcStorageContext,
 {
-    type AccountId = Key;
+    type AccountId = Address;
 
     fn send_coins(
         &mut self,
         from: &Self::AccountId,
         to: &Self::AccountId,
-        amt: &PrefixedCoin,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
+        // Assumes that the coin denom is prefixed with "port-id/channel-id" or
+        // has no prefix
+
         let token =
-            Address::decode(amt.denom.base_denom.as_str()).map_err(|_| {
+            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
                 TokenTransferError::InvalidCoin {
-                    coin: amt.denom.base_denom.to_string(),
+                    coin: coin.denom.base_denom.to_string(),
                 }
             })?;
 
         // TODO: https://github.com/anoma/namada/issues/1089
-        let amount = if amt.amount > u64::MAX.into() {
+        let amount = if coin.amount > u64::MAX.into() {
             return Err(TokenTransferError::InvalidCoin {
-                coin: amt.to_string(),
+                coin: coin.to_string(),
             });
         } else {
-            token::Amount::from_str(&amt.amount.to_string())
+            token::Amount::from_str(&coin.amount.to_string())
                 .expect("invalid amount")
         };
 
-        let src = if storage::is_ibc_escrow_key(from) {
-            Key::from(token.to_db_key()).join(from)
+        let src = if coin.denom.trace_path.is_empty()
+            || *from == Address::Internal(InternalAddress::IbcMint)
+        {
+            token::balance_key(&token, from)
         } else {
-            // TODO: sending from multitoken address
-            let sender = match from.segments.first() {
-                Some(DbKeySeg::AddressSeg(addr)) => addr,
-                _ => return Err(TokenTransferError::ParseAccountFailure),
-            };
-            token::balance_key(&token, &sender)
+            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+                .map_err(|_| TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?;
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            token::multitoken_balance_key(&prefix, from)
         };
 
-        let dest = if storage::is_ibc_escrow_key(to) {
-            Key::from(token.to_db_key()).join(to)
-        } else {
-            let receiver = match to.segments.first() {
-                Some(DbKeySeg::AddressSeg(addr)) => addr,
-                _ => return Err(TokenTransferError::ParseAccountFailure),
-            };
-            token::balance_key(&token, &receiver)
-        };
+        let dest = token::balance_key(&token, to);
 
         self.ctx
             .ctx
@@ -557,25 +546,145 @@ where
     fn mint_coins(
         &mut self,
         account: &Self::AccountId,
-        amt: &PrefixedCoin,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
+        let token =
+            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
+                TokenTransferError::InvalidCoin {
+                    coin: coin.denom.base_denom.to_string(),
+                }
+            })?;
+
+        // TODO: https://github.com/anoma/namada/issues/1089
+        let amount = if coin.amount > u64::MAX.into() {
+            return Err(TokenTransferError::InvalidCoin {
+                coin: coin.to_string(),
+            });
+        } else {
+            token::Amount::from_str(&coin.amount.to_string())
+                .expect("invalid amount")
+        };
+
+        let src = token::balance_key(
+            &token,
+            &Address::Internal(InternalAddress::IbcMint),
+        );
+
+        let dest = if coin.denom.trace_path.is_empty() {
+            token::balance_key(&token, account)
+        } else {
+            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+                .map_err(|_| TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?;
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            token::multitoken_balance_key(&prefix, account)
+        };
+
+        self.ctx
+            .ctx
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
     }
 
-    /// This function should enable burning of minted tokens in a user account
     fn burn_coins(
         &mut self,
         account: &Self::AccountId,
-        amt: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError>;
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        let token =
+            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
+                TokenTransferError::InvalidCoin {
+                    coin: coin.denom.base_denom.to_string(),
+                }
+            })?;
+
+        // TODO: https://github.com/anoma/namada/issues/1089
+        let amount = if coin.amount > u64::MAX.into() {
+            return Err(TokenTransferError::InvalidCoin {
+                coin: coin.to_string(),
+            });
+        } else {
+            token::Amount::from_str(&coin.amount.to_string())
+                .expect("invalid amount")
+        };
+
+        let src = if coin.denom.trace_path.is_empty() {
+            token::balance_key(&token, account)
+        } else {
+            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+                .map_err(|_| TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?;
+            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
+            token::multitoken_balance_key(&prefix, account)
+        };
+
+        let dest = token::balance_key(
+            &token,
+            &Address::Internal(InternalAddress::IbcBurn),
+        );
+
+        self.ctx
+            .ctx
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
+    }
 }
 
-impl<C> TokenTransferKeeper for TransferModule<C> where C: IbcStorageContext {}
+impl<C> TokenTransferKeeper for TransferModule<C>
+where
+    C: IbcStorageContext,
+{
+    fn store_packet_commitment(
+        &mut self,
+        port_id: PortId,
+        channel_id: ChannelId,
+        sequence: Sequence,
+        commitment: PacketCommitment,
+    ) -> Result<(), ContextError> {
+        let path = CommitmentPath {
+            port_id,
+            channel_id,
+            sequence,
+        };
+        self.ctx.store_packet_commitment(&path, commitment)
+    }
+
+    fn store_next_sequence_send(
+        &mut self,
+        port_id: PortId,
+        channel_id: ChannelId,
+        seq: Sequence,
+    ) -> Result<(), ContextError> {
+        let path = SeqSendPath(port_id, channel_id);
+        self.ctx.store_next_sequence_send(&path, seq)
+    }
+}
 
 impl<C> TokenTransferContext for TransferModule<C>
 where
     C: IbcStorageContext,
 {
-    type AccountId = Key;
+    type AccountId = Address;
 }
 
 fn into_channel_error(error: TokenTransferError) -> ChannelError {
