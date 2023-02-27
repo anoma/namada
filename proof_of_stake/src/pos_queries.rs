@@ -20,7 +20,7 @@ use thiserror::Error;
 use crate::tendermint_proto::google::protobuf;
 use crate::tendermint_proto::types::EvidenceParams;
 use crate::types::WeightedValidator;
-use crate::{PosBase, PosParams};
+use crate::{read_pos_params, PosParams};
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
@@ -108,6 +108,12 @@ where
         self.wl_storage
     }
 
+    /// Read the proof-of-stake parameters from storage.
+    pub fn get_pos_params(self) -> PosParams {
+        read_pos_params(self.wl_storage)
+            .expect("Should be able to read PosParams from storage")
+    }
+
     /// Get the set of active validators for a given epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     pub fn get_active_validators(
@@ -124,7 +130,10 @@ where
 
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
-    pub fn get_total_voting_power(&self, epoch: Option<Epoch>) -> token::Amount {
+    pub fn get_total_voting_power(
+        &self,
+        epoch: Option<Epoch>,
+    ) -> token::Amount {
         self.get_active_validators(epoch)
             .iter()
             .map(|validator| validator.bonded_stake)
@@ -134,7 +143,11 @@ where
 
     /// Simple helper function for the ledger to get balances
     /// of the specified token at the specified address.
-    pub fn get_balance(&self, token: &Address, owner: &Address) -> token::Amount {
+    pub fn get_balance(
+        &self,
+        token: &Address,
+        owner: &Address,
+    ) -> token::Amount {
         let balance = storage_api::StorageRead::read(
             self.wl_storage,
             &token::balance_key(token, owner),
@@ -180,7 +193,8 @@ where
         let pk_bytes = pk
             .try_to_vec()
             .expect("Serializing public key should not fail");
-        let epoch = epoch.unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
             .into_iter()
             .find(|validator| {
@@ -269,8 +283,6 @@ where
         //     })
         todo!()
     }
-
-
 
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
     /// within the current [`Epoch`].
