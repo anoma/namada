@@ -197,7 +197,7 @@ pub fn connection_key(conn_id: &ConnectionId) -> Key {
 pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
     let path = Path::ChannelEnd(ChannelEndPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for the channel shouldn't fail")
@@ -227,7 +227,7 @@ pub fn capability_key(index: u64) -> Key {
 pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
     let path = Path::SeqSend(SeqSendPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceSend shouldn't fail")
@@ -237,7 +237,7 @@ pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
 pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
     let path = Path::SeqRecv(SeqRecvPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceRecv shouldn't fail")
@@ -247,7 +247,7 @@ pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
 pub fn next_sequence_ack_key(port_channel_id: &PortChannelId) -> Key {
     let path = Path::SeqAck(SeqAckPath(
         port_channel_id.port_id.clone(),
-        port_channel_id.channel_id,
+        port_channel_id.channel_id.clone(),
     ));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceAck shouldn't fail")
@@ -261,7 +261,7 @@ pub fn commitment_key(
 ) -> Key {
     let path = Path::Commitment(CommitmentPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -276,7 +276,7 @@ pub fn receipt_key(
 ) -> Key {
     let path = Path::Receipt(ReceiptPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -291,7 +291,7 @@ pub fn ack_key(
 ) -> Key {
     let path = Path::Ack(AckPath {
         port_id: port_id.clone(),
-        channel_id: *channel_id,
+        channel_id: channel_id.clone(),
         sequence,
     });
     ibc_key(path.to_string())
@@ -541,6 +541,12 @@ pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
         .push(&ibc_token.to_db_key())
         .expect("Cannot obtain a storage key");
     Ok(prefix)
+}
+
+/// Returns true if the given key is for IBC
+pub fn is_ibc_key(key: &Key) -> bool {
+    matches!(&key.segments[0],
+             DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
 }
 
 /// Returns true if the sub prefix is for IBC

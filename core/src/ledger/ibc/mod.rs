@@ -4,18 +4,17 @@ mod context;
 pub mod storage;
 
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::fmt::Debug;
 
-use context::storage::IbcStorageContext;
-use context::transfer_mod::TransferModule;
+pub use context::storage::{IbcStorageContext, ProofSpec};
+pub use context::transfer_mod::TransferModule;
 use prost::Message;
 use thiserror::Error;
 
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
-    MsgTransfer, TYPE_URL,
+    MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
 };
-use crate::ibc::applications::transfer::MODULE_ID_STR;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
@@ -37,43 +36,43 @@ pub enum Error {
     TokenTransfer(TokenTransferError),
 }
 
+/// IBC actions to handle IBC operations
 #[derive(Debug)]
 pub struct IbcActions<C>
 where
     C: IbcStorageContext + 'static,
 {
-    ctx: &'static C,
+    ctx: &'static mut C,
     modules: HashMap<ModuleId, Box<dyn Module>>,
     ports: HashMap<PortId, ModuleId>,
 }
 
 impl<C> IbcActions<C>
 where
-    C: IbcStorageContext + Sync + core::fmt::Debug,
+    C: IbcStorageContext + Debug,
 {
-    pub fn new(ctx: &C) -> Self {
-        let mut actions = Self {
+    /// Make new IBC actions
+    pub fn new(ctx: &'static mut C) -> Self {
+        Self {
             ctx,
             modules: HashMap::new(),
             ports: HashMap::new(),
-        };
-        let module_id =
-            ModuleId::from_str(MODULE_ID_STR).expect("should be parsable");
-        let module = TransferModule { ctx: &actions };
-        actions
-            .modules
-            .insert(module_id.clone(), Box::new(module) as Box<dyn Module>);
-        actions.ports.insert(PortId::transfer(), module_id);
+        }
+    }
 
-        actions
+    /// Add a route to IBC actions
+    pub fn add_route(&mut self, module_id: ModuleId, module: impl Module) {
+        self.modules
+            .insert(module_id.clone(), Box::new(module) as Box<dyn Module>);
+        self.ports.insert(PortId::transfer(), module_id);
     }
 
     /// Execute according to the message in an IBC transaction or VP
-    pub fn execute(&mut self, tx_data: &Vec<u8>) -> Result<(), Error> {
+    pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
         let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
-            TYPE_URL => {
-                let msg =
+            MSG_TRANSFER_TYPE_URL => {
+                let _msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
                 // TODO: call send_transfer(...)
                 // TODO: write results and emit the event
@@ -84,11 +83,11 @@ where
     }
 
     /// Validate according to the message in IBC VP
-    pub fn validate(&self, tx_data: &Vec<u8>) -> Result<(), Error> {
+    pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
         let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
-            TYPE_URL => {
-                let msg =
+            MSG_TRANSFER_TYPE_URL => {
+                let _msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
                 // TODO: validate transfer and a sent packet
                 Ok(())

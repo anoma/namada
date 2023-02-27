@@ -6,19 +6,18 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use thiserror::Error;
 
-use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics04_channel::packet::Packet;
-use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
+use crate::ibc::core::ics26_routing::error::RouterError;
+use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
+use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
 use crate::types::address::{
     Address, DecodeError as AddressError, InternalAddress,
-};
-use crate::types::ibc::data::{
-    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
 };
 use crate::types::storage::Key;
 use crate::types::token::{self, Amount, AmountParseError};
@@ -30,7 +29,7 @@ pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
     #[error("IBC message error: {0}")]
-    IbcMessage(IbcDataError),
+    IbcMessage(RouterError),
     #[error("Invalid message error")]
     InvalidMessage,
     #[error("Invalid address error: {0}")]
@@ -139,22 +138,32 @@ where
         }
 
         // Check the message
-        let ibc_msg = IbcMessage::decode(tx_data).map_err(Error::IbcMessage)?;
-        match &ibc_msg.0 {
-            Ics26Envelope::Ics20Msg(msg) => self.validate_sending_token(msg),
-            Ics26Envelope::Ics4PacketMsg(PacketMsg::RecvPacket(msg)) => {
-                self.validate_receiving_token(&msg.packet)
+        let ibc_msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        match ibc_msg.type_url.as_str() {
+            MSG_TRANSFER_TYPE_URL => {
+                let msg = MsgTransfer::try_from(ibc_msg)
+                    .map_err(Error::TokenTransfer)?;
+                self.validate_sending_token(&msg)
             }
-            Ics26Envelope::Ics4PacketMsg(PacketMsg::AckPacket(msg)) => {
-                self.validate_refunding_token(&msg.packet)
+            _ => {
+                let envelope: MsgEnvelope =
+                    ibc_msg.try_into().map_err(Error::IbcMessage)?;
+                match envelope {
+                    MsgEnvelope::Packet(PacketMsg::RecvPacket(msg)) => {
+                        self.validate_receiving_token(&msg.packet)
+                    }
+                    MsgEnvelope::Packet(PacketMsg::AckPacket(msg)) => {
+                        self.validate_refunding_token(&msg.packet)
+                    }
+                    MsgEnvelope::Packet(PacketMsg::ToPacket(msg)) => {
+                        self.validate_refunding_token(&msg.packet)
+                    }
+                    MsgEnvelope::Packet(PacketMsg::ToClosePacket(msg)) => {
+                        self.validate_refunding_token(&msg.packet)
+                    }
+                    _ => Err(Error::InvalidMessage),
+                }
             }
-            Ics26Envelope::Ics4PacketMsg(PacketMsg::ToPacket(msg)) => {
-                self.validate_refunding_token(&msg.packet)
-            }
-            Ics26Envelope::Ics4PacketMsg(PacketMsg::ToClosePacket(msg)) => {
-                self.validate_refunding_token(&msg.packet)
-            }
-            _ => Err(Error::InvalidMessage),
         }
     }
 }
@@ -166,9 +175,12 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn validate_sending_token(&self, msg: &MsgTransfer) -> Result<bool> {
-        let mut data = FungibleTokenPacketData::from(msg.clone());
+        let mut coin = msg
+            .token
+            .try_into()
+            .map_err(|e| Error::Denom(e.to_string()))?;
         if let Some(token_hash) =
-            ibc_storage::token_hash_from_denom(&data.denom).map_err(|e| {
+            ibc_storage::token_hash_from_denom(&coin.denom).map_err(|e| {
                 Error::Denom(format!("Invalid denom: error {}", e))
             })?
         {
@@ -188,7 +200,7 @@ where
                     denom_key, e
                 ))
             })?;
-            data.denom = denom.to_string();
+            coin.denom = denom.to_string();
         }
         let token = ibc_storage::token(&data.denom)
             .map_err(|e| Error::Denom(e.to_string()))?;

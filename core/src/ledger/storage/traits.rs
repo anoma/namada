@@ -155,7 +155,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
 }
 
 /// The storage hasher used for the merkle tree.
-pub trait StorageHasher: Hasher + Default {
+pub trait StorageHasher: Hasher + fmt::Debug + Default {
     /// Hash the value to store
     fn hash(value: impl AsRef<[u8]>) -> H256;
 }

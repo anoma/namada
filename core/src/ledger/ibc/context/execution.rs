@@ -40,8 +40,8 @@ where
         let path = Path::ClientType(client_type_path);
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let bytes = client_type.as_str().as_bytes();
-        self.ctx.write(&key, bytes).map_err(|e| {
+        let bytes = client_type.as_str().as_bytes().to_vec();
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the client state failed: Key {}",
@@ -60,7 +60,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = client_state.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the client state failed: Key {}",
@@ -81,7 +81,7 @@ where
         let bytes = consensus_state
             .encode_vec()
             .expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the consensus state failed: Key {}",
@@ -95,14 +95,14 @@ where
         let key = storage::client_counter_key();
         let count = self.client_counter().expect("read failed");
         self.ctx
-            .write(&key, count.to_be_bytes())
+            .write(&key, count.to_be_bytes().to_vec())
             .expect("write failed");
     }
 
     fn store_update_time(
         &mut self,
         client_id: ClientId,
-        height: Height,
+        _height: Height,
         timestamp: Timestamp,
     ) -> Result<(), ContextError> {
         let key = storage::client_update_timestamp_key(&client_id);
@@ -113,7 +113,7 @@ where
                     &key,
                     time.encode_vec().expect("encoding shouldn't fail"),
                 )
-                .map_err(|e| {
+                .map_err(|_| {
                     ContextError::ClientError(ClientError::Other {
                         description: format!(
                             "Writing the consensus state failed: Key {}",
@@ -133,12 +133,12 @@ where
     fn store_update_height(
         &mut self,
         client_id: ClientId,
-        height: Height,
+        _height: Height,
         host_height: Height,
     ) -> Result<(), ContextError> {
         let key = storage::client_update_height_key(&client_id);
-        let bytes = height.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|e| {
+        let bytes = host_height.encode_vec().expect("encoding shouldn't fail");
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the consensus state failed: Key {}",
@@ -159,7 +159,7 @@ where
         let bytes = connection_end
             .encode_vec()
             .expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(
                     "Writing the connection end failed: Key {}",
@@ -191,7 +191,7 @@ where
                 format!("{},{}", list, conn_id.to_string())
             }
             Ok(None) => conn_id.to_string(),
-            Err(e) => {
+            Err(_) => {
                 Err(ContextError::ConnectionError(ConnectionError::Other {
                     description: format!(
                         "Reading the connection list of failed: Key {}",
@@ -200,8 +200,8 @@ where
                 }))?
             }
         };
-        let bytes = list.as_bytes();
-        self.ctx.write(&key, bytes).map_err(|e| {
+        let bytes = list.as_bytes().to_vec();
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(
                     "Writing the list of connection IDs failed: Key {}",
@@ -226,7 +226,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = commitment.into_vec();
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -245,7 +245,7 @@ where
         let path = Path::Commitment(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.delete(&key).map_err(|e| {
+        self.ctx.delete(&key).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -260,14 +260,14 @@ where
     fn store_packet_receipt(
         &mut self,
         path: &ReceiptPath,
-        receipt: Receipt,
+        _receipt: Receipt,
     ) -> Result<(), ContextError> {
         let path = Path::Receipt(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         // the value is the same as ibc-go
-        let bytes = &[1_u8];
-        self.ctx.write(&key, bytes).map_err(|e| {
+        let bytes = [1_u8].to_vec();
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -288,7 +288,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = ack_commitment.into_vec();
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -307,7 +307,7 @@ where
         let path = Path::Ack(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.delete(&key).map_err(|e| {
+        self.ctx.delete(&key).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -328,7 +328,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = channel_end.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|e| {
+        self.ctx.write(&key, bytes).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!(
                     "Writing the channel end failed: Key {}",
@@ -394,10 +394,10 @@ impl<C> IbcActions<C>
 where
     C: IbcStorageContext,
 {
-    fn increase_counter(&self, key: &Key) -> Result<(), ContextError> {
+    fn increase_counter(&mut self, key: &Key) -> Result<(), ContextError> {
         let count = self.read_counter(key)?;
         self.ctx
-            .write(&key, &(count + 1).to_be_bytes())
+            .write(&key, (count + 1).to_be_bytes().to_vec())
             .map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
@@ -409,12 +409,12 @@ where
     }
 
     fn store_sequence(
-        &self,
+        &mut self,
         key: &Key,
         sequence: Sequence,
     ) -> Result<(), ContextError> {
         self.ctx
-            .write(&key, &(u64::from(sequence) + 1).to_be_bytes())
+            .write(&key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
             .map_err(|_| {
                 ContextError::PacketError(PacketError::Channel(
                     ChannelError::Other {

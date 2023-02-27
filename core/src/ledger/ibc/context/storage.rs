@@ -1,11 +1,12 @@
 //! IBC storage context
 
-use ics23::ProofSpec;
+use std::fmt::Debug;
+
+pub use ics23::ProofSpec;
 
 use super::super::Error;
 use crate::ledger::storage_api;
-use crate::types::chain::ChainId;
-use crate::types::ibc::IbcEvent as NamadaIbcEvent;
+use crate::types::ibc::IbcEvent;
 use crate::types::storage::{BlockHeight, Header, Key};
 use crate::types::token::Amount;
 
@@ -19,7 +20,8 @@ impl From<Error> for storage_api::Error {
 
 /// IBC context trait to be implemented in integration that can read and write
 pub trait IbcStorageContext {
-    type Error: From<Error> + core::fmt::Debug;
+    /// IBC storage error
+    type Error: From<Error> + Debug;
     /// Storage read prefix iterator
     type PrefixIter<'iter>
     where
@@ -41,20 +43,13 @@ pub trait IbcStorageContext {
     ) -> Result<Option<(String, Vec<u8>)>, Self::Error>;
 
     /// Write IBC-related data
-    fn write(
-        &mut self,
-        key: &Key,
-        data: impl AsRef<[u8]>,
-    ) -> Result<(), Self::Error>;
+    fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(), Self::Error>;
 
     /// Delete IBC-related data
     fn delete(&mut self, key: &Key) -> Result<(), Self::Error>;
 
     /// Emit an IBC event
-    fn emit_ibc_event(
-        &mut self,
-        event: NamadaIbcEvent,
-    ) -> Result<(), Self::Error>;
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error>;
 
     /// Transfer token
     fn transfer_token(
@@ -71,7 +66,7 @@ pub trait IbcStorageContext {
     fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error>;
 
     /// Get the chain ID
-    fn get_chain_id(&self) -> Result<ChainId, Self::Error>;
+    fn get_chain_id(&self) -> Result<String, Self::Error>;
 
     /// Get the IBC proof specs
     fn get_proof_specs(&self) -> Vec<ProofSpec>;

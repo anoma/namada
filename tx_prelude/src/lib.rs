@@ -30,9 +30,8 @@ use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
+    self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-use namada_core::types::time::Rfc3339String;
 pub use namada_core::types::*;
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
@@ -73,6 +72,7 @@ macro_rules! debug_log {
 }
 
 /// Execution context provides access to the host environment functions
+#[derive(Debug)]
 pub struct Ctx(());
 
 impl Ctx {
@@ -137,16 +137,17 @@ impl StorageRead for Ctx {
             .expect("Cannot convert the ID string"))
     }
 
-    fn get_block_header(
-        &self,
-    ) -> Result<namada_core::types::storage::Header, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, Error> {
         Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
     }
 
-    fn get_block_height(
-        &self,
-    ) -> Result<namada_core::types::storage::BlockHeight, Error> {
-        Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
+    fn get_block_header(&self, height: BlockHeight) -> Result<Header, Error> {
+        let read_result = unsafe { namada_tx_get_block_header(height.0) };
+        let header_value =
+            read_from_buffer(read_result, namada_tx_result_buffer)
+                .expect("The block header should exist");
+        Ok(Header::try_from_slice(&header_value[..])
+            .expect("The conversion shouldn't fail"))
     }
 
     fn get_block_hash(
@@ -236,16 +237,6 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn get_block_time(&self) -> Result<time::Rfc3339String, Error> {
-        let read_result = unsafe { namada_tx_get_block_time() };
-        let time_value = read_from_buffer(read_result, namada_tx_result_buffer)
-            .expect("The block time should exist");
-        Ok(Rfc3339String(
-            String::try_from_slice(&time_value[..])
-                .expect("The conversion shouldn't fail"),
-        ))
-    }
-
     fn write_temp<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,

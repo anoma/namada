@@ -22,7 +22,7 @@ use crate::types::address::{self, Address};
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::key::*;
-use crate::types::storage::{Key, TxIndex};
+use crate::types::storage::{BlockHeight, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{
@@ -1622,11 +1622,12 @@ where
     Ok(height.0)
 }
 
-/// Getting the block time function exposed to the wasm VM Tx
-/// environment. The time is that of the block header to which the current
+/// Getting the block header function exposed to the wasm VM Tx
+/// environment. The header is the block header to which the current
 /// transaction is being applied.
-pub fn tx_get_block_time<MEM, DB, H, CA>(
+pub fn tx_get_block_header<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
+    height: u64,
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
@@ -1636,21 +1637,18 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
-        .get_block_header(None)
+        .get_block_header(Some(BlockHeight(height)))
         .map_err(TxRuntimeError::StorageError)?;
     Ok(match header {
         Some(h) => {
-            let time = h
-                .time
-                .to_rfc3339()
-                .try_to_vec()
-                .map_err(TxRuntimeError::EncodingError)?;
-            let len: i64 = time
+            let value =
+                h.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let len: i64 = value
                 .len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(time);
+            result_buffer.replace(value);
             tx_add_gas(env, gas)?;
             len
         }

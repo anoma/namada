@@ -1,6 +1,7 @@
 //! IBC module for token transfer
 
-use core::str::FromStr;
+use std::fmt::Debug;
+use std::str::FromStr;
 
 use super::super::{IbcActions, IbcStorageContext};
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
@@ -20,6 +21,7 @@ use crate::ibc::applications::transfer::context::{
 };
 use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
+use crate::ibc::applications::transfer::MODULE_ID_STR;
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -39,24 +41,43 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
-use crate::ibc::core::ics26_routing::context::{Module, ModuleOutputBuilder};
+use crate::ibc::core::ics26_routing::context::{
+    Module, ModuleId, ModuleOutputBuilder,
+};
 use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
 use crate::ibc::signer::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
 
+/// IBC module for token transfer
 #[derive(Debug)]
 pub struct TransferModule<C>
 where
     C: IbcStorageContext + 'static,
 {
-    pub ctx: &'static IbcActions<C>,
+    /// IBC actions
+    pub ctx: &'static mut IbcActions<C>,
+}
+
+impl<C> TransferModule<C>
+where
+    C: IbcStorageContext + 'static,
+{
+    /// Make a new module
+    pub fn new(ctx: &'static mut IbcActions<C>) -> Self {
+        Self { ctx }
+    }
+
+    /// Get the module ID
+    pub fn module_id(&self) -> ModuleId {
+        ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+    }
 }
 
 impl<C> Module for TransferModule<C>
 where
-    C: IbcStorageContext + Sync + core::fmt::Debug + 'static,
+    C: IbcStorageContext + Debug + 'static,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(
@@ -462,8 +483,8 @@ where
 
     fn get_channel_escrow_address(
         &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
     ) -> Result<Self::AccountId, TokenTransferError> {
         Ok(Address::Internal(InternalAddress::IbcEscrow))
     }

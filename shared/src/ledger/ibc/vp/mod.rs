@@ -1,30 +1,28 @@
 //! IBC integration as a native validity predicate
 
-mod channel;
-mod client;
-mod connection;
-mod denom;
-mod packet;
-mod port;
-mod sequence;
+// TODO validate denom map and multitoken transfer?
+// mod denom;
 mod token;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::ibc::storage::{
-    client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
+use namada_core::ledger::ibc::storage::is_ibc_key;
+use namada_core::ledger::ibc::{
+    Error as ActionError, IbcActions, IbcStorageContext, ProofSpec,
 };
+use namada_core::ledger::storage::ics23_specs::ibc_proof_specs;
+use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::proto::SignedTxData;
 use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::ibc::IbcEvent as WrappedIbcEvent;
-use namada_core::types::storage::Key;
+use namada_core::types::ibc::IbcEvent;
+use namada_core::types::storage::{BlockHeight, Header, Key};
+use namada_core::types::token::Amount;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
-use crate::ibc::core::ics02_client::context::ClientReader;
-use crate::ibc::events::IbcEvent;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::vm::WasmCacheAccess;
 
@@ -33,34 +31,18 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
-    #[error("Key error: {0}")]
-    KeyError(String),
-    #[error("Counter error: {0}")]
-    CounterError(String),
-    #[error("Client validation error: {0}")]
-    ClientError(client::Error),
-    #[error("Connection validation error: {0}")]
-    ConnectionError(connection::Error),
-    #[error("Channel validation error: {0}")]
-    ChannelError(channel::Error),
-    #[error("Port validation error: {0}")]
-    PortError(port::Error),
-    #[error("Packet validation error: {0}")]
-    PacketError(packet::Error),
-    #[error("Sequence validation error: {0}")]
-    SequenceError(sequence::Error),
-    #[error("Denom validation error: {0}")]
-    DenomError(denom::Error),
-    #[error("IBC event error: {0}")]
-    IbcEvent(String),
     #[error("Decoding transaction data error: {0}")]
     TxDataDecoding(std::io::Error),
     #[error("IBC message is required as transaction data")]
     NoTxData,
+    #[error("IBC action error: {0}")]
+    IbcAction(ActionError),
+    #[error("State change error: {0}")]
+    StateChange(String),
 }
 
 /// IBC functions result
-pub type Result<T> = std::result::Result<T, Error>;
+pub type VpResult<T> = std::result::Result<T, Error>;
 
 /// IBC VP
 pub struct Ibc<'a, DB, H, CA>
@@ -88,167 +70,308 @@ where
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> VpResult<bool> {
         let signed = SignedTxData::try_from_slice(tx_data)
             .map_err(Error::TxDataDecoding)?;
         let tx_data = &signed.data.ok_or(Error::NoTxData)?;
-        let mut clients = HashSet::new();
 
-        for key in keys_changed {
-            if let Some(ibc_prefix) = ibc_prefix(key) {
-                match ibc_prefix {
-                    IbcPrefix::Client => {
-                        if is_client_counter_key(key) {
-                            let counter =
-                                self.client_counter().map_err(|_| {
-                                    Error::CounterError(
-                                        "The client counter doesn't exist"
-                                            .to_owned(),
-                                    )
-                                })?;
-                            if self.client_counter_pre()? >= counter {
-                                return Err(Error::CounterError(
-                                    "The client counter is invalid".to_owned(),
-                                ));
-                            }
-                        } else {
-                            let client_id = client_id(key)
-                                .map_err(|e| Error::KeyError(e.to_string()))?;
-                            if !clients.insert(client_id.clone()) {
-                                // this client has been checked
-                                continue;
-                            }
-                            self.validate_client(&client_id, tx_data)?
-                        }
-                    }
-                    IbcPrefix::Connection => {
-                        self.validate_connection(key, tx_data)?
-                    }
-                    IbcPrefix::Channel => {
-                        self.validate_channel(key, tx_data)?
-                    }
-                    IbcPrefix::Port => self.validate_port(key)?,
-                    IbcPrefix::Capability => self.validate_capability(key)?,
-                    IbcPrefix::SeqSend => {
-                        self.validate_sequence_send(key, tx_data)?
-                    }
-                    IbcPrefix::SeqRecv => {
-                        self.validate_sequence_recv(key, tx_data)?
-                    }
-                    IbcPrefix::SeqAck => {
-                        self.validate_sequence_ack(key, tx_data)?
-                    }
-                    IbcPrefix::Commitment => {
-                        self.validate_commitment(key, tx_data)?
-                    }
-                    IbcPrefix::Receipt => {
-                        self.validate_receipt(key, tx_data)?
-                    }
-                    IbcPrefix::Ack => self.validate_ack(key)?,
-                    IbcPrefix::Event => {}
-                    IbcPrefix::Denom => self.validate_denom(tx_data)?,
-                    IbcPrefix::Unknown => {
-                        return Err(Error::KeyError(format!(
-                            "Invalid IBC-related key: {}",
-                            key
-                        )));
-                    }
-                };
-            }
-        }
+        // Pseudo execution and compare them
+        self.validate_state(tx_data, keys_changed)?;
+
+        // Validate the state according to the given IBC message
+        self.validate_with_msg(tx_data)?;
+
+        // TODO
+        // validate denom?
 
         Ok(true)
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum StateChange {
-    Created,
-    Updated,
-    Deleted,
-    NotExists,
-}
-
 impl<'a, DB, H, CA> Ibc<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn get_state_change(&self, key: &Key) -> Result<StateChange> {
-        if self.ctx.has_key_pre(key)? {
-            if self.ctx.has_key_post(key)? {
-                Ok(StateChange::Updated)
-            } else {
-                Ok(StateChange::Deleted)
-            }
-        } else if self.ctx.has_key_post(key)? {
-            Ok(StateChange::Created)
-        } else {
-            Ok(StateChange::NotExists)
-        }
-    }
+    fn validate_state(
+        &self,
+        tx_data: &[u8],
+        keys_changed: &BTreeSet<Key>,
+    ) -> VpResult<()> {
+        let mut exec_ctx = PseudoExecutionContext::new(&self.ctx);
+        let actions = IbcActions::new(&mut exec_ctx);
+        actions.execute(tx_data)?;
 
-    fn read_counter_pre(&self, key: &Key) -> Result<u64> {
-        match self.ctx.read_bytes_pre(key) {
-            Ok(Some(value)) => {
-                // As ibc-go, u64 like a counter is encoded with big-endian
-                let counter: [u8; 8] = value.try_into().map_err(|_| {
-                    Error::CounterError(
-                        "Encoding the counter failed".to_string(),
-                    )
-                })?;
-                Ok(u64::from_be_bytes(counter))
-            }
-            Ok(None) => {
-                Err(Error::CounterError("The counter doesn't exist".to_owned()))
-            }
-            Err(e) => Err(Error::CounterError(format!(
-                "Reading the counter failed: {}",
-                e
-            ))),
+        let changed_ibc_keys: BTreeSet<Key> =
+            keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
+        if changed_ibc_keys.len() != exec_ctx.get_changed_keys().len() {
+            return Err(Error::StateChange(format!(
+                "The changed keys mismatched: Actual {}, Expected {}",
+                changed_ibc_keys,
+                exec_ctx
+                    .get_changed_keys()
+                    .iter()
+                    .map(|k| k.clone())
+                    .collect(),
+            )));
         }
-    }
 
-    fn read_counter(&self, key: &Key) -> Result<u64> {
-        match self.ctx.read_bytes_post(key) {
-            Ok(Some(value)) => {
-                // As ibc-go, u64 like a counter is encoded with big-endian
-                let counter: [u8; 8] = value.try_into().map_err(|_| {
-                    Error::CounterError(
-                        "Encoding the counter failed".to_string(),
-                    )
-                })?;
-                Ok(u64::from_be_bytes(counter))
-            }
-            Ok(None) => {
-                Err(Error::CounterError("The counter doesn't exist".to_owned()))
-            }
-            Err(e) => Err(Error::CounterError(format!(
-                "Reading the counter failed: {}",
-                e
-            ))),
-        }
-    }
-
-    fn check_emitted_event(&self, expected_event: IbcEvent) -> Result<()> {
-        match self.ctx.write_log.get_ibc_event() {
-            Some(event) => {
-                let expected = WrappedIbcEvent::try_from(expected_event)
-                    .map_err(|e| Error::IbcEvent(e.to_string()))?;
-                if *event == expected {
-                    Ok(())
-                } else {
-                    Err(Error::IbcEvent(format!(
-                        "The IBC event is invalid: Event {}",
-                        event
-                    )))
+        for key in changed_ibc_keys {
+            match self.ctx.read_bytes_post(&key)? {
+                Some(v) => match exec_ctx.get_changed_value(&key) {
+                    Some(StorageModification::Write { value }) => {
+                        if v != *value {
+                            return Err(Error::StateChange(format!(
+                                "The value mismatched: Key {}",
+                                key,
+                            )));
+                        }
+                    }
+                    _ => Err(Error::StateChange(format!(
+                        "The value was invalid: Key {}",
+                        key
+                    ))),
+                },
+                None => {
+                    // deleted value
+                    match exec_ctx.get_changed_value(&key) {
+                        Some(StorageModification::Delete) => {}
+                        _ => Err(Error::StateChange(format!(
+                            "The key was deleted unexpectedly: Key {}",
+                            key
+                        ))),
+                    }
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
+        let validation_ctx = IbcVpContext { ctx: &self.ctx };
+        let actions = IbcActions::new(&mut validation_ctx);
+        actions.validate(tx_data)
+    }
+}
+
+#[derive(Debug)]
+struct PseudoExecutionContext<'a, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// Temporary store for pseudo execution
+    store: HashMap<Key, StorageModification>,
+    /// Context to read the previous value
+    ctx: &'a Ctx<'a, DB, H, CA>,
+    /// IBC event
+    event: Option<IbcEvent>,
+}
+
+impl<'a, DB, H, CA> PseudoExecutionContext<'a, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    pub fn new(ctx: &Ctx<'a, DB, H, CA>) -> Self {
+        Self {
+            store: HashMap::new(),
+            ctx,
+            event: None,
+        }
+    }
+
+    pub fn get_changed_keys(&self) -> HashSet<&Key> {
+        self.store.keys().collect()
+    }
+
+    pub fn get_changed_value(&self, key: &Key) -> Option<&StorageModification> {
+        self.store.get(key)
+    }
+}
+
+impl<'a, DB, H, CA> IbcStorageContext for PseudoExecutionContext<'a, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    type Error = Error;
+    type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
+
+    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
+        match self.store.get(key) {
+            Some(StorageModification::Write { ref value }) => {
+                Ok(Some(value.clone()))
+            }
+            Some(StorageModification::Delete) => Ok(None),
+            Some(StorageModification::Temp { .. }) => {
+                unreachable!("Temp shouldn't be inserted")
+            }
+            Some(StorageModification::InitAccount { .. }) => {
+                unreachable!("InitAccount shouldn't be inserted")
+            }
             None => {
-                Err(Error::IbcEvent("No event has been emitted".to_owned()))
+                self.ctx.pre().read_bytes(key).map_err(Error::NativeVpError)
             }
         }
+    }
+
+    fn iter_prefix<'iter>(
+        &self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+        // NOTE: Read only the previous state since the updated state isn't
+        // needed for the caller
+        self.ctx
+            .pre()
+            .iter_prefix(prefix)
+            .map_err(Error::NativeVpError)
+    }
+
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
+        self.ctx.pre().iter_next(iter).map_err(Error::NativeVpError)
+    }
+
+    fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(), Self::Error> {
+        self.store
+            .insert(key.clone(), StorageModification::Write { value });
+        Ok(())
+    }
+
+    fn delete(&mut self, key: &Key) -> Result<(), Self::Error> {
+        self.store.insert(key.clone(), StorageModification::Delete);
+        Ok(())
+    }
+
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
+        self.event = Some(event);
+        Ok(())
+    }
+
+    fn transfer_token(
+        &mut self,
+        src: &Key,
+        dest: &Key,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    /// Get the current height of this chain
+    fn get_height(&self) -> Result<BlockHeight, Self::Error> {
+        self.ctx.get_block_height().map_err(Error::NativeVpError)
+    }
+
+    /// Get the block header of this chain
+    fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error> {
+        self.ctx
+            .get_block_header(height)
+            .map_err(Error::NativeVpError)
+    }
+
+    /// Get the chain ID
+    fn get_chain_id(&self) -> Result<String, Self::Error> {
+        self.ctx.get_chain_id().map_err(Error::NativeVpError)
+    }
+
+    fn get_proof_specs(&self) -> Vec<ProofSpec> {
+        ibc_proof_specs::<H>()
+    }
+
+    fn log_string(&self, message: String) {
+        tracing::debug!("{} in the pseudo execution for IBC VP", message);
+    }
+}
+
+#[derive(Debug)]
+struct IbcVpContext<'a, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    /// Context to read the post value
+    ctx: &'a Ctx<'a, DB, H, CA>,
+}
+
+impl<'a, DB, H, CA> IbcStorageContext for IbcVpContext<'a, DB, H, CA>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    type Error = Error;
+    type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
+
+    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.ctx.post().read_bytes(key)
+    }
+
+    fn iter_prefix<'iter>(
+        &self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+        self.ctx.post().iter_prefix(prefix)
+    }
+
+    /// next key value pair
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
+        self.ctx.post().iter_next(iter)
+    }
+
+    fn write(&mut self, _key: &Key, _data: Vec<u8>) -> Result<(), Self::Error> {
+        unimplemented!("VP doesn't write any data")
+    }
+
+    fn delete(&mut self, _key: &Key) -> Result<(), Self::Error> {
+        unimplemented!("VP doesn't delete any data")
+    }
+
+    /// Emit an IBC event
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
+        unimplemented!("VP doesn't emit an event")
+    }
+
+    /// Transfer token
+    fn transfer_token(
+        &mut self,
+        src: &Key,
+        dest: &Key,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        unimplemented!("VP doesn't transfer")
+    }
+
+    fn get_height(&self) -> Result<BlockHeight, Self::Error> {
+        self.ctx.get_block_height()
+    }
+
+    fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error> {
+        self.ctx.get_block_header()
+    }
+
+    fn get_chain_id(&self) -> Result<String, Self::Error> {
+        self.ctx.get_chain_id()
+    }
+
+    /// Get the IBC proof specs
+    fn get_proof_specs(&self) -> Vec<ProofSpec> {
+        self.ctx.get_proof_specs()
+    }
+
+    /// Logging
+    fn log_string(&self, message: String) {
+        tracing::debug!("{} for validation in IBC VP", message);
     }
 }
 
@@ -258,45 +381,9 @@ impl From<native_vp::Error> for Error {
     }
 }
 
-impl From<client::Error> for Error {
-    fn from(err: client::Error) -> Self {
-        Self::ClientError(err)
-    }
-}
-
-impl From<connection::Error> for Error {
-    fn from(err: connection::Error) -> Self {
-        Self::ConnectionError(err)
-    }
-}
-
-impl From<channel::Error> for Error {
-    fn from(err: channel::Error) -> Self {
-        Self::ChannelError(err)
-    }
-}
-
-impl From<port::Error> for Error {
-    fn from(err: port::Error) -> Self {
-        Self::PortError(err)
-    }
-}
-
-impl From<packet::Error> for Error {
-    fn from(err: packet::Error) -> Self {
-        Self::PacketError(err)
-    }
-}
-
-impl From<sequence::Error> for Error {
-    fn from(err: sequence::Error) -> Self {
-        Self::SequenceError(err)
-    }
-}
-
-impl From<denom::Error> for Error {
-    fn from(err: denom::Error) -> Self {
-        Self::DenomError(err)
+impl From<ActionError> for Error {
+    fn from(err: ActionError) -> Self {
+        Self::IbcActionError(err)
     }
 }
 

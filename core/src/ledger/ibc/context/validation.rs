@@ -143,7 +143,7 @@ where
         })?;
         let mut lowest_height_value = None;
         while let Some((key, value)) =
-            self.ctx.iter_next(&mut iter).map_err(|e| {
+            self.ctx.iter_next(&mut iter).map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
                         "Iterating consensus states failed: ID {}, height {}",
@@ -304,7 +304,7 @@ where
             }
             Ok(None) => Err(ContextError::ConnectionError(
                 ConnectionError::ConnectionNotFound {
-                    connection_id: *connection_id,
+                    connection_id: connection_id.clone(),
                 },
             )),
             Err(_) => {
@@ -523,7 +523,7 @@ where
                     },
                 ))
             }
-            Err(e) => Err(ContextError::PacketError(PacketError::Channel(
+            Err(_) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
                         "Reading commitment failed: Key {}",
@@ -553,7 +553,7 @@ where
                     },
                 ))
             }
-            Err(e) => Err(ContextError::PacketError(PacketError::Channel(
+            Err(_) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
                         "Reading the receipt failed: Key {}",
@@ -583,7 +583,7 @@ where
                     },
                 ))
             }
-            Err(e) => Err(ContextError::PacketError(PacketError::Channel(
+            Err(_) => Err(ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
                         "Reading the ack commitment failed: Key {}",
@@ -601,7 +601,7 @@ where
     fn client_update_time(
         &self,
         client_id: &ClientId,
-        height: &Height,
+        _height: &Height,
     ) -> Result<Timestamp, ContextError> {
         let key = storage::client_update_timestamp_key(client_id);
         match self.ctx.read(&key) {
@@ -624,7 +624,7 @@ where
                     ),
                 }))
             }
-            Err(e) => Err(ContextError::ClientError(ClientError::Other {
+            Err(_) => Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Reading the client update time failed: ID {}",
                     client_id,
@@ -688,6 +688,7 @@ impl<C> IbcActions<C>
 where
     C: IbcStorageContext,
 {
+    /// Read a counter
     pub fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
         match self.ctx.read(&key) {
             Ok(Some(value)) => {
@@ -708,6 +709,7 @@ where
         }
     }
 
+    /// Read a sequence
     pub fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
         match self.ctx.read(&key) {
             Ok(Some(value)) => {
@@ -762,7 +764,7 @@ fn parse_port_channel_list(
 ) -> Result<Vec<(PortId, ChannelId)>, ContextError> {
     let mut port_channel_list = Vec::new();
     for pair in list.as_ref().split(',') {
-        let port_channel = pair.split('/');
+        let mut port_channel = pair.split('/');
         let port_id_str = port_channel.next().ok_or_else(|| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!("No port ID in the entry: {}", pair),

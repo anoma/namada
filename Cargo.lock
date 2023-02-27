@@ -2981,7 +2981,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.29.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=bab47783f92653015e5686f7dfb2fccc20a6b9b0#bab47783f92653015e5686f7dfb2fccc20a6b9b0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1#36103fad65c07cc72c4fc4c0ec72ec425978cae1"
 dependencies = [
  "bytes 1.4.0",
  "cfg-if 1.0.0",
@@ -3962,7 +3962,7 @@ dependencies = [
  "clru",
  "data-encoding",
  "derivative",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=bab47783f92653015e5686f7dfb2fccc20a6b9b0)",
+ "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
  "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=bced24eac45a9e82cd517d7fcb89bea35f7bcdce)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
@@ -4109,7 +4109,7 @@ dependencies = [
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=bab47783f92653015e5686f7dfb2fccc20a6b9b0)",
+ "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
  "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=bced24eac45a9e82cd517d7fcb89bea35f7bcdce)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
@@ -4207,7 +4207,7 @@ dependencies = [
  "eyre",
  "file-serve",
  "fs_extra",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=bab47783f92653015e5686f7dfb2fccc20a6b9b0)",
+ "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-relayer",
  "itertools",
