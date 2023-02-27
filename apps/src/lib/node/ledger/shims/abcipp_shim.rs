@@ -1,13 +1,10 @@
 use std::convert::TryFrom;
 use std::future::Future;
-use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 use futures::future::FutureExt;
-use tokio::sync::broadcast;
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
@@ -17,6 +14,7 @@ use namada::types::storage::BlockHeight;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::watch;
 use tower::Service;
 
 use super::super::Shell;
@@ -29,16 +27,15 @@ use crate::config::ActionAtHeight;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
-use crate::node::ledger::abortable::AbortingTask;
 
 /// An action to be performed at a
 /// certain block height.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
     /// Stop the chain.
     Halt(BlockHeight),
     /// Suspend consensus indefinitely.
-    Suspend(BlockHeight, broadcast::Receiver<AbortingTask>),
+    Suspend(BlockHeight),
 }
 
 /// The shim wraps the shell, which implements ABCI++.
@@ -55,7 +52,6 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
-    action_at_height: Option<Action>,
 }
 
 impl AbcippShim {
@@ -69,17 +65,23 @@ impl AbcippShim {
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
         native_token: Address,
-        abortable: broadcast::Receiver<AbortingTask>,
     ) -> (Self, AbciService) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
         let action_at_height = match config.shell.action_at_height {
-            Some(ActionAtHeight{height, action: config::Action::Suspend}) => Some(Action::Suspend(height, abortable)),
-            Some(ActionAtHeight{height, action: config::Action::Halt}) => Some(Action::Halt(height)),
+            Some(ActionAtHeight {
+                height,
+                action: config::Action::Suspend,
+            }) => Some(Action::Suspend(height)),
+            Some(ActionAtHeight {
+                height,
+                action: config::Action::Halt,
+            }) => Some(Action::Halt(height)),
             None => None,
         };
 
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
+        let (server_shutdown, _) = watch::channel::<bool>(false);
         (
             Self {
                 service: Shell::new(
@@ -96,9 +98,13 @@ impl AbcippShim {
                 #[cfg(not(feature = "abcipp"))]
                 delivered_txs: vec![],
                 shell_recv,
-                action_at_height,
             },
-            AbciService { shell_send },
+            AbciService {
+                shell_send,
+                shutdown: server_shutdown,
+                action_at_height,
+                suspended: false,
+            },
         )
     }
 
@@ -110,49 +116,21 @@ impl AbcippShim {
         hash_tx(bytes.as_slice())
     }
 
-    /// Check if we are at a block height with a scheduled action.
-    /// If so, perform the action.
-    fn maybe_take_action(&mut self, hght: i64) -> ControlFlow<()> {
-        let hght = BlockHeight::from(hght as u64);
-        match &mut self.action_at_height {
-            Some(Action::Suspend(ref height, recv)) if *height == hght => {
-                tracing::info!("Reached block height {}, suspending.", height);
-                loop {
-                    std::thread::sleep(Duration::from_millis(5));
-                    if recv.try_recv().is_ok() {
-                        break;
-                    }
-                }
-               ControlFlow::Break(())
-            }
-            Some(Action::Halt(height)) if *height == hght => {
-                tracing::info!("Reached block height {}, halting chain.", height);
-                ControlFlow::Break(())
-            }
-            _ => ControlFlow::Continue(())
-        }
-    }
-
     /// Run the shell's blocking loop that receives messages from the
     /// [`AbciService`].
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => {
-                    match self.maybe_take_action(proposal.height) {
-                        ControlFlow::Continue(_) => {}
-                        ControlFlow::Break(_) => return,
-                    }
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                Ok(Resp::ProcessProposal((&resp).into()))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal((&resp).into()))
+                        }
+                        _ => unreachable!(),
+                    }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let block_time =
@@ -218,21 +196,6 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                 }
-                ref req @ Req::PrepareProposal(ref prepare) => {
-                    match self.maybe_take_action(prepare.height) {
-                        ControlFlow::Continue(_) => {}
-                        ControlFlow::Break(_) => return,
-                    }
-                    match Request::try_from(req.clone()) {
-                        Ok(request) => self
-                            .service
-                            .call(request)
-                            .map(Resp::try_from)
-                            .map_err(Error::Shell)
-                            .and_then(|inner| inner),
-                        Err(err) => Err(err),
-                    }
-                }
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self
                         .service
@@ -251,12 +214,107 @@ impl AbcippShim {
     }
 }
 
+enum CheckAction {
+    NoAction,
+    Check(i64),
+    AlreadySuspended,
+}
+
 #[derive(Debug)]
 pub struct AbciService {
     shell_send: std::sync::mpsc::Sender<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    suspended: bool,
+    shutdown: watch::Sender<bool>,
+    action_at_height: Option<Action>,
+}
+
+impl AbciService {
+    /// Check if we are at a block height with a scheduled action.
+    /// If so, perform the action.
+    fn maybe_take_action(
+        action_at_height: Option<Action>,
+        check: CheckAction,
+        mut shutdown_recv: watch::Receiver<bool>,
+    ) -> (bool, Option<<Self as Service<Req>>::Future>) {
+        let hght = match check {
+            CheckAction::NoAction => BlockHeight::from(u64::MAX),
+            CheckAction::Check(hght) => BlockHeight::from(hght as u64),
+            CheckAction::AlreadySuspended => BlockHeight::default(),
+        };
+        match action_at_height {
+            Some(Action::Suspend(height)) if height >= hght => (
+                true,
+                Some(Box::pin(
+                    async move {
+                        _ = shutdown_recv.changed().await;
+                        Err(BoxError::from("Resolving suspended future"))
+                    }
+                    .boxed(),
+                )),
+            ),
+            Some(Action::Halt(height)) if height == hght => (
+                false,
+                Some(Box::pin(
+                    async move {
+                        Err(BoxError::from(format!(
+                            "Reached height{}, halting the chain",
+                            height
+                        )))
+                    }
+                    .boxed(),
+                )),
+            ),
+            _ => (false, None),
+        }
+    }
+
+    /// If we are not taking special action for this request,
+    /// forward it normally.
+    fn forward_request(&mut self, req: Req) -> <Self as Service<Req>>::Future {
+        let (resp_send, recv) = tokio::sync::oneshot::channel();
+        let result = self.shell_send.send((req, resp_send));
+        Box::pin(
+            async move {
+                if let Err(err) = result {
+                    // The shell has shut-down
+                    return Err(err.into());
+                }
+                match recv.await {
+                    Ok(resp) => resp,
+                    Err(err) => {
+                        tracing::info!("ABCI response channel didn't respond");
+                        Err(err.into())
+                    }
+                }
+            }
+            .boxed(),
+        )
+    }
+
+    /// Given the type of request, determine if we need to check
+    /// to possibly take an action.
+    fn get_action(&self, req: &Req) -> Option<CheckAction> {
+        match req {
+            Req::PrepareProposal(req) => Some(CheckAction::Check(req.height)),
+            Req::ProcessProposal(req) => Some(CheckAction::Check(req.height)),
+            Req::EndBlock(_)
+            | Req::BeginBlock(_)
+            | Req::DeliverTx(_)
+            | Req::InitChain(_)
+            | Req::CheckTx(_)
+            | Req::Commit(_) => {
+                if self.suspended {
+                    Some(CheckAction::AlreadySuspended)
+                } else {
+                    Some(CheckAction::NoAction)
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 /// The ABCI tower service implementation sends and receives messages to and
@@ -276,23 +334,23 @@ impl Service<Req> for AbciService {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let (resp_send, recv) = tokio::sync::oneshot::channel();
-        let result = self.shell_send.send((req, resp_send));
-        Box::pin(
-            async move {
-                if let Err(err) = result {
-                    // The shell has shut-down
-                    return Err(err.into());
-                }
-                match recv.await {
-                    Ok(resp) => resp,
-                    Err(err) => {
-                        tracing::info!("ABCI response channel didn't respond");
-                        Err(err.into())
-                    }
-                }
-            }
-            .boxed(),
-        )
+        let action = self.get_action(&req);
+        if let Some(action) = action {
+            let (suspended, fut) = Self::maybe_take_action(
+                self.action_at_height.clone(),
+                action,
+                self.shutdown.subscribe(),
+            );
+            self.suspended = suspended;
+            fut.unwrap_or_else(|| self.forward_request(req))
+        } else {
+            self.forward_request(req)
+        }
+    }
+}
+
+impl Drop for AbciService {
+    fn drop(&mut self) {
+        _ = self.shutdown.send(true);
     }
 }
