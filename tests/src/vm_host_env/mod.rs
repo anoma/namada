@@ -463,7 +463,7 @@ mod tests {
                 vp::CTX
                     .verify_tx_signature(
                         &pk,
-                        &signed_tx_data.sigs.get(0).unwrap().sig
+                        &signed_tx_data.sigs.get(0).unwrap().0
                     )
                     .unwrap()
             );
@@ -473,7 +473,7 @@ mod tests {
                 !vp::CTX
                     .verify_tx_signature(
                         &other_keypair.ref_to(),
-                        &signed_tx_data.sigs.get(0).unwrap().sig
+                        &signed_tx_data.sigs.get(0).unwrap().0
                     )
                     .unwrap()
             );

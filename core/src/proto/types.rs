@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
@@ -38,15 +39,24 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
-pub struct SignatureIndex {
-    pub sig: common::Signature,
-    pub index: u64,
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize, Eq, PartialEq)]
+pub struct SignatureIndex(pub common::Signature, pub u64);
+
+impl Ord for SignatureIndex {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.1.cmp(&other.1)
+    }
+}
+
+impl PartialOrd for SignatureIndex {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl SignatureIndex {
     pub fn from_single_signature(sig: common::Signature) -> Self {
-        Self { sig, index: 0 }
+        Self(sig, 0)
     }
 
     pub fn to_vec(&self) -> Vec<Self> {
@@ -76,8 +86,8 @@ impl SignedTxData {
         index: u64,
     ) -> Option<common::Signature> {
         for signature in &self.sigs {
-            if signature.index == index {
-                return Some(signature.sig.clone());
+            if signature.1 == index {
+                return Some(signature.0.clone());
             }
         }
         None
@@ -200,10 +210,7 @@ impl SigningTx {
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
         let sig = self.compute_signature(keypair);
-        let signed = SignedTxData {
-            data: self.data,
-            sigs: SignatureIndex::from_single_signature(sig).to_vec(),
-        }
+        let signed = SignedTxData { data: self.data, sigs: SignatureIndex::from_single_signature(sig).to_vec() }
         .try_to_vec()
         .expect("Encoding transaction data shouldn't fail");
         SigningTx {
@@ -270,10 +277,7 @@ impl SigningTx {
             .iter()
             .filter_map(|(public_key, signature)| {
                 let pk_index = pks_index_map.get(public_key);
-                pk_index.map(|index| SignatureIndex {
-                    sig: signature.clone(),
-                    index: *index,
-                })
+                pk_index.map(|index| SignatureIndex(signature.clone(), *index))
             })
             .collect::<Vec<SignatureIndex>>()
     }

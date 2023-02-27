@@ -10,6 +10,7 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -20,9 +21,10 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::{btc, eth, masp_rewards, Address};
-use namada::types::governance::ProposalType;
+use namada::types::governance::{Council, ProposalType};
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada::types::token::Amount;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -2504,8 +2506,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
-    println!("\nSEND YAY VOTE FROM VALIDATOR-0\n");
-
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
@@ -2537,8 +2537,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    println!("\nSEND NAY VOTE FROM BERTHA\n");
-
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
         "--proposal-id",
@@ -2557,8 +2555,6 @@ fn proposal_submission() -> Result<()> {
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-
-    println!("\nSEND YAY VOTE FROM ALBERT\n");
 
     // 10. Send a yay vote from a non-validator/non-delegator user
     let submit_proposal_vote = vec![
@@ -2889,6 +2885,7 @@ fn eth_governance_proposal() -> Result<()> {
 
 /// Test submission and vote of a PGF proposal
 ///
+/// 0 - Candidate two councils
 /// 1 - Sumbit two proposals
 /// 2 - Check balance
 /// 3 - Vote for the accepted proposals
@@ -2899,10 +2896,10 @@ fn pgf_governance_proposal() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(1),
+                epochs_per_year: epochs_per_year_from_min_duration(7),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 1,
-                max_expected_time_per_block: 1,
+                min_num_of_blocks: 4,
+                max_expected_time_per_block: 2,
                 ..genesis.parameters
             };
 
@@ -2948,6 +2945,40 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
     client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 0 - Candidate two councils with different spending caps
+    // ./target/debug/namada client init-counsil --address p --amount 1000000 --counsil-data thedata
+    let albert_address = find_address(&test, ALBERT)?;
+    let _albert_address_string = albert_address.to_string();
+    let counsil_one = vec![
+        "init-counsil",
+        "--address",
+        "albert",
+        "--amount",
+        "1000",
+        "--counsil-data",
+        "some data",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    client = run!(test, Bin::Client, counsil_one, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    let counsil_two = vec![
+        "init-counsil",
+        "--address",
+        "albert",
+        "--amount",
+        "900",
+        "--counsil-data",
+        "some data",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    client = run!(test, Bin::Client, counsil_two, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3046,8 +3077,14 @@ fn pgf_governance_proposal() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let albert_address = find_address(&test, ALBERT)?;
-    let arg_vote = format!("{} 1000", albert_address);
+    let counsil: HashSet<Council> = vec![Council {
+        address: albert_address.clone(),
+        spending_cap: Amount::whole(1000),
+    }]
+    .iter()
+    .cloned()
+    .collect();
+    let proposal_vote_path = prepare_pgf_vote_data(&test, counsil);
 
     let submit_proposal_vote = vec![
         "vote-proposal",
@@ -3056,8 +3093,8 @@ fn pgf_governance_proposal() -> Result<()> {
         "--vote",
         "yay",
         "--pgf",
-        &arg_vote,
-        "--signer",
+        proposal_vote_path.to_str().unwrap(),
+        "--signers",
         "validator-0",
         "--address",
         "validator-0",
@@ -3076,16 +3113,23 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
-    let different_vote = format!("{} 900", albert_address);
-    let submit_proposal_vote_delagator = vec![
+    let counsil: HashSet<Council> = vec![Council {
+        address: albert_address.clone(),
+        spending_cap: Amount::whole(900),
+    }]
+    .iter()
+    .cloned()
+    .collect();
+    let proposal_vote_path = prepare_pgf_vote_data(&test, counsil);
+    let submit_proposal_vote_delegetor = vec![
         "vote-proposal",
         "--proposal-id",
         "0",
         "--vote",
         "yay",
         "--pgf",
-        &different_vote,
-        "--signer",
+        proposal_vote_path.to_str().unwrap(),
+        "--signers",
         BERTHA,
         "--address",
         BERTHA,
@@ -3093,20 +3137,20 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_vote_delegetor, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // Send vote to the second proposal from delegator
-    let submit_proposal_vote_delagator = vec![
+    let submit_proposal_vote_delegetor = vec![
         "vote-proposal",
         "--proposal-id",
         "1",
         "--vote",
         "yay",
         "--pgf",
-        &different_vote,
-        "--signer",
+        proposal_vote_path.to_str().unwrap(),
+        "--signers",
         BERTHA,
         "--address",
         BERTHA,
@@ -3114,7 +3158,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client = run!(test, Bin::Client, submit_proposal_vote_delegetor, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3136,7 +3180,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string(&format!(
-        "Result: passed with PGF council address: {}, spending cap: 0.001",
+        "Result: passed with PGF council address: {}, spending cap: 1000",
         albert_address
     ))?;
     client.assert_success();
@@ -4042,6 +4086,17 @@ fn prepare_proposal_data(
         &valid_proposal_json,
     );
     valid_proposal_json_path
+}
+
+fn prepare_pgf_vote_data(
+    test: &setup::Test,
+    counsil: HashSet<Council>,
+) -> PathBuf {
+    let json = json!(counsil);
+    let vote_json_path = test.test_dir.path().join("proposal_vote.json");
+    generate_proposal_json_file(vote_json_path.as_path(), &json);
+
+    vote_json_path
 }
 
 /// Convert epoch `min_duration` in seconds to `epochs_per_year` genesis

@@ -1309,17 +1309,12 @@ pub async fn query_proposal_result(
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let public_key = get_public_key(
-                            &proposal.address,
-                            0,
-                            args.query.ledger_address.clone(),
-                        )
-                        .await
-                        .expect("Public key should exist.");
-
-                        if !proposal.check_signature(&public_key) {
-                            eprintln!("Bad proposal signature.");
-                            cli::safe_exit(1)
+                        let proposer_pks_map = get_address_pks_map(&client, &proposal.address).await;
+                        let proposer_threshold = get_address_threshold(&client, &proposal.address).await;
+                
+                        if !proposal.check_signature(proposer_pks_map, proposer_threshold) {
+                            eprintln!("Invalid proposal signature from proposer.");
+                            safe_exit(1)
                         }
 
                         let votes = get_proposal_offline_votes(
@@ -1963,6 +1958,14 @@ pub async fn get_address_pks_map(
     }
 }
 
+pub async fn get_address_threshold(
+    client: &HttpClient,
+    address: &Address,
+) -> u64 {
+    let key = key::threshold_key(address);
+    query_storage_value::<u64>(client, &key).await.unwrap_or(1)
+}
+
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
@@ -2442,8 +2445,6 @@ pub async fn get_proposal_offline_votes(
     proposal: OfflineProposal,
     files: HashSet<PathBuf>,
 ) -> Votes {
-    // let validators = get_all_validators(client, proposal.tally_epoch).await;
-
     let proposal_hash = proposal.compute_hash();
 
     let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
@@ -2458,19 +2459,16 @@ pub async fn get_proposal_offline_votes(
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
 
-        let key = pk_key(&proposal_vote.address, 0);
-        let public_key = query_storage_value(client, &key)
-            .await
-            .expect("Public key should exist.");
+        let proposer_pks_map = get_address_pks_map(client, &proposal.address).await;
+        let proposer_threshold = get_address_threshold(client, &proposal.address).await;
 
         if !proposal_vote.proposal_hash.eq(&proposal_hash)
-            || !proposal_vote.check_signature(&public_key)
+            || !proposal_vote.check_signature(proposer_pks_map, proposer_threshold)
         {
             continue;
         }
 
         if proposal_vote.vote.is_yay()
-            // && validators.contains(&proposal_vote.address)
             && unwrap_client_response(
                 RPC.vp().pos().is_validator(client, &proposal_vote.address).await,
             )
