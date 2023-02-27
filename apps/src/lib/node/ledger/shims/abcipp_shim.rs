@@ -1,10 +1,8 @@
 use std::convert::TryFrom;
 use std::future::Future;
-use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 use futures::future::FutureExt;
 use namada::types::address::Address;
@@ -15,9 +13,8 @@ use namada::types::storage::BlockHash;
 use namada::types::storage::BlockHeight;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
-use tokio::sync::watch;
 use tokio::sync::mpsc::UnboundedSender;
-use tonic::codegen::Body;
+use tokio::sync::watch;
 use tower::Service;
 
 use super::super::Shell;
@@ -30,11 +27,10 @@ use crate::config::ActionAtHeight;
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
-use crate::node::ledger::abortable::AbortingTask;
 
 /// An action to be performed at a
 /// certain block height.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
     /// Stop the chain.
     Halt(BlockHeight),
@@ -103,7 +99,12 @@ impl AbcippShim {
                 delivered_txs: vec![],
                 shell_recv,
             },
-            AbciService { shell_send, shutdown: server_shutdown, action_at_height, suspended: false },
+            AbciService {
+                shell_send,
+                shutdown: server_shutdown,
+                action_at_height,
+                suspended: false,
+            },
         )
     }
 
@@ -120,17 +121,16 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => {
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                Ok(Resp::ProcessProposal((&resp).into()))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal((&resp).into()))
+                        }
+                        _ => unreachable!(),
+                    }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
                     let unprocessed_txs = block.txs.clone();
@@ -232,26 +232,39 @@ pub struct AbciService {
 impl AbciService {
     /// Check if we are at a block height with a scheduled action.
     /// If so, perform the action.
-    fn maybe_take_action(&self, check: CheckAction) -> (bool, Option<<Self as Service<Req>>::Future>)
-    {
+    fn maybe_take_action(
+        action_at_height: Option<Action>,
+        check: CheckAction,
+        mut shutdown_recv: watch::Receiver<bool>,
+    ) -> (bool, Option<<Self as Service<Req>>::Future>) {
         let hght = match check {
             CheckAction::NoAction => BlockHeight::from(u64::MAX),
             CheckAction::Check(hght) => BlockHeight::from(hght as u64),
             CheckAction::AlreadySuspended => BlockHeight::default(),
         };
-        match &self.action_at_height {
-            Some(Action::Suspend(ref height)) if *height >= hght => {
-                let mut shutdown_recv = self.shutdown.subscribe();
-                (true, Some(Box::pin(async {
-                    _ = shutdown_recv.changed().await;
-                    Err(BoxError::from("Resolving suspended future"))
-                }.boxed())))
-            }
-            Some(Action::Halt(height)) if *height == hght => {
-                (false, Some(Box::pin(async move {
-                    Err(BoxError::from(format!("Reached height{}, halting the chain", height)))
-                }.boxed())))
-            }
+        match action_at_height {
+            Some(Action::Suspend(height)) if height >= hght => (
+                true,
+                Some(Box::pin(
+                    async move {
+                        _ = shutdown_recv.changed().await;
+                        Err(BoxError::from("Resolving suspended future"))
+                    }
+                    .boxed(),
+                )),
+            ),
+            Some(Action::Halt(height)) if height == hght => (
+                false,
+                Some(Box::pin(
+                    async move {
+                        Err(BoxError::from(format!(
+                            "Reached height{}, halting the chain",
+                            height
+                        )))
+                    }
+                    .boxed(),
+                )),
+            ),
             _ => (false, None),
         }
     }
@@ -270,13 +283,12 @@ impl AbciService {
                 match recv.await {
                     Ok(resp) => resp,
                     Err(err) => {
-                        tracing::info!(
-                            "ABCI response channel didn't respond"
-                        );
+                        tracing::info!("ABCI response channel didn't respond");
                         Err(err.into())
                     }
                 }
-            }.boxed()
+            }
+            .boxed(),
         )
     }
 
@@ -291,12 +303,14 @@ impl AbciService {
             | Req::DeliverTx(_)
             | Req::InitChain(_)
             | Req::CheckTx(_)
-            | Req::Commit(_) => if self.suspended {
-                Some(CheckAction::AlreadySuspended)
-            } else {
-                Some(CheckAction::NoAction)
-            },
-            _ => None
+            | Req::Commit(_) => {
+                if self.suspended {
+                    Some(CheckAction::AlreadySuspended)
+                } else {
+                    Some(CheckAction::NoAction)
+                }
+            }
+            _ => None,
         }
     }
 }
@@ -318,9 +332,13 @@ impl Service<Req> for AbciService {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let action  = self.get_action(&req);
+        let action = self.get_action(&req);
         if let Some(action) = action {
-            let (suspended, fut) = self.maybe_take_action(action);
+            let (suspended, fut) = Self::maybe_take_action(
+                self.action_at_height.clone(),
+                action,
+                self.shutdown.subscribe(),
+            );
             self.suspended = suspended;
             fut.unwrap_or_else(|| self.forward_request(req))
         } else {
