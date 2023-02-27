@@ -93,7 +93,7 @@ impl Ctx {
         become_validator(BecomeValidator {
             storage: self,
             params: &params,
-            validator_address: &validator_address,
+            address: &validator_address,
             consensus_key: &consensus_key,
             eth_cold_key: &eth_cold_key,
             eth_hot_key: &eth_hot_key,

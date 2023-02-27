@@ -15,7 +15,9 @@ use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
-use namada_core::types::key::{secp256k1, RefTo};
+use namada_core::types::key::{
+    secp256k1, RefTo, SecretKey as SecretKeyTrait, SigScheme,
+};
 use namada_core::types::storage::Epoch;
 use namada_core::types::{address, key, token};
 use proptest::prelude::*;
