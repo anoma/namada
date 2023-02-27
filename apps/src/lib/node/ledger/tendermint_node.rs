@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::BorshSerialize;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
+use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
 #[cfg(feature = "abciplus")]
@@ -44,6 +45,8 @@ pub enum Error {
     StartUp(std::io::Error),
     #[error("{0}")]
     Runtime(String),
+    #[error("Failed to rollback tendermint state: {0}")]
+    RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
 }
@@ -190,12 +193,12 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
 
     // Rollback tendermint state
-    std::process::Command::new(tendermint_path)
+    let output = std::process::Command::new(tendermint_path)
         .args([
             "rollback",
             "unsafe-all",
@@ -205,9 +208,30 @@ pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<()> {
             &tendermint_dir,
         ])
         .output()
-        .expect("Failed to rollback tendermint node");
+        .map_err(|e| Error::RollBack(e.to_string()))?;
 
-    Ok(())
+    // Capture the block height from the output of tendermint rollback
+    // Tendermint stdout message: "Rolled
+    // back state to height %d and hash %v"
+    let output_msg = String::from_utf8(output.stdout)
+        .map_err(|e| Error::RollBack(e.to_string()))?;
+    let (_, right) = output_msg
+        .split_once("Rolled back state to height")
+        .ok_or(Error::RollBack(
+            "Missing expected block height in tendermint stdout message"
+                .to_string(),
+        ))?;
+
+    let mut sub = right.split_ascii_whitespace();
+    let height = sub.next().ok_or(Error::RollBack(
+        "Missing expected block height in tendermint stdout message"
+            .to_string(),
+    ))?;
+
+    Ok(height
+        .parse::<u64>()
+        .map_err(|e| Error::RollBack(e.to_string()))?
+        .into())
 }
 
 /// Convert a common signing scheme validator key into JSON for

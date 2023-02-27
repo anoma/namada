@@ -304,11 +304,26 @@ impl RocksDB {
     }
 
     /// Rollback to previous block
-    pub fn rollback(&mut self) -> Result<()> {
-        let last_block = self.read_last_block()?.expect("No block was found");
+    pub fn rollback(
+        &mut self,
+        tendermint_block_height: BlockHeight,
+    ) -> Result<()> {
+        let last_block = self.read_last_block()?.ok_or(Error::DBError(
+            "Missing last block in storage".to_string(),
+        ))?;
+
+        // If the block height to which tendermint rolled back matches the
+        // Namada height, there's no need to rollback
+        if tendermint_block_height == last_block.height {
+            return Ok(());
+        }
+
         let mut batch = WriteBatch::default();
 
-        // Revert the non-height-prepended metadata storage keys
+        // Revert the non-height-prepended metadata storage keys which get
+        // updated with every block Because of the way we save these
+        // three keys in storage we can only perform one rollback before
+        // restarting the chain
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
@@ -317,49 +332,51 @@ impl RocksDB {
             let key = Key::from(metadata_key.to_owned().to_db_key());
             let previous_key =
                 Key::from(format!("pred/{}", metadata_key).to_db_key());
-            let previous_value = self.read_subspace_val(&previous_key)?.expect(
-                format!("Missing {} metadata key in storage", metadata_key)
-                    .as_str(),
-            );
+            let previous_value = self.read_subspace_val(&previous_key)?.ok_or(
+                Error::UnknownKey {
+                    key: previous_key.to_string(),
+                },
+            )?;
+
             batch.put(key.to_string(), previous_value);
         }
 
-        // Delete all the subspace diff keys prepended with the previous last height and restore values to previous diffs
         let previous_height =
             BlockHeight::from(u64::from(last_block.height) - 1);
 
-        for (key, _value, _gas) in
-            self.iter_prefix(&Key::from("subspace".to_string().to_db_key()))
-        {
-            // Get any previous value
-            let previous_value = self.read_subspace_val_with_height(
+        for (key, _value, _gas) in self.iter_prefix(&Key::default()) {
+            // Restore previous height diff if present, otherwise delete the
+            // subspace key
+            match self.read_subspace_val_with_height(
                 &Key::from(key.to_db_key()),
                 previous_height,
                 last_block.height,
-            )?;
-
-            // Delete diff keys
-            let diff_key = Key::from(last_block.height.to_db_key())
-                .push(&"diffs".to_owned())
-                .map_err(|e| Error::KeyError(e))?;
-            for diff in ["old", "new"] {
-                let key = diff_key
-                    .clone()
-                    .push(&diff.to_owned())
-                    .map_err(|e| Error::KeyError(e))?
-                    .push(&key)
-                    .map_err(|e| Error::KeyError(e))?;
-                batch.delete(&key.to_string());
-            }
-
-            // Restore previous height diff if present, otherwise delete the subspace key
-            match previous_value {
-                Some(value) => batch.put(&key, value),
+            )? {
+                Some(previous_value) => batch.put(&key, previous_value),
                 None => batch.delete(&key),
             }
         }
 
-        // FIXME: Delete any non-subspace key prepended with the last height
+        // Delete any height-prepended key, including subspace diff keys
+        let db_prefix = format!("{}/", last_block.height);
+        let prefix = last_block.height.to_string();
+        let mut read_opts = ReadOptions::default();
+        read_opts.set_total_order_seek(true);
+        let mut upper_prefix = prefix.clone().into_bytes();
+        if let Some(last) = upper_prefix.pop() {
+            upper_prefix.push(last + 1);
+        }
+        read_opts.set_iterate_upper_bound(upper_prefix);
+
+        let iter = self.0.iterator_opt(
+            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
+            read_opts,
+        );
+        for (key, _value, _gas) in
+            PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
+        {
+            batch.delete(key);
+        }
 
         // Write the batch and persist changes to disk
         self.exec_batch(batch)?;
@@ -573,7 +590,6 @@ impl DB for RocksDB {
                 .get("next_epoch_min_start_height")
                 .map_err(|e| Error::DBError(e.into_string()))?
         {
-            //FIXME:
             // Write the predecessor value for rollback
             batch.put("pred/next_epoch_min_start_height", current_value);
         }

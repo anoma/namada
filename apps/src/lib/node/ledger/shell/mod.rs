@@ -159,17 +159,17 @@ pub fn reset(config: config::Ledger) -> Result<()> {
 }
 
 pub fn rollback(config: config::Ledger) -> Result<()> {
-    let chain_id = config.chain_id.clone();
-    let db_path = config.shell.db_dir(&chain_id);
-
-    let mut db = storage::PersistentDB::open(db_path, None);
-    db.rollback();
-
     // Rollback Tendermint state
-    tendermint_node::rollback(config.tendermint_dir())
-        .map_err(Error::Tendermint)?;
+    let tendermint_block_height =
+        tendermint_node::rollback(config.tendermint_dir())
+            .map_err(Error::Tendermint)?;
 
-    Ok(())
+    // Rollback Namada state
+    let db_path = config.shell.db_dir(&config.chain_id);
+    let mut db = storage::PersistentDB::open(db_path, None);
+
+    db.rollback(tendermint_block_height)
+        .map_err(|e| Error::StorageApi(storage_api::Error::new(e)))
 }
 
 #[derive(Debug)]
