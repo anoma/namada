@@ -68,7 +68,7 @@ use sha2::Digest;
 use tokio::time::{Duration, Instant};
 
 use super::rpc;
-use super::signing::sign_tx_multisignature;
+use super::signing::{sign_tx_multisignature, tx_signers};
 use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
@@ -2009,15 +2009,12 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     }
 
     if args.offline {
-        let signer = ctx.get(&signer);
-        let signing_key = find_keypair(
-            &mut ctx.wallet,
-            &signer,
-            args.tx.ledger_address.clone(),
-        )
-        .await;
+        let signing_keys = tx_signers(&mut ctx, &args.tx, vec![TxSigningKey::WalletAddress(signer)]).await;
+
+        let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
+        
         let offline_proposal =
-            OfflineProposal::new(proposal, signer, &signing_key);
+            OfflineProposal::new(proposal.clone(), proposal.author, signing_keys, pks_map);
         let proposal_filename = args
             .proposal_data
             .parent()
@@ -2091,13 +2088,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 }
 
 pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
-    // TODO: fix me
-    let signer = if let Some(addr) = args.tx.signers.get(0) {
-        addr
-    } else {
-        eprintln!("Missing mandatory argument --signers.");
-        safe_exit(1)
-    };
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
@@ -2149,43 +2140,39 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             );
             safe_exit(1);
         }
-        let signer = ctx.get(signer);
+
         let proposal_file_path =
             args.proposal_data.expect("Proposal file should exist.");
         let file = File::open(&proposal_file_path).expect("File must exist.");
-
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = rpc::get_public_key(
-            &proposal.address,
-            0,
-            args.tx.ledger_address.clone(),
-        )
-        .await
-        .expect("Public key should exist.");
-        if !proposal.check_signature(&public_key) {
-            eprintln!("Proposal signature mismatch!");
+
+        let proposer_pks_map = rpc::get_address_pks_map(&client, &proposal.address).await;
+        let proposer_threshold = rpc::get_address_threshold(&client, &proposal.address).await;
+
+        if !proposal.check_signature(proposer_pks_map, proposer_threshold) {
+            eprintln!("Invalid proposal signature from proposer.");
             safe_exit(1)
         }
 
-        let signing_key = find_keypair(
-            &mut ctx.wallet,
-            &signer,
-            args.tx.ledger_address.clone(),
-        )
-        .await;
+        let voter_address = ctx.get(&args.address);
+        let signing_keys = tx_signers(&mut ctx, &args.tx, vec![TxSigningKey::WalletAddress(args.address)]).await;
+
+        let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
 
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
-            signer.clone(),
-            &signing_key,
+            voter_address.clone(),
+            signing_keys,
+            pks_map
         );
 
         let proposal_vote_filename = proposal_file_path
             .parent()
             .expect("No parent found")
-            .join(format!("proposal-vote-{}", &signer.to_string()));
+            .join(format!("proposal-vote-{}", &voter_address.to_string()));
+
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
@@ -2200,7 +2187,6 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             }
         }
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
         let current_epoch = rpc::query_and_print_epoch(args::Query {
             ledger_address: args.tx.ledger_address.clone(),
         })

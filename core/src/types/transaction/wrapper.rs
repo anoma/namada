@@ -490,7 +490,7 @@ pub mod wrapper_tx {
             // check that the signature is not valid
             tx.verify_sig(
                 &keypair.ref_to(),
-                &signed_tx_data.sigs.get(0).unwrap().sig,
+                &signed_tx_data.sigs.get(0).unwrap().0,
             )
             .expect_err("Test failed");
             // check that the try from method also fails
