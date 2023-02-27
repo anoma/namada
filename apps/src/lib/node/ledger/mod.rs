@@ -455,7 +455,6 @@ fn start_abci_broadcaster_shell(
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
         genesis.native_token,
-        spawner.subscribe(),
     );
 
     // Channel for signalling shut down to ABCI server

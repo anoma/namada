@@ -1822,7 +1822,11 @@ pub mod args {
             )
             .arg(BLOCK_HEIGHT.def().about("The block height to run until."))
             .arg(HALT_ACTION.def().about("Halt at the given block height"))
-            .arg(SUSPEND_ACTION.def().about("Suspend consensus at the given block height"))
+            .arg(
+                SUSPEND_ACTION
+                    .def()
+                    .about("Suspend consensus at the given block height"),
+            )
             .group(
                 ArgGroup::new("find_flags")
                     .args(&[HALT_ACTION.name, SUSPEND_ACTION.name])
