@@ -1547,23 +1547,40 @@ where
     Ok(())
 }
 
+/// Arguments to [`become_validator`].
+pub struct BecomeValidator<'a, S> {
+    storage: &'a mut S,
+    params: &'a PosParams,
+    address: &'a Address,
+    consensus_key: &'a common::PublicKey,
+    eth_cold_key: &'a common::PublicKey,
+    eth_hot_key: &'a common::PublicKey,
+    current_epoch: Epoch,
+    commission_rate: Decimal,
+    max_commission_rate_change: Decimal,
+}
+
 /// NEW: Initialize data for a new validator.
 /// TODO: should this still happen at pipeline if it is occurring with 0 bonded
 /// stake
 pub fn become_validator<S>(
-    storage: &mut S,
-    params: &PosParams,
-    address: &Address,
-    consensus_key: &common::PublicKey,
-    eth_cold_key: &common::PublicKey,
-    eth_hot_key: &common::PublicKey,
-    current_epoch: Epoch,
-    commission_rate: Decimal,
-    max_commission_rate_change: Decimal,
+    args: BecomeValidator<'_, S>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    let BecomeValidator {
+        storage,
+        params,
+        address,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        current_epoch,
+        commission_rate,
+        max_commission_rate_change,
+    } = args;
+
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
     write_validator_max_commission_rate_change(

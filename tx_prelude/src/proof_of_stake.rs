@@ -5,7 +5,7 @@ use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, change_validator_commission_rate,
-    read_pos_params, unbond_tokens, withdraw_tokens,
+    read_pos_params, unbond_tokens, withdraw_tokens, BecomeValidator,
 };
 pub use namada_proof_of_stake::{parameters, types};
 use rust_decimal::Decimal;
@@ -90,17 +90,17 @@ impl Ctx {
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
 
         let params = read_pos_params(self)?;
-        become_validator(
-            self,
-            &params,
-            &validator_address,
-            &consensus_key,
-            &eth_cold_key,
-            &eth_hot_key,
+        become_validator(BecomeValidator {
+            storage: self,
+            params: &params,
+            validator_address: &validator_address,
+            consensus_key: &consensus_key,
+            eth_cold_key: &eth_cold_key,
+            eth_hot_key: &eth_hot_key,
             current_epoch,
             commission_rate,
             max_commission_rate_change,
-        )?;
+        })?;
 
         Ok(validator_address)
     }

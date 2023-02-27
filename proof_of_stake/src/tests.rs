@@ -45,7 +45,7 @@ use crate::{
     total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
     update_validator_set, validator_consensus_key_handle,
     validator_set_update_tendermint, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash,
+    write_validator_address_raw_hash, BecomeValidator,
 };
 
 proptest! {
@@ -640,17 +640,17 @@ fn test_become_validator_aux(
     let consensus_key = new_validator_consensus_key.to_public();
     let eth_hot_key = gen_secp256k1_keypair().ref_to();
     let eth_cold_key = gen_secp256k1_keypair().ref_to();
-    become_validator(
-        &mut s,
-        &params,
-        &new_validator,
-        &consensus_key,
-        &eth_cold_key,
-        &eth_hot_key,
+    become_validator(BecomeValidator {
+        storage: &mut s,
+        params: &params,
+        address: &new_validator,
+        consensus_key: &consensus_key,
+        eth_cold_key: &eth_cold_key,
+        eth_hot_key: &eth_hot_key,
         current_epoch,
-        Decimal::new(5, 2),
-        Decimal::new(5, 2),
-    )
+        commission_rate: Decimal::new(5, 2),
+        max_commission_rate_change: Decimal::new(5, 2),
+    })
     .unwrap();
 
     let num_consensus_after = read_num_consensus_validators(&s).unwrap();
