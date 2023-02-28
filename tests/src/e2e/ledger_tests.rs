@@ -2950,6 +2950,13 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 0 - Candidate two councils with different spending caps
     // ./target/debug/namada client init-counsil --address p --amount 1000000 --counsil-data thedata
+
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 < 1 {
+        sleep(1);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
     let albert_address = find_address(&test, ALBERT)?;
     let _albert_address_string = albert_address.to_string();
     let counsil_one = vec![
@@ -2966,6 +2973,12 @@ fn pgf_governance_proposal() -> Result<()> {
     client = run!(test, Bin::Client, counsil_one, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 2 {
+        sleep(1);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
 
     let counsil_two = vec![
         "init-counsil",
@@ -3071,7 +3084,7 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // 3 - Send a yay vote from a validator
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
