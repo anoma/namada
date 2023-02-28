@@ -249,10 +249,7 @@ where
                                             Some(candidate_data),
                                         ) if candidate_data.epoch
                                             + expiration
-                                            > pre_voting_end_epoch =>
-                                        {
-                                            
-                                        }
+                                            > pre_voting_end_epoch => {}
                                         _ => return Ok(false),
                                     };
                                 }

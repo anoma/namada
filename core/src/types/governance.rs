@@ -1,6 +1,6 @@
 //! Files defyining the types used in governance.
 
-use std::collections::{BTreeMap, HashSet, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{self, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -8,6 +8,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::key::RefTo;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -15,8 +16,6 @@ use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
 use crate::types::token::{Amount, SCALE};
-
-use super::key::RefTo;
 
 /// Type alias for vote power
 pub type VotePower = u128;
@@ -263,7 +262,7 @@ impl OfflineProposal {
         proposal: Proposal,
         address: Address,
         signing_key: Vec<common::SecretKey>,
-        pks_map: HashMap<common::PublicKey, u64>
+        pks_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
         let content_serialized = serde_json::to_vec(&proposal.content)
             .expect("Conversion to bytes shouldn't fail.");
@@ -278,17 +277,23 @@ impl OfflineProposal {
         ]
         .concat();
         let proposal_data_hash = Hash::sha256(proposal_serialized);
-        
-        let signatures_index = signing_key.iter().filter_map(|signing_key| {
-            let pk = signing_key.ref_to();
-            let pk_index = pks_map.get(&pk);
-            if pk_index.is_some() {
-                let signature = common::SigScheme::sign(signing_key, proposal_data_hash.clone());
-                Some(SignatureIndex::from_single_signature(signature))
-            } else {
-                None
-            }
-        }).collect::<BTreeSet<SignatureIndex>>();
+
+        let signatures_index = signing_key
+            .iter()
+            .filter_map(|signing_key| {
+                let pk = signing_key.ref_to();
+                let pk_index = pks_map.get(&pk);
+                if pk_index.is_some() {
+                    let signature = common::SigScheme::sign(
+                        signing_key,
+                        proposal_data_hash.clone(),
+                    );
+                    Some(SignatureIndex::from_single_signature(signature))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<SignatureIndex>>();
 
         Self {
             content: proposal.content,
@@ -300,31 +305,33 @@ impl OfflineProposal {
     }
 
     /// Check whether the signature is valid or not
-    pub fn check_signature(&self, pks_map: HashMap<common::PublicKey, u64>, threshold: u64) -> bool {
+    pub fn check_signature(
+        &self,
+        pks_map: HashMap<common::PublicKey, u64>,
+        threshold: u64,
+    ) -> bool {
         let proposal_data_hash = self.compute_hash();
         if self.signatures.len() < threshold as usize {
             return false;
         }
 
-        let pks_map_inverted: HashMap<u64, common::PublicKey>  = pks_map.iter().map(|(k, v)| (*v, k.clone())).collect();
-    
-        let signature_checks = self.signatures.iter().fold(0_u64, |acc, signature_index| {
-            let public_key = pks_map_inverted.get(&signature_index.1);
-            if let Some(pk) = public_key {
-                let sig_check = common::SigScheme::verify_signature(
-                    pk,
-                    &proposal_data_hash,
-                    &signature_index.0
-                );
-                if sig_check.is_ok() {
-                    acc + 1
+        let pks_map_inverted: HashMap<u64, common::PublicKey> =
+            pks_map.iter().map(|(k, v)| (*v, k.clone())).collect();
+
+        let signature_checks =
+            self.signatures.iter().fold(0_u64, |acc, signature_index| {
+                let public_key = pks_map_inverted.get(&signature_index.1);
+                if let Some(pk) = public_key {
+                    let sig_check = common::SigScheme::verify_signature(
+                        pk,
+                        &proposal_data_hash,
+                        &signature_index.0,
+                    );
+                    if sig_check.is_ok() { acc + 1 } else { acc }
                 } else {
                     acc
                 }
-            } else {
-                acc
-            }
-        });
+            });
 
         signature_checks >= threshold
     }
@@ -369,7 +376,7 @@ impl OfflineVote {
         vote: ProposalVote,
         address: Address,
         signing_key: Vec<common::SecretKey>,
-        pks_map: HashMap<common::PublicKey, u64>
+        pks_map: HashMap<common::PublicKey, u64>,
     ) -> Self {
         let proposal_hash = proposal.compute_hash();
         let proposal_hash_data = proposal_hash
@@ -381,17 +388,21 @@ impl OfflineVote {
 
         let vote_serialized =
             &[proposal_hash_data, proposal_vote_data].concat();
-        
-        let signatures_index = signing_key.iter().filter_map(|signing_key| {
-            let pk = signing_key.ref_to();
-            let pk_index = pks_map.get(&pk);
-            if pk_index.is_some() {
-                let signature = common::SigScheme::sign(signing_key, vote_serialized);
-                Some(SignatureIndex::from_single_signature(signature))
-            } else {
-                None
-            }
-        }).collect::<BTreeSet<SignatureIndex>>();
+
+        let signatures_index = signing_key
+            .iter()
+            .filter_map(|signing_key| {
+                let pk = signing_key.ref_to();
+                let pk_index = pks_map.get(&pk);
+                if pk_index.is_some() {
+                    let signature =
+                        common::SigScheme::sign(signing_key, vote_serialized);
+                    Some(SignatureIndex::from_single_signature(signature))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<SignatureIndex>>();
 
         Self {
             proposal_hash,
@@ -418,31 +429,33 @@ impl OfflineVote {
     }
 
     /// Check whether the signature is valid or not
-    pub fn check_signature(&self, pks_map: HashMap<common::PublicKey, u64>, threshold: u64) -> bool {
+    pub fn check_signature(
+        &self,
+        pks_map: HashMap<common::PublicKey, u64>,
+        threshold: u64,
+    ) -> bool {
         let vote_data_hash = self.compute_hash();
         if self.signatures.len() < threshold as usize {
             return false;
         }
 
-        let pks_map_inverted: HashMap<u64, common::PublicKey>  = pks_map.iter().map(|(k, v)| (*v, k.clone())).collect();
-    
-        let signature_checks = self.signatures.iter().fold(0_u64, |acc, signature_index| {
-            let public_key = pks_map_inverted.get(&signature_index.1);
-            if let Some(pk) = public_key {
-                let sig_check = common::SigScheme::verify_signature(
-                    pk,
-                    &vote_data_hash,
-                    &signature_index.0
-                );
-                if sig_check.is_ok() {
-                    acc + 1
+        let pks_map_inverted: HashMap<u64, common::PublicKey> =
+            pks_map.iter().map(|(k, v)| (*v, k.clone())).collect();
+
+        let signature_checks =
+            self.signatures.iter().fold(0_u64, |acc, signature_index| {
+                let public_key = pks_map_inverted.get(&signature_index.1);
+                if let Some(pk) = public_key {
+                    let sig_check = common::SigScheme::verify_signature(
+                        pk,
+                        &vote_data_hash,
+                        &signature_index.0,
+                    );
+                    if sig_check.is_ok() { acc + 1 } else { acc }
                 } else {
                     acc
                 }
-            } else {
-                acc
-            }
-        });
+            });
 
         signature_checks >= threshold
     }

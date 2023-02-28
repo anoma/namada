@@ -2009,12 +2009,21 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     }
 
     if args.offline {
-        let signing_keys = tx_signers(&mut ctx, &args.tx, vec![TxSigningKey::WalletAddress(signer)]).await;
+        let signing_keys = tx_signers(
+            &mut ctx,
+            &args.tx,
+            vec![TxSigningKey::WalletAddress(signer)],
+        )
+        .await;
 
         let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
-        
-        let offline_proposal =
-            OfflineProposal::new(proposal.clone(), proposal.author, signing_keys, pks_map);
+
+        let offline_proposal = OfflineProposal::new(
+            proposal.clone(),
+            proposal.author,
+            signing_keys,
+            pks_map,
+        );
         let proposal_filename = args
             .proposal_data
             .parent()
@@ -2147,8 +2156,10 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
 
-        let proposer_pks_map = rpc::get_address_pks_map(&client, &proposal.address).await;
-        let proposer_threshold = rpc::get_address_threshold(&client, &proposal.address).await;
+        let proposer_pks_map =
+            rpc::get_address_pks_map(&client, &proposal.address).await;
+        let proposer_threshold =
+            rpc::get_address_threshold(&client, &proposal.address).await;
 
         if !proposal.check_signature(proposer_pks_map, proposer_threshold) {
             eprintln!("Invalid proposal signature from proposer.");
@@ -2156,7 +2167,12 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
 
         let voter_address = ctx.get(&args.address);
-        let signing_keys = tx_signers(&mut ctx, &args.tx, vec![TxSigningKey::WalletAddress(args.address)]).await;
+        let signing_keys = tx_signers(
+            &mut ctx,
+            &args.tx,
+            vec![TxSigningKey::WalletAddress(args.address)],
+        )
+        .await;
 
         let pks_map = rpc::get_address_pks_map(&client, &voter_address).await;
 
@@ -2165,7 +2181,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
             proposal_vote,
             voter_address.clone(),
             signing_keys,
-            pks_map
+            pks_map,
         );
 
         let proposal_vote_filename = proposal_file_path

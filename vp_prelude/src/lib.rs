@@ -53,6 +53,7 @@ pub fn verify_signatures(
     if signed_tx_data.total_signatures() < threshold {
         return false;
     }
+
     let mut valid_signatures = 0;
     for sig_data in &signed_tx_data.sigs {
         let pk = key::get(ctx, addr, sig_data.1);
@@ -74,6 +75,16 @@ pub fn verify_signatures(
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
     Hash(*digest.as_ref())
+}
+
+pub fn is_valid_max_signatures(
+    ctx: &Ctx,
+    signed_tx_data: &SignedTxData,
+) -> VpResult {
+    let key = parameters::storage::get_max_pk_per_account_key();
+    let max_pk_per_account: u64 = ctx.read_pre(&key)?.unwrap();
+
+    Ok(signed_tx_data.total_signatures() <= max_pk_per_account)
 }
 
 pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
@@ -114,12 +125,16 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 /// - tx is whitelisted, or
 /// - tx is executed by an approved governance proposal (no need to be
 ///   whitelisted)
-pub fn is_valid_tx(ctx: &Ctx, tx_data: &[u8]) -> VpResult {
-    if is_tx_whitelisted(ctx)? {
+pub fn is_valid_tx(
+    ctx: &Ctx,
+    signed_tx_data: &SignedTxData,
+    tx_data: &[u8],
+) -> VpResult {
+    if is_tx_whitelisted(ctx)? && is_valid_max_signatures(ctx, signed_tx_data)?
+    {
         accept()
     } else {
         let proposal_id = u64::try_from_slice(tx_data).ok();
-
         proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
     }
 }

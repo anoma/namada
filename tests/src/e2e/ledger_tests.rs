@@ -21,10 +21,10 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::{btc, eth, masp_rewards, Address};
-use namada::types::governance::{ProposalType, Council};
-use namada::types::token::Amount;
+use namada::types::governance::{Council, ProposalType};
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada::types::token::Amount;
 use namada_apps::client::tx::ShieldedContext;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -2940,15 +2940,15 @@ fn pgf_governance_proposal() -> Result<()> {
     client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-    
+
     // 0 - Candidate two councils with different spending caps
-    
+
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 < 1 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
-    
+
     let albert_address = find_address(&test, ALBERT)?;
     let _albert_address_string = albert_address.to_string();
     let counsil_one = vec![
@@ -3082,7 +3082,13 @@ fn pgf_governance_proposal() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let counsil: HashSet<Council> = vec![Council { address: albert_address.clone(), spending_cap: Amount::whole(1000)}].iter().cloned().collect();
+    let counsil: HashSet<Council> = vec![Council {
+        address: albert_address.clone(),
+        spending_cap: Amount::whole(1000),
+    }]
+    .iter()
+    .cloned()
+    .collect();
     let proposal_vote_path = prepare_pgf_vote_data(&test, counsil);
 
     let submit_proposal_vote = vec![
@@ -3112,7 +3118,13 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
-    let counsil: HashSet<Council> = vec![Council { address: albert_address.clone(), spending_cap: Amount::whole(900)}].iter().cloned().collect();
+    let counsil: HashSet<Council> = vec![Council {
+        address: albert_address.clone(),
+        spending_cap: Amount::whole(900),
+    }]
+    .iter()
+    .cloned()
+    .collect();
     let proposal_vote_path = prepare_pgf_vote_data(&test, counsil);
     let submit_proposal_vote_delegetor = vec![
         "vote-proposal",
@@ -4043,7 +4055,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
 fn prepare_proposal_data(
     test: &setup::Test,
     source: Address,
-    proposal_type: ProposalType
+    proposal_type: ProposalType,
 ) -> PathBuf {
     let valid_proposal_json = json!(
         {
@@ -4076,7 +4088,7 @@ fn prepare_proposal_data(
 
 fn prepare_pgf_vote_data(
     test: &setup::Test,
-    counsil: HashSet<Council>
+    counsil: HashSet<Council>,
 ) -> PathBuf {
     let json = json!(counsil);
     let vote_json_path = test.test_dir.path().join("proposal_vote.json");

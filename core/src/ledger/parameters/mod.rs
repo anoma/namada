@@ -52,6 +52,8 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Maximum number of public keys associated with an account
+    pub max_pk_per_account: u64,
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
@@ -120,6 +122,7 @@ impl Parameters {
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_pk_per_account,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
@@ -180,6 +183,15 @@ impl Parameters {
             .expect(
                 "Max expected time per block parameter must be initialized in \
                  the genesis block",
+            );
+
+        // write implicit vp parameter
+        let max_pk_per_account_key = storage::get_max_pk_per_account_key();
+        storage
+            .write(&max_pk_per_account_key, encode(max_pk_per_account))
+            .expect(
+                "Implicit VP parameter must be initialized in the genesis \
+                 block",
             );
 
         // write implicit vp parameter
@@ -586,6 +598,15 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read maximum number of pk per account
+    let max_pk_per_account_key = storage::get_max_pk_per_account_key();
+    let (value, gas_max_pk_per_account) = storage
+        .read(&max_pk_per_account_key)
+        .map_err(ReadError::StorageError)?;
+    let max_pk_per_account: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
     // read faucet account
     #[cfg(not(feature = "mainnet"))]
     let (faucet_account, gas_faucet_account) =
@@ -611,6 +632,7 @@ where
         gas_gain_d,
         gas_staked,
         gas_reward,
+        gas_max_pk_per_account,
         gas_proposal_bytes,
         gas_faucet_account,
         gas_wrapper_tx_fees,
@@ -635,6 +657,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_pk_per_account,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
