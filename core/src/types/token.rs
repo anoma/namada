@@ -10,6 +10,7 @@ use rust_decimal::prelude::{Decimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
@@ -284,6 +285,18 @@ impl Display for Amount {
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
         amount.micro as i128
+    }
+}
+
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        // TODO: https://github.com/anoma/namada/issues/1089
+        if amount > u64::MAX.into() {
+            return Err(AmountParseError::InvalidRange);
+        }
+        Self::from_str(&amount.to_string())
     }
 }
 

@@ -524,15 +524,11 @@ where
                 }
             })?;
 
-        // TODO: https://github.com/anoma/namada/issues/1089
-        let amount = if coin.amount > u64::MAX.into() {
-            return Err(TokenTransferError::InvalidCoin {
+        let amount = coin.amount.try_into().map_err(|_| {
+            TokenTransferError::InvalidCoin {
                 coin: coin.to_string(),
-            });
-        } else {
-            token::Amount::from_str(&coin.amount.to_string())
-                .expect("invalid amount")
-        };
+            }
+        })?;
 
         let src = if coin.denom.trace_path.is_empty()
             || *from == Address::Internal(InternalAddress::IbcMint)
@@ -576,15 +572,11 @@ where
                 }
             })?;
 
-        // TODO: https://github.com/anoma/namada/issues/1089
-        let amount = if coin.amount > u64::MAX.into() {
-            return Err(TokenTransferError::InvalidCoin {
+        let amount = coin.amount.try_into().map_err(|_| {
+            TokenTransferError::InvalidCoin {
                 coin: coin.to_string(),
-            });
-        } else {
-            token::Amount::from_str(&coin.amount.to_string())
-                .expect("invalid amount")
-        };
+            }
+        })?;
 
         let src = token::balance_key(
             &token,
@@ -629,15 +621,11 @@ where
                 }
             })?;
 
-        // TODO: https://github.com/anoma/namada/issues/1089
-        let amount = if coin.amount > u64::MAX.into() {
-            return Err(TokenTransferError::InvalidCoin {
+        let amount = coin.amount.try_into().map_err(|_| {
+            TokenTransferError::InvalidCoin {
                 coin: coin.to_string(),
-            });
-        } else {
-            token::Amount::from_str(&coin.amount.to_string())
-                .expect("invalid amount")
-        };
+            }
+        })?;
 
         let src = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, account)

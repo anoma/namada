@@ -478,13 +478,6 @@ pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
     ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
 }
 
-/// Key's prefix for the escrow, burn, or mint account
-pub fn ibc_account_sub_prefix(port_id: &PortId, channel_id: &ChannelId) -> Key {
-    let sub_prefix =
-        format!("{}/{}/{}", MULTITOKEN_STORAGE_KEY, port_id, channel_id);
-    Key::parse(sub_prefix).expect("Cannot obtain a storage key")
-}
-
 /// Token address from the denom string
 pub fn token(denom: impl AsRef<str>) -> Result<Address> {
     let token_str = denom.as_ref().split('/').last().ok_or_else(|| {
