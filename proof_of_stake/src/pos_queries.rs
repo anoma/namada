@@ -1,14 +1,15 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
-use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ferveo_common::TendermintValidator;
+use namada_core::ferveo_common::TendermintValidator;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
-use namada_core::ledger::storage::types::decode;
 use namada_core::ledger::storage::WlStorage;
+use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
 use namada_core::ledger::{storage, storage_api};
+use namada_core::tendermint_proto::google::protobuf;
+use namada_core::tendermint_proto::types::EvidenceParams;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
 use namada_core::types::key::dkg_session_keys::DkgPublicKey;
@@ -17,10 +18,11 @@ use namada_core::types::transaction::EllipticCurve;
 use namada_core::types::{key, token};
 use thiserror::Error;
 
-use crate::tendermint_proto::google::protobuf;
-use crate::tendermint_proto::types::EvidenceParams;
 use crate::types::WeightedValidator;
-use crate::{read_pos_params, PosParams};
+use crate::{
+    consensus_validator_set_handle, read_pos_params, ConsensusValidatorSet,
+    PosParams,
+};
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
@@ -136,7 +138,7 @@ where
     ) -> token::Amount {
         self.get_active_validators(epoch)
             .iter()
-            .map(|validator| validator.bonded_stake)
+            .map(|validator| u64::from(validator.bonded_stake))
             .sum::<u64>()
             .into()
     }
@@ -196,7 +198,7 @@ where
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_active_validators(Some(epoch))
-            .into_iter()
+            .iter()
             .find(|validator| {
                 let pk_key = key::protocol_pk_key(&validator.address);
                 match self.wl_storage.storage.read(&pk_key) {
@@ -222,7 +224,7 @@ where
                         "DKG public key in storage should be deserializable",
                     );
                 TendermintValidator {
-                    power: validator.bonded_stake,
+                    power: validator.bonded_stake.into(),
                     address: validator.address.to_string(),
                     public_key: dkg_publickey.into(),
                 }
@@ -294,13 +296,17 @@ where
         // handle that case
         //
         // we can remove this check once that's fixed
-        if self.get_current_epoch().0 == Epoch(0) {
+        if self.wl_storage.storage.get_current_epoch().0 == Epoch(0) {
             let height_offset_within_epoch = BlockHeight(1 + height_offset);
             return current_decision_height == height_offset_within_epoch;
         }
 
-        let fst_heights_of_each_epoch =
-            self.block.pred_epochs.first_block_heights();
+        let fst_heights_of_each_epoch = self
+            .wl_storage
+            .storage
+            .block
+            .pred_epochs
+            .first_block_heights();
 
         fst_heights_of_each_epoch
             .last()
