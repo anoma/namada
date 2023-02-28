@@ -772,8 +772,10 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 run.or(reset)
                     .or(dump_db)
+                    .or(rollback)
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun(None)))))
             })
@@ -788,6 +790,7 @@ pub mod cmds {
                 .subcommand(LedgerRun::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerRollBack::def())
         }
     }
 
