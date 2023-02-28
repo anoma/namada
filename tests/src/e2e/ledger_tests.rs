@@ -33,7 +33,7 @@ use serde_json::json;
 use setup::constants::*;
 
 use super::helpers::{get_height, is_debug_mode, wait_for_block_height};
-use super::setup::get_all_wasms_hashes;
+use super::setup::{get_all_wasms_hashes, sleep_milliseconds};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
 };
@@ -2950,8 +2950,8 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 0 - Candidate two councils with different spending caps
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 < 1 {
-        sleep(1);
+    while epoch.0 < 2 {
+        sleep_milliseconds(500);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -2973,8 +2973,8 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 2 {
-        sleep(1);
+    while epoch.0 < 3 {
+        sleep_milliseconds(500);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3242,6 +3242,18 @@ fn pgf_governance_proposal() -> Result<()> {
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 0")?;
+    client.assert_success();
+
+    let query_pgf_counsil = vec![
+        "query-active-counsil",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    
+    let counsil_check = format!(".*Address: Established: {}.*", albert_address);
+    client = run!(test, Bin::Client, query_pgf_counsil, Some(40))?;
+    client.exp_string("PGF counsil:")?;
+    client.exp_regex(&counsil_check)?;
     client.assert_success();
 
     Ok(())

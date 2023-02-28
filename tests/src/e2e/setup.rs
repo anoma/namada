@@ -777,7 +777,11 @@ where
 
 /// Sleep for given `seconds`.
 pub fn sleep(seconds: u64) {
-    thread::sleep(time::Duration::from_secs(seconds));
+    sleep_milliseconds(seconds * 1000);
+}
+
+pub fn sleep_milliseconds(miliseconds: u64) {
+    thread::sleep(time::Duration::from_millis(miliseconds));
 }
 
 #[allow(dead_code)]
