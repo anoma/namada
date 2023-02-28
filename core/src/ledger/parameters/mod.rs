@@ -51,6 +51,8 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Maximum number of public keys associated with an account
+    pub max_pk_per_account: u64,
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
@@ -118,6 +120,7 @@ impl Parameters {
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_pk_per_account,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
@@ -155,6 +158,15 @@ impl Parameters {
             &max_expected_time_per_block_key,
             max_expected_time_per_block,
         )?;
+
+        // write implicit vp parameter
+        let max_pk_per_account_key = storage::get_max_pk_per_account_key();
+        storage
+            .write(&max_pk_per_account_key, encode(max_pk_per_account))
+            .expect(
+                "Implicit VP parameter must be initialized in the genesis \
+                 block",
+            );
 
         // write implicit vp parameter
         let implicit_vp_key = storage::get_implicit_vp_key();
@@ -456,6 +468,15 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read maximum number of pk per account
+    let max_pk_per_account_key = storage::get_max_pk_per_account_key();
+    let (value, gas_max_pk_per_account) = storage
+        .read(&max_pk_per_account_key)
+        .map_err(ReadError::StorageError)?;
+    let max_pk_per_account: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
     // read faucet account
     #[cfg(not(feature = "mainnet"))]
     let faucet_account = read_faucet_account_parameter(storage)?;
@@ -464,21 +485,48 @@ where
     #[cfg(not(feature = "mainnet"))]
     let wrapper_tx_fees = read_wrapper_tx_fees_parameter(storage)?;
 
-    Ok(Parameters {
-        epoch_duration,
-        max_expected_time_per_block,
-        max_proposal_bytes,
-        vp_whitelist,
-        tx_whitelist,
-        implicit_vp,
-        epochs_per_year,
-        pos_gain_p,
-        pos_gain_d,
-        staked_ratio,
-        pos_inflation_amount,
-        #[cfg(not(feature = "mainnet"))]
-        faucet_account,
-        #[cfg(not(feature = "mainnet"))]
-        wrapper_tx_fees,
-    })
+    let total_gas_cost = [
+        gas_epoch,
+        gas_tx,
+        gas_vp,
+        gas_time,
+        gas_implicit_vp,
+        gas_epy,
+        gas_gain_p,
+        gas_gain_d,
+        gas_staked,
+        gas_reward,
+        gas_max_pk_per_account,
+        gas_proposal_bytes,
+        gas_faucet_account,
+        gas_wrapper_tx_fees,
+    ]
+    .into_iter()
+    .fold(0u64, |accum, gas| {
+        accum
+            .checked_add(gas)
+            .expect("u64 overflow occurred while doing gas arithmetic")
+    });
+
+    Ok((
+        Parameters {
+            epoch_duration,
+            max_expected_time_per_block,
+            max_proposal_bytes,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            staked_ratio,
+            pos_inflation_amount,
+            max_pk_per_account,
+            #[cfg(not(feature = "mainnet"))]
+            faucet_account,
+            #[cfg(not(feature = "mainnet"))]
+            wrapper_tx_fees,
+        },
+        total_gas_cost,
+    ))
 }

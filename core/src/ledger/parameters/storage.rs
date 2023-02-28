@@ -19,6 +19,7 @@ struct Keys {
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
+    max_pk_per_account: &'static str,
     faucet_account: &'static str,
     wrapper_tx_fees: &'static str,
 }
@@ -155,6 +156,16 @@ pub fn get_tx_whitelist_storage_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
             DbKeySeg::StringSeg(Keys::VALUES.tx_whitelist.to_string()),
+        ],
+    }
+}
+
+/// Storage key used for max_pk_per_account parameter.
+pub fn get_max_pk_per_account_key() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::StringSeg(Keys::VALUES.max_pk_per_account.to_string()),
         ],
     }
 }

@@ -1309,11 +1309,20 @@ pub async fn query_proposal_result(
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let proposer_pks_map = get_address_pks_map(&client, &proposal.address).await;
-                        let proposer_threshold = get_address_threshold(&client, &proposal.address).await;
-                
-                        if !proposal.check_signature(proposer_pks_map, proposer_threshold) {
-                            eprintln!("Invalid proposal signature from proposer.");
+                        let proposer_pks_map =
+                            get_address_pks_map(&client, &proposal.address)
+                                .await;
+                        let proposer_threshold =
+                            get_address_threshold(&client, &proposal.address)
+                                .await;
+
+                        if !proposal.check_signature(
+                            proposer_pks_map,
+                            proposer_threshold,
+                        ) {
+                            eprintln!(
+                                "Invalid proposal signature from proposer."
+                            );
                             safe_exit(1)
                         }
 
@@ -2459,18 +2468,24 @@ pub async fn get_proposal_offline_votes(
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
 
-        let proposer_pks_map = get_address_pks_map(client, &proposal.address).await;
-        let proposer_threshold = get_address_threshold(client, &proposal.address).await;
+        let proposer_pks_map =
+            get_address_pks_map(client, &proposal.address).await;
+        let proposer_threshold =
+            get_address_threshold(client, &proposal.address).await;
 
         if !proposal_vote.proposal_hash.eq(&proposal_hash)
-            || !proposal_vote.check_signature(proposer_pks_map, proposer_threshold)
+            || !proposal_vote
+                .check_signature(proposer_pks_map, proposer_threshold)
         {
             continue;
         }
 
         if proposal_vote.vote.is_yay()
             && unwrap_client_response(
-                RPC.vp().pos().is_validator(client, &proposal_vote.address).await,
+                RPC.vp()
+                    .pos()
+                    .is_validator(client, &proposal_vote.address)
+                    .await,
             )
         {
             let amount: VotePower = get_validator_stake(

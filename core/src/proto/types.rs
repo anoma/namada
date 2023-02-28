@@ -39,7 +39,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+)]
 pub struct SignatureIndex(pub common::Signature, pub u64);
 
 impl Ord for SignatureIndex {
@@ -210,7 +220,10 @@ impl SigningTx {
     /// Sign a transaction using [`SignedTxData`].
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
         let sig = self.compute_signature(keypair);
-        let signed = SignedTxData { data: self.data, sigs: SignatureIndex::from_single_signature(sig).to_vec() }
+        let signed = SignedTxData {
+            data: self.data,
+            sigs: SignatureIndex::from_single_signature(sig).to_vec(),
+        }
         .try_to_vec()
         .expect("Encoding transaction data shouldn't fail");
         SigningTx {

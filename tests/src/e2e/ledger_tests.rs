@@ -2949,8 +2949,6 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // 0 - Candidate two councils with different spending caps
-    // ./target/debug/namada client init-counsil --address p --amount 1000000 --counsil-data thedata
-
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 < 1 {
         sleep(1);

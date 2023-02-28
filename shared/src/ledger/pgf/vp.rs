@@ -8,6 +8,7 @@ use namada_core::types::token::Amount;
 use sha2::digest::generic_array::typenum::private::IsLessOrEqualPrivate;
 use thiserror::Error;
 
+use super::MAX_COUNSIL_DATA;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, storage};
@@ -116,7 +117,7 @@ where
             ) => {
                 // TODO: maybe max charatecter should be a pgf vp parameter
                 let is_valid_amount = spending_cap.is_greater_than_zero();
-                let is_valid_data = data.data_is_less_than(4096)
+                let is_valid_data = data.data_is_less_than(MAX_COUNSIL_DATA)
                     && data.epoch.eq(&current_epoch);
                 let is_valid_address = self.is_valid_counsil_address(address, verifiers)?;
                 Ok(is_valid_address && is_valid_data && is_valid_amount)

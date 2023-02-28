@@ -83,6 +83,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_pk_per_account,
             wrapper_tx_fees,
         } = genesis.parameters;
         // borrow necessary for release build, annoys clippy on dev build
@@ -135,6 +136,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_pk_per_account,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
