@@ -166,6 +166,9 @@ pub mod vp {
         // Get the current block height
         pub fn namada_vp_get_block_height() -> u64;
 
+        // Get the current block header
+        pub fn namada_vp_get_block_header(height: u64) -> i64;
+
         // Get the current block hash
         pub fn namada_vp_get_block_hash(result_ptr: u64);
 

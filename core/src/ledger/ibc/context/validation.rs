@@ -240,11 +240,19 @@ where
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         let height = self.host_height()?;
         let height = BlockHeight(height.revision_height());
-        let header = self.ctx.get_header(height).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: "Getting the host header failed".to_string(),
-            })
-        })?;
+        let header = self
+            .ctx
+            .get_header(height)
+            .map_err(|_| {
+                ContextError::ClientError(ClientError::Other {
+                    description: "Getting the host header failed".to_string(),
+                })
+            })?
+            .ok_or_else(|| {
+                ContextError::ClientError(ClientError::Other {
+                    description: "No host header".to_string(),
+                })
+            })?;
         let time = TmTime::try_from(header.time).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: "Converting to Tenderming time failed".to_string(),
@@ -258,14 +266,22 @@ where
         height: &Height,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
         let height = BlockHeight(height.revision_height());
-        let header = self.ctx.get_header(height).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Getting the header on this chain failed: Height {}",
-                    height
-                ),
-            })
-        })?;
+        let header = self
+            .ctx
+            .get_header(height)
+            .map_err(|_| {
+                ContextError::ClientError(ClientError::Other {
+                    description: format!(
+                        "Getting the header on this chain failed: Height {}",
+                        height
+                    ),
+                })
+            })?
+            .ok_or_else(|| {
+                ContextError::ClientError(ClientError::Other {
+                    description: "No host header".to_string(),
+                })
+            })?;
         let commitment_root = header.hash.to_vec().into();
         let time = header
             .time

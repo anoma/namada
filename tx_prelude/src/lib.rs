@@ -141,13 +141,18 @@ impl StorageRead for Ctx {
         Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
     }
 
-    fn get_block_header(&self, height: BlockHeight) -> Result<Header, Error> {
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Error> {
         let read_result = unsafe { namada_tx_get_block_header(height.0) };
-        let header_value =
-            read_from_buffer(read_result, namada_tx_result_buffer)
-                .expect("The block header should exist");
-        Ok(Header::try_from_slice(&header_value[..])
-            .expect("The conversion shouldn't fail"))
+        match read_from_buffer(read_result, namada_tx_result_buffer) {
+            Some(value) => Ok(Some(
+                Header::try_from_slice(&value[..])
+                    .expect("The conversion shouldn't fail"),
+            )),
+            None => Ok(None),
+        }
     }
 
     fn get_block_hash(

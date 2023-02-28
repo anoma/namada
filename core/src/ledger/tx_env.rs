@@ -56,10 +56,4 @@ pub trait TxEnv: StorageRead + StorageWrite {
         &mut self,
         event: &IbcEvent,
     ) -> Result<(), storage_api::Error>;
-
-    /// Get time of the current block header as rfc 3339 string
-    fn get_block_header(
-        &self,
-        height: storage::BlockHeight,
-    ) -> Result<Option<storage::Header>, storage_api::Error>;
 }

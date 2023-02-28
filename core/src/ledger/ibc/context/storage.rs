@@ -32,7 +32,7 @@ pub trait IbcStorageContext {
 
     /// Read IBC-related data with a prefix
     fn iter_prefix<'iter>(
-        &self,
+        &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, Self::Error>;
 
@@ -63,7 +63,10 @@ pub trait IbcStorageContext {
     fn get_height(&self) -> Result<BlockHeight, Self::Error>;
 
     /// Get the block header of this chain
-    fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error>;
+    fn get_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Self::Error>;
 
     /// Get the chain ID
     fn get_chain_id(&self) -> Result<String, Self::Error>;

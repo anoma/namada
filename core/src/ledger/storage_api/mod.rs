@@ -82,7 +82,7 @@ pub trait StorageRead {
     fn get_block_height(&self) -> Result<BlockHeight>;
 
     /// Getting the block header.
-    fn get_block_header(&self, height: BlockHeight) -> Result<Header>;
+    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.

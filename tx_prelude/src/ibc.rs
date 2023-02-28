@@ -32,7 +32,7 @@ impl IbcStorageContext for Ctx {
     }
 
     fn iter_prefix<'iter>(
-        &self,
+        &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
         StorageRead::iter_prefix(self, prefix)
@@ -72,7 +72,7 @@ impl IbcStorageContext for Ctx {
     fn get_header(
         &self,
         height: BlockHeight,
-    ) -> std::result::Result<Header, Self::Error> {
+    ) -> std::result::Result<Option<Header>, Self::Error> {
         self.get_block_header(height)
     }
 
@@ -89,9 +89,24 @@ impl IbcStorageContext for Ctx {
     }
 }
 
-pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
-    let mut actions = IbcActions::new(ctx);
-    let module = TransferModule::new(&mut actions);
+pub fn ibc_actions(ctx: &'static mut Ctx) -> IbcActions<Ctx> {
+    IbcActions::new(ctx)
+}
+
+pub fn transfer_module<C>(
+    actions: &'static mut IbcActions<C>,
+) -> TransferModule<C>
+where
+    C: IbcStorageContext + 'static,
+{
+    TransferModule::new(actions)
+}
+
+pub fn add_transfer_module<C>(
+    actions: &'static mut IbcActions<C>,
+    module: TransferModule<C>,
+) where
+    C: IbcStorageContext + std::fmt::Debug + 'static,
+{
     actions.add_route(module.module_id(), module);
-    actions
 }

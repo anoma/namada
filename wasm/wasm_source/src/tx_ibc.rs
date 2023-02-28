@@ -10,5 +10,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let signed = SignedTxData::try_from_slice(&tx_data[..])
         .wrap_err("failed to decode SignedTxData")?;
     let data = signed.data.ok_or_err_msg("Missing data")?;
-    ibc_actions(ctx).execute(&data)
+
+    let actions = ibc_actions(ctx);
+    let module = transfer_module(&mut actions);
+    add_transfer_module(actions, module);
+
+    actions.execute(&data)
 }

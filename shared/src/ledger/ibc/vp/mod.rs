@@ -103,22 +103,22 @@ where
         let actions = IbcActions::new(&mut exec_ctx);
         actions.execute(tx_data)?;
 
-        let changed_ibc_keys: BTreeSet<Key> =
+        let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
         if changed_ibc_keys.len() != exec_ctx.get_changed_keys().len() {
             return Err(Error::StateChange(format!(
-                "The changed keys mismatched: Actual {}, Expected {}",
+                "The changed keys mismatched: Actual {:?}, Expected {:?}",
                 changed_ibc_keys,
-                exec_ctx
-                    .get_changed_keys()
-                    .iter()
-                    .map(|k| k.clone())
-                    .collect(),
+                exec_ctx.get_changed_keys(),
             )));
         }
 
         for key in changed_ibc_keys {
-            match self.ctx.read_bytes_post(&key)? {
+            match self
+                .ctx
+                .read_bytes_post(&key)
+                .map_err(Error::NativeVpError)?
+            {
                 Some(v) => match exec_ctx.get_changed_value(&key) {
                     Some(StorageModification::Write { value }) => {
                         if v != *value {
@@ -128,19 +128,24 @@ where
                             )));
                         }
                     }
-                    _ => Err(Error::StateChange(format!(
-                        "The value was invalid: Key {}",
-                        key
-                    ))),
+                    _ => {
+                        return Err(Error::StateChange(format!(
+                            "The value was invalid: Key {}",
+                            key
+                        )));
+                    }
                 },
                 None => {
-                    // deleted value
                     match exec_ctx.get_changed_value(&key) {
-                        Some(StorageModification::Delete) => {}
-                        _ => Err(Error::StateChange(format!(
-                            "The key was deleted unexpectedly: Key {}",
-                            key
-                        ))),
+                        Some(StorageModification::Delete) => {
+                            // the key was deleted expectedly
+                        }
+                        _ => {
+                            return Err(Error::StateChange(format!(
+                                "The key was deleted unexpectedly: Key {}",
+                                key
+                            )));
+                        }
                     }
                 }
             }
@@ -151,7 +156,7 @@ where
     fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
         let validation_ctx = IbcVpContext { ctx: &self.ctx };
         let actions = IbcActions::new(&mut validation_ctx);
-        actions.validate(tx_data)
+        actions.validate(tx_data).map_err(Error::IbcAction)
     }
 }
 
@@ -221,7 +226,7 @@ where
     }
 
     fn iter_prefix<'iter>(
-        &self,
+        &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
         // NOTE: Read only the previous state since the updated state isn't
@@ -270,7 +275,10 @@ where
     }
 
     /// Get the block header of this chain
-    fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error> {
+    fn get_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Self::Error> {
         self.ctx
             .get_block_header(height)
             .map_err(Error::NativeVpError)
@@ -311,14 +319,20 @@ where
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.ctx.post().read_bytes(key)
+        self.ctx
+            .post()
+            .read_bytes(key)
+            .map_err(Error::NativeVpError)
     }
 
     fn iter_prefix<'iter>(
-        &self,
+        &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
-        self.ctx.post().iter_prefix(prefix)
+        self.ctx
+            .post()
+            .iter_prefix(prefix)
+            .map_err(Error::NativeVpError)
     }
 
     /// next key value pair
@@ -326,7 +340,10 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.ctx.post().iter_next(iter)
+        self.ctx
+            .post()
+            .iter_next(iter)
+            .map_err(Error::NativeVpError)
     }
 
     fn write(&mut self, _key: &Key, _data: Vec<u8>) -> Result<(), Self::Error> {
@@ -353,20 +370,25 @@ where
     }
 
     fn get_height(&self) -> Result<BlockHeight, Self::Error> {
-        self.ctx.get_block_height()
+        self.ctx.get_block_height().map_err(Error::NativeVpError)
     }
 
-    fn get_header(&self, height: BlockHeight) -> Result<Header, Self::Error> {
-        self.ctx.get_block_header()
+    fn get_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Header>, Self::Error> {
+        self.ctx
+            .get_block_header(height)
+            .map_err(Error::NativeVpError)
     }
 
     fn get_chain_id(&self) -> Result<String, Self::Error> {
-        self.ctx.get_chain_id()
+        self.ctx.get_chain_id().map_err(Error::NativeVpError)
     }
 
     /// Get the IBC proof specs
     fn get_proof_specs(&self) -> Vec<ProofSpec> {
-        self.ctx.get_proof_specs()
+        ibc_proof_specs::<H>()
     }
 
     /// Logging
@@ -375,15 +397,9 @@ where
     }
 }
 
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
-    }
-}
-
 impl From<ActionError> for Error {
     fn from(err: ActionError) -> Self {
-        Self::IbcActionError(err)
+        Self::IbcAction(err)
     }
 }
 
