@@ -87,6 +87,7 @@ byteorder = "1.4.2"
 clap = {git = "https://github.com/clap-rs/clap/", tag = "v3.0.0-beta.2", default-features = false, features = ["std", "suggestions", "color", "cargo"]}
 color-eyre = "0.5.10"
 config = "0.11.0"
+console-subscriber = "0.1.8"
 data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
@@ -132,7 +133,7 @@ tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
 tendermint-rpc = {version = "0.23.6", features = ["http-client", "websocket-client"], optional = true}
 thiserror = "1.0.30"
-tokio = {version = "1.8.2", features = ["full"]}
+tokio = {version = "1.8.2", features = ["full", "tracing"]}
 toml = "0.5.8"
 tonic = "0.6.1"
 tower = "0.4"
@@ -163,3 +164,4 @@ tokio-test = "0.4.2"
 
 [build-dependencies]
 git2 = "0.13.25"
+

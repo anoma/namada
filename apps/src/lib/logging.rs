@@ -36,7 +36,9 @@ pub fn init_from_env_or(default: impl Into<Directive>) -> Result<()> {
 pub fn filter_from_env_or(default: impl Into<Directive>) -> EnvFilter {
     env::var(ENV_KEY)
         .map(EnvFilter::new)
-        .unwrap_or_else(|_| EnvFilter::default().add_directive(default.into()))
+        .unwrap_or_else(|_| EnvFilter::default()
+            .add_directive(default.into()))
+
 }
 
 pub fn set_subscriber(filter: EnvFilter) -> Result<()> {
