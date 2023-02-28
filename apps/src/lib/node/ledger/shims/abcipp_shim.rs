@@ -263,9 +263,9 @@ impl AbciService {
                         height
                     );
                     tracing::warn!(
-                        "\x1b[93mThis feature is intended for debugging purposes. \
-                         Note that on shutdown a spurious panic message will \
-                         be produced.\x1b[0m"
+                        "\x1b[93mThis feature is intended for debugging \
+                         purposes. Note that on shutdown a spurious panic \
+                         message will be produced.\x1b[0m"
                     )
                 }
                 (
@@ -275,8 +275,8 @@ impl AbciService {
                             shutdown_recv.recv().await.unwrap();
                             Err(BoxError::from(
                                 "Not all tendermint responses were processed. \
-                                 If the `--suspended` flag was passed, you may ignore \
-                                 this error.",
+                                 If the `--suspended` flag was passed, you \
+                                 may ignore this error.",
                             ))
                         }
                         .boxed(),
@@ -285,9 +285,9 @@ impl AbciService {
             }
             Some(Action::Halt(height)) if height == hght => {
                 tracing::info!(
-                        "Reached block height {}, halting the chain.",
-                        height
-                    );
+                    "Reached block height {}, halting the chain.",
+                    height
+                );
                 (
                     false,
                     Some(Box::pin(
@@ -297,10 +297,10 @@ impl AbciService {
                                 height
                             )))
                         }
-                            .boxed(),
+                        .boxed(),
                     )),
                 )
-            },
+            }
             _ => (false, None),
         }
     }

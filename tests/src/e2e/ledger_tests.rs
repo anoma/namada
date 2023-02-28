@@ -269,6 +269,75 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     Ok(())
 }
 
+/// In this test we
+///   1. Run the ledger node until a pre-configured height,
+///      at which point it should suspend.
+///   2. Check that we can still query the ledger.
+///   3. Check that we can shutdown the ledger normally afterwards.
+#[test]
+fn suspend_ledger() -> Result<()> {
+    let test = setup::single_node_net()?;
+    // 1. Run the ledger node
+    let mut ledger = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run-until", "--block-height", "2", "--suspend",],
+        Some(40)
+    )?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    // There should be no previous state
+    ledger.exp_string("No state could be found")?;
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.exp_string("Reached block height 2, suspending.")?;
+    let bg_ledger = ledger.background();
+
+    // 2. Query the ledger
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &["epoch", "--ledger-address", &validator_one_rpc],
+        Some(40)
+    )?;
+    client.exp_string("Last committed epoch: 0")?;
+
+    // 3. Shut it down
+    let mut ledger = bg_ledger.foreground();
+    ledger.send_control('c')?;
+    // Wait for the node to stop running to finish writing the state and tx
+    // queue
+    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_eof()?;
+    Ok(())
+}
+
+/// Test that if we configure the ledger to
+/// halt at a given height, it does indeed halt.
+#[test]
+fn stop_ledger_at_height() -> Result<()> {
+    let test = setup::single_node_net()?;
+    // 1. Run the ledger node
+    let mut ledger = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run-until", "--block-height", "2", "--halt",],
+        Some(40)
+    )?;
+
+    ledger.exp_string("Namada ledger node started")?;
+    // There should be no previous state
+    ledger.exp_string("No state could be found")?;
+    // Wait to commit a block
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.exp_string("Reached block height 2, halting the chain.")?;
+    ledger.exp_eof()?;
+    Ok(())
+}
+
 /// In this test we:
 /// 1. Run the ledger node
 /// 2. Submit a token transfer tx
