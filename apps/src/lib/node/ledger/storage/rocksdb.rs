@@ -303,7 +303,7 @@ impl RocksDB {
         println!("Done writing to {}", full_path.to_string_lossy());
     }
 
-    /// Rollback to previous block
+    /// Rollback to previous block. Given the inner working of tendermint rollback and of the key structure of Namada, calling rollback more than once without restarting the chain results in a single rollback.
     pub fn rollback(
         &mut self,
         tendermint_block_height: BlockHeight,
@@ -315,6 +315,7 @@ impl RocksDB {
         // If the block height to which tendermint rolled back matches the
         // Namada height, there's no need to rollback
         if tendermint_block_height == last_block.height {
+            tracing::info!("Namada height already matches the rollback Tendermint height, no need to rollback.");
             return Ok(());
         }
 
