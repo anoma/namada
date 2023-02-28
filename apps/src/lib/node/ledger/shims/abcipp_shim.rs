@@ -13,8 +13,8 @@ use namada::types::storage::BlockHash;
 use namada::types::storage::BlockHeight;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::transaction::hash_tx;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::watch;
 use tower::Service;
 
 use super::super::Shell;
@@ -65,7 +65,7 @@ impl AbcippShim {
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
         native_token: Address,
-    ) -> (Self, AbciService, tokio::sync::oneshot::Sender<()>) {
+    ) -> (Self, AbciService, broadcast::Sender<()>) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
         let action_at_height = match config.shell.action_at_height {
@@ -81,8 +81,7 @@ impl AbcippShim {
         };
 
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
-        let (server_shutdown, _) = watch::channel::<bool>(false);
-        let (abort_handle, abort_recv) = tokio::sync::oneshot::channel::<()>();
+        let (server_shutdown, _) = broadcast::channel::<()>(1);
         (
             Self {
                 service: Shell::new(
@@ -102,12 +101,11 @@ impl AbcippShim {
             },
             AbciService {
                 shell_send,
-                shutdown: server_shutdown,
+                shutdown: server_shutdown.clone(),
                 action_at_height,
                 suspended: false,
-                abort_recv,
             },
-            abort_handle,
+            server_shutdown,
         )
     }
 
@@ -237,12 +235,9 @@ pub struct AbciService {
     )>,
     /// Indicates if the consensus connection is suspended.
     suspended: bool,
-    /// A channel that outside processes use to tell the service to
-    /// stop.
-    abort_recv: tokio::sync::oneshot::Receiver<()>,
     /// This resolves the non-completing futures returned to tower-abci
     /// during suspension.
-    shutdown: watch::Sender<bool>,
+    pub shutdown: broadcast::Sender<()>,
     /// An action to be taken at a specified block height.
     action_at_height: Option<Action>,
 }
@@ -253,9 +248,8 @@ impl AbciService {
     fn maybe_take_action(
         action_at_height: Option<Action>,
         check: CheckAction,
-        mut shutdown_recv: watch::Receiver<bool>,
+        mut shutdown_recv: broadcast::Receiver<()>,
     ) -> (bool, Option<<Self as Service<Req>>::Future>) {
-        tracing::debug!("{:?}", check);
         let hght = match check {
             CheckAction::AlreadySuspended => BlockHeight::from(u64::MAX),
             CheckAction::Check(hght) => BlockHeight::from(hght as u64),
@@ -268,30 +262,45 @@ impl AbciService {
                         "Reached block height {}, suspending.",
                         height
                     );
+                    tracing::warn!(
+                        "\x1b[93mThis feature is intended for debugging purposes. \
+                         Note that on shutdown a spurious panic message will \
+                         be produced.\x1b[0m"
+                    )
                 }
                 (
                     true,
                     Some(Box::pin(
                         async move {
-                            shutdown_recv.changed().await.unwrap();
-                            Err(BoxError::from("Resolving suspended future"))
+                            shutdown_recv.recv().await.unwrap();
+                            Err(BoxError::from(
+                                "Not all tendermint responses were processed. \
+                                 If the `--suspended` flag was passed, you may ignore \
+                                 this error.",
+                            ))
                         }
                         .boxed(),
                     )),
                 )
             }
-            Some(Action::Halt(height)) if height == hght => (
-                false,
-                Some(Box::pin(
-                    async move {
-                        Err(BoxError::from(format!(
-                            "Reached height{}, halting the chain",
-                            height
-                        )))
-                    }
-                    .boxed(),
-                )),
-            ),
+            Some(Action::Halt(height)) if height == hght => {
+                tracing::info!(
+                        "Reached block height {}, halting the chain.",
+                        height
+                    );
+                (
+                    false,
+                    Some(Box::pin(
+                        async move {
+                            Err(BoxError::from(format!(
+                                "Reached block height {}, halting the chain.",
+                                height
+                            )))
+                        }
+                            .boxed(),
+                    )),
+                )
+            },
             _ => (false, None),
         }
     }
@@ -340,16 +349,6 @@ impl AbciService {
             _ => None,
         }
     }
-
-    fn check_shutdown(&mut self) -> bool {
-        if self.abort_recv.try_recv().is_ok() {
-            tracing::info!("Service received shutdown signal");
-            _ = self.shutdown.send(true);
-            true
-        } else {
-            false
-        }
-    }
 }
 
 /// The ABCI tower service implementation sends and receives messages to and
@@ -369,12 +368,6 @@ impl Service<Req> for AbciService {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        if self.check_shutdown() {
-            return Box::pin(
-                async { Err(BoxError::from("Shutting down the ABCI server: HYEEAW!!")) }
-                    .boxed(),
-            );
-        }
         let action = self.get_action(&req);
         if let Some(action) = action {
             let (suspended, fut) = Self::maybe_take_action(
