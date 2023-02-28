@@ -321,7 +321,7 @@ impl RocksDB {
         let mut batch = WriteBatch::default();
 
         // Revert the non-height-prepended metadata storage keys which get
-        // updated with every block Because of the way we save these
+        // updated with every block. Because of the way we save these
         // three keys in storage we can only perform one rollback before
         // restarting the chain
         for metadata_key in [

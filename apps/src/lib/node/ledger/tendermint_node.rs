@@ -197,7 +197,8 @@ pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
 
-    // Rollback tendermint state
+    // Rollback tendermint state, see https://github.com/tendermint/tendermint/blob/main/cmd/tendermint/commands/rollback.go for details
+    // on how the tendermint rollback behaves
     let output = std::process::Command::new(tendermint_path)
         .args([
             "rollback",
