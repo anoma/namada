@@ -1,15 +1,14 @@
-use namada_core::ledger::storage_api::pgf::{get_current_counsil, get_candidates, get_receipients};
+use namada_core::ledger::storage_api::pgf::{
+    get_candidates, get_current_counsil, get_receipients,
+};
 use namada_core::types::transaction::pgf::PgfProjectsUpdate;
+use namada_core::types::transaction::pgf::{
+    Candidate, Counsil, PgfReceipients,
+};
 
 use crate::ledger::queries::types::RequestCtx;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api;
-use crate::types::address::Address;
-use crate::types::storage::Epoch;
-use crate::types::token;
-
-type Counsil = (Address, token::Amount, token::Amount);
-type Candidate = (Address, token::Amount, String);
 
 router! {PGF,
     ( "current_counsil" ) -> Option<Counsil> = current_counsil,
@@ -40,8 +39,7 @@ where
 }
 
 /// Get the current counsil receipients
-fn receipients
-<D, H>(
+fn receipients<D, H>(
     ctx: RequestCtx<'_, D, H>,
 ) -> storage_api::Result<Option<PgfProjectsUpdate>>
 where

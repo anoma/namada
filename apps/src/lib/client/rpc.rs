@@ -21,14 +21,14 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::ledger::pgf::storage as pgf_storage;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::core::types::transaction::governance::ProposalType;
 use namada::core::types::key;
+use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
-use namada::core::ledger::pgf::storage as pgf_storage;
 
 use namada::ledger::native_vp::governance::utils::{self, Votes};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -40,7 +40,8 @@ use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, SigningTx, Tx};
 use namada::types::address::{masp, tokens, Address};
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType, TallyResult, Tally,
+    OfflineProposal, OfflineVote, ProposalVote, Tally, TallyResult, VotePower,
+    VoteType,
 };
 use namada::types::hash::Hash;
 use namada::types::key::*;
@@ -50,6 +51,7 @@ use namada::types::storage::{
 };
 use namada::types::token::{balance_key, Transfer};
 use namada::types::transaction::pgf::PgfProjectsUpdate;
+use namada::types::transaction::pgf::{Candidate, Counsil, PgfReceipients};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
@@ -803,10 +805,15 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
             {
                 match utils::compute_tally(votes, total_stake, &proposal_type) {
                     Ok(partial_proposal_result) => {
-                        if let TallyResult::Passed(Tally::PGFCouncil(counsil)) = partial_proposal_result.result {
+                        if let TallyResult::Passed(Tally::PGFCouncil(counsil)) =
+                            partial_proposal_result.result
+                        {
                             println!("{:4}Most voted counsil:", "");
-                            println!("{:8}Address: {}", "",  counsil.address);
-                            println!("{:8}Spending cap: {}", "", counsil.spending_cap);
+                            println!("{:8}Address: {}", "", counsil.address);
+                            println!(
+                                "{:8}Spending cap: {}",
+                                "", counsil.spending_cap
+                            );
                         }
                         println!(
                             "{:4}Yay votes: {}",
@@ -1440,37 +1447,30 @@ pub async fn query_protocol_parameters(
     println!("{:4}Votes per token: {}", "", pos_params.tm_votes_per_token);
 }
 
-pub async fn query_pgf_counsil(
-    _ctx: Context,
-    args: args::QueryPgfCounsil,
-) {
+pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let counsil_data: Option<(Address, token::Amount, token::Amount)> = unwrap_client_response(
-        RPC.vp().pgf().current_counsil(&client).await
-    );
+    let counsil_data = pgf_counsil(&client).await;
 
-    let receipients: Option<PgfProjectsUpdate> = unwrap_client_response(
-        RPC.vp().pgf().receipients(&client).await
-    );
-
-    println!("{}", receipients.is_some());
+    let receipients = pgf_receipients(&client).await;
 
     match counsil_data {
-        Some((address, spending_cap, spent_amount)) => {
+        Some(counsil) => {
             println!("PGF counsil:");
-            println!("{:4}Address: {}", "", address.to_pretty_string());
-            println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
-            println!("{:4}Spent amount: {}", "", spent_amount.to_string());
+            println!("{:4}Address: {}", "", counsil.address.to_pretty_string());
+            println!("{:4}Spending cap: {} nam", "", counsil.spending_cap);
+            println!("{:4}Spent amount: {}", "", counsil.spent_amount);
             if let Some(receipients) = receipients {
                 println!("{:4}Receipients:", "");
                 for receipient in receipients {
                     println!("{:8}Project address {} is founded with {}nam every epoch", "", receipient.address, receipient.amount);
                 }
+            } else {
+                println!("{:8} No pgf receipients present.", "")
             }
-        },
+        }
         None => {
             println!("There is no active counsil yet.");
-        },
+        }
     }
 }
 
@@ -1478,23 +1478,39 @@ pub async fn query_pgf_candidates(
     _ctx: Context,
     args: args::QueryPgfCandidates,
 ) {
-
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let candidates_data: Vec<(Address, token::Amount, String)> = unwrap_client_response(
-        RPC.vp().pgf().candidates(&client).await
-    );
-    
-    match candidates_data.len() {
+    let candidates = pgf_candidates(&client).await;
+
+    match candidates.len() {
         0 => println!("There are not candidates for pgf."),
         _ => {
             println!("PGF candidates:");
-            for (address, spending_cap, data) in candidates_data {
-                println!("{:2}- Address: {}", "", address.to_pretty_string());
-                println!("{:4}Spending cap: {} nam", "", spending_cap.to_string());
-                println!("{:4}Extra data: {}", "", data.to_string());
+            for candidate in candidates {
+                println!(
+                    "{:2}- Address: {}",
+                    "",
+                    candidate.address.to_pretty_string()
+                );
+                println!(
+                    "{:4}Spending cap: {} nam",
+                    "", candidate.spending_cap
+                );
+                println!("{:4}Extra data: {}", "", candidate.data);
             }
         }
     }
+}
+
+pub async fn pgf_counsil(client: &HttpClient) -> Option<Counsil> {
+    unwrap_client_response(RPC.vp().pgf().current_counsil(client).await)
+}
+
+pub async fn pgf_receipients(client: &HttpClient) -> Option<PgfReceipients> {
+    unwrap_client_response(RPC.vp().pgf().receipients(client).await)
+}
+
+pub async fn pgf_candidates(client: &HttpClient) -> Vec<Candidate> {
+    unwrap_client_response(RPC.vp().pgf().candidates(client).await)
 }
 
 pub async fn query_bond(
