@@ -48,7 +48,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
-use namada::types::transaction::pgf::PgfReceipients;
+use namada::types::transaction::pgf::{Candidate, Counsil, PgfReceipients};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
@@ -1446,18 +1446,16 @@ pub async fn query_protocol_parameters(
 
 pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let counsil_data: Option<(Address, token::Amount, token::Amount)> =
-        unwrap_client_response(RPC.vp().pgf().current_counsil(&client).await);
+    let counsil_data = pgf_counsil(&client).await;
 
-    let receipients: Option<PgfReceipients> =
-        unwrap_client_response(RPC.vp().pgf().receipients(&client).await);
+    let receipients = pgf_receipients(&client).await;
 
     match counsil_data {
-        Some((address, spending_cap, spent_amount)) => {
+        Some(counsil) => {
             println!("PGF counsil:");
-            println!("{:4}Address: {}", "", address.to_pretty_string());
-            println!("{:4}Spending cap: {} nam", "", spending_cap);
-            println!("{:4}Spent amount: {}", "", spent_amount);
+            println!("{:4}Address: {}", "", counsil.address.to_pretty_string());
+            println!("{:4}Spending cap: {} nam", "", counsil.spending_cap);
+            println!("{:4}Spent amount: {}", "", counsil.spent_amount);
             if let Some(receipients) = receipients {
                 println!("{:4}Receipients:", "");
                 for receipient in receipients {
@@ -1467,6 +1465,8 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
                         "", receipient.address, receipient.amount
                     );
                 }
+            } else {
+                println!("{:8} No pgf receipients present.", "")
             }
         }
         None => {
@@ -1480,20 +1480,38 @@ pub async fn query_pgf_candidates(
     args: args::QueryPgfCandidates,
 ) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
-    let candidates_data: Vec<(Address, token::Amount, String)> =
-        unwrap_client_response(RPC.vp().pgf().candidates(&client).await);
+    let candidates = pgf_candidates(&client).await;
 
-    match candidates_data.len() {
+    match candidates.len() {
         0 => println!("There are not candidates for pgf."),
         _ => {
             println!("PGF candidates:");
-            for (address, spending_cap, data) in candidates_data {
-                println!("{:2}- Address: {}", "", address.to_pretty_string());
-                println!("{:4}Spending cap: {} nam", "", spending_cap);
-                println!("{:4}Extra data: {}", "", data);
+            for candidate in candidates {
+                println!(
+                    "{:2}- Address: {}",
+                    "",
+                    candidate.address.to_pretty_string()
+                );
+                println!(
+                    "{:4}Spending cap: {} nam",
+                    "", candidate.spending_cap
+                );
+                println!("{:4}Extra data: {}", "", candidate.data);
             }
         }
     }
+}
+
+pub async fn pgf_counsil(client: &HttpClient) -> Option<Counsil> {
+    unwrap_client_response(RPC.vp().pgf().current_counsil(client).await)
+}
+
+pub async fn pgf_receipients(client: &HttpClient) -> Option<PgfReceipients> {
+    unwrap_client_response(RPC.vp().pgf().receipients(client).await)
+}
+
+pub async fn pgf_candidates(client: &HttpClient) -> Vec<Candidate> {
+    unwrap_client_response(RPC.vp().pgf().candidates(client).await)
 }
 
 pub async fn query_bond(

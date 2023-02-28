@@ -7,7 +7,9 @@ use crate::ledger::storage_api::token::transfer as token_transfer;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::token::{self, Transfer};
-use crate::types::transaction::pgf::{InitCounsil, PgfReceipients};
+use crate::types::transaction::pgf::{
+    Candidate, Counsil, InitCounsil, PgfReceipients,
+};
 
 /// A counsil creation transaction.
 pub fn init_counsil<S>(
@@ -56,14 +58,14 @@ where
 /// Check if the provided address is a validator address
 pub fn get_current_counsil<S>(
     storage: &S,
-) -> storage_api::Result<Option<(Address, Amount, Amount)>>
+) -> storage_api::Result<Option<Counsil>>
 where
     S: StorageRead + StorageWrite,
 {
     let counsil_key = pgf_storage::get_active_counsil_key();
     let counsil_address: Option<Address> = storage.read(&counsil_key)?;
 
-    if let Some(counsil_address) = counsil_address {
+    if let Some(address) = counsil_address {
         let spending_cap_key = pgf_storage::get_spending_cap_key();
         let spent_amount_key = pgf_storage::get_spent_amount_key();
 
@@ -71,8 +73,13 @@ where
         let spent_amunt: Option<Amount> = storage.read(&spent_amount_key)?;
 
         match (spending_cap, spent_amunt) {
-            (Some(spending_cap), Some(spent_amunt)) => {
-                Ok(Some((counsil_address, spending_cap, spent_amunt)))
+            (Some(spending_cap), Some(spent_amount)) => {
+                let current_counsil = Counsil {
+                    address,
+                    spending_cap,
+                    spent_amount,
+                };
+                Ok(Some(current_counsil))
             }
             _ => Ok(None),
         }
@@ -104,9 +111,7 @@ where
 }
 
 /// Get all the valid and votable candidates
-pub fn get_candidates<S>(
-    storage: &S,
-) -> storage_api::Result<Vec<(Address, Amount, String)>>
+pub fn get_candidates<S>(storage: &S) -> storage_api::Result<Vec<Candidate>>
 where
     S: StorageRead + StorageWrite,
 {
@@ -122,7 +127,7 @@ where
         storage,
         &candidates_prefix_key,
     )?;
-    let candidates: Vec<(Address, Amount, String)> = iter
+    let candidates: Vec<Candidate> = iter
         .filter_map(|element| match element {
             Ok((key, counsil_data)) => {
                 let candidate_address =
@@ -133,11 +138,14 @@ where
                     None
                 } else {
                     match (candidate_address, candidate_spending_cap) {
-                        (Some(address), Some(spending_cap)) => Some((
-                            address.clone(),
-                            spending_cap,
-                            counsil_data.data,
-                        )),
+                        (Some(address), Some(spending_cap)) => {
+                            let candidate = Candidate {
+                                address: address.to_owned(),
+                                spending_cap,
+                                data: counsil_data.data,
+                            };
+                            Some(candidate)
+                        }
                         _ => None,
                     }
                 }

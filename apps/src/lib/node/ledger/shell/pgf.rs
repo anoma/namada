@@ -78,8 +78,8 @@ where
                 response.events.push(pgf_event);
                 tracing::info!(
                     "PGF active transfer with amount {} has been sent to {}.",
-                    project.address,
-                    project.amount
+                    project.amount,
+                    project.address
                 );
             }
             Err(msg) => {
