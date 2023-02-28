@@ -65,7 +65,7 @@ impl AbcippShim {
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
         native_token: Address,
-    ) -> (Self, AbciService) {
+    ) -> (Self, AbciService, tokio::sync::oneshot::Sender<()>) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
         let action_at_height = match config.shell.action_at_height {
@@ -82,6 +82,7 @@ impl AbcippShim {
 
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         let (server_shutdown, _) = watch::channel::<bool>(false);
+        let (abort_handle, abort_recv) = tokio::sync::oneshot::channel::<()>();
         (
             Self {
                 service: Shell::new(
@@ -104,7 +105,9 @@ impl AbcippShim {
                 shutdown: server_shutdown,
                 action_at_height,
                 suspended: false,
+                abort_recv,
             },
+            abort_handle,
         )
     }
 
@@ -214,20 +217,35 @@ impl AbcippShim {
     }
 }
 
+/// Indicates how [`AbciService`] should
+/// check whether or not it needs to take
+/// action.
+#[derive(Debug)]
 enum CheckAction {
+    /// No check necessary.
     NoAction,
+    /// Check a given block height.
     Check(i64),
+    /// The action been taken.
     AlreadySuspended,
 }
 
 #[derive(Debug)]
 pub struct AbciService {
+    /// A channel for forwarding requests to the shell
     shell_send: std::sync::mpsc::Sender<(
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    /// Indicates if the consensus connection is suspended.
     suspended: bool,
+    /// A channel that outside processes use to tell the service to
+    /// stop.
+    abort_recv: tokio::sync::oneshot::Receiver<()>,
+    /// This resolves the non-completing futures returned to tower-abci
+    /// during suspension.
     shutdown: watch::Sender<bool>,
+    /// An action to be taken at a specified block height.
     action_at_height: Option<Action>,
 }
 
@@ -239,22 +257,31 @@ impl AbciService {
         check: CheckAction,
         mut shutdown_recv: watch::Receiver<bool>,
     ) -> (bool, Option<<Self as Service<Req>>::Future>) {
+        tracing::debug!("{:?}", check);
         let hght = match check {
-            CheckAction::NoAction => BlockHeight::from(u64::MAX),
+            CheckAction::AlreadySuspended => BlockHeight::from(u64::MAX),
             CheckAction::Check(hght) => BlockHeight::from(hght as u64),
-            CheckAction::AlreadySuspended => BlockHeight::default(),
+            CheckAction::NoAction => BlockHeight::default(),
         };
         match action_at_height {
-            Some(Action::Suspend(height)) if height >= hght => (
-                true,
-                Some(Box::pin(
-                    async move {
-                        _ = shutdown_recv.changed().await;
-                        Err(BoxError::from("Resolving suspended future"))
-                    }
-                    .boxed(),
-                )),
-            ),
+            Some(Action::Suspend(height)) if height <= hght => {
+                if height == hght {
+                    tracing::info!(
+                        "Reached block height {}, suspending.",
+                        height
+                    );
+                }
+                (
+                    true,
+                    Some(Box::pin(
+                        async move {
+                            shutdown_recv.changed().await.unwrap();
+                            Err(BoxError::from("Resolving suspended future"))
+                        }
+                        .boxed(),
+                    )),
+                )
+            }
             Some(Action::Halt(height)) if height == hght => (
                 false,
                 Some(Box::pin(
@@ -315,6 +342,16 @@ impl AbciService {
             _ => None,
         }
     }
+
+    fn check_shutdown(&mut self) -> bool {
+        if self.abort_recv.try_recv().is_ok() {
+            tracing::info!("Service received shutdown signal");
+            _ = self.shutdown.send(true);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 /// The ABCI tower service implementation sends and receives messages to and
@@ -334,6 +371,12 @@ impl Service<Req> for AbciService {
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
+        if self.check_shutdown() {
+            return Box::pin(
+                async { Err(BoxError::from("Shutting down the ABCI server: HYEEAW!!")) }
+                    .boxed(),
+            );
+        }
         let action = self.get_action(&req);
         if let Some(action) = action {
             let (suspended, fut) = Self::maybe_take_action(
@@ -346,11 +389,5 @@ impl Service<Req> for AbciService {
         } else {
             self.forward_request(req)
         }
-    }
-}
-
-impl Drop for AbciService {
-    fn drop(&mut self) {
-        _ = self.shutdown.send(true);
     }
 }

@@ -6,17 +6,21 @@ pub mod storage;
 pub mod tendermint_node;
 
 use std::convert::TryInto;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
 use std::thread;
 
 use byte_unit::Byte;
-use futures::future::TryFutureExt;
+use futures::future::{FutureExt, TryFutureExt};
 use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
+use tokio::sync::oneshot::error::RecvError;
 use tokio::task;
 use tower::ServiceBuilder;
 
@@ -26,7 +30,7 @@ use crate::cli::args;
 use crate::config::utils::num_of_threads;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::CheckTxType;
-use crate::facade::tower_abci::{response, split, Server};
+use crate::facade::tower_abci::{response, split, BoxError, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::config::genesis;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
@@ -232,6 +236,7 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
 ///
 /// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
+    console_subscriber::init();
     let setup_data = run_aux_setup(&config, &wasm_dir).await;
 
     // Create an `AbortableSpawner` for signalling shut down from the shell or
@@ -469,8 +474,13 @@ fn start_abci_broadcaster_shell(
     // Start the ABCI server
     let abci = spawner
         .spawn_abortable("ABCI", move |aborter| async move {
-            let res =
-                run_abci(abci_service, ledger_address, abci_abort_recv).await;
+            let res = run_abci(
+                abci_service,
+                service_handle,
+                ledger_address,
+                abci_abort_recv,
+            )
+            .await;
 
             drop(aborter);
             res
@@ -503,6 +513,7 @@ fn start_abci_broadcaster_shell(
 /// mempool, snapshot, and info.
 async fn run_abci(
     abci_service: AbciService,
+    service_handle: tokio::sync::oneshot::Sender<()>,
     ledger_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
 ) -> shell::Result<()> {
@@ -529,26 +540,53 @@ async fn run_abci(
         )
         .finish()
         .unwrap();
+    let list_future = server.listen(ledger_address);
+    futures::pin_mut!(list_future);
+    DependentFuture {
+        service: list_future,
+        abort_recv,
+        service_handle: Some(service_handle),
+        aborted: false,
+    }.await
 
-    tokio::select! {
-        // Run the server with the ABCI service
-        status = server.listen(ledger_address) => {
-            status.map_err(|err| Error::TowerServer(err.to_string()))
-        },
-        resp_sender = abort_recv => {
-            match resp_sender {
-                Ok(()) => {
-                    tracing::info!("Shutting down ABCI server...");
-                },
-                Err(err) => {
-                    tracing::error!("The ABCI server abort sender has unexpectedly dropped: {}", err);
-                    tracing::info!("Shutting down ABCI server...");
-                }
-            }
-            Ok(())
+}
+
+#[derive(Debug)]
+struct DependentFuture<F1, F2> {
+    service: F1,
+    abort_recv: F2,
+    service_handle: Option<tokio::sync::oneshot::Sender<()>>,
+    aborted: bool,
+}
+
+impl<F1, F2> Future for DependentFuture<F1, F2>
+where
+    F1: Future<Output=Result<(), BoxError>> + Unpin,
+    F2: Future<Output=Result<(), RecvError>> + Unpin,
+{
+    type Output = Result<(), Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        tracing::warn!("Still polling. Aborted: {}", self.aborted);
+        if let Poll::Ready(val) = self.service.poll_unpin(cx) {
+            return Poll::Ready(val.map_err(|e| Error::TowerServer(e.to_string())));
         }
+        if self.aborted {
+            return Poll::Pending;
+        }
+        if let Poll::Ready(val) = self.abort_recv.poll_unpin(cx) {
+            self.aborted = true;
+            _ = self.service_handle.take().unwrap().send(());
+            if let Err(err) = val {
+                tracing::error!("The ABCI server abort sender has unexpectedly dropped: {}", err)
+            }
+            tracing::info!("Shutting down ABCI server...");
+            return self.service.poll_unpin(cx).map_err(|e| Error::TowerServer(e.to_string()))
+        }
+        Poll::Pending
     }
 }
+
 
 /// Launches a new task managing a Tendermint process into the asynchronous
 /// runtime, and returns its [`task::JoinHandle`].
