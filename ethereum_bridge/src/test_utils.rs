@@ -1,6 +1,6 @@
 //! Test utilies for the Ethereum bridge crate.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 
@@ -11,16 +11,11 @@ use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{
-    self, protocol_pk_key, RefTo, SecretKey, SigScheme,
-};
+use namada_core::types::key::{self, protocol_pk_key, RefTo, SigScheme};
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
-use namada_proof_of_stake::epoched::Epoched;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::GenesisValidator;
-use rand::prelude::ThreadRng;
-use rand::thread_rng;
 use rust_decimal_macros::dec;
 
 use crate::parameters::{

@@ -228,7 +228,7 @@ mod test_apply_bp_roots_to_storage {
                 (validator_c.clone(), 40_u64.into()),
             ]),
         );
-        bridge_pool_vp::init_storage(&mut storage);
+        bridge_pool_vp::init_storage(&mut wl_storage);
         test_utils::commit_bridge_pool_root_at_height(
             &mut wl_storage.storage,
             &KeccakHash([1; 32]),
@@ -250,7 +250,7 @@ mod test_apply_bp_roots_to_storage {
         TestPackage {
             validators: [validator_a, validator_b, validator_c],
             keys,
-            storage,
+            wl_storage,
         }
     }
 
@@ -336,7 +336,7 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[1]].protocol);
         vexts.insert(vext);
         let TxResult { changed_keys, .. } =
-            apply_derived_tx(&mut storage, vexts).expect("Test failed");
+            apply_derived_tx(&mut wl_storage, vexts).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
             BridgePoolRootProof::new((root, nonce)),
         ));

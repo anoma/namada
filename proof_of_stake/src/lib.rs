@@ -1550,15 +1550,24 @@ where
 
 /// Arguments to [`become_validator`].
 pub struct BecomeValidator<'a, S> {
-    storage: &'a mut S,
-    params: &'a PosParams,
-    address: &'a Address,
-    consensus_key: &'a common::PublicKey,
-    eth_cold_key: &'a common::PublicKey,
-    eth_hot_key: &'a common::PublicKey,
-    current_epoch: Epoch,
-    commission_rate: Decimal,
-    max_commission_rate_change: Decimal,
+    /// Storage implementation.
+    pub storage: &'a mut S,
+    /// Proof-of-stake parameters.
+    pub params: &'a PosParams,
+    /// The validator's address.
+    pub address: &'a Address,
+    /// The validator's consensus key, used by Tendermint.
+    pub consensus_key: &'a common::PublicKey,
+    /// The validator's Ethereum bridge cold key.
+    pub eth_cold_key: &'a common::PublicKey,
+    /// The validator's Ethereum bridge hot key.
+    pub eth_hot_key: &'a common::PublicKey,
+    /// The numeric value of the current epoch.
+    pub current_epoch: Epoch,
+    /// Commission rate.
+    pub commission_rate: Decimal,
+    /// Max commission rate change.
+    pub max_commission_rate_change: Decimal,
 }
 
 /// NEW: Initialize data for a new validator.

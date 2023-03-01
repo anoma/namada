@@ -377,7 +377,7 @@ mod tests {
         expected = "Ethereum bridge appears to be only partially configured!"
     )]
     fn test_ethereum_bridge_config_storage_partially_configured() {
-        let mut wl_storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         // Write a valid min_confirmations value
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         wl_storage
