@@ -38,21 +38,21 @@ pub enum Error {
 
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcActions<C>
+pub struct IbcActions<'a, C>
 where
-    C: IbcStorageContext + 'static,
+    C: IbcStorageContext,
 {
-    ctx: &'static mut C,
+    ctx: &'a mut C,
     modules: HashMap<ModuleId, Box<dyn Module>>,
     ports: HashMap<PortId, ModuleId>,
 }
 
-impl<C> IbcActions<C>
+impl<'a, C> IbcActions<'a, C>
 where
     C: IbcStorageContext + Debug,
 {
     /// Make new IBC actions
-    pub fn new(ctx: &'static mut C) -> Self {
+    pub fn new(ctx: &'a mut C) -> Self {
         Self {
             ctx,
             modules: HashMap::new(),

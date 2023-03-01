@@ -48,7 +48,7 @@ use crate::types::time::DurationSecs;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> ValidationContext for IbcActions<C>
+impl<C> ValidationContext for IbcActions<'_, C>
 where
     C: IbcStorageContext,
 {
@@ -700,7 +700,7 @@ where
 }
 
 /// Helper functions
-impl<C> IbcActions<C>
+impl<C> IbcActions<'_, C>
 where
     C: IbcStorageContext,
 {

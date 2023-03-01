@@ -28,7 +28,7 @@ use crate::ledger::ibc::storage;
 use crate::tendermint_proto::Protobuf as TmProtobuf;
 use crate::types::storage::Key;
 
-impl<C> ExecutionContext for IbcActions<C>
+impl<C> ExecutionContext for IbcActions<'_, C>
 where
     C: IbcStorageContext,
 {
@@ -390,7 +390,7 @@ where
 }
 
 /// Helper functions
-impl<C> IbcActions<C>
+impl<C> IbcActions<'_, C>
 where
     C: IbcStorageContext,
 {

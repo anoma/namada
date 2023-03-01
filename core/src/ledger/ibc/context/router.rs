@@ -7,7 +7,7 @@ use crate::ibc::core::context::Router;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 
-impl<C> Router for IbcActions<C>
+impl<C> Router for IbcActions<'_, C>
 where
     C: IbcStorageContext,
 {

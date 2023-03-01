@@ -5,7 +5,7 @@ mod token;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{
     Error as ActionError, IbcActions, IbcStorageContext, ProofSpec,
@@ -18,11 +18,13 @@ use namada_core::proto::SignedTxData;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::Amount;
+use namada_core::types::token::{is_any_token_balance_key, Amount};
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
-use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
+use crate::ledger::native_vp::{
+    self, Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp, VpEnv,
+};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -30,8 +32,8 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
-    #[error("Decoding transaction data error: {0}")]
-    TxDataDecoding(std::io::Error),
+    #[error("Decoding error: {0}")]
+    Decoding(std::io::Error),
     #[error("IBC message is required as transaction data")]
     NoTxData,
     #[error("IBC action error: {0}")]
@@ -40,6 +42,8 @@ pub enum Error {
     StateChange(String),
     #[error("Denom store error: {0}")]
     Denom(denom::Error),
+    #[error("IBC event error: {0}")]
+    IbcEvent(String),
 }
 
 /// IBC functions result
@@ -72,8 +76,8 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<bool> {
-        let signed = SignedTxData::try_from_slice(tx_data)
-            .map_err(Error::TxDataDecoding)?;
+        let signed =
+            SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
         let tx_data = &signed.data.ok_or(Error::NoTxData)?;
 
         // Pseudo execution and compare them
@@ -91,8 +95,8 @@ where
 
 impl<'a, DB, H, CA> Ibc<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     fn validate_state(
@@ -101,7 +105,7 @@ where
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
         let mut exec_ctx = PseudoExecutionContext::new(&self.ctx);
-        let actions = IbcActions::new(&mut exec_ctx);
+        let mut actions = IbcActions::new(&mut exec_ctx);
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -151,41 +155,51 @@ where
                 }
             }
         }
+
+        // check the event
+        let actual = self.ctx.write_log.get_ibc_event().cloned();
+        if actual != exec_ctx.event {
+            return Err(Error::IbcEvent(format!(
+                "The IBC event is invalid: Actual {:?}, Expected {:?}",
+                actual, exec_ctx.event
+            )));
+        }
+
         Ok(())
     }
 
     fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
-        let validation_ctx = IbcVpContext { ctx: &self.ctx };
+        let mut validation_ctx = IbcVpContext::new(&self.ctx);
         let actions = IbcActions::new(&mut validation_ctx);
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 }
 
 #[derive(Debug)]
-struct PseudoExecutionContext<'a, DB, H, CA>
+struct PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     /// Temporary store for pseudo execution
     store: HashMap<Key, StorageModification>,
     /// Context to read the previous value
-    ctx: &'a Ctx<'a, DB, H, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
     /// IBC event
     event: Option<IbcEvent>,
 }
 
-impl<'a, DB, H, CA> PseudoExecutionContext<'a, DB, H, CA>
+impl<'view, 'a, DB, H, CA> PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    pub fn new(ctx: &Ctx<'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: &'view Ctx<'a, DB, H, CA>) -> Self {
         Self {
             store: HashMap::new(),
-            ctx,
+            ctx: ctx.pre(),
             event: None,
         }
     }
@@ -199,10 +213,11 @@ where
     }
 }
 
-impl<'a, DB, H, CA> IbcStorageContext for PseudoExecutionContext<'a, DB, H, CA>
+impl<'a, 'c, DB, H, CA> IbcStorageContext
+    for PseudoExecutionContext<'a, 'c, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -220,9 +235,7 @@ where
             Some(StorageModification::InitAccount { .. }) => {
                 unreachable!("InitAccount shouldn't be inserted")
             }
-            None => {
-                self.ctx.pre().read_bytes(key).map_err(Error::NativeVpError)
-            }
+            None => self.ctx.read_bytes(key).map_err(Error::NativeVpError),
         }
     }
 
@@ -232,17 +245,14 @@ where
     ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
         // NOTE: Read only the previous state since the updated state isn't
         // needed for the caller
-        self.ctx
-            .pre()
-            .iter_prefix(prefix)
-            .map_err(Error::NativeVpError)
+        self.ctx.iter_prefix(prefix).map_err(Error::NativeVpError)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.ctx.pre().iter_next(iter).map_err(Error::NativeVpError)
+        self.ctx.iter_next(iter).map_err(Error::NativeVpError)
     }
 
     fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(), Self::Error> {
@@ -267,7 +277,44 @@ where
         dest: &Key,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let src_owner = is_any_token_balance_key(src);
+        let mut src_bal = match src_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => Amount::max(),
+            Some(Address::Internal(InternalAddress::IbcBurn)) => {
+                unreachable!("Invalid transfer from IBC burn address")
+            }
+            _ => match self.read(src)? {
+                Some(v) => {
+                    Amount::try_from_slice(&v[..]).map_err(Error::Decoding)?
+                }
+                None => unreachable!("The source has no balance"),
+            },
+        };
+        src_bal.spend(&amount);
+        let dest_owner = is_any_token_balance_key(dest);
+        let mut dest_bal = match dest_owner {
+            Some(Address::Internal(InternalAddress::IbcMint)) => {
+                unreachable!("Invalid transfer to IBC mint address")
+            }
+            _ => match self.read(dest)? {
+                Some(v) => {
+                    Amount::try_from_slice(&v[..]).map_err(Error::Decoding)?
+                }
+                None => Amount::default(),
+            },
+        };
+        dest_bal.receive(&amount);
+
+        self.write(
+            src,
+            src_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )?;
+        self.write(
+            dest,
+            dest_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )?;
+
+        Ok(())
     }
 
     /// Get the current height of this chain
@@ -300,40 +347,46 @@ where
 }
 
 #[derive(Debug)]
-struct IbcVpContext<'a, DB, H, CA>
+struct IbcVpContext<'view, 'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     /// Context to read the post value
-    ctx: &'a Ctx<'a, DB, H, CA>,
+    ctx: CtxPostStorageRead<'view, 'a, DB, H, CA>,
 }
 
-impl<'a, DB, H, CA> IbcStorageContext for IbcVpContext<'a, DB, H, CA>
+impl<'view, 'a, DB, H, CA> IbcVpContext<'view, 'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: StorageHasher,
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    pub fn new(ctx: &'view Ctx<'a, DB, H, CA>) -> Self {
+        Self { ctx: ctx.post() }
+    }
+}
+
+impl<'view, 'a, DB, H, CA> IbcStorageContext
+    for IbcVpContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.ctx
-            .post()
-            .read_bytes(key)
-            .map_err(Error::NativeVpError)
+        self.ctx.read_bytes(key).map_err(Error::NativeVpError)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
-        self.ctx
-            .post()
-            .iter_prefix(prefix)
-            .map_err(Error::NativeVpError)
+        self.ctx.iter_prefix(prefix).map_err(Error::NativeVpError)
     }
 
     /// next key value pair
@@ -341,33 +394,30 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.ctx
-            .post()
-            .iter_next(iter)
-            .map_err(Error::NativeVpError)
+        self.ctx.iter_next(iter).map_err(Error::NativeVpError)
     }
 
     fn write(&mut self, _key: &Key, _data: Vec<u8>) -> Result<(), Self::Error> {
-        unimplemented!("VP doesn't write any data")
+        unimplemented!("Validation doesn't write any data")
     }
 
     fn delete(&mut self, _key: &Key) -> Result<(), Self::Error> {
-        unimplemented!("VP doesn't delete any data")
+        unimplemented!("Validation doesn't delete any data")
     }
 
     /// Emit an IBC event
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
-        unimplemented!("VP doesn't emit an event")
+    fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<(), Self::Error> {
+        unimplemented!("Validation doesn't emit an event")
     }
 
     /// Transfer token
     fn transfer_token(
         &mut self,
-        src: &Key,
-        dest: &Key,
-        amount: Amount,
+        _src: &Key,
+        _dest: &Key,
+        _amount: Amount,
     ) -> Result<(), Self::Error> {
-        unimplemented!("VP doesn't transfer")
+        unimplemented!("Validation doesn't transfer")
     }
 
     fn get_height(&self) -> Result<BlockHeight, Self::Error> {

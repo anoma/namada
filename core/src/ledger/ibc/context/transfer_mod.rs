@@ -57,7 +57,7 @@ where
     C: IbcStorageContext + 'static,
 {
     /// IBC actions
-    pub ctx: &'static mut IbcActions<C>,
+    pub ctx: &'static mut IbcActions<'static, C>,
 }
 
 impl<C> TransferModule<C>
@@ -65,7 +65,7 @@ where
     C: IbcStorageContext + 'static,
 {
     /// Make a new module
-    pub fn new(ctx: &'static mut IbcActions<C>) -> Self {
+    pub fn new(ctx: &'static mut IbcActions<'static, C>) -> Self {
         Self { ctx }
     }
 
