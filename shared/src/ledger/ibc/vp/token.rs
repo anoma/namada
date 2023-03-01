@@ -25,9 +25,7 @@ use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::proto::SignedTxData;
-use crate::types::address::{
-    Address, DecodeError as AddressError, InternalAddress,
-};
+use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token::{self, Amount, AmountParseError};
 use crate::vm::WasmCacheAccess;
@@ -39,29 +37,24 @@ pub enum Error {
     NativeVpError(native_vp::Error),
     #[error("IBC message error: {0}")]
     IbcMessage(RouterError),
-    #[error("Invalid message error")]
+    #[error("Invalid message")]
     InvalidMessage,
-    #[error("Invalid address error: {0}")]
-    Address(AddressError),
-    #[error("Token error")]
-    NoToken,
     #[error("Parsing amount error: {0}")]
     Amount(AmountParseError),
     #[error("Decoding error: {0}")]
     Decoding(std::io::Error),
+    #[error("Decoding IBC data error: {0}")]
+    DecodingIbcData(prost::DecodeError),
     #[error("Decoding PacketData error: {0}")]
     DecodingPacketData(serde_json::Error),
-    #[error("Invalid token transfer error: {0}")]
-    TokenTransfer(String),
     #[error("IBC message is required as transaction data")]
     NoTxData,
-    #[error("Invalid denom error: {0}")]
+    #[error("Invalid denom: {0}")]
     Denom(String),
-
-    #[error("Decoding IBC data error: {0}")]
-    DecodingData(prost::DecodeError),
     #[error("Invalid MsgTransfer: {0}")]
     MsgTransfer(TokenTransferError),
+    #[error("Invalid token transfer: {0}")]
+    TokenTransfer(String),
 }
 
 /// Result for IBC token VP
@@ -151,7 +144,8 @@ where
         }
 
         // Check the message
-        let ibc_msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        let ibc_msg =
+            Any::decode(&tx_data[..]).map_err(Error::DecodingIbcData)?;
         match ibc_msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
                 let msg = MsgTransfer::try_from(ibc_msg)
@@ -208,7 +202,7 @@ where
                 }
             };
             let denom = RawPrefixedDenom::decode(&value[..])
-                .map_err(Error::DecodingData)?;
+                .map_err(Error::DecodingIbcData)?;
             coin.denom = denom.try_into().map_err(Error::MsgTransfer)?;
         }
         let token = ibc_storage::token(&coin.denom.to_string())

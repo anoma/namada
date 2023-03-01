@@ -1,7 +1,6 @@
 //! IBC integration as a native validity predicate
 
-// TODO validate denom map and multitoken transfer?
-// mod denom;
+mod denom;
 mod token;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -39,6 +38,8 @@ pub enum Error {
     IbcAction(ActionError),
     #[error("State change error: {0}")]
     StateChange(String),
+    #[error("Denom store error: {0}")]
+    Denom(denom::Error),
 }
 
 /// IBC functions result
@@ -81,8 +82,8 @@ where
         // Validate the state according to the given IBC message
         self.validate_with_msg(tx_data)?;
 
-        // TODO
-        // validate denom?
+        // Validate the denom store
+        self.validate_denom(tx_data).map_err(Error::Denom)?;
 
         Ok(true)
     }

@@ -1,26 +1,28 @@
 //! IBC validity predicate for denom
 
+use prost::Message;
 use thiserror::Error;
 
 use super::Ibc;
+use crate::ibc::applications::transfer::packet::PacketData;
+use crate::ibc::core::ics04_channel::msgs::PacketMsg;
+use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
+use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::ibc::storage;
 use crate::ledger::native_vp::VpEnv;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::types::ibc::data::{
-    Error as IbcDataError, FungibleTokenPacketData, IbcMessage,
-};
 use crate::types::storage::KeySeg;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Decoding TX data error: {0}")]
-    DecodingTxData(std::io::Error),
-    #[error("IBC data error: {0}")]
-    InvalidIbcData(IbcDataError),
-    #[error("Invalid packet data: {0}")]
-    PacketData(String),
+    #[error("Decoding IBC data error: {0}")]
+    DecodingData(prost::DecodeError),
+    #[error("Invalid message: {0}")]
+    IbcMessage(String),
+    #[error("Decoding PacketData error: {0}")]
+    DecodingPacketData(serde_json::Error),
     #[error("Denom error: {0}")]
     Denom(String),
 }
@@ -35,54 +37,47 @@ where
     CA: 'static + WasmCacheAccess,
 {
     pub(super) fn validate_denom(&self, tx_data: &[u8]) -> Result<()> {
-        let ibc_msg = IbcMessage::decode(tx_data)?;
-        let msg = ibc_msg.msg_recv_packet()?;
-        match serde_json::from_slice::<FungibleTokenPacketData>(
-            &msg.packet.data,
-        ) {
-            Ok(data) => {
-                let denom = format!(
-                    "{}/{}/{}",
-                    &msg.packet.destination_port,
-                    &msg.packet.destination_channel,
-                    &data.denom
-                );
-                let token_hash = storage::calc_hash(&denom);
-                let denom_key = storage::ibc_denom_key(token_hash.raw());
-                match self.ctx.read_bytes_post(&denom_key) {
-                    Ok(Some(v)) => match std::str::from_utf8(&v) {
-                        Ok(d) if d == denom => Ok(()),
-                        Ok(d) => Err(Error::Denom(format!(
-                            "Mismatch the denom: original {}, denom {}",
-                            denom, d
-                        ))),
-                        Err(e) => Err(Error::Denom(format!(
-                            "Decoding the denom failed: key {}, error {}",
-                            denom_key, e
-                        ))),
-                    },
-                    _ => Err(Error::Denom(format!(
-                        "Looking up the denom failed: Key {}",
-                        denom_key
-                    ))),
-                }
-            }
-            Err(e) => Err(Error::PacketData(format!(
-                "unknown packet data: error {}",
+        let ibc_msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        let envelope: MsgEnvelope = ibc_msg.try_into().map_err(|e| {
+            Error::IbcMessage(format!(
+                "Decoding a MsgRecvPacket failed: Error {}",
                 e
+            ))
+        })?;
+        // A transaction only with MsgRecvPacket can update the denom store
+        let msg = match envelope {
+            MsgEnvelope::Packet(PacketMsg::Recv(msg)) => msg,
+            _ => {
+                return Err(Error::IbcMessage(
+                    "Non-MsgRecvPacket message updated the denom store"
+                        .to_string(),
+                ));
+            }
+        };
+        let data = serde_json::from_slice::<PacketData>(&msg.packet.data)
+            .map_err(Error::DecodingPacketData)?;
+        let denom = format!(
+            "{}/{}/{}",
+            &msg.packet.port_on_b, &msg.packet.chan_on_b, &data.token.denom,
+        );
+        let token_hash = storage::calc_hash(&denom);
+        let denom_key = storage::ibc_denom_key(token_hash.raw());
+        match self.ctx.read_bytes_post(&denom_key) {
+            Ok(Some(v)) => match std::str::from_utf8(&v) {
+                Ok(d) if d == denom => Ok(()),
+                Ok(d) => Err(Error::Denom(format!(
+                    "Mismatch the denom: original {}, denom {}",
+                    denom, d
+                ))),
+                Err(e) => Err(Error::Denom(format!(
+                    "Decoding the denom failed: key {}, error {}",
+                    denom_key, e
+                ))),
+            },
+            _ => Err(Error::Denom(format!(
+                "Looking up the denom failed: Key {}",
+                denom_key
             ))),
         }
-    }
-}
-
-impl From<IbcDataError> for Error {
-    fn from(err: IbcDataError) -> Self {
-        Self::InvalidIbcData(err)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Self::DecodingTxData(err)
     }
 }
