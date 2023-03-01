@@ -330,36 +330,41 @@ impl RocksDB {
             "next_epoch_min_start_time",
             "tx_queue",
         ] {
-            let key = Key::from(metadata_key.to_owned().to_db_key());
-            let previous_key =
-                Key::from(format!("pred/{}", metadata_key).to_db_key());
-            let previous_value = self.read_subspace_val(&previous_key)?.ok_or(
-                Error::UnknownKey {
-                    key: previous_key.to_string(),
-                },
-            )?;
+            tracing::info!("Reverting non-height-prepended metadata keys");
+            let previous_key = format!("pred/{}", metadata_key);
+            let previous_value = self
+                .0
+                .get(previous_key.as_bytes())
+                .map_err(|e| Error::DBError(e.to_string()))?
+                .ok_or(Error::UnknownKey { key: previous_key })?;
 
-            batch.put(key.to_string(), previous_value);
+            batch.put(metadata_key.to_owned(), previous_value);
         }
 
         let previous_height =
             BlockHeight::from(u64::from(last_block.height) - 1);
 
+        tracing::info!("Restoring previous hight subspace diffs");
         for (key, _value, _gas) in self.iter_prefix(&Key::default()) {
             // Restore previous height diff if present, otherwise delete the
             // subspace key
+
+            // Add the prefix back since `iter_prefix` has removed it
+            let prefixed_key = format!("subspace/{}", key);
+
             match self.read_subspace_val_with_height(
                 &Key::from(key.to_db_key()),
                 previous_height,
                 last_block.height,
             )? {
-                Some(previous_value) => batch.put(&key, previous_value),
-                None => batch.delete(&key),
+                Some(previous_value) => {
+                    batch.put(&prefixed_key, previous_value)
+                }
+                None => batch.delete(&prefixed_key),
             }
         }
 
         // Delete any height-prepended key, including subspace diff keys
-        let db_prefix = format!("{}/", last_block.height);
         let prefix = last_block.height.to_string();
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(true);
@@ -373,13 +378,16 @@ impl RocksDB {
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             read_opts,
         );
-        for (key, _value, _gas) in
-            PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
-        {
+        tracing::info!("Deleting keys prepended with the last height");
+        for (key, _value, _gas) in PersistentPrefixIterator(
+            // Empty prefix string to prevent stripping
+            PrefixIterator::new(iter, String::default()),
+        ) {
             batch.delete(key);
         }
 
         // Write the batch and persist changes to disk
+        tracing::info!("Flushing restored state to disk");
         self.exec_batch(batch)?;
         self.flush(true)
     }
