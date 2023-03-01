@@ -1304,17 +1304,17 @@ dependencies = [
  "der",
  "elliptic-curve",
  "rfc6979",
- "signature 1.6.4",
+ "signature",
 ]
 
 [[package]]
 name = "ed25519"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
+checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
  "serde",
- "signature 2.0.0",
+ "signature",
 ]
 
 [[package]]
@@ -2187,7 +2187,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "sha2 0.10.6",
- "signature 1.6.4",
+ "signature",
  "strum",
  "subtle-encoding",
  "tendermint 0.28.0",
@@ -4304,12 +4304,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signature"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
-
-[[package]]
 name = "simple-error"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4508,7 +4502,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.9.9",
- "signature 1.6.4",
+ "signature",
  "subtle",
  "subtle-encoding",
  "tendermint-proto 0.23.6",
@@ -4538,7 +4532,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.9.9",
- "signature 1.6.4",
+ "signature",
  "subtle",
  "subtle-encoding",
  "tendermint-proto 0.28.0",
