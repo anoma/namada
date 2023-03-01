@@ -2358,7 +2358,11 @@ pub mod args {
         /// Common tx arguments
         pub tx: Tx,
         /// Path to the VP WASM code file
-        pub vp_code_path: PathBuf,
+        pub vp_code_path: Option<PathBuf>,
+        /// New set of public keys to associate with the account
+        pub public_keys: Vec<WalletPublicKey>,
+        /// The new account threshold
+        pub threshold: Option<u64>,
         /// Address of the account whose VP is to be updated
         pub addr: WalletAddress,
     }
@@ -2366,11 +2370,15 @@ pub mod args {
     impl Args for TxUpdateVp {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             let addr = ADDRESS.parse(matches);
             Self {
                 tx,
                 vp_code_path,
+                public_keys,
+                threshold,
                 addr,
             }
         }
@@ -2378,9 +2386,17 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(
-                    CODE_PATH.def().about(
+                    CODE_PATH_OPT.def().about(
                         "The path to the new validity predicate WASM code.",
                     ),
+                )
+                .arg(PUBLIC_KEYS.def().about(
+                    "The new set of public keys to associate with the account.",
+                ))
+                .arg(
+                    THRESHOLD
+                        .def()
+                        .about("The new account multisig threshold."),
                 )
                 .arg(ADDRESS.def().about(
                     "The account's address. It's key is used to produce the \
