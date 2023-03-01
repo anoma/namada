@@ -2,15 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::token;
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::WeightedValidator;
-
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
@@ -30,7 +28,7 @@ pub(super) trait GetVoters {
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.
 pub(super) fn get_voting_powers<D, H, P>(
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     proof: &P,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
 where
@@ -38,11 +36,12 @@ where
     H: 'static + StorageHasher + Sync,
     P: GetVoters + ?Sized,
 {
-    let voters = proof.get_voters(storage.get_epoch_start_height());
+    let voters =
+        proof.get_voters(wl_storage.pos_queries().get_epoch_start_height());
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let active_validators = get_active_validators(
-        storage,
+        wl_storage,
         voters.iter().map(|(_, h)| h.to_owned()).collect(),
     );
     tracing::debug!(
@@ -61,8 +60,9 @@ where
     Ok(voting_powers)
 }
 
+// TODO: we might be able to remove allocation here
 pub(super) fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     block_heights: HashSet<BlockHeight>,
 ) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>
 where
@@ -71,11 +71,17 @@ where
 {
     let mut active_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
-        let epoch = storage.get_epoch(height).expect(
+        let epoch = wl_storage.pos_queries().get_epoch(height).expect(
             "The epoch of the last block height should always be known",
         );
-        _ = active_validators
-            .insert(height, storage.get_active_validators(Some(epoch)));
+        _ = active_validators.insert(
+            height,
+            wl_storage
+                .pos_queries()
+                .get_active_validators(Some(epoch))
+                .iter()
+                .collect(),
+        );
     }
     active_validators
 }
