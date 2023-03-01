@@ -4878,6 +4878,8 @@ dependencies = [
  "namada_core",
  "namada_proof_of_stake",
  "rand 0.8.5",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde 1.0.147",
  "serde_json",
  "tendermint 0.23.5",
