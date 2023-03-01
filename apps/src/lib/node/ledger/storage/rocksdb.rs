@@ -311,6 +311,11 @@ impl RocksDB {
         let last_block = self.read_last_block()?.ok_or(Error::DBError(
             "Missing last block in storage".to_string(),
         ))?;
+        tracing::info!(
+            "Namada last block height: {}, Tendermint last block height: {}",
+            last_block.height,
+            tendermint_block_height
+        );
 
         // If the block height to which tendermint rolled back matches the
         // Namada height, there's no need to rollback
@@ -320,17 +325,20 @@ impl RocksDB {
         }
 
         let mut batch = WriteBatch::default();
+        let previous_height =
+            BlockHeight::from(u64::from(last_block.height) - 1);
 
         // Revert the non-height-prepended metadata storage keys which get
         // updated with every block. Because of the way we save these
         // three keys in storage we can only perform one rollback before
         // restarting the chain
+        tracing::info!("Reverting non-height-prepended metadata keys");
+        batch.put("height", types::encode(&previous_height));
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
             "tx_queue",
         ] {
-            tracing::info!("Reverting non-height-prepended metadata keys");
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
                 .0
@@ -339,10 +347,12 @@ impl RocksDB {
                 .ok_or(Error::UnknownKey { key: previous_key })?;
 
             batch.put(metadata_key.to_owned(), previous_value);
+            // NOTE: we cannot restore the "pred/" keys themselves since we don't have their predecessors in storage, but there's no need to since we cannot do more than one rollback anyway because of Tendermint.
         }
 
-        let previous_height =
-            BlockHeight::from(u64::from(last_block.height) - 1);
+        // Delete block results for the last block
+        tracing::info!("Removing last block results");
+        batch.delete(format!("results/{}", last_block.height));
 
         tracing::info!("Restoring previous hight subspace diffs");
         for (key, _value, _gas) in self.iter_prefix(&Key::default()) {
