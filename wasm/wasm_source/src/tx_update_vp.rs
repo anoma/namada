@@ -14,5 +14,19 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
 
-    ctx.update_validity_predicate(&update_vp.addr, update_vp.vp_code)
+    if let Some(vp_code) = update_vp.vp_code {
+        ctx.update_validity_predicate(&update_vp.addr, vp_code)?;
+    }
+
+    if let Some(threshold) = update_vp.threshold {
+        let pk_threshold = key::threshold_key(&update_vp.addr);
+        ctx.write(&pk_threshold, threshold)?;
+    }
+
+    for (pk, index) in update_vp.public_keys.iter().zip(0u64..) {
+        let pk_key = key::pk_key(&update_vp.addr, index);
+        ctx.write(&pk_key, pk)?;
+    }
+
+    Ok(())
 }

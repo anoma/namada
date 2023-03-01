@@ -3243,7 +3243,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    
+
     let counsil_check = format!(".*Address: Established: {}.*", albert_address);
     client = run!(test, Bin::Client, query_pgf_counsil, Some(40))?;
     client.exp_string("PGF counsil:")?;

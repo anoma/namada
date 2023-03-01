@@ -147,7 +147,11 @@ pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
     /// The new VP code
-    pub vp_code: Vec<u8>,
+    pub vp_code: Option<Vec<u8>>,
+    /// Public keys
+    pub public_keys: Vec<common::PublicKey>,
+    /// Account threshold
+    pub threshold: Option<u64>,
 }
 
 /// A tx data type to initialize a new established account
