@@ -17,10 +17,8 @@ use namada_core::types::key::{
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::epoched::Epoched;
-use namada_proof_of_stake::types::{
-    ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet, WeightedValidator,
-};
-use namada_proof_of_stake::{PosBase, PosParams};
+use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::types::GenesisValidator;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use rust_decimal_macros::dec;
@@ -47,10 +45,11 @@ impl TestValidatorKeys {
     #[inline]
     pub fn generate() -> Self {
         TestValidatorKeys {
-            consensus: gen_ed25519_keypair(),
-            protocol: gen_ed25519_keypair(),
-            eth_bridge: gen_secp256k1_keypair(),
-            eth_gov: gen_secp256k1_keypair(),
+            consensus: key::testing::gen_keypair::<key::ed25519::SigScheme>(),
+            protocol: key::testing::gen_keypair::<key::ed25519::SigScheme>(),
+            eth_bridge: key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+            ),
+            eth_gov: key::testing::gen_keypair::<key::secp256k1::SigScheme>(),
         }
     }
 }
@@ -118,27 +117,26 @@ pub fn setup_storage_with_validators(
     };
 
     let mut all_keys = HashMap::new();
-    let validator_iterator =
-        active_validators.into_iter().map(|(address, tokens)| {
-            let keys = TestValidatorKeys::generate();
-            let consensus_key = keys.consensus.ref_to();
-            let eth_cold_key = keys.eth_gov.ref_to();
-            let eth_hot_key = keys.eth_bridge.ref_to();
-            let protocol_key = keys.protocol.ref_to();
-            wl_storage
-                .write(&protocol_pk_key(&address), protocol_key)
-                .expect("Test failed");
-            all_keys.insert(address.clone(), keys);
-            GenesisValidator {
-                address,
-                tokens,
-                consensus_key,
-                eth_cold_key,
-                eth_hot_key,
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
-            }
-        });
+    let validators = active_validators.into_iter().map(|(address, tokens)| {
+        let keys = TestValidatorKeys::generate();
+        let consensus_key = keys.consensus.ref_to();
+        let eth_cold_key = keys.eth_gov.ref_to();
+        let eth_hot_key = keys.eth_bridge.ref_to();
+        let protocol_key = keys.protocol.ref_to();
+        wl_storage
+            .write(&protocol_pk_key(&address), protocol_key)
+            .expect("Test failed");
+        all_keys.insert(address.clone(), keys);
+        GenesisValidator {
+            address,
+            tokens,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            commission_rate: dec!(0.05),
+            max_commission_rate_change: dec!(0.01),
+        }
+    });
 
     namada_proof_of_stake::init_genesis(
         &mut wl_storage,
@@ -149,22 +147,6 @@ pub fn setup_storage_with_validators(
     .expect("Test failed");
 
     (wl_storage, all_keys)
-}
-
-/// Generate a random [`key::secp256k1`] keypair.
-pub fn gen_secp256k1_keypair() -> key::common::SecretKey {
-    let mut rng: ThreadRng = thread_rng();
-    key::secp256k1::SigScheme::generate(&mut rng)
-        .try_to_sk()
-        .unwrap()
-}
-
-/// Generate a random [`key::ed25519`] keypair.
-pub fn gen_ed25519_keypair() -> key::common::SecretKey {
-    let mut rng: ThreadRng = thread_rng();
-    key::ed25519::SigScheme::generate(&mut rng)
-        .try_to_sk()
-        .unwrap()
 }
 
 /// Commit a bridge pool root at a given height
