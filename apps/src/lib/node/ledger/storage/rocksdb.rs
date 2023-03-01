@@ -303,7 +303,9 @@ impl RocksDB {
         println!("Done writing to {}", full_path.to_string_lossy());
     }
 
-    /// Rollback to previous block. Given the inner working of tendermint rollback and of the key structure of Namada, calling rollback more than once without restarting the chain results in a single rollback.
+    /// Rollback to previous block. Given the inner working of tendermint
+    /// rollback and of the key structure of Namada, calling rollback more than
+    /// once without restarting the chain results in a single rollback.
     pub fn rollback(
         &mut self,
         tendermint_block_height: BlockHeight,
@@ -320,7 +322,10 @@ impl RocksDB {
         // If the block height to which tendermint rolled back matches the
         // Namada height, there's no need to rollback
         if tendermint_block_height == last_block.height {
-            tracing::info!("Namada height already matches the rollback Tendermint height, no need to rollback.");
+            tracing::info!(
+                "Namada height already matches the rollback Tendermint \
+                 height, no need to rollback."
+            );
             return Ok(());
         }
 
@@ -346,8 +351,11 @@ impl RocksDB {
                 .map_err(|e| Error::DBError(e.to_string()))?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
 
-            batch.put(metadata_key.to_owned(), previous_value);
-            // NOTE: we cannot restore the "pred/" keys themselves since we don't have their predecessors in storage, but there's no need to since we cannot do more than one rollback anyway because of Tendermint.
+            batch.put(metadata_key, previous_value);
+            // NOTE: we cannot restore the "pred/" keys themselves since we
+            // don't have their predecessors in storage, but there's no need to
+            // since we cannot do more than one rollback anyway because of
+            // Tendermint.
         }
 
         // Delete block results for the last block
