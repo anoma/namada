@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::storage::Key;
 use namada_core::types::voting_power::FractionalVotingPower;
 
@@ -8,7 +8,7 @@ use super::{Tally, Votes};
 use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
-    storage: &mut Storage<D, H>,
+    storage: &mut WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
     body: &T,
     tally: &Tally,
@@ -34,7 +34,7 @@ where
 }
 
 pub fn delete<D, H, T>(
-    storage: &mut Storage<D, H>,
+    storage: &mut WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<()>
 where
@@ -51,7 +51,7 @@ where
 }
 
 pub fn read<D, H, T>(
-    storage: &Storage<D, H>,
+    storage: &WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Tally>
 where
@@ -71,7 +71,7 @@ where
 }
 
 pub fn iter_prefix<'a, D, H>(
-    storage: &'a Storage<D, H>,
+    storage: &'a WlStorage<D, H>,
     prefix: &Key,
 ) -> <D as DBIter<'a>>::PrefixIter
 where
@@ -83,7 +83,7 @@ where
 
 #[inline]
 pub fn read_body<D, H, T>(
-    storage: &Storage<D, H>,
+    storage: &WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<T>
 where
@@ -96,7 +96,7 @@ where
 
 #[inline]
 pub fn maybe_read_seen<D, H, T>(
-    storage: &Storage<D, H>,
+    storage: &WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Option<bool>>
 where

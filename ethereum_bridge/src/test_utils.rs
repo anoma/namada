@@ -6,8 +6,8 @@ use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-use namada_core::ledger::storage::testing::TestStorage;
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
+use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
@@ -23,6 +23,7 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::{PosBase, PosParams};
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
+use rust_decimal_macros::dec;
 
 use crate::parameters::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
@@ -41,23 +42,36 @@ pub struct TestValidatorKeys {
     pub eth_gov: key::common::SecretKey,
 }
 
-/// Set up a [`TestStorage`] initialized at genesis with a single
+impl TestValidatorKeys {
+    /// Generate a new test wallet.
+    #[inline]
+    pub fn generate() -> Self {
+        TestValidatorKeys {
+            consensus: gen_ed25519_keypair(),
+            protocol: gen_ed25519_keypair(),
+            eth_bridge: gen_secp256k1_keypair(),
+            eth_gov: gen_secp256k1_keypair(),
+        }
+    }
+}
+
+/// Set up a [`TestWlStorage`] initialized at genesis with a single
 /// validator.
 ///
 /// The validator's address is [`address::testing::established_address_1`].
 #[inline]
 pub fn setup_default_storage()
--> (TestStorage, HashMap<Address, TestValidatorKeys>) {
+-> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
     setup_storage_with_validators(HashMap::from_iter([(
         address::testing::established_address_1(),
         100_u64.into(),
     )]))
 }
 
-/// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestStorage`], and
+/// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestWlStorage`], and
 /// returns it.
 pub fn bootstrap_ethereum_bridge(
-    storage: &mut TestStorage,
+    wl_storage: &mut TestWlStorage,
 ) -> EthereumBridgeConfig {
     let config = EthereumBridgeConfig {
         min_confirmations: MinimumConfirmations::from(unsafe {
@@ -78,96 +92,63 @@ pub fn bootstrap_ethereum_bridge(
             },
         },
     };
-    config.init_storage(storage);
+    config.init_storage(wl_storage);
     config
 }
 
 /// Returns the number of keys in `storage` which have values present.
-pub fn stored_keys_count(storage: &TestStorage) -> usize {
+pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
     let root = Key::from_str("").unwrap();
-    storage.iter_prefix(&root).0.count()
+    wl_storage.iter_prefix(&root).count()
 }
 
-/// Set up a [`TestStorage`] initialized at genesis with the given
+/// Set up a [`TestWlStorage`] initialized at genesis with the given
 /// validators.
 pub fn setup_storage_with_validators(
     active_validators: HashMap<Address, token::Amount>,
-) -> (TestStorage, HashMap<Address, TestValidatorKeys>) {
+) -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
-    let mut storage = TestStorage {
-        last_height: 3.into(),
-        ..TestStorage::default()
+    let mut wl_storage = TestWlStorage {
+        storage: TestStorage {
+            last_height: 3.into(),
+            ..TestStorage::default()
+        },
+        ..TestWlStorage::default()
     };
 
-    // write validator set
-    let validator_set = ValidatorSet {
-        active: active_validators
-            .iter()
-            .map(|(address, bonded_stake)| WeightedValidator {
-                bonded_stake: u64::from(*bonded_stake),
-                address: address.clone(),
-            })
-            .collect(),
-        inactive: BTreeSet::default(),
-    };
-    let validator_sets = Epoched::init_at_genesis(validator_set, 0);
-    storage.write_validator_set(&validator_sets);
-
-    // write validator keys
     let mut all_keys = HashMap::new();
-    for validator in active_validators.into_keys() {
-        let keys = setup_storage_validator(&mut storage, &validator);
-        all_keys.insert(validator, keys);
-    }
+    let validator_iterator =
+        active_validators.into_iter().map(|(address, tokens)| {
+            let keys = TestValidatorKeys::generate();
+            let consensus_key = keys.consensus.ref_to();
+            let eth_cold_key = keys.eth_gov.ref_to();
+            let eth_hot_key = keys.eth_bridge.ref_to();
+            let protocol_key = keys.protocol.ref_to();
+            wl_storage
+                .write(&protocol_pk_key(&address), protocol_key)
+                .expect("Test failed");
+            all_keys.insert(address.clone(), keys);
+            GenesisValidator {
+                address,
+                tokens,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                commission_rate: dec!(0.05),
+                max_commission_rate_change: dec!(0.01),
+            }
+        });
 
-    // write PoS parameteres for timeout check
-    let params = PosParams::default();
-    storage.write_pos_params(&params);
+    namada_proof_of_stake::init_genesis(
+        &mut wl_storage,
+        &PosParams::default(),
+        validators,
+        0.into(),
+    )
+    .expect("Test failed");
 
-    (storage, all_keys)
-}
-
-/// Set up a single validator in [`TestStorage`] with some
-/// arbitrary keys.
-pub fn setup_storage_validator(
-    storage: &mut TestStorage,
-    validator: &Address,
-) -> TestValidatorKeys {
-    // register protocol key
-    let protocol_key = gen_ed25519_keypair();
-    storage
-        .write(
-            &protocol_pk_key(validator),
-            protocol_key.ref_to().try_to_vec().expect("Test failed"),
-        )
-        .expect("Test failed");
-
-    // register consensus key
-    let consensus_key = gen_ed25519_keypair();
-    storage.write_validator_consensus_key(
-        validator,
-        &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
-    );
-
-    // register ethereum keys
-    let hot_key = gen_secp256k1_keypair();
-    let cold_key = gen_secp256k1_keypair();
-    storage.write_validator_eth_hot_key(
-        validator,
-        &ValidatorEthKey::init_at_genesis(hot_key.ref_to(), 0),
-    );
-    storage.write_validator_eth_cold_key(
-        validator,
-        &ValidatorEthKey::init_at_genesis(cold_key.ref_to(), 0),
-    );
-
-    TestValidatorKeys {
-        consensus: consensus_key,
-        protocol: protocol_key,
-        eth_bridge: hot_key,
-        eth_gov: cold_key,
-    }
+    (wl_storage, all_keys)
 }
 
 /// Generate a random [`key::secp256k1`] keypair.
@@ -191,13 +172,10 @@ pub fn gen_ed25519_keypair() -> key::common::SecretKey {
 ///
 /// N.B. assumes the bridge pool is empty.
 pub fn commit_bridge_pool_root_at_height<D, H>(
-    storage: &mut Storage<D, H>,
+    storage: &mut TestStorage,
     root: &KeccakHash,
     height: BlockHeight,
-) where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
+) {
     let value = height.try_to_vec().expect("Encoding failed");
     storage
         .block

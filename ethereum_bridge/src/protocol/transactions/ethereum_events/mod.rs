@@ -9,14 +9,14 @@ use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, Storage, DB};
+use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_core::types::voting_power::FractionalVotingPower;
-use namada_proof_of_stake::PosBase;
+use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -45,7 +45,7 @@ impl utils::GetVoters for HashSet<EthMsgUpdate> {
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
 pub fn apply_derived_tx<D, H>(
-    storage: &mut Storage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
     events: Vec<MultiSignedEthEvent>,
 ) -> Result<TxResult>
 where
@@ -63,11 +63,11 @@ where
 
     let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
 
-    let voting_powers = utils::get_voting_powers(storage, &updates)?;
+    let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
-    let mut changed_keys = apply_updates(storage, updates, voting_powers)?;
+    let mut changed_keys = apply_updates(wl_storage, updates, voting_powers)?;
 
-    changed_keys.extend(timeout_events(storage)?);
+    changed_keys.extend(timeout_events(wl_storage)?);
 
     Ok(TxResult {
         changed_keys,
@@ -81,7 +81,7 @@ where
 /// The `voting_powers` map must contain a voting power for all
 /// `(Address, BlockHeight)`s that occur in any of the `updates`.
 pub(super) fn apply_updates<D, H>(
-    storage: &mut Storage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
     updates: HashSet<EthMsgUpdate>,
     voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<ChangedKeys>
@@ -101,7 +101,7 @@ where
         // The order in which updates are applied to storage does not matter.
         // The final storage state will be the same regardless.
         let (mut changed, newly_confirmed) =
-            apply_update(storage, update.clone(), &voting_powers)?;
+            apply_update(wl_storage, update.clone(), &voting_powers)?;
         changed_keys.append(&mut changed);
         if newly_confirmed {
             confirmed.push(update.body);
@@ -116,7 +116,7 @@ where
     // Right now, the order in which events are acted on does not matter.
     // For `TransfersToNamada` events, they can happen in any order.
     for event in &confirmed {
-        let mut changed = events::act_on(storage, event)?;
+        let mut changed = events::act_on(wl_storage, event)?;
         changed_keys.append(&mut changed);
     }
     Ok(changed_keys)
@@ -128,7 +128,7 @@ where
 /// The `voting_powers` map must contain a voting power for all
 /// `(Address, BlockHeight)`s that occur in `update`.
 fn apply_update<D, H>(
-    storage: &mut Storage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
     update: EthMsgUpdate,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
 ) -> Result<(ChangedKeys, bool)>
@@ -141,7 +141,7 @@ where
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
     // is a less arbitrary way to do this
-    let (exists_in_storage, _) = storage.has_key(&eth_msg_keys.seen())?;
+    let (exists_in_storage, _) = wl_storage.has_key(&eth_msg_keys.seen())?;
 
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
@@ -158,7 +158,7 @@ where
             let new_votes =
                 NewVotes::new(update.seen_by.clone(), voting_powers)?;
             let (vote_tracking, changed) =
-                votes::update::calculate(storage, &eth_msg_keys, new_votes)?;
+                votes::update::calculate(wl_storage, &eth_msg_keys, new_votes)?;
             if changed.is_empty() {
                 return Ok((changed, false));
             }
@@ -168,7 +168,7 @@ where
         };
 
     votes::storage::write(
-        storage,
+        wl_storage,
         &eth_msg_keys,
         &update.body,
         &vote_tracking,
@@ -178,18 +178,18 @@ where
     Ok((changed, confirmed))
 }
 
-fn timeout_events<D, H>(storage: &mut Storage<D, H>) -> Result<ChangedKeys>
+fn timeout_events<D, H>(wl_storage: &mut WlStorage<D, H>) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut changed = ChangedKeys::new();
-    for keys in get_timed_out_eth_events(storage) {
+    for keys in get_timed_out_eth_events(wl_storage) {
         tracing::debug!(
             %keys.prefix,
             "Ethereum event timed out",
         );
-        votes::storage::delete(storage, &keys)?;
+        votes::storage::delete(wl_storage, &keys)?;
         changed.extend(keys.clone().into_iter());
     }
 
@@ -197,14 +197,14 @@ where
 }
 
 fn get_timed_out_eth_events<D, H>(
-    storage: &mut Storage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
 ) -> Vec<Keys<EthereumEvent>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let unbonding_len = storage.read_pos_params().unbonding_len;
-    let current_epoch = storage.last_epoch;
+    let unbonding_len = wl_storage.pos_queries().get_pos_params().unbonding_len;
+    let current_epoch = wl_storage.storage.last_epoch;
     if current_epoch.0 <= unbonding_len {
         return Vec::new();
     }
@@ -215,7 +215,7 @@ where
     let mut is_timed_out = false;
     let mut is_seen = false;
     let mut results = Vec::new();
-    for (key, val, _) in votes::storage::iter_prefix(storage, &prefix) {
+    for (key, val, _) in votes::storage::iter_prefix(wl_storage, &prefix) {
         let key = Key::parse(key).expect("The key should be parsable");
         if let Some(keys) = vote_tallies::eth_event_keys(&key) {
             match &cur_keys {
