@@ -31,6 +31,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -44,6 +45,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
+use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, SliceTransform, WriteBatch, WriteOptions,
@@ -362,27 +364,35 @@ impl RocksDB {
         tracing::info!("Removing last block results");
         batch.delete(format!("results/{}", last_block.height));
 
+        // Execute next step in parallel
+        let batch = Mutex::new(batch);
+
         tracing::info!("Restoring previous hight subspace diffs");
-        for (key, _value, _gas) in self.iter_prefix(&Key::default()) {
-            // Restore previous height diff if present, otherwise delete the
-            // subspace key
+        self.iter_prefix(&Key::default())
+            .par_bridge()
+            .try_for_each(|(key, _value, _gas)| -> Result<()> {
+                // Restore previous height diff if present, otherwise delete the
+                // subspace key
 
-            // Add the prefix back since `iter_prefix` has removed it
-            let prefixed_key = format!("subspace/{}", key);
+                // Add the prefix back since `iter_prefix` has removed it
+                let prefixed_key = format!("subspace/{}", key);
 
-            match self.read_subspace_val_with_height(
-                &Key::from(key.to_db_key()),
-                previous_height,
-                last_block.height,
-            )? {
-                Some(previous_value) => {
-                    batch.put(&prefixed_key, previous_value)
+                match self.read_subspace_val_with_height(
+                    &Key::from(key.to_db_key()),
+                    previous_height,
+                    last_block.height,
+                )? {
+                    Some(previous_value) => {
+                        batch.lock().unwrap().put(&prefixed_key, previous_value)
+                    }
+                    None => batch.lock().unwrap().delete(&prefixed_key),
                 }
-                None => batch.delete(&prefixed_key),
-            }
-        }
+
+                Ok(())
+            })?;
 
         // Delete any height-prepended key, including subspace diff keys
+        let mut batch = batch.into_inner().unwrap();
         let prefix = last_block.height.to_string();
         let mut read_opts = ReadOptions::default();
         read_opts.set_total_order_seek(true);
