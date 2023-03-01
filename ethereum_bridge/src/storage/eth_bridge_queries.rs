@@ -16,7 +16,7 @@ use namada_core::types::vote_extensions::validator_set_update::{
 use namada_core::types::voting_power::{
     EthBridgeVotingPower, FractionalVotingPower,
 };
-use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::pos_queries::{ActiveValidators, PosQueries};
 use namada_proof_of_stake::{
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
 };
@@ -314,42 +314,18 @@ where
     pub fn get_active_eth_addresses(
         self,
         epoch: Option<Epoch>,
-    ) -> impl Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db {
+    ) -> ActiveEthAddresses<'db, D, H> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        self.wl_storage
+        let active_validators = self
+            .wl_storage
             .pos_queries()
-            .get_active_validators(Some(epoch))
-            .iter()
-            .map(move |validator| {
-                let hot_key_addr = self
-                    .get_ethbridge_from_namada_addr(
-                        &validator.address,
-                        Some(epoch),
-                    )
-                    .expect(
-                        "All Namada validators should have an Ethereum bridge \
-                         key",
-                    );
-                let cold_key_addr = self
-                    .get_ethgov_from_namada_addr(
-                        &validator.address,
-                        Some(epoch),
-                    )
-                    .expect(
-                        "All Namada validators should have an Ethereum \
-                         governance key",
-                    );
-                let eth_addr_book = EthAddrBook {
-                    hot_key_addr,
-                    cold_key_addr,
-                };
-                (
-                    eth_addr_book,
-                    validator.address,
-                    validator.bonded_stake.into(),
-                )
-            })
+            .get_active_validators(Some(epoch));
+        ActiveEthAddresses {
+            wl_storage: self.wl_storage,
+            active_validators,
+            epoch,
+        }
     }
 
     /// Query the active [`ValidatorSetArgs`] at the given [`Epoch`].
@@ -363,6 +339,7 @@ where
 
         let voting_powers_map: VotingPowersMap = self
             .get_active_eth_addresses(Some(epoch))
+            .iter()
             .map(|(addr_book, _, power)| (addr_book, power))
             .collect();
 
@@ -391,5 +368,62 @@ where
             },
             voting_powers_map,
         )
+    }
+}
+
+/// A handle to the Ethereum addresses of the set of active
+/// validators in Namada, at some given epoch.
+pub struct ActiveEthAddresses<'db, D, H>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    epoch: Epoch,
+    wl_storage: &'db WlStorage<D, H>,
+    active_validators: ActiveValidators<'db, D, H>,
+}
+
+impl<'db, D, H> ActiveEthAddresses<'db, D, H>
+where
+    D: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: storage::StorageHasher,
+{
+    /// Iterate over the Ethereum addresses of the set of active validators
+    /// in Namada, at some given epoch.
+    pub fn iter<'this: 'db>(
+        &'this self,
+    ) -> impl Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db {
+        self.active_validators.iter().map(move |validator| {
+            let hot_key_addr = self
+                .wl_storage
+                .ethbridge_queries()
+                .get_ethbridge_from_namada_addr(
+                    &validator.address,
+                    Some(self.epoch),
+                )
+                .expect(
+                    "All Namada validators should have an Ethereum bridge key",
+                );
+            let cold_key_addr = self
+                .wl_storage
+                .ethbridge_queries()
+                .get_ethgov_from_namada_addr(
+                    &validator.address,
+                    Some(self.epoch),
+                )
+                .expect(
+                    "All Namada validators should have an Ethereum governance \
+                     key",
+                );
+            let eth_addr_book = EthAddrBook {
+                hot_key_addr,
+                cold_key_addr,
+            };
+            (
+                eth_addr_book,
+                validator.address,
+                validator.bonded_stake.into(),
+            )
+        })
     }
 }
