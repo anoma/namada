@@ -2377,6 +2377,16 @@ pub async fn submit_pgf_receipients(
         serde_json::from_reader(file).expect("JSON was not well-formatted");
 
     let counsil_address = ctx.get(&address);
+    let active_counsil_address = rpc::pgf_counsil(&client).await;
+
+    if let Some(counsil) = active_counsil_address {
+        if !counsil.address.eq(&counsil_address) {
+            eprintln!("The selected counsil address doesn't corresponde with the active counsil address.");
+            safe_exit(1)
+        }
+    } else {
+        eprintln!("There is no active counsil yet.");
+    }
 
     let data = pgf_receipients
         .try_to_vec()
@@ -2589,6 +2599,45 @@ pub async fn submit_init_counsil(
         ledger_address: tx_args.ledger_address.clone(),
     })
     .await;
+
+    // Check that the address is established and exists on chain
+    match &counsil_address.clone() {
+        Address::Established(_) => {
+            let exists = rpc::known_address(
+                &counsil_address,
+                tx_args.ledger_address.clone(),
+            )
+            .await;
+            if !exists {
+                eprintln!(
+                    "The address {} doesn't exist on chain.",
+                    counsil_address.clone()
+                );
+                if !tx_args.force {
+                    safe_exit(1)
+                }
+            }
+        }
+        Address::Implicit(_) => {
+            eprintln!(
+                "A validity predicate of an implicit address cannot be \
+                directly updated. You can use an established address for \
+                this purpose."
+            );
+            if !tx_args.force {
+                safe_exit(1)
+            }
+        }
+        Address::Internal(_) => {
+            eprintln!(
+                "A validity predicate of an internal address cannot be \
+                directly updated."
+            );
+            if !tx_args.force {
+                safe_exit(1)
+            }
+        }
+    }
 
     let tx_code = ctx.read_wasm(TX_INIT_COUNSIL);
     let data = InitCounsil {
