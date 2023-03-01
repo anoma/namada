@@ -1658,7 +1658,7 @@ where
 pub fn vp_get_block_header<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     height: u64,
-) -> TxResult<i64>
+) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -1670,16 +1670,17 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
         .get_block_header(Some(BlockHeight(height)))
-        .map_err(TxRuntimeError::StorageError)?;
-    vp_host_fns::add_gas(gas_meter, gas);
+        .map_err(vp_host_fns::RuntimeError::StorageError)?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
     Ok(match header {
         Some(h) => {
-            let value =
-                h.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let value = h
+                .try_to_vec()
+                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
             let len: i64 = value
                 .len()
                 .try_into()
-                .map_err(TxRuntimeError::NumConversionError)?;
+                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
             len
