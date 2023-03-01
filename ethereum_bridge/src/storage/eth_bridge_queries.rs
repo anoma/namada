@@ -140,28 +140,6 @@ where
         }
     }
 
-    /// Fetch the first [`BlockHeight`] of the last [`Epoch`]
-    /// committed to storage.
-    #[inline]
-    pub fn get_epoch_start_height(self) -> BlockHeight {
-        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
-        // is 0, because of a bug (should be 1), so this code needs to
-        // handle that case
-        //
-        // we can remove this check once that's fixed
-        if self.wl_storage.storage.last_epoch.0 == 0 {
-            return BlockHeight(1);
-        }
-        self.wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights()
-            .last()
-            .copied()
-            .expect("The block height of the current epoch should be known")
-    }
-
     /// Get the latest nonce for the Ethereum bridge
     /// pool.
     pub fn get_bridge_pool_nonce(self) -> Uint {
