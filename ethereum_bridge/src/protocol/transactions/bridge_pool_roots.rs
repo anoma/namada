@@ -423,7 +423,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.voting_power())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -443,7 +442,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.voting_power())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -482,7 +480,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.seen())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -503,7 +500,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.seen())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -543,7 +539,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.seen_by())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -568,7 +563,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.seen_by())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -615,7 +609,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&bp_root_key.body())
                 .expect("Test failed")
-                .0
                 .expect("Test failed")
                 .as_slice(),
         )
@@ -641,7 +634,6 @@ mod test_apply_bp_roots_to_storage {
             wl_storage
                 .read_bytes(&get_signed_root_key())
                 .expect("Test failed")
-                .0
                 .is_none()
         );
 
@@ -684,7 +676,6 @@ mod test_apply_bp_roots_to_storage {
                 wl_storage
                     .read_bytes(&get_signed_root_key())
                     .expect("Test failed")
-                    .0
                     .expect("Test failed")
                     .as_slice(),
             )

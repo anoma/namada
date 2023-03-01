@@ -638,10 +638,12 @@ fn test_become_validator_aux(
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
-    let eth_hot_key =
-        key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to();
-    let eth_cold_key =
-        key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to();
+    let eth_hot_key = key::common::PublicKey::Secp256k1(
+        key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+    );
+    let eth_cold_key = key::common::PublicKey::Secp256k1(
+        key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+    );
     become_validator(BecomeValidator {
         storage: &mut s,
         params: &params,
@@ -829,14 +831,14 @@ fn test_validator_sets() {
                 address: val1.clone(),
                 tokens: stake1,
                 consensus_key: pk1.clone(),
-                eth_hot_key: key::testing::gen_keypair::<
-                    key::secp256k1::SigScheme,
-                >()
-                .ref_to(),
-                eth_cold_key: key::testing::gen_keypair::<
-                    key::secp256k1::SigScheme,
-                >()
-                .ref_to(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -844,14 +846,14 @@ fn test_validator_sets() {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2.clone(),
-                eth_hot_key: key::testing::gen_keypair::<
-                    key::secp256k1::SigScheme,
-                >()
-                .ref_to(),
-                eth_cold_key: key::testing::gen_keypair::<
-                    key::secp256k1::SigScheme,
-                >()
-                .ref_to(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -1462,6 +1464,14 @@ fn test_validator_sets_swap() {
                 address: val1,
                 tokens: stake1,
                 consensus_key: pk1,
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -1469,6 +1479,14 @@ fn test_validator_sets_swap() {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2,
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
                 commission_rate: Decimal::new(1, 1),
                 max_commission_rate_change: Decimal::new(1, 1),
             },
@@ -1602,12 +1620,14 @@ fn arb_genesis_validators(
                 let consensus_sk = common_sk_from_simple_seed(seed);
                 let consensus_key = consensus_sk.to_public();
 
-                let eth_hot_key =
+                let eth_hot_key = key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to();
-                let eth_cold_key =
+                        .ref_to(),
+                );
+                let eth_cold_key = key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to();
+                        .ref_to(),
+                );
 
                 let commission_rate = Decimal::new(5, 2);
                 let max_commission_rate_change = Decimal::new(1, 3);

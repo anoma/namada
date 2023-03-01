@@ -303,7 +303,7 @@ pub fn validator_slashes_handle(validator: &Address) -> Slashes {
 pub fn init_genesis<S>(
     storage: &mut S,
     params: &PosParams,
-    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    validators: impl Iterator<Item = GenesisValidator>,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where

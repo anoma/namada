@@ -10,6 +10,7 @@ use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
@@ -141,7 +142,7 @@ where
     // we arbitrarily look at whether the seen key is present to
     // determine if the /eth_msg already exists in storage, but maybe there
     // is a less arbitrary way to do this
-    let (exists_in_storage, _) = wl_storage.has_key(&eth_msg_keys.seen())?;
+    let exists_in_storage = wl_storage.has_key(&eth_msg_keys.seen())?;
 
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
@@ -184,7 +185,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let mut changed = ChangedKeys::new();
-    for keys in get_timed_out_eth_events(wl_storage) {
+    for keys in get_timed_out_eth_events(wl_storage)? {
         tracing::debug!(
             %keys.prefix,
             "Ethereum event timed out",
@@ -198,7 +199,7 @@ where
 
 fn get_timed_out_eth_events<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-) -> Vec<Keys<EthereumEvent>>
+) -> Result<Vec<Keys<EthereumEvent>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -206,7 +207,7 @@ where
     let unbonding_len = wl_storage.pos_queries().get_pos_params().unbonding_len;
     let current_epoch = wl_storage.storage.last_epoch;
     if current_epoch.0 <= unbonding_len {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     let timeout_epoch = Epoch(current_epoch.0 - unbonding_len);
@@ -215,7 +216,7 @@ where
     let mut is_timed_out = false;
     let mut is_seen = false;
     let mut results = Vec::new();
-    for (key, val, _) in votes::storage::iter_prefix(wl_storage, &prefix) {
+    for (key, val, _) in votes::storage::iter_prefix(wl_storage, &prefix)? {
         let key = Key::parse(key).expect("The key should be parsable");
         if let Some(keys) = vote_tallies::eth_event_keys(&key) {
             match &cur_keys {
@@ -254,7 +255,7 @@ where
         }
     }
 
-    results
+    Ok(results)
 }
 
 #[cfg(test)]
@@ -263,7 +264,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -304,10 +305,11 @@ mod tests {
             (sole_validator.clone(), BlockHeight(100)),
             FractionalVotingPower::new(1, 1).unwrap(),
         )]);
-        let mut storage = TestStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
 
-        let changed_keys = apply_updates(&mut storage, updates, voting_powers)?;
+        let changed_keys =
+            apply_updates(&mut wl_storage, updates, voting_powers)?;
 
         let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
         let wrapped_erc20_keys: wrapped_erc20s::Keys = (&asset).into();
@@ -324,40 +326,40 @@ mod tests {
             changed_keys
         );
 
-        let (body_bytes, _) = storage.read(&eth_msg_keys.body())?;
+        let body_bytes = wl_storage.read_bytes(&eth_msg_keys.body())?;
         let body_bytes = body_bytes.unwrap();
         assert_eq!(EthereumEvent::try_from_slice(&body_bytes)?, body);
 
-        let (seen_bytes, _) = storage.read(&eth_msg_keys.seen())?;
+        let seen_bytes = wl_storage.read_bytes(&eth_msg_keys.seen())?;
         let seen_bytes = seen_bytes.unwrap();
         assert!(bool::try_from_slice(&seen_bytes)?);
 
-        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Votes::try_from_slice(&seen_by_bytes)?,
             Votes::from([(sole_validator, BlockHeight(100))])
         );
 
-        let (voting_power_bytes, _) =
-            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 1));
 
-        let (epoch_bytes, _) = storage.read(&eth_msg_keys.epoch())?;
+        let epoch_bytes = wl_storage.read_bytes(&eth_msg_keys.epoch())?;
         let epoch_bytes = epoch_bytes.unwrap();
         assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
 
-        let (wrapped_erc20_balance_bytes, _) =
-            storage.read(&wrapped_erc20_keys.balance(&receiver))?;
+        let wrapped_erc20_balance_bytes =
+            wl_storage.read_bytes(&wrapped_erc20_keys.balance(&receiver))?;
         let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
             amount
         );
 
-        let (wrapped_erc20_supply_bytes, _) =
-            storage.read(&wrapped_erc20_keys.supply())?;
+        let wrapped_erc20_supply_bytes =
+            wl_storage.read_bytes(&wrapped_erc20_keys.supply())?;
         let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
         assert_eq!(
             Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
@@ -373,10 +375,10 @@ mod tests {
     /// that it is recorded in storage
     fn test_apply_derived_tx_new_event_mint_immediately() {
         let sole_validator = address::testing::established_address_2();
-        let (mut storage, _) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![(sole_validator.clone(), 100_u64.into())]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -389,7 +391,7 @@ mod tests {
         };
 
         let result = apply_derived_tx(
-            &mut storage,
+            &mut wl_storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
                 signers: BTreeSet::from([(sole_validator, BlockHeight(100))]),
@@ -432,13 +434,13 @@ mod tests {
     fn test_apply_derived_tx_new_event_dont_mint() {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let (mut storage, _) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), 100_u64.into()),
                 (validator_b, 100_u64.into()),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -451,7 +453,7 @@ mod tests {
         };
 
         let result = apply_derived_tx(
-            &mut storage,
+            &mut wl_storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
                 signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
@@ -485,7 +487,7 @@ mod tests {
     pub fn test_apply_derived_tx_duplicates() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let (mut storage, _) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), 100_u64.into()),
                 (validator_b, 100_u64.into()),
@@ -509,7 +511,7 @@ mod tests {
 
         let multisigneds = vec![multisigned.clone(), multisigned];
 
-        let result = apply_derived_tx(&mut storage, multisigneds);
+        let result = apply_derived_tx(&mut wl_storage, multisigneds);
         let tx_result = match result {
             Ok(tx_result) => tx_result,
             Err(err) => panic!("unexpected error: {:#?}", err),
@@ -528,15 +530,15 @@ mod tests {
             "One vote for the Ethereum event should have been recorded",
         );
 
-        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Votes::try_from_slice(&seen_by_bytes)?,
             Votes::from([(validator_a, BlockHeight(100))])
         );
 
-        let (voting_power_bytes, _) =
-            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
 
@@ -605,13 +607,13 @@ mod tests {
     pub fn test_timeout_events() {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let (mut storage, _) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), 100_u64.into()),
                 (validator_b, 100_u64.into()),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut storage);
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -623,7 +625,7 @@ mod tests {
             }],
         };
         let _result = apply_derived_tx(
-            &mut storage,
+            &mut wl_storage,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
                 signers: BTreeSet::from([(
@@ -635,10 +637,14 @@ mod tests {
         let prev_keys = vote_tallies::Keys::from(&event);
 
         // commit then update the epoch
-        storage.commit().unwrap();
-        let unbonding_len = storage.read_pos_params().unbonding_len + 1;
-        storage.last_epoch = storage.last_epoch + unbonding_len;
-        storage.block.epoch = storage.last_epoch + 1_u64;
+        wl_storage.storage.commit_block().unwrap();
+        let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
+            .expect("Test failed")
+            .unbonding_len
+            + 1;
+        wl_storage.storage.last_epoch =
+            wl_storage.storage.last_epoch + unbonding_len;
+        wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;
 
         let new_event = EthereumEvent::TransfersToNamada {
             nonce: 2.into(),
@@ -649,7 +655,7 @@ mod tests {
             }],
         };
         let result = apply_derived_tx(
-            &mut storage,
+            &mut wl_storage,
             vec![MultiSignedEthEvent {
                 event: new_event.clone(),
                 signers: BTreeSet::from([(validator_a, BlockHeight(100))]),
@@ -678,7 +684,7 @@ mod tests {
             "New event should be inserted and the previous one should be \
              deleted",
         );
-        assert!(storage.read(&prev_keys.body()).unwrap().0.is_none());
-        assert!(storage.read(&new_keys.body()).unwrap().0.is_some());
+        assert!(wl_storage.read_bytes(&prev_keys.body()).unwrap().is_none());
+        assert!(wl_storage.read_bytes(&new_keys.body()).unwrap().is_some());
     }
 }

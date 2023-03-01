@@ -165,7 +165,7 @@ where
                 .read_subspace_val_with_height(
                     &get_nonce_key(),
                     height,
-                    self.last_height,
+                    self.wl_storage.storage.last_height,
                 )
                 .expect("Reading signed Bridge pool nonce shouldn't fail.")
                 .expect("Reading signed Bridge pool nonce shouldn't fail."),
@@ -268,12 +268,13 @@ where
         validator: &Address,
         epoch: Option<Epoch>,
     ) -> Option<EthAddress> {
-        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         let params = self.wl_storage.pos_queries().get_pos_params();
         validator_eth_hot_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .expect("Should be able to read eth hot key from storage")
-            .and_then(|pk| pk.try_into().ok())
+            .and_then(|ref pk| pk.try_into().ok())
     }
 
     /// For a given Namada validator, return its corresponding Ethereum
@@ -284,12 +285,13 @@ where
         validator: &Address,
         epoch: Option<Epoch>,
     ) -> Option<EthAddress> {
-        let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         let params = self.wl_storage.pos_queries().get_pos_params();
         validator_eth_cold_key_handle(validator)
             .get(self.wl_storage, epoch, &params)
             .expect("Should be able to read eth cold key from storage")
-            .and_then(|pk| pk.try_into().ok())
+            .and_then(|ref pk| pk.try_into().ok())
     }
 
     /// For a given Namada validator, return its corresponding Ethereum
@@ -419,11 +421,7 @@ where
                 hot_key_addr,
                 cold_key_addr,
             };
-            (
-                eth_addr_book,
-                validator.address,
-                validator.bonded_stake.into(),
-            )
+            (eth_addr_book, validator.address, validator.bonded_stake)
         })
     }
 }

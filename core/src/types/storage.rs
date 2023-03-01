@@ -3,7 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
 use std::num::ParseIntError;
-use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Deref, Div, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
@@ -171,6 +171,18 @@ impl Add<u64> for BlockHeight {
 
     fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
+    }
+}
+
+impl AddAssign for BlockHeight {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl AddAssign<u64> for BlockHeight {
+    fn add_assign(&mut self, other: u64) {
+        self.0 += other;
     }
 }
 

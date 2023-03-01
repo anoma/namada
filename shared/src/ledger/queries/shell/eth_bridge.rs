@@ -528,7 +528,11 @@ mod test_ethbridge_router {
         test_utils::setup_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let validator_set = RPC
@@ -585,7 +589,11 @@ mod test_ethbridge_router {
         test_utils::setup_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let result = RPC
@@ -633,7 +641,11 @@ mod test_ethbridge_router {
         assert!(!tx_result.changed_keys.is_empty());
 
         // commit the changes
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let proof = RPC
@@ -670,7 +682,11 @@ mod test_ethbridge_router {
         test_utils::setup_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let result = RPC
@@ -717,7 +733,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.storage.block.height + 1;
 
@@ -759,7 +779,7 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
+        client.storage.commit_block().expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -771,15 +791,19 @@ mod test_ethbridge_router {
         let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -830,7 +854,11 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -857,7 +885,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -940,7 +972,11 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -965,7 +1001,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -1024,7 +1064,11 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -1049,7 +1093,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
         let resp = RPC
@@ -1121,7 +1169,11 @@ mod test_ethbridge_router {
             )
             .expect("Test failed");
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -1137,7 +1189,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
         let resp = RPC
@@ -1192,7 +1248,11 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
 
@@ -1217,7 +1277,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height =
             client.wl_storage.storage.block.height + 1;
         // this was in the pool, covered by an old signed Merkle root.

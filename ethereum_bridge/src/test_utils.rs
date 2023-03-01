@@ -7,11 +7,11 @@ use std::str::FromStr;
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
-use namada_core::ledger::storage_api::StorageWrite;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{self, protocol_pk_key, RefTo, SigScheme};
+use namada_core::types::key::{self, protocol_pk_key, RefTo};
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
@@ -40,11 +40,18 @@ impl TestValidatorKeys {
     #[inline]
     pub fn generate() -> Self {
         TestValidatorKeys {
-            consensus: key::testing::gen_keypair::<key::ed25519::SigScheme>(),
-            protocol: key::testing::gen_keypair::<key::ed25519::SigScheme>(),
-            eth_bridge: key::testing::gen_keypair::<key::secp256k1::SigScheme>(
+            consensus: key::common::SecretKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>(),
             ),
-            eth_gov: key::testing::gen_keypair::<key::secp256k1::SigScheme>(),
+            protocol: key::common::SecretKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>(),
+            ),
+            eth_bridge: key::common::SecretKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>(),
+            ),
+            eth_gov: key::common::SecretKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>(),
+            ),
         }
     }
 }
@@ -92,8 +99,8 @@ pub fn bootstrap_ethereum_bridge(
 
 /// Returns the number of keys in `storage` which have values present.
 pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
-    let root = Key::from_str("").unwrap();
-    wl_storage.iter_prefix(&root).count()
+    let root = Key::from_str("").expect("Test failed");
+    wl_storage.iter_prefix(&root).expect("Test failed").count()
 }
 
 /// Set up a [`TestWlStorage`] initialized at genesis with the given
@@ -117,10 +124,6 @@ pub fn setup_storage_with_validators(
         let consensus_key = keys.consensus.ref_to();
         let eth_cold_key = keys.eth_gov.ref_to();
         let eth_hot_key = keys.eth_bridge.ref_to();
-        let protocol_key = keys.protocol.ref_to();
-        wl_storage
-            .write(&protocol_pk_key(&address), protocol_key)
-            .expect("Test failed");
         all_keys.insert(address.clone(), keys);
         GenesisValidator {
             address,
@@ -141,6 +144,13 @@ pub fn setup_storage_with_validators(
     )
     .expect("Test failed");
 
+    for (validator, keys) in all_keys.iter() {
+        let protocol_key = keys.protocol.ref_to();
+        wl_storage
+            .write(&protocol_pk_key(validator), protocol_key)
+            .expect("Test failed");
+    }
+
     (wl_storage, all_keys)
 }
 
@@ -148,7 +158,7 @@ pub fn setup_storage_with_validators(
 /// to storage.
 ///
 /// N.B. assumes the bridge pool is empty.
-pub fn commit_bridge_pool_root_at_height<D, H>(
+pub fn commit_bridge_pool_root_at_height(
     storage: &mut TestStorage,
     root: &KeccakHash,
     height: BlockHeight,
@@ -160,6 +170,6 @@ pub fn commit_bridge_pool_root_at_height<D, H>(
         .update(&get_key_from_hash(root), value)
         .unwrap();
     storage.block.height = height;
-    storage.commit().unwrap();
+    storage.commit_block().unwrap();
     storage.block.tree.delete(&get_key_from_hash(root)).unwrap();
 }

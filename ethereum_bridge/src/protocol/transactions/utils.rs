@@ -126,7 +126,7 @@ pub(super) fn get_voting_powers_for_selected(
                 Ok((
                     (addr, height),
                     FractionalVotingPower::new(
-                        individual_voting_power,
+                        individual_voting_power.into(),
                         total_voting_power.into(),
                     )?,
                 ))
@@ -150,7 +150,7 @@ pub(super) fn sum_voting_powers(
 ) -> token::Amount {
     validators
         .iter()
-        .map(|validator| validator.bonded_stake)
+        .map(|validator| u64::from(validator.bonded_stake))
         .sum::<u64>()
         .into()
 }
