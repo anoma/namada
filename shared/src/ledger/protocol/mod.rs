@@ -15,7 +15,7 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
@@ -66,17 +66,26 @@ pub enum Error {
     AccessForbidden(InternalAddress),
 }
 
-#[allow(missing_docs)]
-pub struct ShellParams<'a, D, H, CA>
+/// Shell parameters for running wasm transactions.
+pub enum ShellParams<'a, D, H, CA>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    pub block_gas_meter: &'a mut BlockGasMeter,
-    pub wl_storage: &'a WlStorage<D, H>,
-    pub vp_wasm_cache: &'a mut VpCache<CA>,
-    pub tx_wasm_cache: &'a mut TxCache<CA>,
+    /// Parameters passed to dry ran txs.
+    DryRun {
+        storage: &'a Storage<D, H>,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
+    /// Parameters passed to mutating tx executions.
+    Mutating {
+        block_gas_meter: &'a mut BlockGasMeter,
+        wl_storage: &'a mut WlStorage<D, H>,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
 }
 
 /// Result of applying a transaction
@@ -114,12 +123,14 @@ where
             tx,
             tx_length,
             &tx_index,
-            ShellParams {
+            ShellParams::Mutating {
                 block_gas_meter,
                 wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
             },
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         ),
         TxType::Protocol(ProtocolTx { tx, .. }) => {
             apply_protocol_tx(tx, wl_storage)
@@ -143,12 +154,8 @@ pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
     tx: Tx,
     tx_length: usize,
     tx_index: &TxIndex,
-    ShellParams {
-        block_gas_meter,
-        wl_storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
-    }: ShellParams<'a, D, H, CA>,
+    shell_params: ShellParams<'a, D, H, CA>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -175,6 +182,8 @@ where
         block_gas_meter,
         &verifiers,
         vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
     )?;
 
     let gas_used = block_gas_meter
@@ -287,8 +296,8 @@ where
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
-        wl_storage,
-        &wl_storage.write_log,
+        &wl_storage.storage,
+        &mut wl_storage.write_log,
         gas_meter,
         tx_index,
         &tx.code,
@@ -330,7 +339,6 @@ where
         tx,
         tx_index,
         wl_storage,
-        &wl_storage.write_log,
         initial_gas,
         vp_wasm_cache,
         #[cfg(not(feature = "mainnet"))]

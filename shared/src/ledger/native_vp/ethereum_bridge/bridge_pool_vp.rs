@@ -136,7 +136,7 @@ where
                 let debit = transfer
                     .gas_fee
                     .amount
-                    .checked_add(&transfer.transfer.amount)
+                    .checked_add(transfer.transfer.amount)
                     .ok_or_else(|| {
                         Error(eyre!(
                             "Addition oveflowed adding gas fee + transfer \

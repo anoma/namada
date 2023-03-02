@@ -270,7 +270,7 @@ where
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
                 match ctx.wl_storage.read_bytes(&key) {
-                    Ok((Some(bytes), _)) => Some((key, bytes)),
+                    Ok(Some(bytes)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
                         None
@@ -376,7 +376,6 @@ where
                 &ctx.wl_storage
                     .read_bytes(&key)
                     .into_storage_result()?
-                    .0
                     .expect(
                         "Iterating over storage should not yield keys without \
                          values.",
