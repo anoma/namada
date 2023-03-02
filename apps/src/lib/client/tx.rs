@@ -153,7 +153,10 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     .await;
 }
 
-pub async fn submit_update_vp(mut ctx: Context, args: args::TxUpdateVp) {
+pub async fn submit_update_account(
+    mut ctx: Context,
+    args: args::TxUpdateAccount,
+) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let addr = ctx.get(&args.addr);
