@@ -270,7 +270,7 @@ impl AbciService {
                 }
                 (
                     true,
-                    Some(Box::pin(
+                    Some(
                         async move {
                             shutdown_recv.recv().await.unwrap();
                             Err(BoxError::from(
@@ -280,7 +280,7 @@ impl AbciService {
                             ))
                         }
                         .boxed(),
-                    )),
+                    ),
                 )
             }
             Some(Action::Halt(height)) if height == hght => {
@@ -290,7 +290,7 @@ impl AbciService {
                 );
                 (
                     false,
-                    Some(Box::pin(
+                    Some(
                         async move {
                             Err(BoxError::from(format!(
                                 "Reached block height {}, halting the chain.",
@@ -298,7 +298,7 @@ impl AbciService {
                             )))
                         }
                         .boxed(),
-                    )),
+                    ),
                 )
             }
             _ => (false, None),
@@ -310,22 +310,21 @@ impl AbciService {
     fn forward_request(&mut self, req: Req) -> <Self as Service<Req>>::Future {
         let (resp_send, recv) = tokio::sync::oneshot::channel();
         let result = self.shell_send.send((req, resp_send));
-        Box::pin(
-            async move {
-                if let Err(err) = result {
-                    // The shell has shut-down
-                    return Err(err.into());
-                }
-                match recv.await {
-                    Ok(resp) => resp,
-                    Err(err) => {
-                        tracing::info!("ABCI response channel didn't respond");
-                        Err(err.into())
-                    }
+
+        async move {
+            if let Err(err) = result {
+                // The shell has shut-down
+                return Err(err.into());
+            }
+            match recv.await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    tracing::info!("ABCI response channel didn't respond");
+                    Err(err.into())
                 }
             }
-            .boxed(),
-        )
+        }
+        .boxed()
     }
 
     /// Given the type of request, determine if we need to check
