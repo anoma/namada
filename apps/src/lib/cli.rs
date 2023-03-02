@@ -47,7 +47,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateVp(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -62,7 +62,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateVp::def())
+                .subcommand(TxUpdateAccount::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
                 .subcommand(TxRevealPk::def())
@@ -154,7 +154,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
-                .subcommand(TxUpdateVp::def().display_order(1))
+                .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
@@ -196,7 +196,7 @@ pub mod cmds {
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
+            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
@@ -307,7 +307,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
@@ -1099,24 +1099,24 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp);
+    pub struct TxUpdateAccount(pub args::TxUpdateAccount);
 
-    impl SubCmd for TxUpdateVp {
-        const CMD: &'static str = "update";
+    impl SubCmd for TxUpdateAccount {
+        const CMD: &'static str = "update-account";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdateVp(args::TxUpdateVp::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateAccount(args::TxUpdateAccount::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to update account's validity \
-                     predicate.",
+                    "Send a signed transaction to update an account \
+                     substorage.",
                 )
-                .add_args::<args::TxUpdateVp>()
+                .add_args::<args::TxUpdateAccount>()
         }
     }
 
@@ -2353,7 +2353,7 @@ pub mod args {
 
     /// Transaction to update a VP arguments
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp {
+    pub struct TxUpdateAccount {
         /// Common tx arguments
         pub tx: Tx,
         /// Path to the VP WASM code file
@@ -2366,7 +2366,7 @@ pub mod args {
         pub addr: WalletAddress,
     }
 
-    impl Args for TxUpdateVp {
+    impl Args for TxUpdateAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
