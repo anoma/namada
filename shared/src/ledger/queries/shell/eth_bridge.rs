@@ -106,7 +106,7 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    let Some(contract) = StorageRead::read(ctx.storage, key)? else {
+    let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
         return Err(storage_api::Error::SimpleMessage(
             "Failed to read contract: The Ethereum bridge \
              storage is not initialized",
@@ -164,7 +164,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(read_ethereum_bridge_pool_at_height(
-        ctx.storage.last_height,
+        ctx.wl_storage.storage.last_height,
         ctx,
     ))
 }
@@ -180,7 +180,8 @@ where
 {
     // get the latest signed merkle root of the Ethereum bridge pool
     let (_, height) = ctx
-        .storage
+        .wl_storage
+        .ethbridge_queries()
         .get_signed_bridge_pool_root()
         .ok_or(storage_api::Error::SimpleMessage(
             "No signed root for the Ethereum bridge pool exists in storage.",
@@ -201,6 +202,7 @@ where
     // get the backing store of the merkle tree corresponding
     // at the specified height.
     let stores = ctx
+        .wl_storage
         .storage
         .db
         .read_merkle_tree_stores(height)
@@ -216,13 +218,10 @@ where
     let transfers: Vec<PendingTransfer> = store
         .keys()
         .map(|hash| {
-            let res = ctx
-                .storage
+            ctx.wl_storage
                 .read(&get_key_from_hash(hash))
                 .unwrap()
-                .0
-                .unwrap();
-            BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
+                .unwrap()
         })
         .collect();
     transfers
@@ -243,7 +242,8 @@ where
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .get_signed_bridge_pool_root()
             .ok_or(storage_api::Error::SimpleMessage(
                 "No signed root for the Ethereum bridge pool exists in \
@@ -253,7 +253,8 @@ where
 
         // get the merkle tree corresponding to the above root.
         let tree = MerkleTree::<H>::new(
-            ctx.storage
+            ctx.wl_storage
+                .storage
                 .db
                 .read_merkle_tree_stores(height)
                 .expect("We should always be able to read the database")
@@ -268,7 +269,7 @@ where
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
-                match ctx.storage.read(&key) {
+                match ctx.wl_storage.read_bytes(&key) {
                     Ok((Some(bytes), _)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
@@ -301,8 +302,10 @@ where
             values.iter().map(|v| v.as_slice()).collect(),
         ) {
             Ok(BridgePool(proof)) => {
-                let (validator_args, voting_powers) =
-                    ctx.storage.get_validator_set_args(None);
+                let (validator_args, voting_powers) = ctx
+                    .wl_storage
+                    .ethbridge_queries()
+                    .get_validator_set_args(None);
                 let data = RelayProof {
                     validator_set_args: validator_args.into(),
                     signatures: sort_sigs(
@@ -346,9 +349,8 @@ where
 {
     let mut pending_events = HashMap::new();
     for (mut key, value) in ctx
-        .storage
-        .iter_prefix(&eth_msgs_prefix())
-        .0
+        .wl_storage
+        .iter_prefix(&eth_msgs_prefix())?
         .filter_map(|(k, v, _)| {
             let key = Key::from_str(&k).expect(
                 "Iterating over keys from storage shouldn't not yield \
@@ -371,10 +373,14 @@ where
             *key.segments.last_mut().unwrap() =
                 DbKeySeg::StringSeg(VOTING_POWER_KEY_SEGMENT.into());
             let voting_power = <(u64, u64)>::try_from_slice(
-                &ctx.storage.read(&key).into_storage_result()?.0.expect(
-                    "Iterating over storage should not yield keys without \
-                     values.",
-                ),
+                &ctx.wl_storage
+                    .read_bytes(&key)
+                    .into_storage_result()?
+                    .0
+                    .expect(
+                        "Iterating over storage should not yield keys without \
+                         values.",
+                    ),
             )
             .unwrap();
             let voting_power =
@@ -410,7 +416,7 @@ where
                 .into(),
         )));
     }
-    let current_epoch = ctx.storage.last_epoch;
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
         return Err(storage_api::Error::Custom(CustomError(
             format!(
@@ -423,7 +429,7 @@ where
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
 
-    let seen = StorageRead::read(ctx.storage, &valset_upd_keys.seen())?
+    let seen = StorageRead::read(ctx.wl_storage, &valset_upd_keys.seen())?
         .unwrap_or(false);
     if !seen {
         return Err(storage_api::Error::Custom(CustomError(
@@ -436,7 +442,7 @@ where
     }
 
     let proof: EthereumProof<VotingPowersMap> =
-        StorageRead::read(ctx.storage, &valset_upd_keys.body())?.expect(
+        StorageRead::read(ctx.wl_storage, &valset_upd_keys.body())?.expect(
             "EthereumProof is seen in storage, therefore it must exist",
         );
 
@@ -456,7 +462,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.storage.last_epoch;
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
         Err(storage_api::Error::Custom(CustomError(
             format!(
@@ -466,7 +472,12 @@ where
             .into(),
         )))
     } else {
-        Ok(ctx.storage.get_validator_set_args(Some(epoch)).0.encode())
+        Ok(ctx
+            .wl_storage
+            .ethbridge_queries()
+            .get_validator_set_args(Some(epoch))
+            .0
+            .encode())
     }
 }
 
@@ -480,8 +491,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = ctx.storage.get_epoch(height);
-    let (_, voting_powers) = ctx.storage.get_validator_set_args(epoch);
+    let epoch = ctx.wl_storage.pos_queries().get_epoch(height);
+    let (_, voting_powers) = ctx
+        .wl_storage
+        .ethbridge_queries()
+        .get_validator_set_args(epoch);
     Ok(voting_powers)
 }
 
@@ -1327,18 +1341,11 @@ mod test_ethbridge_router {
     }
 }
 
-// temporary home for test utils lol.
-// this code is borrowed from the `ethereum_bridge` crate.
 #[cfg(any(feature = "testing", test))]
 #[allow(dead_code)]
 mod test_utils {
-    use std::collections::HashMap;
-
-    use borsh::BorshSerialize;
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::types::address::{self, Address};
-    use namada_core::types::key::{self, protocol_pk_key, RefTo, SigScheme};
-    use namada_core::types::token;
+    use namada_core::types::address::Address;
+    pub use namada_ethereum_bridge::test_utils::*;
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {
@@ -1346,97 +1353,5 @@ mod test_utils {
             "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw",
         )
         .expect("The token address decoding shouldn't fail")
-    }
-
-    /// Validator keys used for testing purposes.
-    pub struct TestValidatorKeys {
-        /// Consensus keypair.
-        pub consensus: key::common::SecretKey,
-        /// Protocol keypair.
-        pub protocol: key::common::SecretKey,
-        /// Ethereum hot keypair.
-        pub eth_bridge: key::common::SecretKey,
-        /// Ethereum cold keypair.
-        pub eth_gov: key::common::SecretKey,
-    }
-
-    impl TestValidatorKeys {
-        /// Generate a new test wallet.
-        #[inline]
-        pub fn generate() -> Self {
-            TestValidatorKeys {
-                consensus: key::testing::gen_keypair::<key::ed25519::SigScheme>(
-                ),
-                protocol: key::testing::gen_keypair::<key::ed25519::SigScheme>(
-                ),
-                eth_bridge: key::testing::gen_keypair::<
-                    key::secp256k1::SigScheme,
-                >(),
-                eth_gov: key::testing::gen_keypair::<key::secp256k1::SigScheme>(
-                ),
-            }
-        }
-    }
-
-    /// Set up a [`TestWlStorage`] initialized at genesis with a single
-    /// validator.
-    ///
-    /// The validator's address is [`address::testing::established_address_1`].
-    #[inline]
-    pub fn setup_default_storage()
-    -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
-        setup_storage_with_validators(HashMap::from_iter([(
-            address::testing::established_address_1(),
-            100_u64.into(),
-        )]))
-    }
-
-    /// Set up a [`TestWlStorage`] initialized at genesis with the given
-    /// validators.
-    pub fn setup_storage_with_validators(
-        active_validators: HashMap<Address, token::Amount>,
-    ) -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
-        // set last height to a reasonable value;
-        // it should allow vote extensions to be cast
-        let mut wl_storage = TestWlStorage {
-            storage: TestStorage {
-                last_height: 3.into(),
-                ..TestStorage::default()
-            },
-            ..TestWlStorage::default()
-        };
-
-        let mut all_keys = HashMap::new();
-        let validators =
-            active_validators.into_iter().map(|(address, tokens)| {
-                let keys = TestValidatorKeys::generate();
-                let consensus_key = keys.consensus.ref_to();
-                let eth_cold_key = keys.eth_gov.ref_to();
-                let eth_hot_key = keys.eth_bridge.ref_to();
-                let protocol_key = keys.protocol.ref_to();
-                wl_storage
-                    .write(&protocol_pk_key(&address), protocol_key)
-                    .expect("Test failed");
-                all_keys.insert(address.clone(), keys);
-                namada_proof_of_stake::types::GenesisValidator {
-                    address,
-                    tokens,
-                    consensus_key,
-                    eth_cold_key,
-                    eth_hot_key,
-                    commission_rate: dec!(0.05),
-                    max_commission_rate_change: dec!(0.01),
-                }
-            });
-
-        namada_proof_of_stake::init_genesis(
-            &mut wl_storage,
-            &PosParams::default(),
-            validators,
-            0.into(),
-        )
-        .expect("Test failed");
-
-        (wl_storage, all_keys)
     }
 }
