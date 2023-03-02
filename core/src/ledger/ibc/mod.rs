@@ -14,17 +14,21 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use prost::Message;
 use thiserror::Error;
 
+use crate::ibc::applications::transfer::denom::TracePrefix;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
 };
+use crate::ibc::applications::transfer::packet::PacketData;
 use crate::ibc::applications::transfer::relay::send_transfer::{
     send_transfer_execute, send_transfer_validate,
 };
 use crate::ibc::core::context::Router;
+use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
+use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
 use crate::ibc::core::{execute, validate};
 use crate::ibc_proto::google::protobuf::Any;
 
@@ -43,6 +47,8 @@ pub enum Error {
     TokenTransfer(TokenTransferError),
     #[error("IBC module doesn't exist")]
     NoModule,
+    #[error("Denom error: {0}")]
+    Denom(String),
 }
 
 /// IBC actions to handle IBC operations
@@ -110,10 +116,44 @@ where
                 }
             }
             _ => {
-                execute(self, msg).map_err(Error::Execution)?;
-                // TODO store the denom when MsgRecvPacket
-                Ok(())
+                execute(self, msg.clone()).map_err(Error::Execution)?;
+                // the current ibc-rs execution doesn't store the denom for the
+                // token hash when transfer with MsgRecvPacket
+                self.store_denom(msg)
             }
+        }
+    }
+
+    /// Store the denom when transfer with MsgRecvPacket
+    fn store_denom(&mut self, msg: Any) -> Result<(), Error> {
+        let envelope = MsgEnvelope::try_from(msg).map_err(|e| {
+            Error::Denom(format!("Decoding the message failed: {}", e))
+        })?;
+        match envelope {
+            MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+                let data = match serde_json::from_slice::<PacketData>(
+                    &msg.packet.data,
+                ) {
+                    Ok(data) => data,
+                    // not token transfer data
+                    Err(_) => return Ok(()),
+                };
+                let prefix = TracePrefix::new(
+                    msg.packet.port_on_b.clone(),
+                    msg.packet.chan_on_b.clone(),
+                );
+                let mut coin = data.token;
+                coin.denom.add_trace_prefix(prefix);
+                let trace_hash = storage::calc_hash(coin.denom.to_string());
+                self.ctx
+                    .borrow_mut()
+                    .store_denom(trace_hash, coin.denom)
+                    .map_err(|e| {
+                        Error::Denom(format!("Write the denom failed: {}", e))
+                    })
+            }
+            // other messages
+            _ => Ok(()),
         }
     }
 

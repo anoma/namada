@@ -4,6 +4,7 @@ use prost::Message;
 use sha2::Digest;
 
 use super::storage::IbcStorageContext;
+use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics02_client::client_state::ClientState;
@@ -353,5 +354,20 @@ pub trait IbcCommonContext: IbcStorageContext {
                     },
                 ))
             })
+    }
+
+    /// Write the denom
+    fn store_denom(
+        &mut self,
+        trace_hash: String,
+        denom: PrefixedDenom,
+    ) -> Result<(), ContextError> {
+        let key = storage::ibc_denom_key(trace_hash);
+        let bytes = denom.to_string().as_bytes().to_vec();
+        self.write(&key, bytes).map_err(|_| {
+            ContextError::ChannelError(ChannelError::Other {
+                description: format!("Writing the denom failed: Key {}", key),
+            })
+        })
     }
 }

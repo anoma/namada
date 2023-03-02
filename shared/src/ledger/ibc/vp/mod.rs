@@ -113,8 +113,9 @@ where
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
         let mut actions = IbcActions::new(ctx.clone());
-        let module = TransferModule::new(ctx.clone());
-        actions.add_route(module.module_id(), module);
+        // TODO 'static issue
+        // let module = TransferModule::new(ctx.clone());
+        // actions.add_route(module.module_id(), module);
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -183,8 +184,9 @@ where
         let ctx = Rc::new(RefCell::new(validation_ctx));
 
         let mut actions = IbcActions::new(ctx.clone());
-        let module = TransferModule::new(ctx);
-        actions.add_route(module.module_id(), module);
+        // TODO 'static issue
+        // let module = TransferModule::new(ctx);
+        // actions.add_route(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 }
@@ -346,7 +348,6 @@ where
             .map_err(Error::NativeVpError)
     }
 
-    /// Get the chain ID
     fn get_chain_id(&self) -> Result<String, Self::Error> {
         self.ctx.get_chain_id().map_err(Error::NativeVpError)
     }
@@ -412,7 +413,6 @@ where
         self.ctx.iter_prefix(prefix).map_err(Error::NativeVpError)
     }
 
-    /// next key value pair
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
@@ -428,7 +428,6 @@ where
         unimplemented!("Validation doesn't delete any data")
     }
 
-    /// Emit an IBC event
     fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't emit an event")
     }
