@@ -230,15 +230,12 @@ impl EthereumBridgeConfig {
 }
 
 /// Get the Ethereum address for wNam from storage, if possible
-pub fn read_native_erc20_address<DB, H>(
-    wl_storage: &WlStorage<DB, H>,
-) -> Result<EthAddress>
+pub fn read_native_erc20_address<S>(storage: &S) -> Result<EthAddress>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::traits::StorageHasher,
+    S: StorageRead,
 {
     let native_erc20 = bridge_storage::native_erc20_key();
-    match StorageRead::read(wl_storage, &native_erc20) {
+    match StorageRead::read(storage, &native_erc20) {
         Ok(Some(eth_address)) => Ok(eth_address),
         Ok(None) => {
             Err(eyre!("The Ethereum bridge storage is not initialized"))

@@ -172,7 +172,7 @@ mod tests {
         let sole_validator = address::testing::established_address_1();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: sole_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![(
@@ -206,7 +206,7 @@ mod tests {
         let missing_validator = address::testing::established_address_2();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_present_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: present_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -248,11 +248,11 @@ mod tests {
         let bonded_stake_1 = token::Amount::from(100);
         let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            bonded_stake: bonded_stake_1.into(),
+            bonded_stake: bonded_stake_1,
             address: validator_1.clone(),
         };
         let weighted_validator_2 = WeightedValidator {
-            bonded_stake: bonded_stake_2.into(),
+            bonded_stake: bonded_stake_2,
             address: validator_2.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -292,7 +292,7 @@ mod tests {
         let sole_validator = address::testing::established_address_1();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: sole_validator,
         };
         let validators = BTreeSet::from_iter(vec![weighted_sole_validator]);
@@ -311,11 +311,11 @@ mod tests {
         let bonded_stake_1 = token::Amount::from(100);
         let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            bonded_stake: bonded_stake_1.into(),
+            bonded_stake: bonded_stake_1,
             address: validator_1,
         };
         let weighted_validator_2 = WeightedValidator {
-            bonded_stake: bonded_stake_2.into(),
+            bonded_stake: bonded_stake_2,
             address: validator_2,
         };
         let validators = BTreeSet::from_iter(vec![

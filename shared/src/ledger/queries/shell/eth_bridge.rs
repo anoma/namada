@@ -536,10 +536,10 @@ mod test_ethbridge_router {
     async fn test_read_active_valset() {
         let mut client = TestClient::new(RPC);
         let epoch = Epoch(0);
-        assert_eq!(client.storage.last_epoch, epoch);
+        assert_eq!(client.wl_storage.storage.last_epoch, epoch);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
         client
@@ -600,7 +600,7 @@ mod test_ethbridge_router {
         assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
         client
@@ -633,7 +633,7 @@ mod test_ethbridge_router {
         assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        let keys = test_utils::setup_default_storage(&mut client.wl_storage);
+        let keys = test_utils::init_default_storage(&mut client.wl_storage);
 
         // write proof to storage
         let vext = validator_set_update::Vext {
@@ -693,7 +693,7 @@ mod test_ethbridge_router {
         assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
         client
@@ -752,8 +752,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // check the response
         let pool = RPC
@@ -794,8 +793,7 @@ mod test_ethbridge_router {
 
         // commit the changes and increase block height
         client.storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         client
@@ -850,7 +848,7 @@ mod test_ethbridge_router {
         };
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
@@ -968,7 +966,7 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
@@ -1060,7 +1058,7 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
@@ -1141,7 +1139,7 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
@@ -1232,7 +1230,7 @@ mod test_ethbridge_router {
     async fn test_cannot_get_proof_for_removed_transfer() {
         let mut client = TestClient::new(RPC);
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),

@@ -63,10 +63,26 @@ impl TestValidatorKeys {
 #[inline]
 pub fn setup_default_storage()
 -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
-    setup_storage_with_validators(HashMap::from_iter([(
-        address::testing::established_address_1(),
-        100_u64.into(),
-    )]))
+    let mut wl_storage = TestWlStorage::default();
+    let all_keys = init_default_storage(&mut wl_storage);
+    (wl_storage, all_keys)
+}
+
+/// Set up a [`TestWlStorage`] initialized at genesis with a single
+/// validator.
+///
+/// The validator's address is [`address::testing::established_address_1`].
+#[inline]
+pub fn init_default_storage(
+    wl_storage: &mut TestWlStorage,
+) -> HashMap<Address, TestValidatorKeys> {
+    init_storage_with_validators(
+        wl_storage,
+        HashMap::from_iter([(
+            address::testing::established_address_1(),
+            100_u64.into(),
+        )]),
+    )
 }
 
 /// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestWlStorage`], and
@@ -108,15 +124,21 @@ pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
 pub fn setup_storage_with_validators(
     active_validators: HashMap<Address, token::Amount>,
 ) -> (TestWlStorage, HashMap<Address, TestValidatorKeys>) {
+    let mut wl_storage = TestWlStorage::default();
+    let all_keys =
+        init_storage_with_validators(&mut wl_storage, active_validators);
+    (wl_storage, all_keys)
+}
+
+/// Set up a [`TestWlStorage`] initialized at genesis with the given
+/// validators.
+pub fn init_storage_with_validators(
+    wl_storage: &mut TestWlStorage,
+    active_validators: HashMap<Address, token::Amount>,
+) -> HashMap<Address, TestValidatorKeys> {
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
-    let mut wl_storage = TestWlStorage {
-        storage: TestStorage {
-            last_height: 3.into(),
-            ..TestStorage::default()
-        },
-        ..TestWlStorage::default()
-    };
+    wl_storage.storage.last_height = 3.into();
 
     let mut all_keys = HashMap::new();
     let validators = active_validators.into_iter().map(|(address, tokens)| {
@@ -137,7 +159,7 @@ pub fn setup_storage_with_validators(
     });
 
     namada_proof_of_stake::init_genesis(
-        &mut wl_storage,
+        wl_storage,
         &PosParams::default(),
         validators,
         0.into(),
@@ -151,7 +173,7 @@ pub fn setup_storage_with_validators(
             .expect("Test failed");
     }
 
-    (wl_storage, all_keys)
+    all_keys
 }
 
 /// Commit a bridge pool root at a given height
