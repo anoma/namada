@@ -50,8 +50,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
         code: impl AsRef<[u8]>,
     ) -> Result<(), storage_api::Error>;
 
-    /// Emit an IBC event. There can be only one event per transaction. On
-    /// multiple calls, only the last emitted event will be used.
+    /// Emit an IBC event. On multiple calls, these emitted event will be added.
     fn emit_ibc_event(
         &mut self,
         event: &IbcEvent,

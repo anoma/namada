@@ -68,8 +68,8 @@ pub struct WriteLog {
     block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
-    /// The IBC event for the current transaction
-    ibc_event: Option<IbcEvent>,
+    /// The IBC events for the current transaction
+    ibc_events: Vec<IbcEvent>,
 }
 
 /// Write log prefix iterator
@@ -94,7 +94,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
-            ibc_event: None,
+            ibc_events: Vec::new(),
         }
     }
 }
@@ -329,12 +329,12 @@ impl WriteLog {
     }
 
     /// Set an IBC event and return the gas cost.
-    pub fn set_ibc_event(&mut self, event: IbcEvent) -> u64 {
+    pub fn emit_ibc_event(&mut self, event: IbcEvent) -> u64 {
         let len = event
             .attributes
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        self.ibc_event = Some(event);
+        self.ibc_events.push(event);
         len as _
     }
 
@@ -381,13 +381,13 @@ impl WriteLog {
     }
 
     /// Take the IBC event of the current transaction
-    pub fn take_ibc_event(&mut self) -> Option<IbcEvent> {
-        self.ibc_event.take()
+    pub fn take_ibc_events(&mut self) -> Vec<IbcEvent> {
+        std::mem::replace(&mut self.ibc_events, Vec::new())
     }
 
     /// Get the IBC event of the current transaction
-    pub fn get_ibc_event(&self) -> Option<&IbcEvent> {
-        self.ibc_event.as_ref()
+    pub fn get_ibc_events(&self) -> &Vec<IbcEvent> {
+        self.ibc_events.as_ref()
     }
 
     /// Commit the current transaction's write log to the block when it's
@@ -402,7 +402,7 @@ impl WriteLog {
             HashMap::with_capacity(100),
         );
         self.block_write_log.extend(tx_write_log);
-        self.take_ibc_event();
+        self.take_ibc_events();
     }
 
     /// Drop the current transaction's write log when it's declined by any of

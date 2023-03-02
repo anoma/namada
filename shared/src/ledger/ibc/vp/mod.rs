@@ -167,8 +167,8 @@ where
         }
 
         // check the event
-        let actual = self.ctx.write_log.get_ibc_event().cloned();
-        if actual != ctx.borrow().event {
+        let actual = self.ctx.write_log.get_ibc_events();
+        if *actual != ctx.borrow().event {
             return Err(Error::IbcEvent(format!(
                 "The IBC event is invalid: Actual {:?}, Expected {:?}",
                 actual,
@@ -203,7 +203,7 @@ where
     /// Context to read the previous value
     ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
     /// IBC event
-    event: Option<IbcEvent>,
+    event: Vec<IbcEvent>,
 }
 
 impl<'view, 'a, DB, H, CA> PseudoExecutionContext<'view, 'a, DB, H, CA>
@@ -216,7 +216,7 @@ where
         Self {
             store: HashMap::new(),
             ctx,
-            event: None,
+            event: Vec::new(),
         }
     }
 
@@ -283,7 +283,7 @@ where
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
-        self.event = Some(event);
+        self.event.push(event);
         Ok(())
     }
 
@@ -788,7 +788,7 @@ mod tests {
             .expect("write failed");
 
         let event = make_create_client_event(&get_client_id(), &msg);
-        write_log.set_ibc_event(event.try_into().unwrap());
+        write_log.emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -900,7 +900,7 @@ mod tests {
         let event = make_update_client_event(&client_id, &msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
         // update time and height for this updating
         let key = client_update_timestamp_key(&client_id);
         wl_storage
@@ -978,7 +978,7 @@ mod tests {
         let event = make_open_init_connection_event(&conn_id, &msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1124,7 +1124,7 @@ mod tests {
         let event = make_open_try_connection_event(&conn_id, &msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1224,7 +1224,7 @@ mod tests {
         let event = make_open_ack_connection_event(&msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
@@ -1307,7 +1307,7 @@ mod tests {
         let event = make_open_confirm_connection_event(&msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
@@ -1375,7 +1375,7 @@ mod tests {
         let event = make_open_init_channel_event(&get_channel_id(), &msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1463,7 +1463,7 @@ mod tests {
         let event = make_open_try_channel_event(&get_channel_id(), &msg);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1562,7 +1562,7 @@ mod tests {
             make_open_ack_channel_event(&msg, &channel).expect("no connection");
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1658,7 +1658,7 @@ mod tests {
             .expect("no connection");
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2125,7 +2125,7 @@ mod tests {
         let event = make_send_packet_event(packet);
         wl_storage
             .write_log
-            .set_ibc_event(event.try_into().unwrap());
+            .emit_ibc_event(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];

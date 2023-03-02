@@ -984,7 +984,7 @@ where
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    let gas = write_log.set_ibc_event(event);
+    let gas = write_log.emit_ibc_event(event);
     tx_add_gas(env, gas)
 }
 
