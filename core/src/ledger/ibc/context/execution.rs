@@ -1,6 +1,6 @@
 //! ExecutionContext implementation for IBC
 
-use super::super::{IbcActions, IbcStorageContext};
+use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::client_type::ClientType;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
@@ -26,11 +26,10 @@ use crate::ibc::Height;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
 use crate::tendermint_proto::Protobuf as TmProtobuf;
-use crate::types::storage::Key;
 
 impl<C> ExecutionContext for IbcActions<'_, C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     fn store_client_type(
         &mut self,
@@ -213,7 +212,8 @@ where
 
     fn increase_connection_counter(&mut self) {
         let key = storage::connection_counter_key();
-        self.increase_counter(&key)
+        self.ctx
+            .increase_counter(&key)
             .expect("Error cannot be returned");
     }
 
@@ -222,20 +222,7 @@ where
         path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        let path = Path::Commitment(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = commitment.into_vec();
-        self.ctx.write(&key, bytes).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Writing the packet commitment failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
+        self.ctx.store_packet_commitment(&path, commitment)
     }
 
     fn delete_packet_commitment(
@@ -343,10 +330,7 @@ where
         path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let path = Path::SeqSend(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.store_sequence(&key, seq)
+        self.ctx.store_next_sequence_send(path, seq)
     }
 
     fn store_next_sequence_recv(
@@ -357,7 +341,7 @@ where
         let path = Path::SeqRecv(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.store_sequence(&key, seq)
+        self.ctx.store_sequence(&key, seq)
     }
 
     fn store_next_sequence_ack(
@@ -368,12 +352,13 @@ where
         let path = Path::SeqAck(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.store_sequence(&key, seq)
+        self.ctx.store_sequence(&key, seq)
     }
 
     fn increase_channel_counter(&mut self) {
         let key = storage::channel_counter_key();
-        self.increase_counter(&key)
+        self.ctx
+            .increase_counter(&key)
             .expect("Error cannot be returned");
     }
 
@@ -386,44 +371,5 @@ where
 
     fn log_message(&mut self, message: String) {
         self.ctx.log_string(message)
-    }
-}
-
-/// Helper functions
-impl<C> IbcActions<'_, C>
-where
-    C: IbcStorageContext,
-{
-    fn increase_counter(&mut self, key: &Key) -> Result<(), ContextError> {
-        let count = self.read_counter(key)?;
-        self.ctx
-            .write(&key, (count + 1).to_be_bytes().to_vec())
-            .map_err(|_| {
-                ContextError::ClientError(ClientError::Other {
-                    description: format!(
-                        "Writing the counter failed: Key {}",
-                        key
-                    ),
-                })
-            })
-    }
-
-    fn store_sequence(
-        &mut self,
-        key: &Key,
-        sequence: Sequence,
-    ) -> Result<(), ContextError> {
-        self.ctx
-            .write(&key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
-            .map_err(|_| {
-                ContextError::PacketError(PacketError::Channel(
-                    ChannelError::Other {
-                        description: format!(
-                            "Writing the counter failed: Key {}",
-                            key
-                        ),
-                    },
-                ))
-            })
     }
 }

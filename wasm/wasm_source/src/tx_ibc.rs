@@ -11,9 +11,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         .wrap_err("failed to decode SignedTxData")?;
     let data = signed.data.ok_or_err_msg("Missing data")?;
 
-    let actions = ibc_actions(ctx);
-    let module = transfer_module(&mut actions);
-    add_transfer_module(actions, module);
+    // ibc-rs `Module` requires `static ctx. It is enough for The ctx to live at
+    // least in `actions.execution()`.
+    // https://github.com/cosmos/ibc-rs/issues/490
+    let mut module_ctx = ctx.clone();
+    let ref_mut_ctx = unsafe {
+        core::mem::transmute::<&mut Ctx, &'static mut Ctx>(&mut module_ctx)
+    };
+    let module = IbcTransferModule::new(ref_mut_ctx);
 
-    actions.execute(&data)
+    let mut actions = IbcActions::new(ctx);
+    actions.add_route(module.module_id(), module);
+
+    actions.execute(&data).into_storage_result()
 }

@@ -1,7 +1,9 @@
 //! IBC lower-level functions for transactions.
 
-pub use namada_core::ledger::ibc::{Error, IbcActions, IbcStorageContext};
-use namada_core::ledger::ibc::{ProofSpec, TransferModule};
+pub use namada_core::ledger::ibc::{
+    Error, IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec,
+    TransferModule,
+};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::types::ibc::IbcEvent;
@@ -89,24 +91,4 @@ impl IbcStorageContext for Ctx {
     }
 }
 
-pub fn ibc_actions(ctx: &'static mut Ctx) -> IbcActions<Ctx> {
-    IbcActions::new(ctx)
-}
-
-pub fn transfer_module<C>(
-    actions: &'static mut IbcActions<C>,
-) -> TransferModule<C>
-where
-    C: IbcStorageContext + 'static,
-{
-    TransferModule::new(actions)
-}
-
-pub fn add_transfer_module<C>(
-    actions: &'static mut IbcActions<C>,
-    module: TransferModule<C>,
-) where
-    C: IbcStorageContext + std::fmt::Debug + 'static,
-{
-    actions.add_route(module.module_id(), module);
-}
+impl IbcCommonContext for Ctx {}

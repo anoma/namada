@@ -3,9 +3,8 @@
 use core::str::FromStr;
 
 use prost::Message;
-use sha2::Digest;
 
-use super::super::{IbcActions, IbcStorageContext};
+use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics02_client::client_state::{
@@ -31,10 +30,6 @@ use crate::ibc::core::ics24_host::path::{
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::{ContextError, ValidationContext};
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::client_state::MockClientState;
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc::timestamp::Timestamp;
 use crate::ibc::Height;
 use crate::ibc_proto::google::protobuf::Any;
@@ -50,81 +45,27 @@ const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 impl<C> ValidationContext for IbcActions<'_, C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     fn client_state(
         &self,
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        let key = storage::client_state_key(&client_id);
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                let any = Any::decode(&value[..]).map_err(|e| {
-                    ContextError::ClientError(ClientError::Decode(e))
-                })?;
-                self.decode_client_state(any)
-            }
-            Ok(None) => {
-                Err(ContextError::ClientError(ClientError::ClientNotFound {
-                    client_id: client_id.clone(),
-                }))
-            }
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Reading the client state failed: ID {}",
-                    client_id,
-                ),
-            })),
-        }
+        self.ctx.client_state(client_id)
     }
 
     fn decode_client_state(
         &self,
         client_state: Any,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        if let Ok(cs) = TmClientState::try_from(client_state.clone()) {
-            return Ok(cs.into_box());
-        }
-
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockClientState::try_from(client_state) {
-            return Ok(cs.into_box());
-        }
-
-        Err(ContextError::ClientError(ClientError::ClientSpecific {
-            description: format!("Unknown client state"),
-        }))
+        self.ctx.decode_client_state(client_state)
     }
 
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        let path = Path::ClientConsensusState(client_cons_state_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                let any = Any::decode(&value[..]).map_err(|e| {
-                    ContextError::ClientError(ClientError::Decode(e))
-                })?;
-                decode_consensus_state(any)
-            }
-            Ok(None) => {
-                let client_id = storage::client_id(&key).expect("invalid key");
-                let height =
-                    storage::consensus_height(&key).expect("invalid key");
-                Err(ContextError::ClientError(
-                    ClientError::ConsensusStateNotFound { client_id, height },
-                ))
-            }
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Reading the consensus state failed: Key {}",
-                    key,
-                ),
-            })),
-        }
+        self.ctx.consensus_state(client_cons_state_path)
     }
 
     fn next_consensus_state(
@@ -170,7 +111,7 @@ where
                 let any = Any::decode(&value[..]).map_err(|e| {
                     ContextError::ClientError(ClientError::Decode(e))
                 })?;
-                let cs = decode_consensus_state(any)?;
+                let cs = self.ctx.decode_consensus_state(any)?;
                 Ok(Some(cs))
             }
             None => Ok(None),
@@ -220,7 +161,7 @@ where
                 let any = Any::decode(&value[..]).map_err(|e| {
                     ContextError::ClientError(ClientError::Decode(e))
                 })?;
-                let cs = decode_consensus_state(any)?;
+                let cs = self.ctx.decode_consensus_state(any)?;
                 Ok(Some(cs))
             }
             None => Ok(None),
@@ -298,40 +239,14 @@ where
 
     fn client_counter(&self) -> Result<u64, ContextError> {
         let key = storage::client_counter_key();
-        self.read_counter(&key)
+        self.ctx.read_counter(&key)
     }
 
-    /// Returns the ConnectionEnd for the given identifier `conn_id`.
     fn connection_end(
         &self,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
-        let key = storage::connection_key(&connection_id);
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                ConnectionEnd::decode_vec(&value).map_err(|_| {
-                    ContextError::ConnectionError(ConnectionError::Other {
-                        description: format!(
-                            "Decoding the connection end failed: ID {}",
-                            connection_id,
-                        ),
-                    })
-                })
-            }
-            Ok(None) => Err(ContextError::ConnectionError(
-                ConnectionError::ConnectionNotFound {
-                    connection_id: connection_id.clone(),
-                },
-            )),
-            Err(_) => {
-                Err(ContextError::ConnectionError(ConnectionError::Other {
-                    description: format!(
-                        "Reading the connection end failed: ID {}",
-                        connection_id,
-                    ),
-                }))
-            }
-        }
+        self.ctx.connection_end(connection_id)
     }
 
     fn validate_self_client(
@@ -423,40 +338,14 @@ where
 
     fn connection_counter(&self) -> Result<u64, ContextError> {
         let key = storage::connection_counter_key();
-        self.read_counter(&key)
+        self.ctx.read_counter(&key)
     }
 
     fn channel_end(
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        let path = Path::ChannelEnd(channel_end_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => ChannelEnd::decode_vec(&value).map_err(|_| {
-                ContextError::ChannelError(ChannelError::Other {
-                    description: format!(
-                        "Decoding the channel end failed: Key {}",
-                        key,
-                    ),
-                })
-            }),
-            Ok(None) => {
-                let port_channel_id =
-                    storage::port_channel_id(&key).expect("invalid key");
-                Err(ContextError::ChannelError(ChannelError::ChannelNotFound {
-                    channel_id: port_channel_id.channel_id,
-                    port_id: port_channel_id.port_id,
-                }))
-            }
-            Err(_) => Err(ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Reading the channel end failed: Key {}",
-                    key,
-                ),
-            })),
-        }
+        self.ctx.channel_end(channel_end_path)
     }
 
     fn connection_channels(
@@ -494,10 +383,7 @@ where
         &self,
         path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        let path = Path::SeqSend(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.read_sequence(&key)
+        self.ctx.get_next_sequence_send(path)
     }
 
     fn get_next_sequence_recv(
@@ -507,7 +393,7 @@ where
         let path = Path::SeqRecv(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.read_sequence(&key)
+        self.ctx.read_sequence(&key)
     }
 
     fn get_next_sequence_ack(
@@ -517,7 +403,7 @@ where
         let path = Path::SeqAck(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.read_sequence(&key)
+        self.ctx.read_sequence(&key)
     }
 
     fn get_packet_commitment(
@@ -611,7 +497,7 @@ where
     }
 
     fn hash(&self, value: &[u8]) -> Vec<u8> {
-        sha2::Sha256::digest(&value).to_vec()
+        self.ctx.hash(value)
     }
 
     fn client_update_time(
@@ -683,7 +569,7 @@ where
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
         let key = storage::channel_counter_key();
-        self.read_counter(&key)
+        self.ctx.read_counter(&key)
     }
 
     fn max_expected_time_per_block(&self) -> core::time::Duration {
@@ -697,81 +583,6 @@ where
             _ => unreachable!("The parameter should be initialized"),
         }
     }
-}
-
-/// Helper functions
-impl<C> IbcActions<'_, C>
-where
-    C: IbcStorageContext,
-{
-    /// Read a counter
-    pub fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                let value: [u8; 8] = value.try_into().map_err(|_| {
-                    ContextError::ClientError(ClientError::Other {
-                        description: format!(
-                            "The counter value wasn't u64: Key {}",
-                            key
-                        ),
-                    })
-                })?;
-                Ok(u64::from_be_bytes(value))
-            }
-            Ok(None) => unreachable!("the counter should be initialized"),
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
-                description: format!("Reading the counter failed: Key {}", key),
-            })),
-        }
-    }
-
-    /// Read a sequence
-    pub fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                let value: [u8; 8] = value.try_into().map_err(|_| {
-                    ContextError::ChannelError(ChannelError::Other {
-                        description: format!(
-                            "The counter value wasn't u64: Key {}",
-                            key
-                        ),
-                    })
-                })?;
-                Ok(u64::from_be_bytes(value).into())
-            }
-            // when the sequence has never been used, returns the initial value
-            Ok(None) => Ok(1.into()),
-            Err(_) => {
-                let sequence = storage::port_channel_sequence_id(&key)
-                    .expect("The key should have sequence")
-                    .2;
-                Err(ContextError::ChannelError(ChannelError::Other {
-                    description: format!(
-                        "Reading the next sequence send failed: Sequence {}",
-                        sequence
-                    ),
-                }))
-            }
-        }
-    }
-}
-
-/// Decode ConsensusState from Any
-pub fn decode_consensus_state(
-    consensus_state: Any,
-) -> Result<Box<dyn ConsensusState>, ContextError> {
-    if let Ok(cs) = TmConsensusState::try_from(consensus_state.clone()) {
-        return Ok(cs.into_box());
-    }
-
-    #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-    if let Ok(cs) = MockConsensusState::try_from(consensus_state) {
-        return Ok(cs.into_box());
-    }
-
-    Err(ContextError::ClientError(ClientError::ClientSpecific {
-        description: format!("Unknown consensus state"),
-    }))
 }
 
 /// Parse a port/channel list, e.g. "my-port/channel-0,my-port/channel-1"

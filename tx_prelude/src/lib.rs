@@ -37,7 +37,7 @@ pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 
-pub use crate::ibc::IbcActions;
+pub use crate::ibc::{IbcActions, TransferModule as IbcTransferModule};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
@@ -72,7 +72,7 @@ macro_rules! debug_log {
 }
 
 /// Execution context provides access to the host environment functions
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ctx(());
 
 impl Ctx {

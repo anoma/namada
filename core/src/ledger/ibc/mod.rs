@@ -6,6 +6,7 @@ pub mod storage;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+pub use context::common::IbcCommonContext;
 pub use context::storage::{IbcStorageContext, ProofSpec};
 pub use context::transfer_mod::TransferModule;
 use prost::Message;
@@ -40,7 +41,7 @@ pub enum Error {
 #[derive(Debug)]
 pub struct IbcActions<'a, C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     ctx: &'a mut C,
     modules: HashMap<ModuleId, Box<dyn Module>>,
@@ -49,7 +50,7 @@ where
 
 impl<'a, C> IbcActions<'a, C>
 where
-    C: IbcStorageContext + Debug,
+    C: IbcCommonContext + Debug,
 {
     /// Make new IBC actions
     pub fn new(ctx: &'a mut C) -> Self {

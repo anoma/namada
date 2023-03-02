@@ -8,7 +8,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{
-    Error as ActionError, IbcActions, IbcStorageContext, ProofSpec,
+    Error as ActionError, IbcActions, IbcCommonContext, IbcStorageContext,
+    ProofSpec,
 };
 use namada_core::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada_core::ledger::storage::write_log::StorageModification;
@@ -346,6 +347,15 @@ where
     }
 }
 
+impl<'a, 'c, DB, H, CA> IbcCommonContext
+    for PseudoExecutionContext<'a, 'c, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+}
+
 #[derive(Debug)]
 struct IbcVpContext<'view, 'a, DB, H, CA>
 where
@@ -446,6 +456,15 @@ where
     fn log_string(&self, message: String) {
         tracing::debug!("{} for validation in IBC VP", message);
     }
+}
+
+impl<'view, 'a, DB, H, CA> IbcCommonContext
+    for IbcVpContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
 }
 
 impl From<ActionError> for Error {

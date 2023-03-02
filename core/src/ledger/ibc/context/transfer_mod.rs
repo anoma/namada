@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use super::super::{IbcActions, IbcStorageContext};
+use super::common::IbcCommonContext;
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
 use crate::ibc::applications::transfer::context::{
     on_acknowledgement_packet, on_acknowledgement_packet_execute,
@@ -44,7 +44,7 @@ use crate::ibc::core::ics24_host::path::{
 use crate::ibc::core::ics26_routing::context::{
     Module, ModuleId, ModuleOutputBuilder,
 };
-use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
+use crate::ibc::core::ContextError;
 use crate::ibc::signer::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
@@ -54,18 +54,18 @@ use crate::types::token;
 #[derive(Debug)]
 pub struct TransferModule<C>
 where
-    C: IbcStorageContext + 'static,
+    C: IbcCommonContext + 'static,
 {
     /// IBC actions
-    pub ctx: &'static mut IbcActions<'static, C>,
+    pub ctx: &'static mut C,
 }
 
 impl<C> TransferModule<C>
 where
-    C: IbcStorageContext + 'static,
+    C: IbcCommonContext + 'static,
 {
     /// Make a new module
-    pub fn new(ctx: &'static mut IbcActions<'static, C>) -> Self {
+    pub fn new(ctx: &'static mut C) -> Self {
         Self { ctx }
     }
 
@@ -77,7 +77,7 @@ where
 
 impl<C> Module for TransferModule<C>
 where
-    C: IbcStorageContext + Debug + 'static,
+    C: IbcCommonContext + Debug + 'static,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(
@@ -429,51 +429,51 @@ where
 
 impl<C> SendPacketReader for TransferModule<C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     fn channel_end(
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        ValidationContext::channel_end(self.ctx, channel_end_path)
+        self.ctx.channel_end(channel_end_path)
     }
 
     fn connection_end(
         &self,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
-        ValidationContext::connection_end(self.ctx, connection_id)
+        self.ctx.connection_end(connection_id)
     }
 
     fn client_state(
         &self,
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        ValidationContext::client_state(self.ctx, client_id)
+        self.ctx.client_state(client_id)
     }
 
     fn client_consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        ValidationContext::consensus_state(self.ctx, client_cons_state_path)
+        self.ctx.consensus_state(client_cons_state_path)
     }
 
     fn get_next_sequence_send(
         &self,
         seq_send_path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        ValidationContext::get_next_sequence_send(self.ctx, seq_send_path)
+        self.ctx.get_next_sequence_send(seq_send_path)
     }
 
     fn hash(&self, value: &[u8]) -> Vec<u8> {
-        ValidationContext::hash(self.ctx, value)
+        self.ctx.hash(value)
     }
 }
 
 impl<C> TokenTransferReader for TransferModule<C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     type AccountId = Address;
 
@@ -504,7 +504,7 @@ where
 
 impl<C> BankKeeper for TransferModule<C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     type AccountId = Address;
 
@@ -545,19 +545,16 @@ where
 
         let dest = token::balance_key(&token, to);
 
-        self.ctx
-            .ctx
-            .transfer_token(&src, &dest, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
-                        ),
-                    },
-                ))
-            })
+        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
+            TokenTransferError::ContextError(ContextError::ChannelError(
+                ChannelError::Other {
+                    description: format!(
+                        "Sending a coin failed: from {}, to {}, amount {}",
+                        src, dest, amount
+                    ),
+                },
+            ))
+        })
     }
 
     fn mint_coins(
@@ -594,19 +591,16 @@ where
             token::multitoken_balance_key(&prefix, account)
         };
 
-        self.ctx
-            .ctx
-            .transfer_token(&src, &dest, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
-                        ),
-                    },
-                ))
-            })
+        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
+            TokenTransferError::ContextError(ContextError::ChannelError(
+                ChannelError::Other {
+                    description: format!(
+                        "Sending a coin failed: from {}, to {}, amount {}",
+                        src, dest, amount
+                    ),
+                },
+            ))
+        })
     }
 
     fn burn_coins(
@@ -643,25 +637,22 @@ where
             &Address::Internal(InternalAddress::IbcBurn),
         );
 
-        self.ctx
-            .ctx
-            .transfer_token(&src, &dest, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
-                        ),
-                    },
-                ))
-            })
+        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
+            TokenTransferError::ContextError(ContextError::ChannelError(
+                ChannelError::Other {
+                    description: format!(
+                        "Sending a coin failed: from {}, to {}, amount {}",
+                        src, dest, amount
+                    ),
+                },
+            ))
+        })
     }
 }
 
 impl<C> TokenTransferKeeper for TransferModule<C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     fn store_packet_commitment(
         &mut self,
@@ -691,7 +682,7 @@ where
 
 impl<C> TokenTransferContext for TransferModule<C>
 where
-    C: IbcStorageContext,
+    C: IbcCommonContext,
 {
     type AccountId = Address;
 }
