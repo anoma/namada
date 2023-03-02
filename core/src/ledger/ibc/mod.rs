@@ -3,12 +3,14 @@
 mod context;
 pub mod storage;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 pub use context::common::IbcCommonContext;
 pub use context::storage::{IbcStorageContext, ProofSpec};
-pub use context::transfer_mod::TransferModule;
+pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use prost::Message;
 use thiserror::Error;
 
@@ -16,6 +18,10 @@ use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
 };
+use crate::ibc::applications::transfer::relay::send_transfer::{
+    send_transfer_execute, send_transfer_validate,
+};
+use crate::ibc::core::context::Router;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
@@ -35,25 +41,27 @@ pub enum Error {
     Execution(RouterError),
     #[error("IBC token transfer error: {0}")]
     TokenTransfer(TokenTransferError),
+    #[error("IBC module doesn't exist")]
+    NoModule,
 }
 
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcActions<'a, C>
+pub struct IbcActions<C>
 where
     C: IbcCommonContext,
 {
-    ctx: &'a mut C,
-    modules: HashMap<ModuleId, Box<dyn Module>>,
+    ctx: Rc<RefCell<C>>,
+    modules: HashMap<ModuleId, Rc<dyn ModuleWrapper>>,
     ports: HashMap<PortId, ModuleId>,
 }
 
-impl<'a, C> IbcActions<'a, C>
+impl<C> IbcActions<C>
 where
     C: IbcCommonContext + Debug,
 {
     /// Make new IBC actions
-    pub fn new(ctx: &'a mut C) -> Self {
+    pub fn new(ctx: Rc<RefCell<C>>) -> Self {
         Self {
             ctx,
             modules: HashMap::new(),
@@ -62,10 +70,26 @@ where
     }
 
     /// Add a route to IBC actions
-    pub fn add_route(&mut self, module_id: ModuleId, module: impl Module) {
-        self.modules
-            .insert(module_id.clone(), Box::new(module) as Box<dyn Module>);
+    pub fn add_route(
+        &mut self,
+        module_id: ModuleId,
+        module: impl ModuleWrapper,
+    ) {
+        self.modules.insert(module_id.clone(), Rc::new(module));
         self.ports.insert(PortId::transfer(), module_id);
+    }
+
+    fn get_route_by_port(&self, port_id: &PortId) -> Option<&dyn Module> {
+        self.lookup_module_by_port(&port_id)
+            .and_then(|id| self.get_route(&id))
+    }
+
+    fn get_route_mut_by_port(
+        &mut self,
+        port_id: &PortId,
+    ) -> Option<&mut dyn Module> {
+        self.lookup_module_by_port(&port_id)
+            .and_then(|id| self.get_route_mut(&id))
     }
 
     /// Execute according to the message in an IBC transaction or VP
@@ -73,13 +97,23 @@ where
         let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
-                let _msg =
+                let msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
-                // TODO: call send_transfer(...)
-                // TODO: write results and emit the event
+                let port_id = msg.port_on_a.clone();
+                match self.get_route_mut_by_port(&port_id) {
+                    Some(_module) => {
+                        let mut module = TransferModule::new(self.ctx.clone());
+                        send_transfer_execute(&mut module, msg)
+                            .map_err(Error::TokenTransfer)
+                    }
+                    None => Err(Error::NoModule),
+                }
+            }
+            _ => {
+                execute(self, msg).map_err(Error::Execution)?;
+                // TODO store the denom when MsgRecvPacket
                 Ok(())
             }
-            _ => execute(self, msg).map_err(Error::Execution),
         }
     }
 
@@ -88,10 +122,17 @@ where
         let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
-                let _msg =
+                let msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
-                // TODO: validate transfer and a sent packet
-                Ok(())
+                let port_id = msg.port_on_a.clone();
+                match self.get_route_by_port(&port_id) {
+                    Some(_module) => {
+                        let module = TransferModule::new(self.ctx.clone());
+                        send_transfer_validate(&module, msg)
+                            .map_err(Error::TokenTransfer)
+                    }
+                    None => Err(Error::NoModule),
+                }
             }
             _ => validate(self, msg).map_err(Error::Execution),
         }

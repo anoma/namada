@@ -1,6 +1,8 @@
 //! IBC module for token transfer
 
+use std::cell::RefCell;
 use std::fmt::Debug;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use super::common::IbcCommonContext;
@@ -51,28 +53,50 @@ use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
 
+/// IBC module wrapper for getting the reference of the module
+pub trait ModuleWrapper: Module {
+    /// Reference of the module
+    fn as_module(&self) -> &dyn Module;
+
+    /// Mutable reference of the module
+    fn as_module_mut(&mut self) -> &mut dyn Module;
+}
+
 /// IBC module for token transfer
 #[derive(Debug)]
 pub struct TransferModule<C>
 where
-    C: IbcCommonContext + 'static,
+    C: IbcCommonContext,
 {
     /// IBC actions
-    pub ctx: &'static mut C,
+    pub ctx: Rc<RefCell<C>>,
 }
 
 impl<C> TransferModule<C>
 where
-    C: IbcCommonContext + 'static,
+    C: IbcCommonContext,
 {
     /// Make a new module
-    pub fn new(ctx: &'static mut C) -> Self {
+    pub fn new(ctx: Rc<RefCell<C>>) -> Self {
         Self { ctx }
     }
 
     /// Get the module ID
     pub fn module_id(&self) -> ModuleId {
         ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+    }
+}
+
+impl<C> ModuleWrapper for TransferModule<C>
+where
+    C: IbcCommonContext + Debug + 'static,
+{
+    fn as_module(&self) -> &dyn Module {
+        self
+    }
+
+    fn as_module_mut(&mut self) -> &mut dyn Module {
+        self
     }
 }
 
@@ -319,39 +343,39 @@ where
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        self.ctx.channel_end(channel_end_path)
+        self.ctx.borrow().channel_end(channel_end_path)
     }
 
     fn connection_end(
         &self,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
-        self.ctx.connection_end(connection_id)
+        self.ctx.borrow().connection_end(connection_id)
     }
 
     fn client_state(
         &self,
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        self.ctx.client_state(client_id)
+        self.ctx.borrow().client_state(client_id)
     }
 
     fn client_consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        self.ctx.consensus_state(client_cons_state_path)
+        self.ctx.borrow().consensus_state(client_cons_state_path)
     }
 
     fn get_next_sequence_send(
         &self,
         seq_send_path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        self.ctx.get_next_sequence_send(seq_send_path)
+        self.ctx.borrow().get_next_sequence_send(seq_send_path)
     }
 
     fn hash(&self, value: &[u8]) -> Vec<u8> {
-        self.ctx.hash(value)
+        self.ctx.borrow().hash(value)
     }
 
     fn compute_packet_commitment(
@@ -360,7 +384,7 @@ where
         timeout_height: &TimeoutHeight,
         timeout_timestamp: &Timestamp,
     ) -> PacketCommitment {
-        self.ctx.compute_packet_commitment(
+        self.ctx.borrow().compute_packet_commitment(
             packet_data,
             timeout_height,
             timeout_timestamp,
@@ -440,16 +464,19 @@ where
 
         let dest = token::balance_key(&token, to);
 
-        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
-            TokenTransferError::ContextError(ContextError::ChannelError(
-                ChannelError::Other {
-                    description: format!(
-                        "Sending a coin failed: from {}, to {}, amount {}",
-                        src, dest, amount
-                    ),
-                },
-            ))
-        })
+        self.ctx
+            .borrow_mut()
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
     }
 
     fn mint_coins(
@@ -486,16 +513,19 @@ where
             token::multitoken_balance_key(&prefix, account)
         };
 
-        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
-            TokenTransferError::ContextError(ContextError::ChannelError(
-                ChannelError::Other {
-                    description: format!(
-                        "Sending a coin failed: from {}, to {}, amount {}",
-                        src, dest, amount
-                    ),
-                },
-            ))
-        })
+        self.ctx
+            .borrow_mut()
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
     }
 
     fn burn_coins(
@@ -532,16 +562,19 @@ where
             &Address::Internal(InternalAddress::IbcBurn),
         );
 
-        self.ctx.transfer_token(&src, &dest, amount).map_err(|_| {
-            TokenTransferError::ContextError(ContextError::ChannelError(
-                ChannelError::Other {
-                    description: format!(
-                        "Sending a coin failed: from {}, to {}, amount {}",
-                        src, dest, amount
-                    ),
-                },
-            ))
-        })
+        self.ctx
+            .borrow_mut()
+            .transfer_token(&src, &dest, amount)
+            .map_err(|_| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Sending a coin failed: from {}, to {}, amount {}",
+                            src, dest, amount
+                        ),
+                    },
+                ))
+            })
     }
 }
 
@@ -554,7 +587,9 @@ where
         seq_send_path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        self.ctx.store_next_sequence_send(&seq_send_path, seq)
+        self.ctx
+            .borrow_mut()
+            .store_next_sequence_send(&seq_send_path, seq)
     }
 
     fn store_packet_commitment(
@@ -563,18 +598,20 @@ where
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
         self.ctx
+            .borrow_mut()
             .store_packet_commitment(&commitment_path, commitment)
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) {
         let event = event.try_into().expect("IBC event conversion failed");
         self.ctx
+            .borrow_mut()
             .emit_ibc_event(event)
             .expect("Emitting an IBC event failed")
     }
 
     fn log_message(&mut self, message: String) {
-        self.ctx.log_string(message)
+        self.ctx.borrow_mut().log_string(message)
     }
 }
 

@@ -3,13 +3,15 @@
 mod denom;
 mod token;
 
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::ibc::storage::{is_ibc_denom_key, is_ibc_key};
 use namada_core::ledger::ibc::{
     Error as ActionError, IbcActions, IbcCommonContext, IbcStorageContext,
-    ProofSpec,
+    ProofSpec, TransferModule,
 };
 use namada_core::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada_core::ledger::storage::write_log::StorageModification;
@@ -107,17 +109,21 @@ where
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
-        let mut exec_ctx = PseudoExecutionContext::new(&self.ctx);
-        let mut actions = IbcActions::new(&mut exec_ctx);
+        let exec_ctx = PseudoExecutionContext::new(self.ctx.pre());
+        let ctx = Rc::new(RefCell::new(exec_ctx));
+
+        let mut actions = IbcActions::new(ctx.clone());
+        let module = TransferModule::new(ctx.clone());
+        actions.add_route(module.module_id(), module);
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
-        if changed_ibc_keys.len() != exec_ctx.get_changed_keys().len() {
+        if changed_ibc_keys.len() != ctx.borrow().get_changed_keys().len() {
             return Err(Error::StateChange(format!(
                 "The changed keys mismatched: Actual {:?}, Expected {:?}",
                 changed_ibc_keys,
-                exec_ctx.get_changed_keys(),
+                ctx.borrow().get_changed_keys(),
             )));
         }
 
@@ -127,7 +133,7 @@ where
                 .read_bytes_post(&key)
                 .map_err(Error::NativeVpError)?
             {
-                Some(v) => match exec_ctx.get_changed_value(&key) {
+                Some(v) => match ctx.borrow().get_changed_value(&key) {
                     Some(StorageModification::Write { value }) => {
                         if v != *value {
                             return Err(Error::StateChange(format!(
@@ -144,7 +150,7 @@ where
                     }
                 },
                 None => {
-                    match exec_ctx.get_changed_value(&key) {
+                    match ctx.borrow().get_changed_value(&key) {
                         Some(StorageModification::Delete) => {
                             // the key was deleted expectedly
                         }
@@ -161,10 +167,11 @@ where
 
         // check the event
         let actual = self.ctx.write_log.get_ibc_event().cloned();
-        if actual != exec_ctx.event {
+        if actual != ctx.borrow().event {
             return Err(Error::IbcEvent(format!(
                 "The IBC event is invalid: Actual {:?}, Expected {:?}",
-                actual, exec_ctx.event
+                actual,
+                ctx.borrow().event
             )));
         }
 
@@ -172,8 +179,12 @@ where
     }
 
     fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
-        let mut validation_ctx = IbcVpContext::new(&self.ctx);
-        let actions = IbcActions::new(&mut validation_ctx);
+        let validation_ctx = IbcVpContext::new(self.ctx.post());
+        let ctx = Rc::new(RefCell::new(validation_ctx));
+
+        let mut actions = IbcActions::new(ctx.clone());
+        let module = TransferModule::new(ctx);
+        actions.add_route(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 }
@@ -199,10 +210,10 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    pub fn new(ctx: &'view Ctx<'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
         Self {
             store: HashMap::new(),
-            ctx: ctx.pre(),
+            ctx,
             event: None,
         }
     }
@@ -216,8 +227,8 @@ where
     }
 }
 
-impl<'a, 'c, DB, H, CA> IbcStorageContext
-    for PseudoExecutionContext<'a, 'c, DB, H, CA>
+impl<'view, 'a, DB, H, CA> IbcStorageContext
+    for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -349,8 +360,8 @@ where
     }
 }
 
-impl<'a, 'c, DB, H, CA> IbcCommonContext
-    for PseudoExecutionContext<'a, 'c, DB, H, CA>
+impl<'view, 'a, DB, H, CA> IbcCommonContext
+    for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -375,8 +386,8 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    pub fn new(ctx: &'view Ctx<'a, DB, H, CA>) -> Self {
-        Self { ctx: ctx.post() }
+    pub fn new(ctx: CtxPostStorageRead<'view, 'a, DB, H, CA>) -> Self {
+        Self { ctx }
     }
 }
 

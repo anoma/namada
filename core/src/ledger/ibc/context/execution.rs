@@ -27,7 +27,7 @@ use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
 use crate::tendermint_proto::Protobuf as TmProtobuf;
 
-impl<C> ExecutionContext for IbcActions<'_, C>
+impl<C> ExecutionContext for IbcActions<C>
 where
     C: IbcCommonContext,
 {
@@ -40,7 +40,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = client_type.as_str().as_bytes().to_vec();
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the client state failed: Key {}",
@@ -59,7 +59,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = client_state.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the client state failed: Key {}",
@@ -80,7 +80,7 @@ where
         let bytes = consensus_state
             .encode_vec()
             .expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the consensus state failed: Key {}",
@@ -94,6 +94,7 @@ where
         let key = storage::client_counter_key();
         let count = self.client_counter().expect("read failed");
         self.ctx
+            .borrow_mut()
             .write(&key, count.to_be_bytes().to_vec())
             .expect("write failed");
     }
@@ -108,6 +109,7 @@ where
         match timestamp.into_tm_time() {
             Some(time) => self
                 .ctx
+                .borrow_mut()
                 .write(
                     &key,
                     time.encode_vec().expect("encoding shouldn't fail"),
@@ -137,7 +139,7 @@ where
     ) -> Result<(), ContextError> {
         let key = storage::client_update_height_key(&client_id);
         let bytes = host_height.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Writing the consensus state failed: Key {}",
@@ -158,7 +160,7 @@ where
         let bytes = connection_end
             .encode_vec()
             .expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(
                     "Writing the connection end failed: Key {}",
@@ -176,7 +178,7 @@ where
         let path = Path::ClientConnection(client_connection_path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let list = match self.ctx.read(&key) {
+        let list = match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => {
                 let list = String::from_utf8(value).map_err(|e| {
                     ContextError::ConnectionError(ConnectionError::Other {
@@ -200,7 +202,7 @@ where
             }
         };
         let bytes = list.as_bytes().to_vec();
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(
                     "Writing the list of connection IDs failed: Key {}",
@@ -213,6 +215,7 @@ where
     fn increase_connection_counter(&mut self) {
         let key = storage::connection_counter_key();
         self.ctx
+            .borrow_mut()
             .increase_counter(&key)
             .expect("Error cannot be returned");
     }
@@ -222,7 +225,9 @@ where
         path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        self.ctx.store_packet_commitment(&path, commitment)
+        self.ctx
+            .borrow_mut()
+            .store_packet_commitment(&path, commitment)
     }
 
     fn delete_packet_commitment(
@@ -232,7 +237,7 @@ where
         let path = Path::Commitment(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.delete(&key).map_err(|_| {
+        self.ctx.borrow_mut().delete(&key).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -254,7 +259,7 @@ where
             .expect("Creating a key for the client state shouldn't fail");
         // the value is the same as ibc-go
         let bytes = [1_u8].to_vec();
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -275,7 +280,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = ack_commitment.into_vec();
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -294,7 +299,7 @@ where
         let path = Path::Ack(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.delete(&key).map_err(|_| {
+        self.ctx.borrow_mut().delete(&key).map_err(|_| {
             ContextError::PacketError(PacketError::Channel(
                 ChannelError::Other {
                     description: format!(
@@ -315,7 +320,7 @@ where
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
         let bytes = channel_end.encode_vec().expect("encoding shouldn't fail");
-        self.ctx.write(&key, bytes).map_err(|_| {
+        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!(
                     "Writing the channel end failed: Key {}",
@@ -330,7 +335,7 @@ where
         path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        self.ctx.store_next_sequence_send(path, seq)
+        self.ctx.borrow_mut().store_next_sequence_send(path, seq)
     }
 
     fn store_next_sequence_recv(
@@ -341,7 +346,7 @@ where
         let path = Path::SeqRecv(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.store_sequence(&key, seq)
+        self.ctx.borrow_mut().store_sequence(&key, seq)
     }
 
     fn store_next_sequence_ack(
@@ -352,12 +357,13 @@ where
         let path = Path::SeqAck(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.store_sequence(&key, seq)
+        self.ctx.borrow_mut().store_sequence(&key, seq)
     }
 
     fn increase_channel_counter(&mut self) {
         let key = storage::channel_counter_key();
         self.ctx
+            .borrow_mut()
             .increase_counter(&key)
             .expect("Error cannot be returned");
     }
@@ -365,11 +371,12 @@ where
     fn emit_ibc_event(&mut self, event: IbcEvent) {
         let event = event.try_into().expect("The event should be converted");
         self.ctx
+            .borrow_mut()
             .emit_ibc_event(event)
             .expect("Emitting an event shouldn't fail");
     }
 
     fn log_message(&mut self, message: String) {
-        self.ctx.log_string(message)
+        self.ctx.borrow_mut().log_string(message)
     }
 }

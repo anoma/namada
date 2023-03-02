@@ -1,25 +1,28 @@
 //! Functions to handle IBC modules
 
-use core::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::core::context::Router;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 
-impl<C> Router for IbcActions<'_, C>
+impl<C> Router for IbcActions<C>
 where
     C: IbcCommonContext,
 {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
-        self.modules.get(module_id).map(|b| b.deref())
+        self.modules.get(module_id).map(|b| b.as_module())
     }
 
     fn get_route_mut(
         &mut self,
         module_id: &ModuleId,
     ) -> Option<&mut dyn Module> {
-        self.modules.get_mut(module_id).map(|b| b.deref_mut())
+        self.modules
+            .get_mut(module_id)
+            .and_then(Rc::get_mut)
+            .map(|b| b.as_module_mut())
     }
 
     fn has_route(&self, module_id: &ModuleId) -> bool {

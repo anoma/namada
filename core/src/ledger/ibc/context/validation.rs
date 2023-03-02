@@ -39,7 +39,7 @@ use crate::types::time::DurationSecs;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> ValidationContext for IbcActions<'_, C>
+impl<C> ValidationContext for IbcActions<C>
 where
     C: IbcCommonContext,
 {
@@ -47,21 +47,21 @@ where
         &self,
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        self.ctx.client_state(client_id)
+        self.ctx.borrow().client_state(client_id)
     }
 
     fn decode_client_state(
         &self,
         client_state: Any,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        self.ctx.decode_client_state(client_state)
+        self.ctx.borrow().decode_client_state(client_state)
     }
 
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        self.ctx.consensus_state(client_cons_state_path)
+        self.ctx.borrow().consensus_state(client_cons_state_path)
     }
 
     fn next_consensus_state(
@@ -70,7 +70,9 @@ where
         height: &Height,
     ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
         let prefix = storage::consensus_state_prefix(client_id);
-        let mut iter = self.ctx.iter_prefix(&prefix).map_err(|_| {
+        // for iterator
+        let ctx = self.ctx.borrow();
+        let mut iter = ctx.iter_prefix(&prefix).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Reading the consensus state failed: ID {}, height {}",
@@ -80,7 +82,7 @@ where
         })?;
         let mut lowest_height_value = None;
         while let Some((key, value)) =
-            self.ctx.iter_next(&mut iter).map_err(|_| {
+            ctx.iter_next(&mut iter).map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
                         "Iterating consensus states failed: ID {}, height {}",
@@ -107,7 +109,7 @@ where
                 let any = Any::decode(&value[..]).map_err(|e| {
                     ContextError::ClientError(ClientError::Decode(e))
                 })?;
-                let cs = self.ctx.decode_consensus_state(any)?;
+                let cs = self.ctx.borrow().decode_consensus_state(any)?;
                 Ok(Some(cs))
             }
             None => Ok(None),
@@ -120,7 +122,9 @@ where
         height: &Height,
     ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
         let prefix = storage::consensus_state_prefix(client_id);
-        let mut iter = self.ctx.iter_prefix(&prefix).map_err(|_| {
+        // for iterator
+        let ctx = self.ctx.borrow();
+        let mut iter = ctx.iter_prefix(&prefix).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Reading the consensus state failed: ID {}, height {}",
@@ -130,7 +134,7 @@ where
         })?;
         let mut highest_height_value = None;
         while let Some((key, value)) =
-            self.ctx.iter_next(&mut iter).map_err(|_| {
+            ctx.iter_next(&mut iter).map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
                         "Iterating consensus states failed: ID {}, height {}",
@@ -157,7 +161,7 @@ where
                 let any = Any::decode(&value[..]).map_err(|e| {
                     ContextError::ClientError(ClientError::Decode(e))
                 })?;
-                let cs = self.ctx.decode_consensus_state(any)?;
+                let cs = self.ctx.borrow().decode_consensus_state(any)?;
                 Ok(Some(cs))
             }
             None => Ok(None),
@@ -165,7 +169,7 @@ where
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        let height = self.ctx.get_height().map_err(|_| {
+        let height = self.ctx.borrow().get_height().map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: "Getting the host height failed".to_string(),
             })
@@ -179,6 +183,7 @@ where
         let height = BlockHeight(height.revision_height());
         let header = self
             .ctx
+            .borrow()
             .get_header(height)
             .map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
@@ -205,6 +210,7 @@ where
         let height = BlockHeight(height.revision_height());
         let header = self
             .ctx
+            .borrow()
             .get_header(height)
             .map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
@@ -235,14 +241,14 @@ where
 
     fn client_counter(&self) -> Result<u64, ContextError> {
         let key = storage::client_counter_key();
-        self.ctx.read_counter(&key)
+        self.ctx.borrow().read_counter(&key)
     }
 
     fn connection_end(
         &self,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
-        self.ctx.connection_end(connection_id)
+        self.ctx.borrow().connection_end(connection_id)
     }
 
     fn validate_self_client(
@@ -267,12 +273,11 @@ where
             }));
         }
 
-        let chain_id =
-            self.ctx
-                .get_chain_id()
-                .map_err(|_| ConnectionError::Other {
-                    description: "Getting the chain ID failed".to_string(),
-                })?;
+        let chain_id = self.ctx.borrow().get_chain_id().map_err(|_| {
+            ConnectionError::Other {
+                description: "Getting the chain ID failed".to_string(),
+            }
+        })?;
         if client_state.chain_id().to_string() != chain_id.to_string() {
             return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
@@ -291,10 +296,11 @@ where
             }));
         }
 
-        let height =
-            self.ctx.get_height().map_err(|_| ConnectionError::Other {
+        let height = self.ctx.borrow().get_height().map_err(|_| {
+            ConnectionError::Other {
                 description: "Getting the block height failed".to_string(),
-            })?;
+            }
+        })?;
         if client_state.latest_height().revision_height() >= height.0 {
             return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
@@ -306,7 +312,7 @@ where
         }
 
         // proof spec
-        let proof_specs = self.ctx.get_proof_specs();
+        let proof_specs = self.ctx.borrow().get_proof_specs();
         if client_state.proof_specs != proof_specs.into() {
             return Err(ContextError::ClientError(ClientError::Other {
                 description: "The proof specs mismatched".to_string(),
@@ -333,21 +339,21 @@ where
 
     fn connection_counter(&self) -> Result<u64, ContextError> {
         let key = storage::connection_counter_key();
-        self.ctx.read_counter(&key)
+        self.ctx.borrow().read_counter(&key)
     }
 
     fn channel_end(
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        self.ctx.channel_end(channel_end_path)
+        self.ctx.borrow().channel_end(channel_end_path)
     }
 
     fn get_next_sequence_send(
         &self,
         path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        self.ctx.get_next_sequence_send(path)
+        self.ctx.borrow().get_next_sequence_send(path)
     }
 
     fn get_next_sequence_recv(
@@ -357,7 +363,7 @@ where
         let path = Path::SeqRecv(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.read_sequence(&key)
+        self.ctx.borrow().read_sequence(&key)
     }
 
     fn get_next_sequence_ack(
@@ -367,7 +373,7 @@ where
         let path = Path::SeqAck(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.read_sequence(&key)
+        self.ctx.borrow().read_sequence(&key)
     }
 
     fn get_packet_commitment(
@@ -377,7 +383,7 @@ where
         let path = Path::Commitment(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => Ok(value.into()),
             Ok(None) => {
                 let port_channel_sequence_id =
@@ -407,7 +413,7 @@ where
         let path = Path::Receipt(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(_)) => Ok(Receipt::Ok),
             Ok(None) => {
                 let port_channel_sequence_id =
@@ -437,7 +443,7 @@ where
         let path = Path::Ack(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => Ok(value.into()),
             Ok(None) => {
                 let port_channel_sequence_id =
@@ -461,7 +467,7 @@ where
     }
 
     fn hash(&self, value: &[u8]) -> Vec<u8> {
-        self.ctx.hash(value)
+        self.ctx.borrow().hash(value)
     }
 
     fn client_update_time(
@@ -470,7 +476,7 @@ where
         _height: &Height,
     ) -> Result<Timestamp, ContextError> {
         let key = storage::client_update_timestamp_key(client_id);
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => {
                 let time = TmTime::decode_vec(&value).map_err(|_| {
                     ContextError::ClientError(ClientError::Other {
@@ -505,7 +511,7 @@ where
         _height: &Height,
     ) -> Result<Height, ContextError> {
         let key = storage::client_update_height_key(client_id);
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => Height::decode_vec(&value).map_err(|e| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
@@ -533,12 +539,12 @@ where
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
         let key = storage::channel_counter_key();
-        self.ctx.read_counter(&key)
+        self.ctx.borrow().read_counter(&key)
     }
 
     fn max_expected_time_per_block(&self) -> core::time::Duration {
         let key = get_max_expected_time_per_block_key();
-        match self.ctx.read(&key) {
+        match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => {
                 crate::ledger::storage::types::decode::<DurationSecs>(&value)
                     .expect("Decoding max_expected_time_per_block failed")
