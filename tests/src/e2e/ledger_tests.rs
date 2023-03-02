@@ -344,7 +344,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         // 3. Submit a transaction to update an account's validity
         // predicate
         vec![
-            "update",
+            "update-account",
              "--address",
              BERTHA,
              "--code-path",
