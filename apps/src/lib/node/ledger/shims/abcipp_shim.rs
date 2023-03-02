@@ -237,7 +237,7 @@ pub struct AbciService {
     suspended: bool,
     /// This resolves the non-completing futures returned to tower-abci
     /// during suspension.
-    pub shutdown: broadcast::Sender<()>,
+    shutdown: broadcast::Sender<()>,
     /// An action to be taken at a specified block height.
     action_at_height: Option<Action>,
 }
