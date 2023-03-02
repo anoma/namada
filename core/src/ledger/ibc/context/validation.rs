@@ -1,7 +1,5 @@
 //! ValidationContext implementation for IBC
 
-use core::str::FromStr;
-
 use prost::Message;
 
 use super::super::{IbcActions, IbcCommonContext};
@@ -22,9 +20,7 @@ use crate::ibc::core::ics04_channel::commitment::{
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
-};
+use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
@@ -252,8 +248,7 @@ where
     fn validate_self_client(
         &self,
         counterparty_client_state: Any,
-    ) -> Result<(), ConnectionError> {
-        // TODO: should return ContextError
+    ) -> Result<(), ContextError> {
         let client_state = self
             .decode_client_state(counterparty_client_state)
             .map_err(|_| ConnectionError::Other {
@@ -267,9 +262,9 @@ where
                 })?;
 
         if client_state.is_frozen() {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: "The client is frozen".to_string(),
-            });
+            }));
         }
 
         let chain_id =
@@ -279,21 +274,21 @@ where
                     description: "Getting the chain ID failed".to_string(),
                 })?;
         if client_state.chain_id().to_string() != chain_id.to_string() {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "The chain ID mismatched: in the client state {}",
                     client_state.chain_id()
                 ),
-            });
+            }));
         }
 
         if client_state.chain_id().version() != 0 {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "The chain ID revision is not zero: {}",
                     client_state.chain_id()
                 ),
-            });
+            }));
         }
 
         let height =
@@ -301,21 +296,21 @@ where
                 description: "Getting the block height failed".to_string(),
             })?;
         if client_state.latest_height().revision_height() >= height.0 {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "The height of the client state is higher: Client state \
                      height {}",
                     client_state.latest_height()
                 ),
-            });
+            }));
         }
 
         // proof spec
         let proof_specs = self.ctx.get_proof_specs();
         if client_state.proof_specs != proof_specs.into() {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: "The proof specs mismatched".to_string(),
-            });
+            }));
         }
 
         let trust_level = client_state.trust_level.numerator()
@@ -323,9 +318,9 @@ where
         let min_level = TrustThreshold::ONE_THIRD;
         let min_level = min_level.numerator() / min_level.denominator();
         if trust_level < min_level {
-            return Err(ConnectionError::Other {
+            return Err(ContextError::ClientError(ClientError::Other {
                 description: "The trust threshold is less 1/3".to_string(),
-            });
+            }));
         }
 
         Ok(())
@@ -346,37 +341,6 @@ where
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
         self.ctx.channel_end(channel_end_path)
-    }
-
-    fn connection_channels(
-        &self,
-        conn_id: &ConnectionId,
-    ) -> Result<Vec<(PortId, ChannelId)>, ContextError> {
-        let key = storage::connection_channels_key(conn_id);
-        match self.ctx.read(&key) {
-            Ok(Some(value)) => {
-                let list = String::from_utf8(value).map_err(|e| {
-                    ContextError::ConnectionError(ConnectionError::Other {
-                        description: format!(
-                            "Decoding the connection list failed: Key {}, \
-                             error {}",
-                            key, e
-                        ),
-                    })
-                })?;
-                parse_port_channel_list(list)
-            }
-            Ok(None) => Ok(Vec::new()),
-            Err(_) => {
-                Err(ContextError::ConnectionError(ConnectionError::Other {
-                    description: format!(
-                        "Reading the port/channel list failed: Connection ID \
-                         {},",
-                        conn_id,
-                    ),
-                }))
-            }
-        }
     }
 
     fn get_next_sequence_send(
@@ -583,52 +547,4 @@ where
             _ => unreachable!("The parameter should be initialized"),
         }
     }
-}
-
-/// Parse a port/channel list, e.g. "my-port/channel-0,my-port/channel-1"
-fn parse_port_channel_list(
-    list: impl AsRef<str>,
-) -> Result<Vec<(PortId, ChannelId)>, ContextError> {
-    let mut port_channel_list = Vec::new();
-    for pair in list.as_ref().split(',') {
-        let mut port_channel = pair.split('/');
-        let port_id_str = port_channel.next().ok_or_else(|| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!("No port ID in the entry: {}", pair),
-            })
-        })?;
-        let port_id = PortId::from_str(port_id_str).map_err(|_| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!(
-                    "Parsing the port ID failed: {}",
-                    port_id_str
-                ),
-            })
-        })?;
-        let channel_id_str = port_channel.next().ok_or_else(|| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!("No channel ID in the entry: {}", pair),
-            })
-        })?;
-        let channel_id = ChannelId::from_str(channel_id_str).map_err(|_| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!(
-                    "Parsing the channel ID failed: {}",
-                    channel_id_str
-                ),
-            })
-        })?;
-        if port_channel.next().is_some() {
-            return Err(ContextError::ConnectionError(
-                ConnectionError::Other {
-                    description: format!(
-                        "The port/channel pair has an unexpected entry: {}",
-                        pair
-                    ),
-                },
-            ));
-        }
-        port_channel_list.push((port_id, channel_id));
-    }
-    Ok(port_channel_list)
 }

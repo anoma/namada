@@ -2980,8 +2980,8 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.29.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1#36103fad65c07cc72c4fc4c0ec72ec425978cae1"
+version = "0.31.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9#3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9"
 dependencies = [
  "bytes 1.4.0",
  "cfg-if 1.0.0",
@@ -3012,8 +3012,8 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.29.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=bced24eac45a9e82cd517d7fcb89bea35f7bcdce#bced24eac45a9e82cd517d7fcb89bea35f7bcdce"
+version = "0.31.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40#dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40"
 dependencies = [
  "bytes 1.4.0",
  "cfg-if 1.0.0",
@@ -3962,8 +3962,8 @@ dependencies = [
  "clru",
  "data-encoding",
  "derivative",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=bced24eac45a9e82cd517d7fcb89bea35f7bcdce)",
+ "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9)",
+ "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "itertools",
@@ -4109,8 +4109,8 @@ dependencies = [
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=bced24eac45a9e82cd517d7fcb89bea35f7bcdce)",
+ "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9)",
+ "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "ics23",
@@ -4207,7 +4207,7 @@ dependencies = [
  "eyre",
  "file-serve",
  "fs_extra",
- "ibc 0.29.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=36103fad65c07cc72c4fc4c0ec72ec425978cae1)",
+ "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-relayer",
  "itertools",

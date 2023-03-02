@@ -6,18 +6,16 @@ use std::str::FromStr;
 use super::common::IbcCommonContext;
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
 use crate::ibc::applications::transfer::context::{
-    on_acknowledgement_packet, on_acknowledgement_packet_execute,
-    on_acknowledgement_packet_validate, on_chan_close_confirm,
+    on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
-    on_chan_close_init, on_chan_close_init_execute,
-    on_chan_close_init_validate, on_chan_open_ack, on_chan_open_ack_execute,
-    on_chan_open_ack_validate, on_chan_open_confirm,
+    on_chan_close_init_execute, on_chan_close_init_validate,
+    on_chan_open_ack_execute, on_chan_open_ack_validate,
     on_chan_open_confirm_execute, on_chan_open_confirm_validate,
-    on_chan_open_init, on_chan_open_init_execute, on_chan_open_init_validate,
-    on_chan_open_try, on_chan_open_try_execute, on_chan_open_try_validate,
-    on_recv_packet, on_recv_packet_execute, on_timeout_packet,
-    on_timeout_packet_execute, on_timeout_packet_validate, BankKeeper,
-    TokenTransferContext, TokenTransferKeeper, TokenTransferReader,
+    on_chan_open_init_execute, on_chan_open_init_validate,
+    on_chan_open_try_execute, on_chan_open_try_validate,
+    on_recv_packet_execute, on_timeout_packet_execute,
+    on_timeout_packet_validate, TokenTransferExecutionContext,
+    TokenTransferValidationContext,
 };
 use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
@@ -29,11 +27,14 @@ use crate::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty, Order,
 };
 use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
-use crate::ibc::core::ics04_channel::context::SendPacketReader;
+use crate::ibc::core::ics04_channel::context::{
+    SendPacketExecutionContext, SendPacketValidationContext,
+};
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::handler::ModuleExtras;
 use crate::ibc::core::ics04_channel::msgs::acknowledgement::Acknowledgement;
 use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
@@ -41,11 +42,11 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
-use crate::ibc::core::ics26_routing::context::{
-    Module, ModuleId, ModuleOutputBuilder,
-};
+use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ContextError;
+use crate::ibc::events::IbcEvent;
 use crate::ibc::signer::Signer;
+use crate::ibc::timestamp::Timestamp;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
@@ -125,28 +126,6 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn on_chan_open_init(
-        &mut self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        version: &Version,
-    ) -> Result<(ModuleExtras, Version), ChannelError> {
-        on_chan_open_init(
-            self,
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            version,
-        )
-        .map_err(into_channel_error)
-    }
-
-    #[allow(clippy::too_many_arguments)]
     fn on_chan_open_try_validate(
         &self,
         order: Order,
@@ -191,28 +170,6 @@ where
         .map_err(into_channel_error)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn on_chan_open_try(
-        &mut self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        counterparty_version: &Version,
-    ) -> Result<(ModuleExtras, Version), ChannelError> {
-        on_chan_open_try(
-            self,
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            counterparty_version,
-        )
-        .map_err(into_channel_error)
-    }
-
     fn on_chan_open_ack_validate(
         &self,
         port_id: &PortId,
@@ -243,16 +200,6 @@ where
         .map_err(into_channel_error)
     }
 
-    fn on_chan_open_ack(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty_version: &Version,
-    ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_open_ack(self, port_id, channel_id, counterparty_version)
-            .map_err(into_channel_error)
-    }
-
     fn on_chan_open_confirm_validate(
         &self,
         port_id: &PortId,
@@ -268,15 +215,6 @@ where
         channel_id: &ChannelId,
     ) -> Result<ModuleExtras, ChannelError> {
         on_chan_open_confirm_execute(self, port_id, channel_id)
-            .map_err(into_channel_error)
-    }
-
-    fn on_chan_open_confirm(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_open_confirm(self, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -298,15 +236,6 @@ where
             .map_err(into_channel_error)
     }
 
-    fn on_chan_close_init(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_close_init(self, port_id, channel_id)
-            .map_err(into_channel_error)
-    }
-
     fn on_chan_close_confirm_validate(
         &self,
         port_id: &PortId,
@@ -325,30 +254,12 @@ where
             .map_err(into_channel_error)
     }
 
-    fn on_chan_close_confirm(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_close_confirm(self, port_id, channel_id)
-            .map_err(into_channel_error)
-    }
-
     fn on_recv_packet_execute(
         &mut self,
         packet: &Packet,
         _relayer: &Signer,
     ) -> (ModuleExtras, Acknowledgement) {
         on_recv_packet_execute(self, packet)
-    }
-
-    fn on_recv_packet(
-        &mut self,
-        output: &mut ModuleOutputBuilder,
-        packet: &Packet,
-        relayer: &Signer,
-    ) -> Acknowledgement {
-        on_recv_packet(self, output, packet, relayer)
     }
 
     fn on_acknowledgement_packet_validate(
@@ -381,23 +292,6 @@ where
         (extras, result.map_err(into_packet_error))
     }
 
-    fn on_acknowledgement_packet(
-        &mut self,
-        output: &mut ModuleOutputBuilder,
-        packet: &Packet,
-        acknowledgement: &Acknowledgement,
-        relayer: &Signer,
-    ) -> Result<(), PacketError> {
-        on_acknowledgement_packet(
-            self,
-            output,
-            packet,
-            acknowledgement,
-            relayer,
-        )
-        .map_err(into_packet_error)
-    }
-
     fn on_timeout_packet_validate(
         &self,
         packet: &Packet,
@@ -415,19 +309,9 @@ where
         let (extras, result) = on_timeout_packet_execute(self, packet, relayer);
         (extras, result.map_err(into_packet_error))
     }
-
-    fn on_timeout_packet(
-        &mut self,
-        output: &mut ModuleOutputBuilder,
-        packet: &Packet,
-        relayer: &Signer,
-    ) -> Result<(), PacketError> {
-        on_timeout_packet(self, output, packet, relayer)
-            .map_err(into_packet_error)
-    }
 }
 
-impl<C> SendPacketReader for TransferModule<C>
+impl<C> SendPacketValidationContext for TransferModule<C>
 where
     C: IbcCommonContext,
 {
@@ -469,9 +353,22 @@ where
     fn hash(&self, value: &[u8]) -> Vec<u8> {
         self.ctx.hash(value)
     }
+
+    fn compute_packet_commitment(
+        &self,
+        packet_data: &[u8],
+        timeout_height: &TimeoutHeight,
+        timeout_timestamp: &Timestamp,
+    ) -> PacketCommitment {
+        self.ctx.compute_packet_commitment(
+            packet_data,
+            timeout_height,
+            timeout_timestamp,
+        )
+    }
 }
 
-impl<C> TokenTransferReader for TransferModule<C>
+impl<C> TokenTransferValidationContext for TransferModule<C>
 where
     C: IbcCommonContext,
 {
@@ -502,12 +399,10 @@ where
     }
 }
 
-impl<C> BankKeeper for TransferModule<C>
+impl<C> TokenTransferExecutionContext for TransferModule<C>
 where
     C: IbcCommonContext,
 {
-    type AccountId = Address;
-
     fn send_coins(
         &mut self,
         from: &Self::AccountId,
@@ -650,41 +545,37 @@ where
     }
 }
 
-impl<C> TokenTransferKeeper for TransferModule<C>
+impl<C> SendPacketExecutionContext for TransferModule<C>
 where
     C: IbcCommonContext,
 {
-    fn store_packet_commitment(
-        &mut self,
-        port_id: PortId,
-        channel_id: ChannelId,
-        sequence: Sequence,
-        commitment: PacketCommitment,
-    ) -> Result<(), ContextError> {
-        let path = CommitmentPath {
-            port_id,
-            channel_id,
-            sequence,
-        };
-        self.ctx.store_packet_commitment(&path, commitment)
-    }
-
     fn store_next_sequence_send(
         &mut self,
-        port_id: PortId,
-        channel_id: ChannelId,
+        seq_send_path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let path = SeqSendPath(port_id, channel_id);
-        self.ctx.store_next_sequence_send(&path, seq)
+        self.ctx.store_next_sequence_send(&seq_send_path, seq)
     }
-}
 
-impl<C> TokenTransferContext for TransferModule<C>
-where
-    C: IbcCommonContext,
-{
-    type AccountId = Address;
+    fn store_packet_commitment(
+        &mut self,
+        commitment_path: &CommitmentPath,
+        commitment: PacketCommitment,
+    ) -> Result<(), ContextError> {
+        self.ctx
+            .store_packet_commitment(&commitment_path, commitment)
+    }
+
+    fn emit_ibc_event(&mut self, event: IbcEvent) {
+        let event = event.try_into().expect("IBC event conversion failed");
+        self.ctx
+            .emit_ibc_event(event)
+            .expect("Emitting an IBC event failed")
+    }
+
+    fn log_message(&mut self, message: String) {
+        self.ctx.log_string(message)
+    }
 }
 
 fn into_channel_error(error: TokenTransferError) -> ChannelError {
