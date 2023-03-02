@@ -547,3 +547,13 @@ pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
     matches!(&sub_prefix.segments[0],
              DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
 }
+
+/// Returns true if the given key is the denom key
+pub fn is_ibc_denom_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..] => {
+            addr == &Address::Internal(InternalAddress::Ibc) && prefix == DENOM
+        }
+        _ => false,
+    }
+}

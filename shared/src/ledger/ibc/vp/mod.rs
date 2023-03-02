@@ -6,7 +6,7 @@ mod token;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::ibc::storage::is_ibc_key;
+use namada_core::ledger::ibc::storage::{is_ibc_denom_key, is_ibc_key};
 use namada_core::ledger::ibc::{
     Error as ActionError, IbcActions, IbcCommonContext, IbcStorageContext,
     ProofSpec,
@@ -87,8 +87,10 @@ where
         // Validate the state according to the given IBC message
         self.validate_with_msg(tx_data)?;
 
-        // Validate the denom store
-        self.validate_denom(tx_data).map_err(Error::Denom)?;
+        // Validate the denom store if a denom key has been changed
+        if keys_changed.iter().any(is_ibc_denom_key) {
+            self.validate_denom(tx_data).map_err(Error::Denom)?;
+        }
 
         Ok(true)
     }
