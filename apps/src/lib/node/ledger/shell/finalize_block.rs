@@ -311,8 +311,7 @@ where
                         .expect("transaction index out of bounds"),
                 ),
                 &mut self.gas_meter,
-                &mut self.wl_storage.write_log,
-                &self.wl_storage.storage,
+                &mut self.wl_storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
             )

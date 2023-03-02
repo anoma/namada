@@ -15,8 +15,7 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
@@ -75,8 +74,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     pub block_gas_meter: &'a mut BlockGasMeter,
-    pub write_log: &'a mut WriteLog,
-    pub storage: &'a Storage<D, H>,
+    pub wl_storage: &'a WlStorage<D, H>,
     pub vp_wasm_cache: &'a mut VpCache<CA>,
     pub tx_wasm_cache: &'a mut TxCache<CA>,
 }
@@ -97,8 +95,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     tx_length: usize,
     tx_index: TxIndex,
     block_gas_meter: &'a mut BlockGasMeter,
-    write_log: &'a mut WriteLog,
-    storage: &'a mut Storage<D, H>,
+    wl_storage: &'a mut WlStorage<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> Result<TxResult>
@@ -119,14 +116,13 @@ where
             &tx_index,
             ShellParams {
                 block_gas_meter,
-                write_log,
-                storage,
+                wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
             },
         ),
         TxType::Protocol(ProtocolTx { tx, .. }) => {
-            apply_protocol_tx(tx, storage)
+            apply_protocol_tx(tx, wl_storage)
         }
         TxType::Wrapper(_)
         | TxType::Decrypted(DecryptedTx::Undecryptable(_)) => {
@@ -149,8 +145,7 @@ pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
     tx_index: &TxIndex,
     ShellParams {
         block_gas_meter,
-        write_log,
-        storage,
+        wl_storage,
         vp_wasm_cache,
         tx_wasm_cache,
     }: ShellParams<'a, D, H, CA>,
@@ -167,9 +162,8 @@ where
     let verifiers = execute_tx(
         &tx,
         tx_index,
-        storage,
+        wl_storage,
         block_gas_meter,
-        write_log,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
@@ -177,9 +171,8 @@ where
     let vps_result = check_vps(
         &tx,
         tx_index,
-        storage,
+        wl_storage,
         block_gas_meter,
-        write_log,
         &verifiers,
         vp_wasm_cache,
     )?;
@@ -187,9 +180,9 @@ where
     let gas_used = block_gas_meter
         .finalize_transaction()
         .map_err(Error::GasError)?;
-    let initialized_accounts = write_log.get_initialized_accounts();
-    let changed_keys = write_log.get_keys();
-    let ibc_event = write_log.take_ibc_event();
+    let initialized_accounts = wl_storage.write_log.get_initialized_accounts();
+    let changed_keys = wl_storage.write_log.get_keys();
+    let ibc_event = wl_storage.write_log.take_ibc_event();
 
     Ok(TxResult {
         gas_used,
@@ -208,7 +201,7 @@ where
 /// containing changed keys and the like should be returned in the normal way.
 pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
-    storage: &mut Storage<D, H>,
+    storage: &mut WlStorage<D, H>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -278,9 +271,8 @@ where
 fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     gas_meter: &mut BlockGasMeter,
-    write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -295,8 +287,8 @@ where
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
-        storage,
-        write_log,
+        wl_storage,
+        &wl_storage.write_log,
         gas_meter,
         tx_index,
         &tx.code,
@@ -312,9 +304,8 @@ where
 fn check_vps<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     gas_meter: &mut BlockGasMeter,
-    write_log: &WriteLog,
     verifiers_from_tx: &BTreeSet<Address>,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
@@ -327,8 +318,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let (verifiers, keys_changed) =
-        write_log.verifiers_and_changed_keys(verifiers_from_tx);
+    let (verifiers, keys_changed) = wl_storage
+        .write_log
+        .verifiers_and_changed_keys(verifiers_from_tx);
 
     let initial_gas = gas_meter.get_current_transaction_gas();
 
@@ -337,8 +329,8 @@ where
         keys_changed,
         tx,
         tx_index,
-        storage,
-        write_log,
+        wl_storage,
+        &wl_storage.write_log,
         initial_gas,
         vp_wasm_cache,
         #[cfg(not(feature = "mainnet"))]
@@ -360,8 +352,7 @@ fn execute_vps<D, H, CA>(
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
-    write_log: &WriteLog,
+    wl_storage: &WlStorage<D, H>,
     initial_gas: u64,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
@@ -380,7 +371,8 @@ where
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp, gas) = storage
+                    let (vp, gas) = wl_storage
+                        .storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
@@ -396,8 +388,8 @@ where
                         tx,
                         tx_index,
                         addr,
-                        storage,
-                        write_log,
+                        &wl_storage.storage,
+                        &wl_storage.write_log,
                         &mut gas_meter,
                         &keys_changed,
                         &verifiers,
@@ -410,8 +402,8 @@ where
                 Address::Internal(internal_addr) => {
                     let ctx = native_vp::Ctx::new(
                         addr,
-                        storage,
-                        write_log,
+                        &wl_storage.storage,
+                        &wl_storage.write_log,
                         tx,
                         tx_index,
                         gas_meter,
@@ -595,6 +587,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
+    use namada_core::ledger::storage_api::StorageRead;
     use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
@@ -621,7 +614,7 @@ mod tests {
     fn test_apply_protocol_tx_duplicate_eth_events_vext() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let (mut storage, _) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), 100_u64.into()),
                 (validator_b, 100_u64.into()),
@@ -644,11 +637,11 @@ mod tests {
         let signed = vext.sign(&signing_key);
         let tx = ProtocolTxType::EthEventsVext(signed);
 
-        apply_protocol_tx(tx.clone(), &mut storage)?;
-        apply_protocol_tx(tx, &mut storage)?;
+        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
+        apply_protocol_tx(tx, &mut wl_storage)?;
 
         let eth_msg_keys = vote_tallies::Keys::from(&event);
-        let (seen_by_bytes, _) = storage.read(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Votes::try_from_slice(&seen_by_bytes)?,
@@ -656,8 +649,8 @@ mod tests {
         );
 
         // the vote should have only be applied once
-        let (voting_power_bytes, _) =
-            storage.read(&eth_msg_keys.voting_power())?;
+        let voting_power_bytes =
+            wl_storage.read_bytes(&eth_msg_keys.voting_power())?;
         let voting_power_bytes = voting_power_bytes.unwrap();
         assert_eq!(<(u64, u64)>::try_from_slice(&voting_power_bytes)?, (1, 2));
 
@@ -671,18 +664,18 @@ mod tests {
     fn test_apply_protocol_tx_duplicate_bp_roots_vext() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
-        let (mut storage, keys) = test_utils::setup_storage_with_validators(
+        let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), 100_u64.into()),
                 (validator_b, 100_u64.into()),
             ]),
         );
-        bridge_pool_vp::init_storage(&mut storage);
+        bridge_pool_vp::init_storage(&mut wl_storage);
 
-        let root = storage.get_bridge_pool_root();
-        let nonce = storage.get_bridge_pool_nonce();
+        let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
+        let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
         test_utils::commit_bridge_pool_root_at_height(
-            &mut storage,
+            &mut wl_storage.storage,
             &root,
             100.into(),
         );
@@ -698,20 +691,21 @@ mod tests {
         }
         .sign(&signing_key);
         let tx = ProtocolTxType::BridgePoolVext(vext);
-        apply_protocol_tx(tx.clone(), &mut storage)?;
-        apply_protocol_tx(tx, &mut storage)?;
+        apply_protocol_tx(tx.clone(), &mut wl_storage)?;
+        apply_protocol_tx(tx, &mut wl_storage)?;
 
         let bp_root_keys = vote_tallies::Keys::from(
             vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
         );
-        let (root_seen_by_bytes, _) = storage.read(&bp_root_keys.seen_by())?;
+        let root_seen_by_bytes =
+            wl_storage.read_bytes(&bp_root_keys.seen_by())?;
         assert_eq!(
             Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
             Votes::from([(validator_a, BlockHeight(100))])
         );
         // the vote should have only be applied once
-        let (root_voting_power_bytes, _) =
-            storage.read(&bp_root_keys.voting_power())?;
+        let root_voting_power_bytes =
+            wl_storage.read_bytes(&bp_root_keys.voting_power())?;
         assert_eq!(
             <(u64, u64)>::try_from_slice(
                 root_voting_power_bytes.as_ref().unwrap()
