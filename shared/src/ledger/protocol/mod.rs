@@ -15,6 +15,7 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
+use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
@@ -67,6 +68,7 @@ pub enum Error {
 }
 
 /// Shell parameters for running wasm transactions.
+#[allow(missing_docs)]
 pub enum ShellParams<'a, D, H, CA>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -162,6 +164,36 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    let mut default_gas_meter = Default::default();
+    let mut default_write_log = Default::default();
+
+    let (block_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) =
+        match shell_params {
+            ShellParams::Mutating {
+                block_gas_meter,
+                wl_storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            } => (
+                block_gas_meter,
+                &wl_storage.storage,
+                &mut wl_storage.write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
+            ShellParams::DryRun {
+                storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            } => (
+                &mut default_gas_meter,
+                storage,
+                &mut default_write_log,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
+        };
+
     // Base gas cost for applying the tx
     block_gas_meter
         .add_base_transaction_fee(tx_length)
@@ -169,29 +201,31 @@ where
     let verifiers = execute_tx(
         &tx,
         tx_index,
-        wl_storage,
+        storage,
         block_gas_meter,
+        write_log,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
 
-    let vps_result = check_vps(
-        &tx,
+    let vps_result = check_vps(CheckVps {
+        tx: &tx,
         tx_index,
-        wl_storage,
-        block_gas_meter,
-        &verifiers,
+        storage,
+        gas_meter: block_gas_meter,
+        write_log,
+        verifiers_from_tx: &verifiers,
         vp_wasm_cache,
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
-    )?;
+    })?;
 
     let gas_used = block_gas_meter
         .finalize_transaction()
         .map_err(Error::GasError)?;
-    let initialized_accounts = wl_storage.write_log.get_initialized_accounts();
-    let changed_keys = wl_storage.write_log.get_keys();
-    let ibc_event = wl_storage.write_log.take_ibc_event();
+    let initialized_accounts = write_log.get_initialized_accounts();
+    let changed_keys = write_log.get_keys();
+    let ibc_event = write_log.take_ibc_event();
 
     Ok(TxResult {
         gas_used,
@@ -280,8 +314,9 @@ where
 fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    wl_storage: &WlStorage<D, H>,
+    storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
+    write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -296,8 +331,8 @@ where
     let empty = vec![];
     let tx_data = tx.data.as_ref().unwrap_or(&empty);
     wasm::run::tx(
-        &wl_storage.storage,
-        &mut wl_storage.write_log,
+        storage,
+        write_log,
         gas_meter,
         tx_index,
         &tx.code,
@@ -308,28 +343,45 @@ where
     .map_err(Error::TxRunnerError)
 }
 
-/// Check the acceptance of a transaction by validity predicates
-#[allow(clippy::too_many_arguments)]
-fn check_vps<D, H, CA>(
-    tx: &Tx,
-    tx_index: &TxIndex,
-    wl_storage: &WlStorage<D, H>,
-    gas_meter: &mut BlockGasMeter,
-    verifiers_from_tx: &BTreeSet<Address>,
-    vp_wasm_cache: &mut VpCache<CA>,
+/// Arguments to [`check_vps`].
+struct CheckVps<'a, D, H, CA>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    tx: &'a Tx,
+    tx_index: &'a TxIndex,
+    storage: &'a Storage<D, H>,
+    gas_meter: &'a mut BlockGasMeter,
+    write_log: &'a WriteLog,
+    verifiers_from_tx: &'a BTreeSet<Address>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
-    // This is true when the wrapper of this tx contained a valid
-    // `testnet_pow::Solution`
     has_valid_pow: bool,
+}
+
+/// Check the acceptance of a transaction by validity predicates
+fn check_vps<D, H, CA>(
+    CheckVps {
+        tx,
+        tx_index,
+        storage,
+        gas_meter,
+        write_log,
+        verifiers_from_tx,
+        vp_wasm_cache,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
+    }: CheckVps<'_, D, H, CA>,
 ) -> Result<VpsResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let (verifiers, keys_changed) = wl_storage
-        .write_log
-        .verifiers_and_changed_keys(verifiers_from_tx);
+    let (verifiers, keys_changed) =
+        write_log.verifiers_and_changed_keys(verifiers_from_tx);
 
     let initial_gas = gas_meter.get_current_transaction_gas();
 
@@ -338,10 +390,10 @@ where
         keys_changed,
         tx,
         tx_index,
-        wl_storage,
+        storage,
+        write_log,
         initial_gas,
         vp_wasm_cache,
-        #[cfg(not(feature = "mainnet"))]
         has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
@@ -360,7 +412,8 @@ fn execute_vps<D, H, CA>(
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
     tx_index: &TxIndex,
-    wl_storage: &WlStorage<D, H>,
+    storage: &Storage<D, H>,
+    write_log: &WriteLog,
     initial_gas: u64,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
@@ -379,8 +432,7 @@ where
             let mut gas_meter = VpGasMeter::new(initial_gas);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp, gas) = wl_storage
-                        .storage
+                    let (vp, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
                     gas_meter.add(gas).map_err(Error::GasError)?;
@@ -396,8 +448,8 @@ where
                         tx,
                         tx_index,
                         addr,
-                        &wl_storage.storage,
-                        &wl_storage.write_log,
+                        storage,
+                        write_log,
                         &mut gas_meter,
                         &keys_changed,
                         &verifiers,
@@ -410,8 +462,8 @@ where
                 Address::Internal(internal_addr) => {
                     let ctx = native_vp::Ctx::new(
                         addr,
-                        &wl_storage.storage,
-                        &wl_storage.write_log,
+                        storage,
+                        write_log,
                         tx,
                         tx_index,
                         gas_meter,

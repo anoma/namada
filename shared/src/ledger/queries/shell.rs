@@ -76,14 +76,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol::{self, ShellParams};
-    use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
 
-    let mut gas_meter = BlockGasMeter::default();
-    let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     let data = protocol::apply_wasm_tx(
         tx,
