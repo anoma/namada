@@ -175,10 +175,11 @@ where
         Ok(())
     }
 
-    /// Update the data associated with epochs, if needed. Any key-value with
-    /// epoch before the oldest stored epoch is dropped. If the oldest
-    /// stored epoch is not already associated with some value, the latest
-    /// value from the dropped values, if any, is associated with it.
+    /// Update the data associated with epochs to trim historical data, if
+    /// needed. Any value with epoch before the oldest stored epoch to be
+    /// kept is dropped. If the oldest stored epoch is not already
+    /// associated with some value, the latest value from the dropped
+    /// values, if any, is associated with it.
     fn update_data<S>(
         &self,
         storage: &mut S,
@@ -189,33 +190,48 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         if let Some(last_update) = last_update {
-            let expected_epoch = Self::sub_past_epochs(current_epoch);
-            if expected_epoch == last_update {
-                return Ok(());
-            } else {
-                let diff = expected_epoch.0 - last_update.0;
+            if last_update < current_epoch {
+                // Go through the epochs before the expected oldest epoch and
+                // keep the latest one
+                tracing::debug!(
+                    "Trimming data for epoched data in epoch {current_epoch}, \
+                     last updated at {last_update}."
+                );
+                let diff = current_epoch
+                    .checked_sub(last_update)
+                    .unwrap_or_default()
+                    .0;
+                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
                 let mut latest_value: Option<Data> = None;
-                for offset in 1..diff + 1 {
-                    let old = data_handler
-                        .remove(storage, &Epoch(expected_epoch.0 - offset))?;
-                    if old.is_some() && latest_value.is_none() {
-                        latest_value = old;
+                // Remove data before the new oldest epoch, keep the latest
+                // value
+                for epoch in oldest_epoch.iter_range(diff) {
+                    let removed = data_handler.remove(storage, &epoch)?;
+                    if removed.is_some() {
+                        tracing::debug!("Removed value at epoch {epoch}");
+                        latest_value = removed;
                     }
                 }
                 if let Some(latest_value) = latest_value {
+                    let new_oldest_epoch = Self::sub_past_epochs(current_epoch);
                     // TODO we can add `contains_key` to LazyMap
-                    if data_handler.get(storage, &expected_epoch)?.is_none() {
+                    if data_handler.get(storage, &new_oldest_epoch)?.is_none() {
+                        tracing::debug!(
+                            "Setting latest value at epoch \
+                             {new_oldest_epoch}: {latest_value:?}"
+                        );
                         data_handler.insert(
                             storage,
-                            expected_epoch,
+                            new_oldest_epoch,
                             latest_value,
                         )?;
                     }
                 }
+                // Update the epoch of the last update to the current epoch
+                let key = self.get_last_update_storage_key();
+                storage.write(&key, current_epoch)?;
             }
-            let key = self.get_last_update_storage_key();
-            storage.write(&key, current_epoch)?;
         }
         Ok(())
     }
@@ -347,6 +363,7 @@ where
     Data: BorshSerialize
         + BorshDeserialize
         + ops::Add<Output = Data>
+        + ops::AddAssign
         + 'static
         + Debug,
 {
@@ -400,34 +417,6 @@ where
         S: StorageRead,
     {
         self.get_data_handler().get(storage, &epoch)
-        // let last_update = self.get_last_update(storage)?;
-        // match last_update {
-        //     None => Ok(None),
-        //     Some(last_update) => {
-        //         let data_handler = self.get_data_handler();
-        //         let future_most_epoch =
-        //             last_update + FutureEpochs::value(params);
-        //         // Epoch can be a lot greater than the epoch where
-        //         // a value is recorded, we check the upper bound
-        //         // epoch of the LazyMap data
-        //         let mut epoch = std::cmp::min(epoch, future_most_epoch);
-        //         loop {
-        //             let res = data_handler.get(storage, &epoch)?;
-        //             match res {
-        //                 Some(_) => return Ok(res),
-        //                 None => {
-        //                     if epoch.0 > 0
-        //                         && epoch > Self::sub_past_epochs(last_update)
-        //                     {
-        //                         epoch = Epoch(epoch.0 - 1);
-        //                     } else {
-        //                         return Ok(None);
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     /// Get the sum of the delta values up through the given epoch
@@ -440,74 +429,30 @@ where
     where
         S: StorageRead,
     {
-        // TODO: oddly failing to do correctly with iter over
-        // self.get_data_handler() for some reason (it only finds the
-        // first entry in iteration then None afterward). Figure
-        // this out!!!
-
-        // println!("GET_SUM AT EPOCH {}", epoch.clone());
         let last_update = self.get_last_update(storage)?;
         match last_update {
             None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
-                // dbg!(data_handler.get(storage, &Epoch(0)));
-                // dbg!(data_handler.get(storage, &Epoch(1)));
-                // dbg!(data_handler.get(storage, &Epoch(2)));
-                // dbg!(data_handler.len(storage)?);
-
-                // let mut it = data_handler.iter(storage)?;
-                // dbg!(it.next());
-                // dbg!(it.next());
-                // drop(it);
-
+                let start_epoch = Self::sub_past_epochs(last_update);
                 let future_most_epoch =
                     last_update + FutureEpochs::value(params);
-                // dbg!(future_most_epoch);
+
                 // Epoch can be a lot greater than the epoch where
                 // a value is recorded, we check the upper bound
                 // epoch of the LazyMap data
                 let epoch = std::cmp::min(epoch, future_most_epoch);
+
                 let mut sum: Option<Data> = None;
-
-                // ! BELOW IS WHAT IS DESIRED IF ITERATION IS WORKING !
-                // for next in data_handler.iter(storage).unwrap() {
-                //     match dbg!((&mut sum, next)) {
-                //         (Some(_), Ok((next_epoch, next_val))) => {
-                //             if next_epoch > epoch {
-                //                 return Ok(sum);
-                //             } else {
-                //                 sum = sum.map(|cur_sum| cur_sum + next_val)
-                //             }
-                //         }
-                //         (None, Ok((next_epoch, next_val))) => {
-                //             if epoch < next_epoch {
-                //                 return Ok(None);
-                //             } else {
-                //                 sum = Some(next_val)
-                //             }
-                //         }
-                //         (Some(_), Err(_)) => return Ok(sum),
-                //         // perhaps elaborate with an error
-                //         _ => return Ok(None),
-                //     };
-                // }
-
-                // THIS IS THE HACKY METHOD UNTIL I FIGURE OUT WTF GOING ON WITH
-                // THE ITER
-                let start_epoch = Self::sub_past_epochs(last_update);
-                // println!("GETTING SUM OF DELTAS");
                 for ep in (start_epoch.0)..=(epoch.0) {
-                    // println!("epoch {}", ep);
-
-                    if let Some(val) = data_handler.get(storage, &Epoch(ep))? {
-                        if sum.is_none() {
-                            sum = Some(val);
-                        } else {
-                            sum = sum.map(|cur_sum| cur_sum + val);
+                    if let Some(delta) =
+                        data_handler.get(storage, &Epoch(ep))?
+                    {
+                        match sum.as_mut() {
+                            Some(sum) => *sum += delta,
+                            None => sum = Some(delta),
                         }
                     }
-                    // dbg!(&sum);
                 }
                 Ok(sum)
             }
@@ -545,12 +490,9 @@ where
         Ok(())
     }
 
-    /// TODO: maybe better description
-    /// Update the data associated with epochs, if needed. Any key-value with
-    /// epoch before the oldest stored epoch is added to the key-value with the
-    /// oldest stored epoch that is kept. If the oldest stored epoch is not
-    /// already associated with some value, the latest value from the
-    /// dropped values, if any, is associated with it.
+    /// Update the data associated with epochs to trim historical data, if
+    /// needed. Any value with epoch before the oldest epoch to be kept is
+    /// added to the value at the oldest stored epoch that is kept.
     fn update_data<S>(
         &self,
         storage: &mut S,
@@ -561,46 +503,55 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         if let Some(last_update) = last_update {
-            let expected_oldest_epoch = Self::sub_past_epochs(current_epoch);
-            if expected_oldest_epoch != last_update {
-                // dbg!(last_update, expected_oldest_epoch, current_epoch);
-                let diff = expected_oldest_epoch
-                    .0
-                    .checked_sub(last_update.0)
-                    .unwrap_or_default();
+            if last_update < current_epoch {
+                // Go through the epochs before the expected oldest epoch and
+                // sum them into it
+                tracing::debug!(
+                    "Trimming data for epoched delta data in epoch \
+                     {current_epoch}, last updated at {last_update}."
+                );
+                let diff = current_epoch
+                    .checked_sub(last_update)
+                    .unwrap_or_default()
+                    .0;
+                let oldest_epoch = Self::sub_past_epochs(last_update);
                 let data_handler = self.get_data_handler();
-                let mut new_oldest_value: Option<Data> = None;
-                for offset in 1..diff + 1 {
-                    let old = data_handler.remove(
-                        storage,
-                        &Epoch(expected_oldest_epoch.0 - offset),
-                    )?;
-                    if let Some(old) = old {
-                        match new_oldest_value {
-                            Some(latest) => {
-                                new_oldest_value = Some(latest + old)
-                            }
-                            None => new_oldest_value = Some(old),
+                // Find the sum of values before the new oldest epoch to be kept
+                let mut sum: Option<Data> = None;
+                for epoch in oldest_epoch.iter_range(diff) {
+                    let removed = data_handler.remove(storage, &epoch)?;
+                    if let Some(removed) = removed {
+                        tracing::debug!(
+                            "Removed delta value at epoch {epoch}: {removed:?}"
+                        );
+                        match sum.as_mut() {
+                            Some(sum) => *sum += removed,
+                            None => sum = Some(removed),
                         }
                     }
                 }
-                if let Some(new_oldest_value) = new_oldest_value {
-                    // TODO we can add `contains_key` to LazyMap
-                    if data_handler
-                        .get(storage, &expected_oldest_epoch)?
-                        .is_none()
-                    {
-                        data_handler.insert(
-                            storage,
-                            expected_oldest_epoch,
-                            new_oldest_value,
-                        )?;
-                    }
+                if let Some(sum) = sum {
+                    let new_oldest_epoch = Self::sub_past_epochs(current_epoch);
+                    let new_oldest_epoch_data =
+                        match data_handler.get(storage, &new_oldest_epoch)? {
+                            Some(oldest_epoch_data) => oldest_epoch_data + sum,
+                            None => sum,
+                        };
+                    tracing::debug!(
+                        "Adding new sum at epoch {new_oldest_epoch}: \
+                         {new_oldest_epoch_data:?}"
+                    );
+                    data_handler.insert(
+                        storage,
+                        new_oldest_epoch,
+                        new_oldest_epoch_data,
+                    )?;
                 }
+                // Update the epoch of the last update to the current epoch
+                let key = self.get_last_update_storage_key();
+                storage.write(&key, current_epoch)?;
             }
         }
-        let key = self.get_last_update_storage_key();
-        storage.write(&key, current_epoch)?;
         Ok(())
     }
 
