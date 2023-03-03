@@ -8,6 +8,7 @@ use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::{gas, storage_api};
 use crate::types::address::Address;
 use crate::types::storage;
+use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -64,6 +65,32 @@ where
             .commit_block(&mut self.storage)
             .into_storage_result()?;
         self.storage.commit_block().into_storage_result()
+    }
+}
+
+/// with changes not yet committed to the DB.
+#[derive(Debug)]
+pub struct WlStorageRef<'store, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Write log
+    pub write_log: &'store WriteLog,
+    /// Storage provides access to DB
+    pub storage: &'store Storage<D, H>,
+}
+
+impl<'store, D, H> From<&'store WlStorage<D, H>> for WlStorageRef<'store, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn from(WlStorage{write_log, storage}: &'store WlStorage<D, H>) -> Self {
+        Self {
+            write_log,
+            storage
+        }
     }
 }
 
@@ -211,6 +238,56 @@ where
 {
     type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
 
+    fn read_bytes(&self, key: &Key) -> storage_api::Result<Option<Vec<u8>>> {
+        WlStorageRef::from(self).read_bytes(key)
+    }
+
+    fn has_key(&self, key: &Key) -> storage_api::Result<bool> {
+        WlStorageRef::from(self).has_key(key)
+    }
+
+    fn iter_prefix<'iter>(&'iter self, prefix: &Key) -> storage_api::Result<Self::PrefixIter<'iter>> {
+        let (iter, _gas) =
+            iter_prefix_post(&self.write_log, &self.storage, prefix);
+        Ok(iter)
+    }
+
+    fn iter_next<'iter>(&'iter self, iter: &mut Self::PrefixIter<'iter>) -> storage_api::Result<Option<(String, Vec<u8>)>> {
+        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
+    }
+
+    fn get_chain_id(&self) -> storage_api::Result<String> {
+        WlStorageRef::from(self).get_chain_id()
+    }
+
+    fn get_block_height(&self) -> storage_api::Result<BlockHeight> {
+        WlStorageRef::from(self).get_block_height()
+    }
+
+    fn get_block_hash(&self) -> storage_api::Result<BlockHash> {
+        WlStorageRef::from(self).get_block_hash()
+    }
+
+    fn get_block_epoch(&self) -> storage_api::Result<Epoch> {
+        WlStorageRef::from(self).get_block_epoch()
+    }
+
+    fn get_tx_index(&self) -> storage_api::Result<TxIndex> {
+        WlStorageRef::from(self).get_tx_index()
+    }
+
+    fn get_native_token(&self) -> storage_api::Result<Address> {
+        WlStorageRef::from(self).get_native_token()
+    }
+}
+
+impl<'store, D, H> StorageRead for WlStorageRef<'store, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
+
     fn read_bytes(
         &self,
         key: &storage::Key,
@@ -259,7 +336,7 @@ where
         prefix: &storage::Key,
     ) -> storage_api::Result<Self::PrefixIter<'iter>> {
         let (iter, _gas) =
-            iter_prefix_post(&self.write_log, &self.storage, prefix);
+            iter_prefix_post(self.write_log, self.storage, prefix);
         Ok(iter)
     }
 
