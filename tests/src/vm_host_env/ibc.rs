@@ -34,13 +34,13 @@ use namada::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 use namada::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
 use namada::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
 use namada::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
+pub use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
 use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChanVersion;
 use namada::ibc::core::ics23_commitment::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
-use namada::ibc::core::ics24_host::identifier::{
+pub use namada::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 use namada::ibc::mock::client_state::{MockClientState, MOCK_CLIENT_TYPE};
@@ -60,11 +60,10 @@ use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::ibc::init_genesis_storage;
 pub use namada::ledger::ibc::storage::{
-    ack_key, capability_index_key, capability_key, channel_counter_key,
-    channel_key, client_counter_key, client_state_key, client_type_key,
-    commitment_key, connection_counter_key, connection_key,
-    consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
-    next_sequence_send_key, port_key, receipt_key,
+    ack_key, channel_counter_key, channel_key, client_counter_key,
+    client_state_key, client_type_key, commitment_key, connection_counter_key,
+    connection_key, consensus_state_key, next_sequence_ack_key,
+    next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
     get_dummy_header as tm_dummy_header, Ibc, IbcToken,
@@ -219,13 +218,17 @@ pub fn init_storage() -> (Address, Address) {
     (token, account)
 }
 
+pub fn client_id() -> ClientId {
+    let (client_state, _) = dummy_client();
+    ClientId::new(client_state.client_type(), 0).expect("invalid client ID")
+}
+
 pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     let mut writes = HashMap::new();
 
     let (client_state, consensus_state) = dummy_client();
     // client state
-    let client_id = ClientId::new(client_state.client_type(), 0)
-        .expect("invalid client ID");
+    let client_id = client_id();
     let key = client_state_key(&client_id);
     let bytes = client_state
         .into_box()
@@ -300,10 +303,6 @@ pub fn prepare_opened_channel(
     let port_id = PortId::transfer();
     let key = port_key(&port_id);
     writes.insert(key, 0_u64.to_be_bytes().to_vec());
-    // capability
-    let key = capability_key(0);
-    let bytes = port_id.as_bytes().to_vec();
-    writes.insert(key, bytes);
     // channel
     let channel_id = ChannelId::new(0);
     let port_channel_id =
@@ -487,7 +486,7 @@ pub fn msg_channel_open_try(
         proof_height_on_a: dummy_proof_height(),
         ordering: Order::Unordered,
         signer: Signer::from_str("test").expect("invalid signer"),
-        previous_channel_id: "dummy".to_string(),
+        previous_channel_id: ChannelId::default().to_string(),
         version_proposal: ChanVersion::default(),
     }
 }

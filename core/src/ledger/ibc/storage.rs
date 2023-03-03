@@ -11,9 +11,9 @@ use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
 };
 use crate::ibc::core::ics24_host::path::{
-    AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath,
-    ClientTypePath, CommitmentPath, ConnectionPath, PortPath, ReceiptPath,
-    SeqAckPath, SeqRecvPath, SeqSendPath,
+    AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
+    ClientStatePath, ClientTypePath, CommitmentPath, ConnectionPath, PortPath,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_LEN};
@@ -22,8 +22,6 @@ use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
-const CAPABILITIES_INDEX: &str = "capabilities/index";
-const CAPABILITIES: &str = "capabilities";
 const DENOM: &str = "denom";
 /// Key segment for a multitoken related to IBC
 pub const MULTITOKEN_STORAGE_KEY: &str = "ibc";
@@ -107,11 +105,6 @@ pub fn is_channel_counter_key(key: &Key) -> bool {
     *key == channel_counter_key()
 }
 
-/// Check if the given key is a key of the capability index
-pub fn is_capability_index_key(key: &Key) -> bool {
-    *key == capability_index_key()
-}
-
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
     let path = Key::parse(path).map_err(Error::StorageKey)?;
@@ -138,13 +131,6 @@ pub fn channel_counter_key() -> Key {
     let path = CHANNELS_COUNTER.to_owned();
     ibc_key(path)
         .expect("Creating a key for the channel counter shouldn't fail")
-}
-
-/// Returns a key of the IBC capability index
-pub fn capability_index_key() -> Key {
-    let path = CAPABILITIES_INDEX.to_owned();
-    ibc_key(path)
-        .expect("Creating a key for the capability index shouldn't fail")
 }
 
 /// Returns a key for the client type
@@ -203,9 +189,9 @@ pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
         .expect("Creating a key for the channel shouldn't fail")
 }
 
-/// Returns a key for the channel list
-pub fn connection_channels_key(conn_id: &ConnectionId) -> Key {
-    let path = format!("clients/{}/connections", conn_id);
+/// Returns a key for the connection list
+pub fn client_connections_key(client_id: &ClientId) -> Key {
+    let path = Path::ClientConnection(ClientConnectionPath(client_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the channel shouldn't fail")
 }
@@ -215,12 +201,6 @@ pub fn port_key(port_id: &PortId) -> Key {
     let path = Path::Ports(PortPath(port_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the port shouldn't fail")
-}
-
-/// Returns a key of the reversed map for IBC capabilities
-pub fn capability_key(index: u64) -> Key {
-    let path = format!("{}/{}", CAPABILITIES, index);
-    ibc_key(path).expect("Creating a key for a capability shouldn't fail")
 }
 
 /// Returns a key for nextSequenceSend

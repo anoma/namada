@@ -95,7 +95,7 @@ where
         let count = self.client_counter().expect("read failed");
         self.ctx
             .borrow_mut()
-            .write(&key, count.to_be_bytes().to_vec())
+            .write(&key, (count + 1).to_be_bytes().to_vec())
             .expect("write failed");
     }
 

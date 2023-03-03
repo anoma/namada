@@ -16,7 +16,7 @@ use namada_core::types::storage::{BlockHeight, Header, Key};
 use namada_core::types::token::{is_any_token_balance_key, Amount};
 
 use super::Error;
-use crate::ledger::native_vp::{CtxPostStorageRead, CtxPreStorageRead};
+use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::vm::WasmCacheAccess;
 
 #[derive(Debug)]
@@ -206,7 +206,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     /// Context to read the post value
-    ctx: CtxPostStorageRead<'view, 'a, DB, H, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
 }
 
 impl<'view, 'a, DB, H, CA> VpValidationContext<'view, 'a, DB, H, CA>
@@ -215,7 +215,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    pub fn new(ctx: CtxPostStorageRead<'view, 'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
         Self { ctx }
     }
 }

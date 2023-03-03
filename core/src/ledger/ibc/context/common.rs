@@ -343,7 +343,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         key: &Key,
         sequence: Sequence,
     ) -> Result<(), ContextError> {
-        self.write(&key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
+        self.write(&key, u64::from(sequence).to_be_bytes().to_vec())
             .map_err(|_| {
                 ContextError::PacketError(PacketError::Channel(
                     ChannelError::Other {

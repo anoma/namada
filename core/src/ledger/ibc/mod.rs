@@ -45,6 +45,8 @@ pub enum Error {
     Execution(RouterError),
     #[error("IBC token transfer error: {0}")]
     TokenTransfer(TokenTransferError),
+    #[error("IBC validation error: {0}")]
+    Validation(RouterError),
     #[error("IBC module doesn't exist")]
     NoModule,
     #[error("Denom error: {0}")]
@@ -174,7 +176,7 @@ where
                     None => Err(Error::NoModule),
                 }
             }
-            _ => validate(self, msg).map_err(Error::Execution),
+            _ => validate(self, msg).map_err(Error::Validation),
         }
     }
 }

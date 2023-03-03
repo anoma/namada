@@ -1,5 +1,8 @@
 //! IBC lower-level functions for transactions.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub use namada_core::ledger::ibc::{
     Error, IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec,
     TransferModule,
@@ -12,6 +15,15 @@ use namada_core::types::token::Amount;
 
 use crate::token::transfer_with_keys;
 use crate::{Ctx, KeyValIterator};
+
+/// IBC actions to handle an IBC message
+pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
+    let ctx = Rc::new(RefCell::new(ctx.clone()));
+    let mut actions = IbcActions::new(ctx.clone());
+    let module = TransferModule::new(ctx);
+    actions.add_route(module.module_id(), module);
+    actions
+}
 
 impl IbcStorageContext for Ctx {
     type Error = crate::Error;

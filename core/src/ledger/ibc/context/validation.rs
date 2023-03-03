@@ -26,6 +26,8 @@ use crate::ibc::core::ics24_host::path::{
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::{ContextError, ValidationContext};
+#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+use crate::ibc::mock::client_state::MockClientState;
 use crate::ibc::timestamp::Timestamp;
 use crate::ibc::Height;
 use crate::ibc_proto::google::protobuf::Any;
@@ -260,6 +262,14 @@ where
             .map_err(|_| ConnectionError::Other {
                 description: "Decoding the client state failed".to_string(),
             })?;
+
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        if let Some(_mock) =
+            downcast_client_state::<MockClientState>(client_state.as_ref())
+        {
+            return Ok(());
+        }
+
         let client_state =
             downcast_client_state::<TmClientState>(client_state.as_ref())
                 .ok_or_else(|| ConnectionError::Other {
