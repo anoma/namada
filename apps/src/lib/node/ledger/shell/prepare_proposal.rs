@@ -64,7 +64,7 @@ where
         self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
-            let alloc = BlockSpaceAllocator::from(&self.storage);
+            let alloc = BlockSpaceAllocator::from(&self.wl_storage);
             #[cfg(not(feature = "abcipp"))]
             let mut protocol_tx_indices = VecIndexSet::default();
 
@@ -125,24 +125,36 @@ where
     // - https://specs.namada.net/main/releases/v2.html
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
-        &mut self,
+        &self,
         mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
         // TODO: This should not be hardcoded
         let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
+        let pos_queries = self.wl_storage.pos_queries();
         let txs = self
+            .wl_storage
             .storage
             .tx_queue
             .iter()
-            .map(|tx| {
-                Tx::from(match tx.decrypt(privkey) {
-                    Ok(tx) => DecryptedTx::Decrypted(tx),
-                    _ => DecryptedTx::Undecryptable(tx.clone()),
-                })
-                .to_bytes()
-            })
+            .map(
+                |WrapperTxInQueue {
+                     tx,
+                     #[cfg(not(feature = "mainnet"))]
+                     has_valid_pow,
+                 }| {
+                    Tx::from(match tx.decrypt(privkey) {
+                        Ok(tx) => DecryptedTx::Decrypted {
+                            tx,
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: *has_valid_pow,
+                        },
+                        _ => DecryptedTx::Undecryptable(tx.clone()),
+                    })
+                    .to_bytes()
+                },
+            )
             // TODO: make sure all decrypted txs are accepted
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..]).map_or_else(
@@ -152,7 +164,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping decrypted tx from the current proposal",
                             );
                             false
@@ -162,7 +174,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping large decrypted tx from the current proposal",
                             );
                             true
@@ -181,7 +193,7 @@ where
     /// events and, optionally, a validator set update.
     #[cfg(feature = "abcipp")]
     fn build_protocol_txs(
-        &mut self,
+        &self,
         alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
@@ -190,7 +202,7 @@ where
         // this is because we have not decided any block through
         // consensus yet (hence height 0), which in turn means we
         // have not committed any vote extensions to a block either.
-        if self.storage.last_height == BlockHeight(0) {
+        if self.wl_storage.storage.last_height == BlockHeight(0) {
             return (vec![], self.get_encrypted_txs_allocator(alloc));
         }
 
@@ -220,7 +232,8 @@ where
 
         let validator_set_update =
             if self
-                .storage
+                .wl_storage
+                .ethbridge_queries()
                 .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
             {
                 Some(self.compress_valset_updates(valset_upds).unwrap_or_else(
@@ -256,12 +269,12 @@ where
     /// and, optionally, a validator set update
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
-        &mut self,
+        &self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         protocol_tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
-        if self.storage.last_height == BlockHeight(0) {
+        if self.wl_storage.storage.last_height == BlockHeight(0) {
             // genesis should not contain vote extensions.
             //
             // this is because we have not decided any block through
@@ -272,6 +285,7 @@ where
 
         let deserialized_iter =
             self.deserialize_vote_extensions(txs, protocol_tx_indices);
+        let pos_queries = self.wl_storage.pos_queries();
         let txs = deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
@@ -289,7 +303,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping protocol tx from the current proposal",
                             );
                             false
@@ -301,7 +315,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping large protocol tx from the current proposal",
                             );
                             true
@@ -332,13 +346,15 @@ where
         &self,
         alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
     ) -> EncryptedTxBatchAllocator {
-        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        let pos_queries = self.wl_storage.pos_queries();
+
+        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
 
         if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
             tracing::warn!(
                 proposal_height =
-                    ?self.storage.get_current_decision_height(),
+                    ?pos_queries.get_current_decision_height(),
                 "No mempool txs are being included in the current proposal"
             );
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(
@@ -354,10 +370,11 @@ where
     /// Builds a batch of encrypted transactions, retrieved from
     /// Tendermint's mempool.
     fn build_encrypted_txs(
-        &mut self,
+        &self,
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
+        let pos_queries = self.wl_storage.pos_queries();
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
@@ -378,7 +395,7 @@ where
                                     ?tx_bytes,
                                     bin_space_left,
                                     proposal_height =
-                                        ?self.storage.get_current_decision_height(),
+                                        ?pos_queries.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
@@ -390,7 +407,7 @@ where
                                     ?tx_bytes,
                                     bin_size,
                                     proposal_height =
-                                        ?self.storage.get_current_decision_height(),
+                                        ?pos_queries.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
                                 );
                                 true
@@ -409,7 +426,7 @@ where
     /// remaining space of the [`BlockSpaceAllocator`].
     #[cfg(feature = "abcipp")]
     fn build_remaining_batch(
-        &mut self,
+        &self,
         _alloc: BlockSpaceAllocator<FillingRemainingSpace>,
         _txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
@@ -420,11 +437,12 @@ where
     /// remaining space of the [`BlockSpaceAllocator`].
     #[cfg(not(feature = "abcipp"))]
     fn build_remaining_batch(
-        &mut self,
+        &self,
         mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
         protocol_tx_indices: &VecIndexSet<u128>,
         txs: Vec<TxBytes>,
     ) -> Vec<TxBytes> {
+        let pos_queries = self.wl_storage.pos_queries();
         get_remaining_protocol_txs(protocol_tx_indices, txs)
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..]).map_or_else(
@@ -434,7 +452,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping tx from the current proposal",
                             );
                             false
@@ -446,7 +464,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?self.storage.get_current_decision_height(),
+                                    ?pos_queries.get_current_decision_height(),
                                 "Dropping large tx from the current proposal",
                             );
                             true
@@ -503,7 +521,6 @@ mod test_prepare_proposal {
 
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
     use namada::proto::{SignableEthMessage, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
@@ -595,7 +612,7 @@ mod test_prepare_proposal {
             .expect("Test failed")
             .to_owned();
         let evts = {
-            let prev_height = shell.storage.last_height;
+            let prev_height = shell.wl_storage.storage.last_height;
             let ext = ethereum_events::Vext::empty(
                 prev_height,
                 validator_addr.clone(),
@@ -617,7 +634,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.last_height,
+                block_height: shell.wl_storage.storage.last_height,
                 validator_addr,
                 sig,
             }
@@ -694,7 +711,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let signed_vote_extension = {
             let (protocol_key, _, _) = wallet::defaults::validator_keys();
@@ -727,7 +744,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -772,7 +789,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let (validator_addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -803,7 +820,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -881,7 +898,7 @@ mod test_prepare_proposal {
         let eth_vext = ProtocolTxType::EthEventsVext(
             ethereum_events::Vext {
                 validator_addr: address.clone(),
-                block_height: shell.storage.last_height,
+                block_height: shell.wl_storage.storage.last_height,
                 ethereum_events: vec![ethereum_event],
             }
             .sign(protocol_key),
@@ -894,7 +911,7 @@ mod test_prepare_proposal {
         let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
         let bp_vext = ProtocolTxType::BridgePoolVext(
             bridge_pool_roots::Vext {
-                block_height: shell.storage.last_height,
+                block_height: shell.wl_storage.storage.last_height,
                 validator_addr: address,
                 sig,
             }
@@ -956,7 +973,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -983,7 +1000,7 @@ mod test_prepare_proposal {
             )
             .sig;
             bridge_pool_roots::Vext {
-                block_height: shell.storage.last_height,
+                block_height: shell.wl_storage.storage.last_height,
                 validator_addr,
                 sig,
             }
@@ -1046,7 +1063,7 @@ mod test_prepare_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
         // artificially change the block height
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
 
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
@@ -1099,8 +1116,11 @@ mod test_prepare_proposal {
         // artificially change the voting power of the default validator to
         // zero, change the block height, and commit a dummy block,
         // to move to a new epoch
-        let events_epoch =
-            shell.storage.get_epoch(FIRST_HEIGHT).expect("Test failed");
+        let events_epoch = shell
+            .wl_storage
+            .pos_queries()
+            .get_epoch(FIRST_HEIGHT)
+            .expect("Test failed");
         let validator_set = {
             let params = shell.storage.read_pos_params();
             let mut epochs = shell.storage.read_validator_set();
