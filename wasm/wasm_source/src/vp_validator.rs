@@ -64,15 +64,15 @@ fn validate_tx(
         verifiers
     );
 
-    let signed_tx_data = match SignedTxData::try_from_slice(&tx_data[..]) {
-        Ok(data) => data,
-        _ => return reject(),
-    };
+    let signed_tx_data =
+        Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
-    let valid_sig =
-        Lazy::new(|| verify_signatures(ctx, &signed_tx_data, &addr));
+    let valid_sig = Lazy::new(|| match &*signed_tx_data {
+        Ok(signed_tx_data) => verify_signatures(ctx, signed_tx_data, &addr),
+        _ => false,
+    });
 
-    if !is_valid_tx(ctx, &signed_tx_data, &tx_data)? {
+    if !is_valid_tx(ctx, &tx_data)? {
         return reject();
     }
 

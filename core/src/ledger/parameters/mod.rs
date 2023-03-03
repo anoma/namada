@@ -185,13 +185,13 @@ impl Parameters {
                  the genesis block",
             );
 
-        // write implicit vp parameter
+        // write max pks per account parameter
         let max_pk_per_account_key = storage::get_max_pk_per_account_key();
         storage
             .write(&max_pk_per_account_key, encode(max_pk_per_account))
             .expect(
-                "Implicit VP parameter must be initialized in the genesis \
-                 block",
+                "Maximum number of public keys must be initialized in th \
+                 genesis block",
             );
 
         // write implicit vp parameter

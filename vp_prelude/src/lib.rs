@@ -46,6 +46,12 @@ pub fn verify_signatures(
     signed_tx_data: &SignedTxData,
     addr: &Address,
 ) -> bool {
+    let is_valid_total_signatures =
+        is_valid_max_signatures(ctx, signed_tx_data).unwrap_or(false);
+    if !is_valid_total_signatures {
+        return false;
+    }
+
     let threshold = match key::threshold(ctx, addr) {
         Ok(Some(threshold)) => threshold,
         _ => 1,
@@ -122,16 +128,11 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:
-/// - tx is whitelisted, or
+/// - tx is whitelisted and has a valid amount of signatures or
 /// - tx is executed by an approved governance proposal (no need to be
 ///   whitelisted)
-pub fn is_valid_tx(
-    ctx: &Ctx,
-    signed_tx_data: &SignedTxData,
-    tx_data: &[u8],
-) -> VpResult {
-    if is_tx_whitelisted(ctx)? && is_valid_max_signatures(ctx, signed_tx_data)?
-    {
+pub fn is_valid_tx(ctx: &Ctx, tx_data: &[u8]) -> VpResult {
+    if is_tx_whitelisted(ctx)? {
         accept()
     } else {
         let proposal_id = u64::try_from_slice(tx_data).ok();

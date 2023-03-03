@@ -2371,6 +2371,7 @@ pub async fn submit_reveal_pk(mut ctx: Context, args: args::RevealPk) {
         public_key,
     } = args;
     let public_key = ctx.get_cached(&public_key);
+    println!("{}", public_key);
     if !reveal_pk_if_needed(&mut ctx, &public_key, &args).await {
         let addr: Address = (&public_key).into();
         println!("PK for {addr} is already revealed, nothing to do.");

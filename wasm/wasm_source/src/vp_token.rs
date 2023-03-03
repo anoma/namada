@@ -19,12 +19,7 @@ fn validate_tx(
         verifiers
     );
 
-    let signed_tx_data = match SignedTxData::try_from_slice(&tx_data[..]) {
-        Ok(data) => data,
-        _ => return reject(),
-    };
-
-    if !is_valid_tx(ctx, &signed_tx_data, &tx_data)? {
+    if !is_valid_tx(ctx, &tx_data)? {
         return reject();
     }
 
