@@ -366,7 +366,8 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::ledger::storage::Storage;
+    use crate::ledger::storage::{Storage, WlStorage};
+    use crate::ledger::storage_api::StorageWrite;
     use crate::proto::Tx;
     use crate::types::address::wnam;
     use crate::types::chain::ChainId;
@@ -516,13 +517,7 @@ mod test_bridge_pool_vp {
     }
 
     /// Initialize some dummy storage for testing
-    fn setup_storage() -> Storage<MockDB, Sha256Hasher> {
-        let mut storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            address::nam(),
-            None,
-        );
+    fn setup_storage() -> WlStorage<MockDB, Sha256Hasher> {
         // a dummy config for testing
         let config = EthereumBridgeConfig {
             min_confirmations: Default::default(),
@@ -538,8 +533,17 @@ mod test_bridge_pool_vp {
                 },
             },
         };
-        config.init_storage(&mut storage);
-        storage
+        let mut wl_storage = WlStorage {
+            storage: Storage::<MockDB, Sha256Hasher>::open(
+                std::path::Path::new(""),
+                ChainId::default(),
+                address::nam(),
+                None,
+            ),
+            write_log: new_writelog(),
+        };
+        config.init_storage(&mut wl_storage);
+        wl_storage
     }
 
     /// Setup a ctx for running native vps
@@ -582,8 +586,7 @@ mod test_bridge_pool_vp {
         F: FnOnce(PendingTransfer, &mut WriteLog) -> BTreeSet<Key>,
     {
         // setup
-        let mut write_log = new_writelog();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -601,11 +604,11 @@ mod test_bridge_pool_vp {
         };
         // add transfer to pool
         let mut keys_changed =
-            insert_transfer(transfer.clone(), &mut write_log);
+            insert_transfer(transfer.clone(), &mut wl_storage.write_log);
 
         // change Bertha's balances
         let mut new_keys_changed = update_balances(
-            &mut write_log,
+            &mut wl_storage.write_log,
             Balance {
                 owner: bertha_address(),
                 balance: BERTHA_WEALTH.into(),
@@ -618,7 +621,7 @@ mod test_bridge_pool_vp {
 
         // change the bridge pool balances
         let mut new_keys_changed = update_balances(
-            &mut write_log,
+            &mut wl_storage.write_log,
             Balance {
                 owner: BRIDGE_POOL_ADDRESS,
                 balance: ESCROWED_AMOUNT.into(),
@@ -633,8 +636,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
@@ -928,8 +931,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_adding_transfer_twice_fails() {
         // setup
-        let mut write_log = new_writelog();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -937,8 +939,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            write_log
-                .write(
+            wl_storage
+                .write_bytes(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -948,7 +950,7 @@ mod test_bridge_pool_vp {
 
         // update Bertha's balances
         let mut new_keys_changed = update_balances(
-            &mut write_log,
+            &mut wl_storage.write_log,
             Balance {
                 owner: bertha_address(),
                 balance: BERTHA_WEALTH.into(),
@@ -961,7 +963,7 @@ mod test_bridge_pool_vp {
 
         // update the bridge pool balances
         let mut new_keys_changed = update_balances(
-            &mut write_log,
+            &mut wl_storage.write_log,
             Balance {
                 owner: BRIDGE_POOL_ADDRESS,
                 balance: ESCROWED_AMOUNT.into(),
@@ -977,8 +979,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
@@ -1002,8 +1004,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_zero_gas_fees_rejected() {
         // setup
-        let mut write_log = new_writelog();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -1022,8 +1023,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            write_log
-                .write(
+            wl_storage
+                .write_bytes(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1043,8 +1044,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
@@ -1070,11 +1071,9 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_mint_wnam() {
         // setup
-        let mut write_log = new_writelog();
+        let mut wl_storage = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        write_log.commit_tx();
-        let storage = setup_storage();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -1093,8 +1092,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let keys_changed = {
-            write_log
-                .write(
+            wl_storage
+                .write_bytes(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1104,8 +1103,8 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200)
                     .try_to_vec()
@@ -1113,16 +1112,16 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &eb_account_key,
                 Amount::from(100).try_to_vec().expect("Test failed"),
             )
@@ -1133,8 +1132,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
@@ -1161,9 +1160,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_reject_mint_wnam() {
         // setup
-        let mut write_log = new_writelog();
-        write_log.commit_tx();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         let tx = Tx::new(vec![], None);
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
@@ -1184,8 +1181,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let keys_changed = {
-            write_log
-                .write(
+            wl_storage
+                .write_bytes(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1195,8 +1192,8 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200)
                     .try_to_vec()
@@ -1204,16 +1201,16 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &eb_account_key,
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
@@ -1224,8 +1221,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
@@ -1252,12 +1249,12 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_mint_wnam_separate_gas_payer() {
         // setup
-        let mut write_log = new_writelog();
+        let mut wl_storage = setup_storage();
         // initialize the eth bridge balance to 0
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &eb_account_key,
                 Amount::default().try_to_vec().expect("Test failed"),
             )
@@ -1265,16 +1262,15 @@ mod test_bridge_pool_vp {
         // initialize the gas payers account
         let gas_payer_balance_key =
             balance_key(&nam(), &established_address_1());
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &gas_payer_balance_key,
                 Amount::from(BERTHA_WEALTH)
                     .try_to_vec()
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        write_log.commit_tx();
-        let storage = setup_storage();
+        wl_storage.write_log.commit_tx();
         let tx = Tx::new(vec![], None);
 
         // the transfer to be added to the pool
@@ -1293,8 +1289,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let keys_changed = {
-            write_log
-                .write(
+            wl_storage
+                .write_bytes(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1304,16 +1300,16 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 100)
                     .try_to_vec()
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &gas_payer_balance_key,
                 Amount::from(BERTHA_WEALTH - 100)
                     .try_to_vec()
@@ -1321,16 +1317,16 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
                     .expect("Test failed"),
             )
             .expect("Test failed");
-        write_log
-            .write(
+        wl_storage
+            .write_bytes(
                 &eb_account_key,
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
@@ -1340,8 +1336,8 @@ mod test_bridge_pool_vp {
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &storage,
-                &write_log,
+                &wl_storage.storage,
+                &wl_storage.write_log,
                 &keys_changed,
                 &verifiers,
             ),
