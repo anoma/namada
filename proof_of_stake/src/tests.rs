@@ -1,5 +1,7 @@
 //! PoS system tests
 
+mod state_machine;
+
 use std::cmp::min;
 use std::ops::Range;
 
