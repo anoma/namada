@@ -1417,6 +1417,15 @@ pub async fn query_protocol_parameters(
         .expect("Parameter should be defined.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
+    let key = param_storage::get_max_pk_per_account_key();
+    let max_pk_per_account = query_storage_value::<Vec<String>>(&client, &key)
+        .await
+        .expect("Parameter should be defined.");
+    println!(
+        "{:4}Max. transactions per account: {:?}",
+        "", max_pk_per_account
+    );
+
     println!("PoS parameters");
     let key = pos::params_key();
     let pos_params = query_storage_value::<PosParams>(&client, &key)
