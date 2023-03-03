@@ -282,6 +282,7 @@ mod test_bp_vote_extensions {
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
+    use namada::types::token;
     use namada::types::vote_extensions::bridge_pool_roots;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
@@ -300,7 +301,7 @@ mod test_bp_vote_extensions {
         // a validator in the next epoch
         let validators_handle = consensus_validator_set_handle();
         validators_handle
-            .at(&Epoch(1))
+            .at(&1.into())
             .at(&token::Amount::whole(100))
             .insert(
                 &mut shell.wl_storage,
@@ -336,7 +337,7 @@ mod test_bp_vote_extensions {
             consensus_key: &consensus_key.ref_to(),
             eth_hot_key: &hot_key.ref_to(),
             eth_cold_key: &cold_key.ref_to(),
-            current_epoch: Epoch(0),
+            current_epoch: 0.into(),
             commission_rate: Default::default(),
             max_commission_change_per_epoch: Default::default(),
         })

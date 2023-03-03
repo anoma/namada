@@ -37,7 +37,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{ibc, pos, protocol};
+use namada::ledger::{pos, protocol};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address;
@@ -47,7 +47,6 @@ use namada::types::ethereum_events::EthereumEvent;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,

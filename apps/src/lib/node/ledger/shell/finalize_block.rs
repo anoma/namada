@@ -517,7 +517,7 @@ mod test_finalize_block {
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
     use namada::types::storage::Epoch;
-    use namada::types::time::DurationSecs;
+    use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
