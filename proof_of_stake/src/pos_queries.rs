@@ -20,14 +20,17 @@ use thiserror::Error;
 
 use crate::types::WeightedValidator;
 use crate::{
-    consensus_validator_set_handle, read_pos_params,
-    validator_eth_cold_key_handle, validator_eth_hot_key_handle,
-    ConsensusValidatorSet, PosParams,
+    consensus_validator_set_handle, find_validator_by_raw_hash,
+    read_pos_params, validator_eth_cold_key_handle,
+    validator_eth_hot_key_handle, ConsensusValidatorSet, PosParams,
 };
 
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// A storage error occurred.
+    #[error("Storage error: {0}")]
+    Storage(storage_api::Error),
     /// The given address is not among the set of active validators for
     /// the corresponding epoch.
     #[error(
@@ -45,13 +48,9 @@ pub enum Error {
     /// The given public key hash does not correspond to any active validator's
     /// key at the provided epoch.
     #[error(
-        "The public key hash '{0}' is not among the active validator set for \
-         epoch {1}"
+        "The public key hash '{0}' does not belong to a validator in storage"
     )]
-    NotValidatorKeyHash(String, Epoch),
-    /// An invalid Tendermint validator address was detected.
-    #[error("Invalid validator tendermint address")]
-    InvalidTMAddress,
+    NotValidatorKeyHash(String),
 }
 
 /// Result type returned by [`PosQueries`] operations.
@@ -267,24 +266,14 @@ where
     /// Given a tendermint validator, the address is the hash
     /// of the validators public key. We look up the native
     /// address from storage using this hash.
-    // TODO: We may change how this lookup is done, see
-    // https://github.com/anoma/namada/issues/200
     pub fn get_validator_from_tm_address(
         self,
-        _tm_address: &[u8],
-        _epoch: Option<Epoch>,
+        tm_address: impl AsRef<str>,
     ) -> Result<Address> {
-        // let epoch = epoch.unwrap_or_else(|| self.get_current_epoch().0);
-        // let validator_raw_hash = core::str::from_utf8(tm_address)
-        //     .map_err(|_| Error::InvalidTMAddress)?;
-        // self.read_validator_address_raw_hash(validator_raw_hash)
-        //     .ok_or_else(|| {
-        //         Error::NotValidatorKeyHash(
-        //             validator_raw_hash.to_string(),
-        //             epoch,
-        //         )
-        //     })
-        todo!()
+        let addr_hash = tm_address.as_ref();
+        let validator = find_validator_by_raw_hash(self.wl_storage, addr_hash)
+            .map_err(Error::Storage)?;
+        validator.ok_or_else(|| Error::NotValidatorKeyHash(addr_hash.into()))
     }
 
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
