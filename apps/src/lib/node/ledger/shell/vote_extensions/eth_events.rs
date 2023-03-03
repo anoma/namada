@@ -100,20 +100,24 @@ where
         //
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch =
-            match self.storage.get_epoch(ext.data.block_height) {
-                Some(epoch) => epoch,
-                _ => {
-                    tracing::error!(
-                        block_height = ?ext.data.block_height,
-                        "The epoch of the Ethereum events vote extension's \
-                         block height should always be known",
-                    );
-                    return Err(VoteExtensionError::UnexpectedEpoch);
-                }
-            };
+        let ext_height_epoch = match self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::error!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the Ethereum events vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedEpoch);
+            }
+        };
         let (voting_power, pk) = self
-            .storage
+            .wl_storage
+            .pos_queries()
             .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
                 tracing::error!(
@@ -176,7 +180,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_eth_events_vext_and_get_it_back(
                 vote_extension,
-                self.storage.last_height,
+                self.wl_storage.storage.last_height,
             )
         })
     }
@@ -206,19 +210,25 @@ where
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
         #[cfg(not(feature = "abcipp"))]
-        if self.storage.last_height == BlockHeight(0) {
+        if self.wl_storage.storage.last_height == BlockHeight(0) {
             return None;
         }
 
         #[cfg(feature = "abcipp")]
-        let vexts_epoch =
-            self.storage.get_epoch(self.storage.last_height).expect(
+        let vexts_epoch = self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(self.wl_storage.storage.last_height)
+            .expect(
                 "The epoch of the last block height should always be known",
             );
 
         #[cfg(feature = "abcipp")]
-        let total_voting_power =
-            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        let total_voting_power = u64::from(
+            self.wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(vexts_epoch)),
+        );
         #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
@@ -299,9 +309,12 @@ mod test_vote_extensions {
 
     #[cfg(feature = "abcipp")]
     use borsh::{BorshDeserialize, BorshSerialize};
+    use namada::core::ledger::storage_api::collections::lazy_map::{
+        NestedSubKey, SubKey,
+    };
     use namada::ledger::pos;
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
     use namada::types::address::testing::gen_established_address;
@@ -475,7 +488,10 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.storage.get_current_decision_height(),
+            block_height: shell
+                .wl_storage
+                .pos_queries()
+                .get_current_decision_height(),
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
@@ -508,7 +524,7 @@ mod test_vote_extensions {
                     .sig;
                     Some(
                         bridge_pool_roots::Vext {
-                            block_height: shell.storage.last_height,
+                            block_height: shell.wl_storage.storage.last_height,
                             validator_addr: address,
                             sig,
                         }
@@ -529,7 +545,7 @@ mod test_vote_extensions {
         );
         assert!(!shell.validate_eth_events_vext(
             ethereum_events,
-            shell.storage.get_current_decision_height(),
+            shell.wl_storage.pos_queries().get_current_decision_height(),
         ))
     }
 
@@ -547,7 +563,8 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let signed_height = shell.storage.get_current_decision_height();
+        let signed_height =
+            shell.wl_storage.pos_queries().get_current_decision_height();
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
@@ -566,36 +583,49 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert_eq!(shell.storage.get_current_epoch().0.0, 0);
-        // We make a change so that there are no
-        // validators in the next epoch
-        let mut current_validators = shell.storage.read_validator_set();
-        current_validators.data.insert(
-            1,
-            Some(pos::types::ValidatorSet {
-                active: Default::default(),
-                inactive: Default::default(),
-            }),
-        );
-        shell.storage.write_validator_set(&current_validators);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
+        // remove all validators of the next epoch
+        let validators_handle = consensus_validator_set_handle();
+        let consensus_in_mem = validators_handle
+            .at(&Epoch(1))
+            .iter(&shell.wl_storage)
+            .map(|val| {
+                let (
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: SubKey::Data(position),
+                    },
+                    ..,
+                ) = val.expect("Test failed");
+                (stake, position)
+            });
+        for (val_stake, val_position) in consensus_in_mem.into_iter() {
+            consensus_validator_set
+                .at(&Epoch(1))
+                .at(&val_stake)
+                .remove(&mut shell.wl_storage, val_position)?;
+        }
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.storage.last_height = BlockHeight(11);
+        shell.wl_storage.storage.last_height = BlockHeight(11);
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
-        assert_eq!(shell.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
         assert!(
             shell
-                .storage
+                .wl_storage
+                .pos_queries()
                 .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
                 .is_err()
         );
-        let prev_epoch = Epoch(shell.storage.get_current_epoch().0.0 - 1);
+        let prev_epoch =
+            Epoch(shell.wl_storage.storage.get_current_epoch().0.0 - 1);
         assert!(
             shell
                 .shell
-                .storage
+                .wl_storage
+                .pos_queries()
                 .get_validator_from_protocol_pk(
                     &signing_key.ref_to(),
                     Some(prev_epoch)
@@ -628,7 +658,7 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address.clone(),
         };
 
@@ -651,7 +681,7 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.storage.last_height,
+                    block_height: shell.wl_storage.storage.last_height,
                     validator_addr: address.clone(),
                     sig,
                 }
@@ -676,15 +706,13 @@ mod test_vote_extensions {
             );
         }
 
-        ethereum_events.block_height = shell.storage.last_height + 1;
+        ethereum_events.block_height = shell.wl_storage.storage.last_height + 1;
         let signed_vext = ethereum_events
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(
-            !shell.validate_eth_events_vext(
-                signed_vext,
-                shell.storage.last_height
-            )
-        )
+        assert!(!shell.validate_eth_events_vext(
+            signed_vext,
+            shell.wl_storage.storage.last_height
+        ))
     }
 
     /// Test if we reject Ethereum events vote extensions
@@ -707,7 +735,7 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address.clone(),
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
@@ -724,9 +752,9 @@ mod test_vote_extensions {
             shell.verify_vote_extension(req).status,
             i32::from(VerifyStatus::Reject)
         );
-        assert!(
-            !shell
-                .validate_eth_events_vext(vote_ext, shell.storage.last_height)
-        )
+        assert!(!shell.validate_eth_events_vext(
+            vote_ext,
+            shell.wl_storage.storage.last_height
+        ))
     }
 }

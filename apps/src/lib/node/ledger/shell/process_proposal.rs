@@ -3,7 +3,7 @@
 
 use data_encoding::HEXUPPER;
 use namada::core::hints;
-use namada::core::ledger::storage::Storage;
+use namada::core::ledger::storage::WlStorage;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::types::internal::WrapperTxInQueue;
@@ -39,13 +39,14 @@ pub struct ValidationMeta {
     pub decrypted_queue_has_remaining_txs: bool,
 }
 
-impl<D, H> From<&Storage<D, H>> for ValidationMeta
+impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    fn from(storage: &Storage<D, H>) -> Self {
-        let max_proposal_bytes = storage.get_max_proposal_bytes().get();
+    fn from(wl_storage: &WlStorage<D, H>) -> Self {
+        let max_proposal_bytes =
+            wl_storage.pos_queries().get_max_proposal_bytes().get();
         let encrypted_txs_bin =
             TxBin::init_over_ratio(max_proposal_bytes, threshold::ONE_THIRD);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -272,7 +273,7 @@ where
         txs: &[TxBytes],
     ) -> (Vec<TxResult>, ValidationMeta) {
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
-        let mut metadata = ValidationMeta::from(&self.storage);
+        let mut metadata = ValidationMeta::from(&self.wl_storage);
         let tx_results: Vec<_> = txs
             .iter()
             .map(|tx_bytes| {
@@ -284,7 +285,8 @@ where
             })
             .collect();
         metadata.decrypted_queue_has_remaining_txs =
-            !self.storage.tx_queue.is_empty() && tx_queue_iter.next().is_some();
+            !self.wl_storage.storage.tx_queue.is_empty()
+                && tx_queue_iter.next().is_some();
         (tx_results, metadata)
     }
 
@@ -304,8 +306,13 @@ where
         let mut voting_power = FractionalVotingPower::default();
         #[cfg(feature = "abcipp")]
         let total_power = {
-            let epoch = self.storage.get_epoch(self.storage.last_height);
-            u64::from(self.storage.get_total_voting_power(epoch))
+            let epoch = self
+                .wl_storage
+                .pos_queries()
+                .get_epoch(self.wl_storage.storage.last_height);
+            u64::from(
+                self.wl_storage.pos_queries().get_total_voting_power(epoch),
+            )
         };
 
         if vote_extensions.all(|maybe_ext| {
@@ -444,7 +451,7 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthEventsVext(ext) => {
-                    if !self.storage.is_bridge_active() {
+                    if !self.wl_storage.ethbridge_queries().is_bridge_active() {
                         TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected this proposal \
@@ -455,7 +462,7 @@ where
                     } else {
                         self.validate_eth_events_vext_and_get_it_back(
                             ext,
-                            self.storage.last_height,
+                            self.wl_storage.storage.last_height,
                         )
                         .map(|_| TxResult {
                             code: ErrorCodes::Ok.into(),
@@ -475,7 +482,7 @@ where
                     }
                 }
                 ProtocolTxType::BridgePoolVext(ext) => {
-                    if !self.storage.is_bridge_active() {
+                    if !self.wl_storage.ethbridge_queries().is_bridge_active() {
                         TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected this proposal \
@@ -486,7 +493,7 @@ where
                     } else {
                         self.validate_bp_roots_vext_and_get_it_back(
                             ext,
-                            self.storage.last_height,
+                            self.wl_storage.storage.last_height,
                         )
                         .map(|_| TxResult {
                             code: ErrorCodes::Ok.into(),
@@ -511,7 +518,7 @@ where
                         // n.b. only accept validator set updates issued at
                         // the current epoch (signing off on the validators
                         // of the next epoch)
-                        self.storage.get_current_epoch().0,
+                        self.wl_storage.storage.get_current_epoch().0,
                     )
                     .map(|_| TxResult {
                         code: ErrorCodes::Ok.into(),
@@ -532,7 +539,7 @@ where
                         metadata.digests.eth_ev_digest_num += 1;
                     }
                     let extensions =
-                        digest.decompress(self.storage.last_height);
+                        digest.decompress(self.wl_storage.storage.last_height);
                     let valid_extensions =
                         self.validate_eth_events_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
@@ -553,7 +560,8 @@ where
                 }
                 ProtocolTxType::ValidatorSetUpdate(digest) => {
                     if !self
-                        .storage
+                        .wl_storage
+                        .ethbridge_queries()
                         .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
                     {
                         return TxResult {
@@ -569,8 +577,9 @@ where
                         metadata.digests.valset_upd_digest_num += 1;
                     }
 
-                    let extensions =
-                        digest.decompress(self.storage.get_current_epoch().0);
+                    let extensions = digest.decompress(
+                        self.wl_storage.storage.get_current_epoch().0,
+                    );
                     let valid_extensions =
                         self.validate_valset_upd_vext_list(extensions).map(
                             |maybe_ext| maybe_ext.ok().map(|(power, _)| power),
@@ -659,6 +668,8 @@ where
                     } else {
                         masp()
                     };
+                    // check that the fee payer has sufficient balance
+                    let balance = self.get_balance(&tx.fee.token, &fee_payer);
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
@@ -697,9 +708,9 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        if self.storage.is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.eth_ev_digest_num
-                == usize::from(self.storage.last_height.0 != 0)
+                == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
             meta.digests.eth_ev_digest_num == 0
         }
@@ -709,9 +720,9 @@ where
     /// root vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        if self.storage.is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.bridge_pool_roots
-                == usize::from(self.storage.last_height.0 != 0)
+                == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
             meta.digests.bridge_pool_roots == 0
         }
@@ -722,11 +733,12 @@ where
     #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
         if self
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
         {
             meta.digests.valset_upd_digest_num
-                == usize::from(self.storage.last_height.0 != 0)
+                == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
             true
         }
@@ -735,8 +747,9 @@ where
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
     fn encrypted_txs_not_allowed(&self) -> bool {
-        let is_2nd_height_off = self.storage.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.storage.is_deciding_offset_within_epoch(2);
+        let pos_queries = self.wl_storage.pos_queries();
+        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
     }
 }
@@ -785,14 +798,14 @@ mod test_process_proposal {
             .expect("Test failed")
             .clone();
         let ext = ethereum_events::Vext::empty(
-            shell.storage.last_height,
+            shell.wl_storage.storage.last_height,
             addr.clone(),
         )
         .sign(protocol_key);
         ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
             signatures: {
                 let mut s = HashMap::new();
-                s.insert((addr, shell.storage.last_height), ext.sig);
+                s.insert((addr, shell.wl_storage.storage.last_height), ext.sig);
                 s
             },
             events: vec![],
@@ -821,7 +834,7 @@ mod test_process_proposal {
     fn test_more_than_one_vext_digest_rejected() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let vote_extension_digest = {
             let validator_addr = wallet::defaults::validator_address();
@@ -839,7 +852,7 @@ mod test_process_proposal {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(
-                        (validator_addr, shell.storage.last_height),
+                        (validator_addr, shell.wl_storage.storage.last_height),
                         signed_vote_extension.sig,
                     );
                     s
@@ -919,7 +932,7 @@ mod test_process_proposal {
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             ethereum_events: vec![event],
         }
         .sign(protocol_key);
@@ -960,7 +973,8 @@ mod test_process_proposal {
     #[test]
     fn check_rejected_bp_roots_bridge_inactive() {
         let (mut shell, _a, _b, _c) = setup_at_height(3);
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
@@ -971,7 +985,7 @@ mod test_process_proposal {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: addr.clone(),
             sig,
         }
@@ -1015,7 +1029,8 @@ mod test_process_proposal {
     #[test]
     fn check_rejected_vext_bridge_inactive() {
         let (mut shell, _a, _b, _c) = setup_at_height(3);
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
@@ -1026,7 +1041,7 @@ mod test_process_proposal {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: addr.clone(),
             sig,
         }
@@ -1043,21 +1058,27 @@ mod test_process_proposal {
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             ethereum_events: vec![event.clone()],
         }
         .sign(protocol_key);
         let vote_extension_digest = ethereum_events::VextDigest {
             signatures: {
                 let mut s = HashMap::new();
-                s.insert((addr.clone(), shell.storage.last_height), ext.sig);
+                s.insert(
+                    (addr.clone(), shell.wl_storage.storage.last_height),
+                    ext.sig,
+                );
                 s
             },
             events: vec![MultiSignedEthEvent {
                 event,
                 signers: {
                     let mut s = BTreeSet::new();
-                    s.insert((addr.clone(), shell.storage.last_height));
+                    s.insert((
+                        addr.clone(),
+                        shell.wl_storage.storage.last_height,
+                    ));
                     s
                 },
             }],
@@ -1124,7 +1145,7 @@ mod test_process_proposal {
     fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1152,7 +1173,7 @@ mod test_process_proposal {
                 signatures: {
                     let mut s = HashMap::new();
                     s.insert(
-                        (addr.clone(), shell.storage.last_height),
+                        (addr.clone(), shell.wl_storage.storage.last_height),
                         ext.sig,
                     );
                     s
@@ -1161,7 +1182,7 @@ mod test_process_proposal {
                     event,
                     signers: {
                         let mut s = BTreeSet::new();
-                        s.insert((addr, shell.storage.last_height));
+                        s.insert((addr, shell.wl_storage.storage.last_height));
                         s
                     },
                 }],
@@ -1188,7 +1209,7 @@ mod test_process_proposal {
         #[cfg(not(feature = "abcipp"))]
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
         let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
@@ -1241,7 +1262,7 @@ mod test_process_proposal {
     fn test_drop_vext_with_invalid_validators() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _, _) = test_utils::setup();
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
         let (addr, protocol_key) = {
             let bertha_key = wallet::defaults::bertha_keypair();
             let bertha_addr = wallet::defaults::bertha_address();
@@ -2012,7 +2033,7 @@ mod test_process_proposal {
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 1234.into(),
-                token: shell.storage.native_token.clone(),
+                token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
             Epoch(0),
@@ -2024,7 +2045,7 @@ mod test_process_proposal {
         .expect("Test failed")
         .to_bytes();
         for height in [1u64, 2] {
-            shell.storage.last_height = height.into();
+            shell.wl_storage.storage.last_height = height.into();
             #[cfg(feature = "abcipp")]
             let response = {
                 let request = ProcessProposal {

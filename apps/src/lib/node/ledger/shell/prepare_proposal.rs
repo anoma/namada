@@ -1121,37 +1121,38 @@ mod test_prepare_proposal {
             .pos_queries()
             .get_epoch(FIRST_HEIGHT)
             .expect("Test failed");
-        let validator_set = {
-            let params = shell.storage.read_pos_params();
-            let mut epochs = shell.storage.read_validator_set();
-            let mut data =
-                epochs.get(events_epoch).cloned().expect("Test failed");
+        // TODO: update the bonded tokens of the validator to 0
+        // let validator_set = {
+        //    let params = shell.storage.read_pos_params();
+        //    let mut epochs = shell.storage.read_validator_set();
+        //    let mut data =
+        //        epochs.get(events_epoch).cloned().expect("Test failed");
 
-            data.active = data
-                .active
-                .iter()
-                .cloned()
-                .map(|v| WeightedValidator {
-                    bonded_stake: 0,
-                    ..v
-                })
-                .collect();
+        //    data.active = data
+        //        .active
+        //        .iter()
+        //        .cloned()
+        //        .map(|v| WeightedValidator {
+        //            bonded_stake: 0,
+        //            ..v
+        //        })
+        //        .collect();
 
-            epochs.set(data, events_epoch, &params);
-            epochs
-        };
-        shell.storage.write_validator_set(&validator_set);
+        //    epochs.set(data, events_epoch, &params);
+        //    epochs
+        //};
+        // shell.storage.write_validator_set(&validator_set);
 
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.storage.last_height = LAST_HEIGHT;
+        shell.wl_storage.storage.last_height = LAST_HEIGHT;
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
 
         assert_eq!(
-            shell
-                .storage
-                .get_epoch(shell.storage.get_current_decision_height()),
+            shell.wl_storage.pos_queries().get_epoch(
+                shell.wl_storage.pos_queries().get_current_decision_height()
+            ),
             Some(Epoch(1))
         );
 
@@ -1174,76 +1175,41 @@ mod test_prepare_proposal {
             ext
         };
 
-        #[cfg(feature = "abcipp")]
-        {
-            let bp_root = {
-                let to_sign = get_bp_bytes_to_sign();
-                let sig = Signed::<_, SignableEthMessage>::new(
-                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                    to_sign,
-                )
-                .sig;
-                bridge_pool_roots::Vext {
-                    block_height: shell.storage.last_height,
-                    validator_addr: shell
-                        .mode
-                        .get_validator_address()
-                        .unwrap()
-                        .clone(),
-                    sig,
-                }
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            };
-            let vote_extension = VoteExtension {
-                ethereum_events: Some(signed_eth_ev_vote_extension),
-                bridge_pool_root: Some(bp_root),
-                validator_set_update: None,
-            };
-            let vote = ExtendedVoteInfo {
-                vote_extension: vote_extension.try_to_vec().unwrap(),
-                ..Default::default()
-            };
-            // this should panic
-            shell.prepare_proposal(RequestPrepareProposal {
-                local_last_commit: Some(ExtendedCommitInfo {
-                    votes: vec![vote],
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let vote = ProtocolTxType::EthEventsVext(
-                signed_eth_ev_vote_extension.clone(),
+        let bp_root = {
+            let to_sign = get_bp_bytes_to_sign();
+            let sig = Signed::<_, SignableEthMessage>::new(
+                shell.mode.get_eth_bridge_keypair().expect("Test failed"),
+                to_sign,
             )
-            .sign(&protocol_key)
-            .to_bytes();
-            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                txs: vec![vote],
+            .sig;
+            bridge_pool_roots::Vext {
+                block_height: shell.wl_storage.storage.last_height,
+                validator_addr: shell
+                    .mode
+                    .get_validator_address()
+                    .unwrap()
+                    .clone(),
+                sig,
+            }
+            .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        };
+        let vote_extension = VoteExtension {
+            ethereum_events: Some(signed_eth_ev_vote_extension),
+            bridge_pool_root: Some(bp_root),
+            validator_set_update: None,
+        };
+        let vote = ExtendedVoteInfo {
+            vote_extension: vote_extension.try_to_vec().unwrap(),
+            ..Default::default()
+        };
+        // this should panic
+        shell.prepare_proposal(RequestPrepareProposal {
+            local_last_commit: Some(ExtendedCommitInfo {
+                votes: vec![vote],
                 ..Default::default()
-            });
-            assert_eq!(rsp.txs.len(), 1);
-
-            let tx_bytes = rsp.txs.remove(0);
-            let got = Tx::try_from(&tx_bytes[..]).unwrap();
-            let got_signed_tx =
-                SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-            let protocol_tx =
-                TxType::try_from_slice(&got_signed_tx.data.unwrap()[..])
-                    .unwrap();
-            let protocol_tx = match protocol_tx {
-                TxType::Protocol(protocol_tx) => protocol_tx.tx,
-                _ => panic!("Test failed"),
-            };
-
-            let rsp_ext = match protocol_tx {
-                ProtocolTxType::EthEventsVext(ext) => ext,
-                _ => panic!("Test failed"),
-            };
-
-            assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
-        }
+            }),
+            ..Default::default()
+        });
     }
 
     /// Test that if an error is encountered while

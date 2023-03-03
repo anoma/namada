@@ -39,6 +39,8 @@ where
         &mut self,
         init: request::InitChain,
     ) -> Result<response::InitChain> {
+        let mut response = response::InitChain::default();
+        let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
         if current_chain_id != init.chain_id {
             return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
@@ -149,6 +151,22 @@ where
         parameters.init_storage(&mut self.wl_storage.storage);
 
         // Initialize governance parameters
+        genesis
+            .gov_params
+            .init_storage(&mut self.wl_storage.storage);
+        // configure the Ethereum bridge if the configuration is set.
+        if let Some(config) = genesis.ethereum_bridge_params {
+            tracing::debug!("Initializing Ethereum bridge storage.");
+            config.init_storage(&mut self.wl_storage);
+            self.start_ethereum_oracle_if_necessary();
+        } else {
+            self.wl_storage
+                .write_bytes(
+                    &namada::eth_bridge::storage::active_key(),
+                    EthBridgeStatus::Disabled.try_to_vec().unwrap(),
+                )
+                .unwrap();
+        }
 
         // Depends on parameters being initialized
         self.wl_storage
@@ -161,6 +179,8 @@ where
 
         // Initialize genesis established accounts
         self.initialize_established_accounts(
+            genesis.faucet_pow_difficulty,
+            genesis.faucet_withdrawal_limit,
             genesis.established_accounts,
             &mut vp_code_cache,
         )?;
@@ -188,6 +208,8 @@ where
     /// Initialize genesis established accounts
     fn initialize_established_accounts(
         &mut self,
+        faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
+        faucet_withdrawal_limit: Option<token::Amount>,
         accounts: Vec<genesis::EstablishedAccount>,
         vp_code_cache: &mut HashMap<String, Vec<u8>>,
     ) -> Result<()> {
@@ -244,11 +266,9 @@ where
             // When using a faucet WASM, initialize its PoW challenge storage
             #[cfg(not(feature = "mainnet"))]
             if vp_code_path == "vp_testnet_faucet.wasm" {
-                let difficulty =
-                    genesis.faucet_pow_difficulty.unwrap_or_default();
+                let difficulty = faucet_pow_difficulty.unwrap_or_default();
                 // withdrawal limit defaults to 1000 NAM when not set
-                let withdrawal_limit = genesis
-                    .faucet_withdrawal_limit
+                let withdrawal_limit = faucet_withdrawal_limit
                     .unwrap_or_else(|| token::Amount::whole(1_000));
                 testnet_pow::init_faucet_storage(
                     &mut self.wl_storage,
@@ -398,9 +418,8 @@ where
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         pos::init_genesis_storage(
             &mut self.wl_storage,
-            &genesis.pos_params,
-            genesis
-                .validators
+            pos_params,
+            validators
                 .clone()
                 .into_iter()
                 .map(|validator| validator.pos_data),

@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+#[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -296,10 +297,13 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     #[cfg(feature = "abcipp")]
     use borsh::BorshSerialize;
+    use namada::core::ledger::storage_api::collections::lazy_map::{
+        NestedSubKey, SubKey,
+    };
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos;
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
     #[cfg(feature = "abcipp")]
@@ -318,10 +322,6 @@ mod test_vote_extensions {
     use namada::types::vote_extensions::validator_set_update;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
-    use namada_core::ledger::storage_api::collections::lazy_map::{
-        NestedSubKey, SubKey,
-    };
-    use namada_proof_of_stake::consensus_validator_set_handle;
 
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;

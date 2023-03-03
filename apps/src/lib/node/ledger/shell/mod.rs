@@ -736,7 +736,7 @@ where
                          block is {}",
                         eth_height
                     );
-                    self.storage.ethereum_height = Some(eth_height);
+                    self.wl_storage.storage.ethereum_height = Some(eth_height);
                 }
                 None => tracing::info!(
                     "Ethereum oracle has not yet fully processed any Ethereum \
@@ -794,8 +794,8 @@ where
             // this key is present here because we may be starting up the shell
             // for the first time ever, in which case the chain hasn't been
             // initialized yet.
-            let (has_key, _) = self
-                .storage
+            let has_key = self
+                .wl_storage
                 .has_key(&eth_bridge::storage::active_key())
                 .expect(
                     "We should always be able to check whether a key exists \
@@ -808,20 +808,24 @@ where
                 );
                 return;
             }
-            if !self.storage.is_bridge_active() {
+            if !self.wl_storage.ethbridge_queries().is_bridge_active() {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge is disabled"
                 );
                 return;
             }
-            let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
+            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
                 );
                 return;
             };
-            let start_block =
-                self.storage.ethereum_height.clone().unwrap_or_default();
+            let start_block = self
+                .wl_storage
+                .storage
+                .ethereum_height
+                .clone()
+                .unwrap_or_default();
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
@@ -892,7 +896,7 @@ where
                         if let Err(err) = self
                             .validate_eth_events_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                self.wl_storage.storage.last_height,
                             )
                         {
                             response.code = 1;
@@ -912,7 +916,7 @@ where
                         if let Err(err) = self
                             .validate_bp_roots_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                self.wl_storage.storage.last_height,
                             )
                         {
                             response.code = 1;
@@ -940,7 +944,7 @@ where
                                 // committed to storage, so `last_epoch`
                                 // reflects the current value of the
                                 // epoch.
-                                self.storage.last_epoch,
+                                self.wl_storage.storage.last_epoch,
                             )
                         {
                             response.code = 1;
@@ -964,7 +968,6 @@ where
                     }
                     Ok(TxType::Wrapper(wrapper)) => {
                         // Check balance for fee
-
                         let fee_payer = if wrapper.pk != masp_tx_key().ref_to()
                         {
                             wrapper.fee_payer()
@@ -1124,10 +1127,9 @@ where
     H: 'static + StorageHasher + Sync,
 {
     fn from(shell: &'a mut Shell<D, H>) -> Self {
-        Self {
+        ShellParams::Mutating {
             block_gas_meter: &mut shell.gas_meter,
-            write_log: &mut shell.write_log,
-            storage: &shell.storage,
+            wl_storage: &mut shell.wl_storage,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
             tx_wasm_cache: &mut shell.tx_wasm_cache,
         }
