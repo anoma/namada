@@ -55,7 +55,7 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use namada::core::ledger::storage::{self, Storage};
+use namada::core::ledger::storage::{self, WlStorage};
 use namada::ledger::pos::PosQueries;
 
 #[allow(unused_imports)]
@@ -98,15 +98,15 @@ pub struct BlockSpaceAllocator<State> {
     decrypted_txs: TxBin,
 }
 
-impl<D, H> From<&Storage<D, H>>
+impl<D, H> From<&WlStorage<D, H>>
     for BlockSpaceAllocator<states::BuildingDecryptedTxBatch>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
 {
     #[inline]
-    fn from(storage: &Storage<D, H>) -> Self {
-        Self::init(storage.get_max_proposal_bytes().get())
+    fn from(wl_storage: &WlStorage<D, H>) -> Self {
+        Self::init(wl_storage.pos_queries().get_max_proposal_bytes().get())
     }
 }
 
