@@ -20,7 +20,7 @@ pub use merkle_tree::{
 use thiserror::Error;
 pub use traits::{Sha256Hasher, StorageHasher};
 pub use wl_storage::{
-    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage,
+    iter_prefix_post, iter_prefix_pre, PrefixIter, WlStorage, WlStorageRef,
 };
 
 #[cfg(feature = "wasm-runtime")]

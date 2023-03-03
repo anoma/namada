@@ -8,6 +8,7 @@ pub mod slash_fund;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use namada_core::ledger::storage::WlStorageRef;
 pub use namada_core::ledger::vp_env::VpEnv;
 
 use super::storage_api::{self, ResultExt, StorageRead};
@@ -83,6 +84,21 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
+}
+
+impl<'shell, DB, H, CA> From<&Ctx<'shell, DB, H, CA>>
+    for WlStorageRef<'shell, DB, H>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    fn from(ctx: &Ctx<'shell, DB, H, CA>) -> Self {
+        Self {
+            storage: ctx.storage,
+            write_log: ctx.write_log,
+        }
+    }
 }
 
 /// Read access to the prior storage (state before tx execution) via
