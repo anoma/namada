@@ -791,7 +791,11 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit_block().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
 
         // update the pool

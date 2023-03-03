@@ -417,7 +417,7 @@ mod tests {
     use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-    use namada_core::types::address;
+    use namada_core::ledger::storage_api::StorageWrite;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
@@ -428,10 +428,9 @@ mod tests {
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::ledger::storage::Storage;
+    use crate::ledger::storage::{Storage, WlStorage};
     use crate::proto::Tx;
     use crate::types::address::wnam;
-    use crate::types::chain::ChainId;
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
@@ -456,21 +455,16 @@ mod tests {
     }
 
     /// Initialize some dummy storage for testing
-    fn setup_storage() -> Storage<MockDB, Sha256Hasher> {
-        let mut storage = Storage::<MockDB, Sha256Hasher>::open(
-            std::path::Path::new(""),
-            ChainId::default(),
-            address::nam(),
-            None,
-        );
+    fn setup_storage() -> WlStorage<MockDB, Sha256Hasher> {
+        let mut wl_storage = WlStorage::<MockDB, Sha256Hasher>::default();
 
         // setup a user with a balance
         let balance_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        storage
-            .write(
+        wl_storage
+            .write_bytes(
                 &balance_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
                     .try_to_vec()
@@ -493,8 +487,8 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut storage);
-        storage
+        config.init_storage(&mut wl_storage);
+        wl_storage
     }
 
     /// Setup a ctx for running native vps
@@ -639,15 +633,14 @@ mod tests {
     /// Test that escrowing Nam is accepted.
     #[test]
     fn test_escrow_nam_accepted() {
-        let mut writelog = WriteLog::default();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -657,8 +650,8 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &escrow_key,
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
@@ -674,7 +667,13 @@ mod tests {
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &wl_storage.storage,
+                &wl_storage.write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let res = vp.validate_tx(
@@ -688,15 +687,14 @@ mod tests {
     /// Test that escrowing must increase the balance
     #[test]
     fn test_escrowed_nam_must_increase() {
-        let mut writelog = WriteLog::default();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -706,8 +704,8 @@ mod tests {
 
         // do not credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &escrow_key,
                 Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
                     .try_to_vec()
@@ -721,7 +719,13 @@ mod tests {
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &wl_storage.storage,
+                &wl_storage.write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let res = vp.validate_tx(
@@ -736,15 +740,14 @@ mod tests {
     /// be triggered if escrowing occurs.
     #[test]
     fn test_escrowing_must_trigger_bridge_pool_vp() {
-        let mut writelog = WriteLog::default();
-        let storage = setup_storage();
+        let mut wl_storage = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -754,8 +757,8 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
-        writelog
-            .write(
+        wl_storage
+            .write_bytes(
                 &escrow_key,
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
@@ -771,7 +774,13 @@ mod tests {
         // set up the VP
         let tx = Tx::new(vec![], None);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &storage, &writelog, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &tx,
+                &wl_storage.storage,
+                &wl_storage.write_log,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
         let res = vp.validate_tx(
