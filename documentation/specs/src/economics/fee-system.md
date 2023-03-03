@@ -314,14 +314,16 @@ This constraint is given by the following two:
 - The compliance of the cumulative wrapper transactions' `GasLimit` with the
   maximum gas allowed for a block
 
-Tendermint doesn't provide more than the `BlockSize.MaxGas` parameter, leaving
-the validation step to the application (see
-[tendermint spec](https://github.com/tendermint/tendermint/blob/29e5fbcc648510e4763bd0af0b461aed92c21f30/spec/core/data_structures.md#consensusparams)
-and [this issue](https://github.com/tendermint/tendermint/issues/2310)):
-therefore, instead of using the Tendermint provided param, Namada introduces a
-`MaxBlockGas` protocol parameter. This limit is checked during block validation,
-in `process_proposal`: if the block exceeds the maximum amount of gas allowed,
-the validators will reject it.
+Tendermint provides a `BlockSize.MaxGas` parameter, and applies some optional
+validation in mempool if this parameter is initialized. It doesn't instead
+perform any check in consensus, leaving this task to the application itself (see
+[tendermint app spec](https://github.com/heliaxdev/tendermint/blob/78c705573710d5b41d0213080260f9eeb6b04ca7/spec/abci/apps.md#gas),
+[tendermint spec](https://github.com/heliaxdev/tendermint/blob/78c705573710d5b41d0213080260f9eeb6b04ca7/spec/core/data_structures.md#blockparams)
+and [this issue](https://github.com/tendermint/tendermint/issues/2310)).
+Therefore, instead of using the Tendermint provided param (and its mempool
+validation), Namada introduces a `MaxBlockGas` protocol parameter. This limit is
+checked during mempool and block validation, in `process_proposal`: if the block
+exceeds the maximum amount of gas allowed, the validators will reject it.
 
 Note that block gas limit validation should always occur against the `GasLimit`
 declared in the wrappers, not the real gas used by the inner transactions. If
