@@ -42,12 +42,13 @@ check:
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
 
 check-abcipp:
-	$(cargo) check \
+	$(cargo) +$(nightly) check \
 		--workspace \
 		--exclude namada_tests \
 		--all-targets \
 		--no-default-features \
-		--features "abcipp ibc-mocks-abcipp testing"
+		--features "abcipp ibc-mocks-abcipp testing" \
+		-Z unstable-options
 
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
