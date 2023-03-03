@@ -86,11 +86,8 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
-    fn from(WlStorage{write_log, storage}: &'store WlStorage<D, H>) -> Self {
-        Self {
-            write_log,
-            storage
-        }
+    fn from(WlStorage { write_log, storage }: &'store WlStorage<D, H>) -> Self {
+        Self { write_log, storage }
     }
 }
 
@@ -246,13 +243,19 @@ where
         WlStorageRef::from(self).has_key(key)
     }
 
-    fn iter_prefix<'iter>(&'iter self, prefix: &Key) -> storage_api::Result<Self::PrefixIter<'iter>> {
+    fn iter_prefix<'iter>(
+        &'iter self,
+        prefix: &Key,
+    ) -> storage_api::Result<Self::PrefixIter<'iter>> {
         let (iter, _gas) =
             iter_prefix_post(&self.write_log, &self.storage, prefix);
         Ok(iter)
     }
 
-    fn iter_next<'iter>(&'iter self, iter: &mut Self::PrefixIter<'iter>) -> storage_api::Result<Option<(String, Vec<u8>)>> {
+    fn iter_next<'iter>(
+        &'iter self,
+        iter: &mut Self::PrefixIter<'iter>,
+    ) -> storage_api::Result<Option<(String, Vec<u8>)>> {
         Ok(iter.next().map(|(key, val, _gas)| (key, val)))
     }
 
