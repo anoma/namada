@@ -20,8 +20,9 @@ use thiserror::Error;
 
 use crate::types::WeightedValidator;
 use crate::{
-    consensus_validator_set_handle, read_pos_params, ConsensusValidatorSet,
-    PosParams,
+    consensus_validator_set_handle, read_pos_params,
+    validator_eth_cold_key_handle, validator_eth_hot_key_handle,
+    ConsensusValidatorSet, PosParams,
 };
 
 /// Errors returned by [`PosQueries`] operations.
@@ -359,6 +360,38 @@ where
             .last()
             .copied()
             .expect("The block height of the current epoch should be known")
+    }
+
+    /// Get a validator's Ethereum hot key from storage, at the given epoch, or
+    /// the last one, if none is provided.
+    pub fn read_validator_eth_hot_key(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<key::common::PublicKey> {
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let params = self.get_pos_params();
+        validator_eth_hot_key_handle(validator)
+            .get(self.wl_storage, epoch, &params)
+            .ok()
+            .flatten()
+    }
+
+    /// Get a validator's Ethereum cold key from storage, at the given epoch, or
+    /// the last one, if none is provided.
+    pub fn read_validator_eth_cold_key(
+        &self,
+        validator: &Address,
+        epoch: Option<Epoch>,
+    ) -> Option<key::common::PublicKey> {
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let params = self.get_pos_params();
+        validator_eth_cold_key_handle(validator)
+            .get(self.wl_storage, epoch, &params)
+            .ok()
+            .flatten()
     }
 }
 
