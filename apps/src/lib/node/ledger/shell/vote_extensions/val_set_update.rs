@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -60,7 +59,7 @@ where
         (token::Amount, validator_set_update::SignedVext),
         VoteExtensionError,
     > {
-        if self.storage.last_height.0 == 0 {
+        if self.wl_storage.storage.last_height.0 == 0 {
             tracing::error!(
                 "Dropping validator set update vote extension issued at \
                  genesis"
@@ -79,8 +78,10 @@ where
         // verify if the new epoch validators' voting powers in storage match
         // the voting powers in the vote extension
         for (eth_addr_book, namada_addr, namada_power) in self
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .get_active_eth_addresses(Some(signing_epoch.next()))
+            .iter()
         {
             let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
                 Some(voting_power) => voting_power,
@@ -108,8 +109,10 @@ where
         // get the public key associated with this validator
         let validator = &ext.data.validator_addr;
         let (voting_power, _) = self
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .get_validator_from_address(validator, Some(signing_epoch))
+            .iter()
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -120,7 +123,7 @@ where
                 VoteExtensionError::PubKeyNotInStorage
             })?;
         let epoched_pk = self
-            .storage
+            .wl_storage
             .read_validator_eth_hot_key(validator)
             .expect("We should have this hot key in storage");
         let pk = epoched_pk
@@ -160,7 +163,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_valset_upd_vext_and_get_it_back(
                 vote_extension,
-                self.storage.get_current_epoch().0,
+                self.wl_storage.storage.get_current_epoch().0,
             )
         })
     }
@@ -187,19 +190,25 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         #[cfg(not(feature = "abcipp"))]
-        if self.storage.last_height.0 == 0 {
+        if self.wl_storage.storage.last_height.0 == 0 {
             return None;
         }
 
         #[cfg(feature = "abcipp")]
-        let vexts_epoch =
-            self.storage.get_epoch(self.storage.last_height).expect(
+        let vexts_epoch = self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(self.wl_storage.storage.last_height)
+            .expect(
                 "The epoch of the last block height should always be known",
             );
 
         #[cfg(feature = "abcipp")]
-        let total_voting_power =
-            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        let total_voting_power = u64::from(
+            self.wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(vexts_epoch)),
+        );
         #[cfg(feature = "abcipp")]
         let mut voting_power = FractionalVotingPower::default();
 
@@ -309,6 +318,10 @@ mod test_vote_extensions {
     use namada::types::vote_extensions::validator_set_update;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada_core::ledger::storage_api::collections::lazy_map::{
+        NestedSubKey, SubKey,
+    };
+    use namada_proof_of_stake::consensus_validator_set_handle;
 
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
@@ -329,13 +342,14 @@ mod test_vote_extensions {
         let eth_bridge_key =
             shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
-        let signing_epoch = shell.storage.get_current_epoch().0;
+        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
         let next_epoch = signing_epoch.next();
 
         let voting_powers = {
             shell
-                .storage
+                .wl_storage
                 .get_active_eth_addresses(Some(next_epoch))
+                .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -356,7 +370,7 @@ mod test_vote_extensions {
             let protocol_key =
                 shell.mode.get_protocol_key().expect("Test failed");
             let ethereum_events = ethereum_events::Vext::empty(
-                shell.storage.get_current_decision_height(),
+                shell.wl_storage.pos_queries().get_current_decision_height(),
                 validator_addr.clone(),
             )
             .sign(protocol_key);
@@ -374,7 +388,7 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.storage.last_height,
+                    block_height: shell.wl_storage.storage.last_height,
                     validator_addr,
                     sig,
                 }
@@ -415,12 +429,14 @@ mod test_vote_extensions {
             let bertha_addr = wallet::defaults::bertha_address();
             (test_utils::gen_secp256k1_keypair(), bertha_key, bertha_addr)
         };
-        let signing_epoch = shell.storage.get_current_epoch().0;
+        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
         let voting_powers = {
             let next_epoch = signing_epoch.next();
             shell
-                .storage
+                .wl_storage
                 .get_active_eth_addresses(Some(next_epoch))
+                .ethbridge_queries()
+                .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -438,7 +454,7 @@ mod test_vote_extensions {
         #[cfg(feature = "abcipp")]
         {
             let ethereum_events = ethereum_events::Vext::empty(
-                shell.storage.get_current_decision_height(),
+                shell.wl_storage.storage.get_current_decision_height(),
                 validator_addr.clone(),
             )
             .sign(&_protocol_key);
@@ -456,7 +472,7 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.storage.last_height,
+                    block_height: shell.wl_storage.storage.last_height,
                     validator_addr,
                     sig,
                 }
@@ -503,12 +519,14 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let signing_epoch = shell.storage.get_current_epoch().0;
+        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
         let voting_powers = {
             let next_epoch = signing_epoch.next();
             shell
-                .storage
+                .wl_storage
+                .ethbridge_queries()
                 .get_active_eth_addresses(Some(next_epoch))
+                .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -523,37 +541,50 @@ mod test_vote_extensions {
 
         // validators from the current epoch sign over validator
         // set of the next epoch
-        assert_eq!(shell.storage.get_current_epoch().0.0, 0);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
 
         // remove all validators of the next epoch
-        let mut current_validators = shell.storage.read_validator_set();
-        current_validators.data.insert(
-            1,
-            Some(pos::types::ValidatorSet {
-                active: Default::default(),
-                inactive: Default::default(),
-            }),
-        );
-        shell.storage.write_validator_set(&current_validators);
+        let validators_handle = consensus_validator_set_handle();
+        let consensus_in_mem = validators_handle
+            .at(&Epoch(1))
+            .iter(&shell.wl_storage)
+            .map(|val| {
+                let (
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: SubKey::Data(position),
+                    },
+                    ..,
+                ) = val.expect("Test failed");
+                (stake, position)
+            });
+        for (val_stake, val_position) in consensus_in_mem.into_iter() {
+            consensus_validator_set
+                .at(&Epoch(1))
+                .at(&val_stake)
+                .remove(&mut shell.wl_storage, val_position)?;
+        }
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.storage.last_height =
-            shell.storage.get_current_decision_height() + 11;
+        shell.wl_storage.storage.last_height =
+            shell.wl_storage.pos_queries().get_current_decision_height() + 11;
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
-        assert_eq!(shell.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
         assert!(
             shell
-                .storage
+                .wl_storage
+                .pos_queries()
                 .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
                 .is_err()
         );
-        let prev_epoch = shell.storage.get_current_epoch().0 - 1;
+        let prev_epoch = shell.wl_storage.storage.get_current_epoch().0 - 1;
         assert!(
             shell
                 .shell
-                .storage
+                .wl_storage
+                .pos_queries()
                 .get_validator_from_protocol_pk(
                     &protocol_key.ref_to(),
                     Some(prev_epoch)
@@ -575,14 +606,16 @@ mod test_vote_extensions {
         let eth_bridge_key =
             shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
-        let signing_epoch = shell.storage.get_current_epoch().0;
+        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
         #[allow(clippy::redundant_clone)]
         let validator_set_update = {
             let voting_powers = {
                 let next_epoch = signing_epoch.next();
                 shell
-                    .storage
+                    .wl_storage
+                    .ethbridge_queries()
                     .get_active_eth_addresses(Some(next_epoch))
+                    .iter()
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
                     })
@@ -602,7 +635,7 @@ mod test_vote_extensions {
             let protocol_key =
                 shell.mode.get_protocol_key().expect("Test failed");
             let ethereum_events = ethereum_events::Vext::empty(
-                shell.storage.get_current_decision_height(),
+                shell.wl_storage.pos_queries().get_current_decision_height(),
                 validator_addr.clone(),
             )
             .sign(protocol_key);
@@ -620,7 +653,7 @@ mod test_vote_extensions {
                 )
                 .sig;
                 bridge_pool_roots::Vext {
-                    block_height: shell.storage.last_height,
+                    block_height: shell.wl_storage.storage.last_height,
                     validator_addr,
                     sig,
                 }
