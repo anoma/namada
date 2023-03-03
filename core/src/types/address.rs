@@ -669,6 +669,13 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     key_gen.generate_address(rng_source)
 }
 
+/// Generate a new established address. Unlike `gen_established_address`, this
+/// will give the same address for the same `seed`.
+pub fn gen_deterministic_established_address(seed: impl AsRef<str>) -> Address {
+    let mut key_gen = EstablishedAddressGen::new(seed);
+    key_gen.generate_address("")
+}
+
 /// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
@@ -685,7 +692,7 @@ pub mod testing {
 
     /// Derive an established address from a simple seed (`u64`).
     pub fn address_from_simple_seed(seed: u64) -> Address {
-        super::gen_established_address(seed.to_string())
+        super::gen_deterministic_established_address(seed.to_string())
     }
 
     /// Generate a new implicit address.
