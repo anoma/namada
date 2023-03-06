@@ -1486,7 +1486,7 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
 pub async fn query_account(ctx: Context, args: args::QueryAccount) {
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
-    let account_address = ctx.get(&args.account);
+    let account_address = ctx.get(&args.address);
     let pks_map = get_address_pks_map(&client, &account_address).await;
     let threshold = get_address_threshold(&client, &account_address).await;
 
@@ -1499,11 +1499,11 @@ pub async fn query_account(ctx: Context, args: args::QueryAccount) {
             safe_exit(1)
         }
         _ => {
-            println!("Account {}", account_address.to_pretty_string());
+            println!("Address: {}", account_address.to_pretty_string());
             println!("Threshold: {}", threshold);
-            println!("Public keys: {}", threshold);
+            println!("Public keys:");
             for pk in pks_map.keys() {
-                println!("- {:2 }{}", "", pk);
+                println!("-{:2}{}", "", pk);
             }
         }
     }
