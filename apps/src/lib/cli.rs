@@ -2253,6 +2253,16 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
+                .arg(
+                    SOURCE_OPT
+                        .def()
+                        .about(
+                            "The source account's address that signs the \
+                             transaction.",
+                        )
+                        .required(true)
+                        .min_values(1),
+                )
                 .arg(CODE_PATH_OPT.def().about(
                     "The path to the validity predicate WASM code to be used \
                      for the new account. Uses the default user VP if none \
