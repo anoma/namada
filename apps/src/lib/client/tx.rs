@@ -47,6 +47,7 @@ use namada::types::address::{masp, masp_tx_key, Address, InternalAddress};
 use namada::types::governance::{
     Council, OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
@@ -2617,10 +2618,7 @@ pub async fn submit_init_counsil(
     let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
     let counsil_address = ctx.get(&address);
 
-    let current_epoch = rpc::query_and_print_epoch(args::Query {
-        ledger_address: tx_args.ledger_address.clone(),
-    })
-    .await;
+    let current_epoch = rpc::query_epoch(&client).await;
 
     // Check that the address is established and exists on chain
     match &counsil_address.clone() {
@@ -2999,12 +2997,14 @@ async fn process_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
     if args.offline_tx {
-        // TODO: use async version of fs
-        tokio::fs::write("code.tx", tx.clone().code)
+        let tx_hash = Hash(tx.clone().hash()).to_string();
+        let code_filename = format!("{}-code.tx", tx_hash);
+        let data_filename = format!("{}-data.tx", tx_hash);
+        tokio::fs::write(code_filename, tx.clone().code)
             .await
             .expect("Should be able to write a file to disk.");
         if let Some(ref data) = tx.data {
-            tokio::fs::write("data.tx", data)
+            tokio::fs::write(data_filename, data)
                 .await
                 .expect("Should be able to write a file to disk.");
         }
