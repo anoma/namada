@@ -1748,7 +1748,6 @@ pub mod args {
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
-    const ACCOUNT: Arg<WalletAddress> = arg("account");
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ADDRESS_OPT: ArgOpt<WalletAddress> = ADDRESS.opt();
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -3239,20 +3238,20 @@ pub mod args {
     pub struct QueryAccount {
         /// Common query args
         pub query: Query,
-        /// Address of an owner
-        pub account: WalletAddress,
+        /// Address of the account
+        pub address: WalletAddress,
     }
 
     impl Args for QueryAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let account = ACCOUNT.parse(matches);
-            Self { query, account }
+            let address = ADDRESS.parse(matches);
+            Self { query, address }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
-                .arg(OWNER.def().about("The address of the account to query"))
+                .arg(ADDRESS.def().about("The address of the account to query"))
         }
     }
 
