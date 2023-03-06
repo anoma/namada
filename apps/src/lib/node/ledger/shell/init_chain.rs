@@ -391,3 +391,59 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada::ledger::storage::DBIter;
+    use namada::types::chain::ChainId;
+    use namada::types::storage;
+
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::shell::test_utils::TestShell;
+
+    /// Test that the init-chain handler never commits changes directly to the
+    /// DB.
+    #[test]
+    fn test_init_chain_doesnt_commit_db() {
+        let (mut shell, _receiver) = TestShell::new();
+
+        // Collect all storage key-vals into a sorted map
+        let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
+            let prefix: storage::Key = FromStr::from_str("").unwrap();
+            shell
+                .wl_storage
+                .storage
+                .db
+                .iter_prefix(&prefix)
+                .map(|(key, val, _gas)| (key, val))
+                .collect()
+        };
+
+        // Store the full state in sorted map
+        let initial_storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        shell.init_chain(RequestInitChain {
+            time: Some(Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }),
+            chain_id: ChainId::default().to_string(),
+            ..Default::default()
+        });
+
+        // Store the full state again
+        let storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        // The storage state must be unchanged
+        itertools::assert_equal(
+            initial_storage_state.iter(),
+            storage_state.iter(),
+        );
+    }
+}
