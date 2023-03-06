@@ -35,17 +35,6 @@ where
         Self { write_log, storage }
     }
 
-    /// Commit the genesis state to DB. This should only be used before any
-    /// blocks are produced.
-    pub fn commit_genesis(&mut self) -> storage_api::Result<()> {
-        // Because the `impl StorageWrite for WlStorage` writes into block-level
-        // write log, we just commit the `block_write_log`, but without
-        // committing an actual block in storage
-        self.write_log
-            .commit_block(&mut self.storage)
-            .into_storage_result()
-    }
-
     /// Commit the current transaction's write log to the block when it's
     /// accepted by all the triggered validity predicates. Starts a new
     /// transaction write log.

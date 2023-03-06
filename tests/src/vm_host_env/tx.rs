@@ -148,7 +148,7 @@ impl TestTxEnv {
     /// Commit the genesis state. Typically, you'll want to call this after
     /// setting up the initial state, before running a transaction.
     pub fn commit_genesis(&mut self) {
-        self.wl_storage.commit_genesis().unwrap();
+        self.wl_storage.commit_block().unwrap();
     }
 
     pub fn commit_tx_and_block(&mut self) {

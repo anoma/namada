@@ -877,7 +877,7 @@ mod test_finalize_block {
         add_proposal(1, ProposalVote::Nay);
 
         // Commit the genesis state
-        shell.wl_storage.commit_genesis().unwrap();
+        shell.wl_storage.commit_block().unwrap();
         shell.commit();
 
         // Collect all storage key-vals into a sorted map
