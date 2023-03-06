@@ -93,8 +93,7 @@ where
                                 * need it here. */
                             TxIndex::default(),
                             &mut BlockGasMeter::default(),
-                            &mut shell.wl_storage.write_log,
-                            &shell.wl_storage.storage,
+                            &mut shell.wl_storage,
                             &mut shell.vp_wasm_cache,
                             &mut shell.tx_wasm_cache,
                         );

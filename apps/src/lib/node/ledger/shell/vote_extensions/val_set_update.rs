@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-#[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -111,9 +110,8 @@ where
         let validator = &ext.data.validator_addr;
         let (voting_power, _) = self
             .wl_storage
-            .ethbridge_queries()
+            .pos_queries()
             .get_validator_from_address(validator, Some(signing_epoch))
-            .iter()
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -123,15 +121,13 @@ where
                 );
                 VoteExtensionError::PubKeyNotInStorage
             })?;
-        let epoched_pk = self
+        let pk = self
             .wl_storage
-            .read_validator_eth_hot_key(validator)
+            .pos_queries()
+            .read_validator_eth_hot_key(validator, Some(signing_epoch))
             .expect("We should have this hot key in storage");
-        let pk = epoched_pk
-            .get(signing_epoch)
-            .expect("We should have the hot key of the given epoch");
         // verify the signature of the vote extension
-        ext.verify(pk)
+        ext.verify(&pk)
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -301,7 +297,6 @@ mod test_vote_extensions {
         NestedSubKey, SubKey,
     };
     use namada::ledger::eth_bridge::EthBridgeQueries;
-    use namada::ledger::pos;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
@@ -546,8 +541,9 @@ mod test_vote_extensions {
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle();
         let consensus_in_mem = validators_handle
-            .at(&Epoch(1))
+            .at(&1.into())
             .iter(&shell.wl_storage)
+            .expect("Test failed")
             .map(|val| {
                 let (
                     NestedSubKey::Data {
@@ -559,8 +555,8 @@ mod test_vote_extensions {
                 (stake, position)
             });
         for (val_stake, val_position) in consensus_in_mem.into_iter() {
-            consensus_validator_set
-                .at(&Epoch(1))
+            validators_handle
+                .at(&1.into())
                 .at(&val_stake)
                 .remove(&mut shell.wl_storage, val_position)?;
         }

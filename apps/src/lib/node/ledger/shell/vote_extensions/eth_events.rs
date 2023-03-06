@@ -312,7 +312,6 @@ mod test_vote_extensions {
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
-    use namada::ledger::pos;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
@@ -587,7 +586,7 @@ mod test_vote_extensions {
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle();
         let consensus_in_mem = validators_handle
-            .at(&Epoch(1))
+            .at(&1.into())
             .iter(&shell.wl_storage)
             .map(|val| {
                 let (
@@ -600,8 +599,8 @@ mod test_vote_extensions {
                 (stake, position)
             });
         for (val_stake, val_position) in consensus_in_mem.into_iter() {
-            consensus_validator_set
-                .at(&Epoch(1))
+            validators_handle
+                .at(&1.into())
                 .at(&val_stake)
                 .remove(&mut shell.wl_storage, val_position)?;
         }

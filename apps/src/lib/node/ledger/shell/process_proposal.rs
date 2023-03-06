@@ -593,7 +593,11 @@ where
                 },
             },
             TxType::Decrypted(tx) => match tx_queue_iter.next() {
-                Some(wrapper) => {
+                Some(WrapperTxInQueue {
+                    tx: wrapper,
+                    #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: _,
+                }) => {
                     if wrapper.tx_hash != tx.hash_commitment() {
                         TxResult {
                             code: ErrorCodes::InvalidOrder.into(),
@@ -2040,6 +2044,8 @@ mod test_process_proposal {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         )
         .sign(&keypair)
         .expect("Test failed")

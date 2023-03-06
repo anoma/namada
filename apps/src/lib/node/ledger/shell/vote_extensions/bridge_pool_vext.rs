@@ -139,16 +139,13 @@ where
             keccak_hash([bp_root, nonce].concat()),
             ext.data.sig.clone(),
         );
-        let epoched_pk = self
+        let pk = self
             .wl_storage
             .pos_queries()
-            .read_validator_eth_hot_key(validator)
+            .read_validator_eth_hot_key(validator, Some(ext_height_epoch))
             .expect("A validator should have an Ethereum hot key in storage.");
-        let pk = epoched_pk
-            .get(ext_height_epoch)
-            .expect("We should have an Ethereum hot key for the given epoch");
         signed
-            .verify(pk)
+            .verify(&pk)
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -268,7 +265,6 @@ mod test_bp_vote_extensions {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     #[cfg(not(feature = "abcipp"))]
     use namada::ledger::eth_bridge::EthBridgeQueries;
-    use namada::ledger::pos;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::types::Position as ValidatorPosition;
@@ -333,7 +329,7 @@ mod test_bp_vote_extensions {
         become_validator(BecomeValidator {
             storage: &mut shell.wl_storage,
             params: &params,
-            address: &address,
+            address: &bertha_address(),
             consensus_key: &consensus_key.ref_to(),
             eth_hot_key: &hot_key.ref_to(),
             eth_cold_key: &cold_key.ref_to(),

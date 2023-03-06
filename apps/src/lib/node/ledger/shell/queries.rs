@@ -159,18 +159,28 @@ mod test_queries {
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
-                    shell.storage.last_height =
+                    shell.wl_storage.storage.last_height =
                         BlockHeight(curr_block_height - 1);
                     assert_eq!(
                         curr_block_height,
-                        shell.storage.get_current_decision_height().0
+                        shell
+                            .wl_storage
+                            .pos_queries()
+                            .get_current_decision_height()
+                            .0
                     );
                     assert_eq!(
-                        shell.storage.get_epoch(curr_block_height.into()),
+                        shell
+                            .wl_storage
+                            .pos_queries()
+                            .get_epoch(curr_block_height.into()),
                         Some(Epoch(curr_epoch))
                     );
                     assert_eq!(
-                        shell.storage.must_send_valset_upd(SendValsetUpd::Now),
+                        shell
+                            .wl_storage
+                            .ethbridge_queries()
+                            .must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
                     // TODO(feature = "abcipp"): test
@@ -199,7 +209,7 @@ mod test_queries {
                     req.header.time = time;
                     shell.finalize_block(req).expect("Test failed");
                     shell.commit();
-                    shell.storage.next_epoch_min_start_time = time;
+                    shell.wl_storage.storage.next_epoch_min_start_time = time;
                 }
             }
         };

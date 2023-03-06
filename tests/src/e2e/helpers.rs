@@ -42,6 +42,7 @@ pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
     Ok((test, ledger.background()))
 }
 
+/// Initialize an established account.
 pub fn init_established_account(
     test: &Test,
     rpc_addr: &str,
@@ -59,35 +60,6 @@ pub fn init_established_account(
         established_alias,
         "--ledger-address",
         rpc_addr,
-    ];
-    let mut client_init_account =
-        run!(test, Bin::Client, init_account_args, Some(40))?;
-    client_init_account.exp_string("Transaction is valid.")?;
-    client_init_account.exp_string("Transaction applied")?;
-    client_init_account.assert_success();
-    Ok(())
-}
-
-/// Initialize an established account.
-pub fn init_established_account(
-    test: &Test,
-    node: &Who,
-    source_alias: &str,
-    key_alias: &str,
-    established_alias: &str,
-) -> Result<()> {
-    let ledger_address = get_actor_rpc(test, node);
-
-    let init_account_args = vec![
-        "init-account",
-        "--source",
-        source_alias,
-        "--public-key",
-        key_alias,
-        "--alias",
-        established_alias,
-        "--ledger-address",
-        &ledger_address,
     ];
     let mut client_init_account =
         run!(test, Bin::Client, init_account_args, Some(40))?;

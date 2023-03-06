@@ -819,8 +819,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // check the response
         let pool = RPC
@@ -874,8 +873,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
@@ -905,8 +903,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         let resp = RPC
             .shell()
@@ -992,8 +989,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer;
@@ -1021,8 +1017,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // this is in the pool, but its merkle root has not been signed yet
         let resp = RPC
@@ -1084,8 +1079,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
@@ -1113,8 +1107,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1189,8 +1182,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
@@ -1209,8 +1201,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1268,8 +1259,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
@@ -1297,8 +1287,7 @@ mod test_ethbridge_router {
             .storage
             .commit_block()
             .expect("Test failed");
-        client.wl_storage.storage.block.height =
-            client.wl_storage.storage.block.height + 1;
+        client.wl_storage.storage.block.height += 1;
         // this was in the pool, covered by an old signed Merkle root.
         let resp = RPC
             .shell()

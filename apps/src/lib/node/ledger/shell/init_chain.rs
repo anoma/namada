@@ -39,7 +39,6 @@ where
         &mut self,
         init: request::InitChain,
     ) -> Result<response::InitChain> {
-        let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
         if current_chain_id != init.chain_id {
             return Err(Error::ChainId(format!(

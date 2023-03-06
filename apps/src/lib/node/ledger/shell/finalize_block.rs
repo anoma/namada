@@ -279,7 +279,7 @@ where
                             self.mode.get_validator_address().cloned()
                         {
                             let this_signer =
-                                &(address, self.storage.last_height);
+                                &(address, self.wl_storage.storage.last_height);
                             for MultiSignedEthEvent { event, signers } in
                                 &digest.events
                             {
@@ -513,6 +513,7 @@ mod test_finalize_block {
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::storage_api;
+    use namada::ledger::storage_api::StorageWrite;
     use namada::types::ethereum_events::{EthAddress, Uint};
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
@@ -936,7 +937,7 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
         }
@@ -947,13 +948,13 @@ mod test_finalize_block {
                 event,
                 signers: BTreeSet::from([(
                     address.clone(),
-                    shell.storage.last_height,
+                    shell.wl_storage.storage.last_height,
                 )]),
             };
 
             let digest = ethereum_events::VextDigest {
                 signatures: vec![(
-                    (address, shell.storage.last_height),
+                    (address, shell.wl_storage.storage.last_height),
                     ext.sig,
                 )]
                 .into_iter()
@@ -1014,7 +1015,7 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             ethereum_events: vec![event],
             validator_addr: address,
         }
@@ -1054,20 +1055,21 @@ mod test_finalize_block {
     {
         let (mut shell, _, _, _) = setup_at_height(3u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
-            &mut shell.storage,
+            &mut shell.wl_storage.storage,
             &KeccakHash([1; 32]),
             3.into(),
         );
         let value = BlockHeight(4).try_to_vec().expect("Test failed");
         shell
+            .wl_storage
             .storage
             .block
             .tree
             .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
             .expect("Test failed");
         shell
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_nonce_key(),
                 Uint::from(1).try_to_vec().expect("Test failed"),
             )
@@ -1085,14 +1087,14 @@ mod test_finalize_block {
             ..Default::default()
         };
         let root = shell
-            .storage
-            .read(&get_signed_root_key())
-            .expect("Reading signed Bridge pool root shouldn't fail.")
-            .0;
+            .wl_storage
+            .read_bytes(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.");
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");
         let (root, _) = shell
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .get_signed_bridge_pool_root()
             .expect("Test failed");
         assert_eq!(root.data.0, KeccakHash([1; 32]));
@@ -1114,7 +1116,7 @@ mod test_finalize_block {
     /// the DB.
     #[test]
     fn test_finalize_doesnt_commit_db() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _, _) = setup();
 
         // Update epoch duration to make sure we go through couple epochs
         let epoch_duration = EpochDuration {
@@ -1171,9 +1173,8 @@ mod test_finalize_block {
             let prefix: Key = FromStr::from_str("").unwrap();
             shell
                 .wl_storage
-                .storage
-                .db
                 .iter_prefix(&prefix)
+                .expect("Test failed")
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };

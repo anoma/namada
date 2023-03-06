@@ -32,8 +32,7 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup;
 use crate::e2e::setup::constants::{
-    wasm_abs_path, ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
-    TX_WRITE_STORAGE_KEY_WASM,
+    wasm_abs_path, ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM, TX_WRITE_WASM,
 };
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
@@ -80,7 +79,7 @@ fn everything() {
     let tx_data_path = test.test_dir.path().join("queue_storage_key.txt");
     std::fs::write(&tx_data_path, &storage_key("queue")[..]).unwrap();
 
-    let tx_code_path = wasm_abs_path(TX_WRITE_STORAGE_KEY_WASM);
+    let tx_code_path = wasm_abs_path(TX_WRITE_WASM);
 
     let tx_data_path = tx_data_path.to_string_lossy().to_string();
     let tx_code_path = tx_code_path.to_string_lossy().to_string();
@@ -582,9 +581,10 @@ async fn test_dai_transfer_established() -> Result<()> {
 
     // create an established account that Albert controls
     let established_alias = "albert-established";
+    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         ALBERT,
         ALBERT_KEY,
         established_alias,
@@ -677,9 +677,10 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     let initial_transfer_amount = token::Amount::from(10_000_000);
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
+    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         ALBERT,
         ALBERT_KEY,
         albert_established_alias,
@@ -821,9 +822,10 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // create an established account that Bertha controls
     let bertha_established_alias = "bertha-established";
+    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         BERTHA,
         BERTHA_KEY,
         bertha_established_alias,
@@ -875,9 +877,10 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
+    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         ALBERT,
         ALBERT_KEY,
         albert_established_alias,
@@ -950,9 +953,10 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
+    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         ALBERT,
         ALBERT_KEY,
         albert_established_alias,
@@ -981,7 +985,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     let bertha_established_alias = "bertha-established";
     init_established_account(
         &test,
-        &Who::Validator(0),
+        &rpc_address,
         BERTHA,
         BERTHA_KEY,
         bertha_established_alias,

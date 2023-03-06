@@ -34,13 +34,6 @@ use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
-// TODO: remove this hard-coded value; Tendermint, and thus
-// Namada uses 20 MiB max block sizes by default; 5 MiB leaves
-// plenty of room for header data, evidence and protobuf serialization
-// overhead
-const MAX_PROPOSAL_SIZE: usize = 5 << 20;
-const HALF_MAX_PROPOSAL_SIZE: usize = MAX_PROPOSAL_SIZE / 2;
-
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -520,8 +513,11 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::ledger::pos::namada_proof_of_stake::types::WeightedValidator;
+    use namada::core::ledger::storage_api::collections::lazy_map::{
+        NestedSubKey, SubKey,
+    };
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::consensus_validator_set_handle;
     use namada::proto::{SignableEthMessage, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
@@ -1108,40 +1104,47 @@ mod test_prepare_proposal {
         should_panic(expected = "A Tendermint quorum should never")
     )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
-        const FIRST_HEIGHT: BlockHeight = BlockHeight(0);
+        const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
-        let (mut shell, _recv, _, _oracle_control_recv) = test_utils::setup();
+        let (mut shell, _recv, _, _oracle_control_recv) =
+            test_utils::setup_at_height(FIRST_HEIGHT);
 
         // artificially change the voting power of the default validator to
         // zero, change the block height, and commit a dummy block,
         // to move to a new epoch
-        let _events_epoch = shell
+        let events_epoch = shell
             .wl_storage
             .pos_queries()
             .get_epoch(FIRST_HEIGHT)
             .expect("Test failed");
-        // TODO: set stake of all validators to 0
-        // let validator_set = {
-        //     let params = shell.storage.read_pos_params();
-        //     let mut epochs = shell.storage.read_validator_set();
-        //     let mut data =
-        //         epochs.get(events_epoch).cloned().expect("Test failed");
-
-        //     data.active = data
-        //         .active
-        //         .iter()
-        //         .cloned()
-        //         .map(|v| WeightedValidator {
-        //             bonded_stake: 0,
-        //             ..v
-        //         })
-        //         .collect();
-
-        //     epochs.set(data, events_epoch, &params);
-        //     epochs
-        // };
-        // shell.storage.write_validator_set(&validator_set);
+        let validators_handle = consensus_validator_set_handle();
+        let consensus_in_mem = validators_handle
+            .at(&events_epoch)
+            .iter(&shell.wl_storage)
+            .expect("Test failed")
+            .map(|val| {
+                let (
+                    NestedSubKey::Data {
+                        key: stake,
+                        nested_sub_key: SubKey::Data(position),
+                    },
+                    address,
+                ) = val.expect("Test failed");
+                (stake, position, address)
+            });
+        for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
+            validators_handle
+                .at(&events_epoch)
+                .at(&val_stake)
+                .remove(&mut shell.wl_storage, &val_position)
+                .expect("Test failed");
+            validators_handle
+                .at(&events_epoch)
+                .at(&0.into())
+                .insert(&mut shell.wl_storage, val_position, address)
+                .expect("Test failed");
+        }
 
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();

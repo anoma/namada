@@ -100,7 +100,7 @@ where
     pub fn extend_vote_with_ethereum_events(
         &mut self,
     ) -> Option<Signed<ethereum_events::Vext>> {
-        if !self.storage.is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             return None;
         }
         let validator_addr = self
@@ -111,9 +111,12 @@ where
 
         let ext = ethereum_events::Vext {
             #[cfg(feature = "abcipp")]
-            block_height: self.storage.get_current_decision_height(),
+            block_height: self
+                .wl_storage
+                .pos_queries()
+                .get_current_decision_height(),
             #[cfg(not(feature = "abcipp"))]
-            block_height: self.storage.last_height,
+            block_height: self.wl_storage.storage.last_height,
             ethereum_events: self.new_ethereum_events(),
             validator_addr,
         };
@@ -138,7 +141,7 @@ where
     pub fn extend_vote_with_bp_roots(
         &self,
     ) -> Option<Signed<bridge_pool_roots::Vext>> {
-        if !self.storage.is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             return None;
         }
         let validator_addr = self
@@ -146,8 +149,13 @@ where
             .get_validator_address()
             .expect(VALIDATOR_EXPECT_MSG)
             .to_owned();
-        let bp_root = self.storage.get_bridge_pool_root().0;
-        let nonce = self.storage.get_bridge_pool_nonce().to_bytes();
+        let bp_root =
+            self.wl_storage.ethbridge_queries().get_bridge_pool_root().0;
+        let nonce = self
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_pool_nonce()
+            .to_bytes();
         let to_sign =
             keccak_hash([bp_root.as_slice(), nonce.as_slice()].concat());
         let eth_key = self
@@ -156,7 +164,7 @@ where
             .expect(VALIDATOR_EXPECT_MSG);
         let signed = Signed::<_, SignableEthMessage>::new(eth_key, to_sign);
         let ext = bridge_pool_roots::Vext {
-            block_height: self.storage.last_height,
+            block_height: self.wl_storage.storage.last_height,
             validator_addr,
             sig: signed.sig,
         };
@@ -176,13 +184,17 @@ where
             .expect(VALIDATOR_EXPECT_MSG)
             .to_owned();
 
-        self.storage
+        self.wl_storage
+            .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
-                let next_epoch = self.storage.get_current_epoch().0.next();
+                let next_epoch =
+                    self.wl_storage.storage.get_current_epoch().0.next();
                 let voting_powers = self
-                    .storage
+                    .wl_storage
+                    .ethbridge_queries()
                     .get_active_eth_addresses(Some(next_epoch))
+                    .iter()
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
                     })
@@ -191,7 +203,11 @@ where
                 let ext = validator_set_update::Vext {
                     validator_addr,
                     voting_powers,
-                    signing_epoch: self.storage.get_current_epoch().0,
+                    signing_epoch: self
+                        .wl_storage
+                        .storage
+                        .get_current_epoch()
+                        .0,
                 };
 
                 let eth_key = self
@@ -266,12 +282,12 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<Signed<ethereum_events::Vext>>,
     ) -> bool {
-        if !self.storage.is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             ext.is_none()
         } else if let Some(ext) = ext {
             self.validate_eth_events_vext(
                 ext,
-                self.storage.get_current_decision_height(),
+                self.wl_storage.pos_queries().get_current_decision_height(),
             )
             .then_some(true)
             .unwrap_or_else(| | {
@@ -295,11 +311,11 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<bridge_pool_roots::SignedVext>,
     ) -> bool {
-        if self.storage.is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             if let Some(ext) = ext {
                 self.validate_bp_roots_vext(
                     ext,
-                    self.storage.last_height,
+                    self.wl_storage.storage.last_height,
                 )
                 .then_some(true)
                 .unwrap_or_else(|| {
@@ -337,7 +353,8 @@ where
             // can send = false -> verify = true
             //
             // (we simply invert the can send logic)
-            let verify_passes = !self.storage
+            let verify_passes = !self.wl_storage
+                .ethbridge_queries()
                 .must_send_valset_upd(SendValsetUpd::Now);
             if !verify_passes {
                 tracing::warn!(
@@ -349,14 +366,15 @@ where
             }
             return verify_passes;
         };
-        self.storage
+        self.wl_storage
+            .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
                 // we have a valset update vext when we're expecting one,
                 // cool, let's validate it
                 self.validate_valset_upd_vext(
                     ext,
-                    self.storage.get_current_epoch().0,
+                    self.wl_storage.storage.get_current_epoch().0,
                 )
             })
             .unwrap_or_else(|| {
@@ -380,7 +398,7 @@ where
         protocol_tx_indices: &'shell mut VecIndexSet<u128>,
     ) -> impl Iterator<Item = TxBytes> + 'shell {
         use namada::types::transaction::protocol::ProtocolTx;
-        let current_epoch = self.storage.get_current_epoch().0;
+        let current_epoch = self.wl_storage.storage.get_current_epoch().0;
 
         txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
             let tx = match Tx::try_from(tx_bytes.as_slice()) {
@@ -404,7 +422,10 @@ where
                     // mark tx for inclusion or it is skipped
                     // if the bridge is inactive
                     protocol_tx_indices.insert(index);
-                    self.storage.is_bridge_active().then_some(tx_bytes.clone())
+                    self.wl_storage
+                        .ethbridge_queries()
+                        .is_bridge_active()
+                        .then_some(tx_bytes.clone())
                 }
                 TxType::Protocol(ProtocolTx {
                     tx: ProtocolTxType::ValSetUpdateVext(ext),
@@ -447,7 +468,8 @@ where
         let mut eth_evs = vec![];
         let mut bp_roots = vec![];
         let mut valset_upds = vec![];
-        let bridge_active = self.storage.is_bridge_active();
+        let bridge_active =
+            self.wl_storage.ethbridge_queries().is_bridge_active();
 
         for ext in deserialize_vote_extensions(vote_extensions) {
             if let Some(validator_set_update) = ext.validator_set_update {

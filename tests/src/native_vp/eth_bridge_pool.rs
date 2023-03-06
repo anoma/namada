@@ -77,7 +77,7 @@ mod test_bridge_pool_vp {
             },
         };
         // initialize Ethereum bridge storage
-        config.init_storage(&mut env.storage);
+        config.init_storage(&mut env.wl_storage);
         // initialize Bertha's account
         env.spawn_accounts([&albert_address(), &bertha_address(), &nam()]);
         // enrich Albert
