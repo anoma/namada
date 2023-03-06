@@ -389,7 +389,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             &vp_user,
             "--alias",
             "Test-Account",
-            "--signers",
+            "--source",
             BERTHA,
             "--gas-amount",
             "0",
