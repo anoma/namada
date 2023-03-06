@@ -2202,8 +2202,6 @@ pub mod args {
     pub struct TxInitAccount {
         /// Common tx arguments
         pub tx: Tx,
-        /// Address of the source account
-        pub source: Option<WalletAddress>,
         /// Path to the VP WASM code file for the new account
         pub vp_code_path: Option<PathBuf>,
         /// Public key for the new account
@@ -2215,13 +2213,11 @@ pub mod args {
     impl Args for TxInitAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE_OPT.parse(matches);
             let vp_code_path = CODE_PATH_OPT.parse(matches);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
-                source,
                 vp_code_path,
                 public_keys,
                 threshold,
