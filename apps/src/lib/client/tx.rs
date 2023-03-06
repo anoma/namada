@@ -2992,7 +2992,7 @@ async fn process_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
     if args.offline_tx {
-        let tx_hash = Hash(tx.clone().hash()).to_string();
+        let tx_hash = Hash(tx.clone().hash()).to_string().to_ascii_lowercase();
         let code_filename = format!("{}-code.tx", tx_hash);
         let data_filename = format!("{}-data.tx", tx_hash);
         tokio::fs::write(code_filename, tx.clone().code)

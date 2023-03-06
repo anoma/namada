@@ -98,5 +98,5 @@ pub struct Candidate {
     /// Arbitrary data associated with the candidate
     pub data: String,
     /// The init epoch
-    pub epoch: Epoch
+    pub epoch: Epoch,
 }

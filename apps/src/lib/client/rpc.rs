@@ -1484,6 +1484,32 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
     }
 }
 
+pub async fn query_account(ctx: Context, args: args::QueryAccount) {
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+
+    let account_address = ctx.get(&args.account);
+    let pks_map = get_address_pks_map(&client, &account_address).await;
+    let threshold = get_address_threshold(&client, &account_address).await;
+
+    match pks_map.len() {
+        0 => {
+            eprintln!(
+                "Account {} doesn't exist on-chain.",
+                account_address.to_pretty_string()
+            );
+            safe_exit(1)
+        }
+        _ => {
+            println!("Account {}", account_address.to_pretty_string());
+            println!("Threshold: {}", threshold);
+            println!("Public keys: {}", threshold);
+            for pk in pks_map.keys() {
+                println!("- {:2 }{}", "", pk);
+            }
+        }
+    }
+}
+
 pub async fn query_pgf_candidates(
     _ctx: Context,
     args: args::QueryPgfCandidates,
@@ -1505,10 +1531,7 @@ pub async fn query_pgf_candidates(
                     "{:4}Spending cap: {} nam",
                     "", candidate.spending_cap
                 );
-                println!(
-                    "{:4}Created in epoch: {}",
-                    "", candidate.epoch
-                );
+                println!("{:4}Created in epoch: {}", "", candidate.epoch);
                 println!("{:4}Extra data: {}", "", candidate.data);
             }
         }
@@ -1567,7 +1590,6 @@ pub async fn sign_tx(
         tx_signers(&mut ctx, &tx, vec![super::signing::TxSigningKey::None])
             .await;
 
-    
     let keypair = match keypairs.len() {
         1 => keypairs.get(0).expect("One signer should be provided."),
         _ => {
@@ -1588,20 +1610,23 @@ pub async fn sign_tx(
 
     let signature_path = format!(
         "{}-{}-signature.tx",
-        tx_hash.to_string(),
-        public_key.to_string()
+        tx_hash.to_string().to_ascii_lowercase(),
+        public_key
     );
     let offline_signature_out = File::create(&signature_path)
-    .expect("Should be able to create a file.");
+        .expect("Should be able to create a file.");
 
-    match  serde_json::to_writer_pretty(offline_signature_out, &offline_signature) {
+    match serde_json::to_writer_pretty(
+        offline_signature_out,
+        &offline_signature,
+    ) {
         Ok(_) => {
             println!("Signature has been serialized to {}", signature_path);
         }
         Err(_) => {
             eprintln!("Couldn't serialize the signature.");
             safe_exit(1)
-        },
+        }
     }
 }
 
