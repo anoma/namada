@@ -291,13 +291,15 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
         pks_map.insert(pk.clone(), index as u64);
     }
 
+    let default_signer = args.source.unwrap();
+
     let tx = Tx::new(tx_code, Some(data));
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
         tx,
         pks_map,
-        vec![TxSigningKey::None],
+        vec![TxSigningKey::WalletAddress(default_signer)],
         #[cfg(not(feature = "mainnet"))]
         false,
     )
