@@ -147,7 +147,8 @@ where
         // Initialize governance parameters
         genesis
             .gov_params
-            .init_storage(&mut self.wl_storage.storage);
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing governance parameters must not fail");
 
         // Depends on parameters being initialized
         self.wl_storage
