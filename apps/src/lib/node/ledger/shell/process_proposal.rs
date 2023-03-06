@@ -768,6 +768,7 @@ mod test_process_proposal {
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
+    use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
     use namada::proto::{SignableEthMessage, Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
@@ -1497,6 +1498,14 @@ mod test_process_proposal {
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &get_wrapper_tx_fees_key(),
+                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+            )
+            .unwrap();
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1575,6 +1584,14 @@ mod test_process_proposal {
             .wl_storage
             .storage
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .unwrap();
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &get_wrapper_tx_fees_key(),
+                token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let tx = Tx::new(

@@ -394,13 +394,15 @@ mod tests {
                     amount: Amount::from(10),
                 },
                 gas_fee: GasFee {
+
                     amount: Amount::from(1),
                     payer: payer.clone(),
                 },
             };
             let key = get_pending_key(&transfer);
             wl_storage
-                .write_bytes(&key, transfer.try_to_vec().expect("Test failed"))
+                .storage
+                .write(&key, transfer.try_to_vec().expect("Test failed"))
                 .expect("Test failed");
 
             pending_transfers.push(transfer);
@@ -524,6 +526,7 @@ mod tests {
     fn test_act_on_changes_storage_for_transfers_to_namada() {
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
         let initial_stored_keys_count = stored_keys_count(&wl_storage);
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
@@ -675,7 +678,8 @@ mod tests {
         };
         let key = get_pending_key(&transfer);
         wl_storage
-            .write_bytes(&key, transfer.try_to_vec().expect("Test failed"))
+            .storage
+            .write(&key, transfer.try_to_vec().expect("Test failed"))
             .expect("Test failed");
         wl_storage.storage.commit_block().expect("Test failed");
         wl_storage.storage.block.height += 1;

@@ -113,12 +113,10 @@ where
     pub fn check_bridge_status(self) -> EthBridgeStatus {
         BorshDeserialize::try_from_slice(
             self.wl_storage
-                .storage
-                .read(&active_key())
+                .read_bytes(&active_key())
                 .expect(
                     "Reading the Ethereum bridge active key shouldn't fail.",
                 )
-                .0
                 .expect("The Ethereum bridge active key should be in storage")
                 .as_slice(),
         )

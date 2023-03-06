@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
@@ -115,7 +114,7 @@ pub fn bootstrap_ethereum_bridge(
 
 /// Returns the number of keys in `storage` which have values present.
 pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
-    let root = Key::from_str("").expect("Test failed");
+    let root = Key{segments: vec![]};
     wl_storage.iter_prefix(&root).expect("Test failed").count()
 }
 

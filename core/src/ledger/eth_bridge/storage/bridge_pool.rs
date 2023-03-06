@@ -115,7 +115,7 @@ impl BridgePoolTree {
     pub fn get(&self, key: &Key) -> Result<BlockHeight, Error> {
         let hash = Self::parse_key(key)?;
         self.leaves.get(&hash).cloned().ok_or_else(|| {
-            eyre!("Could not parse key segment as a hash").into()
+            eyre!("Key not present in Bridge Pool merkle tree.").into()
         })
     }
 

@@ -1330,7 +1330,7 @@ mod test_utils {
                 tx_wasm_compilation_cache,
                 address::nam(),
             );
-            shell.wl_storage.storage.last_height = height.into();
+            shell.wl_storage.storage.block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
         }
 
@@ -1436,6 +1436,7 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
+        test.wl_storage.commit_block().expect("Test failed");
         (test, receiver, eth_receiver, control_receiver)
     }
 
