@@ -178,6 +178,7 @@ pub mod cmds {
                 .subcommand(QueryBondedStake::def().display_order(4))
                 .subcommand(QuerySlashes::def().display_order(4))
                 .subcommand(QueryDelegations::def().display_order(4))
+                .subcommand(QueryAccount::def().display_order(4))
                 .subcommand(QueryResult::def().display_order(4))
                 .subcommand(QueryRawBytes::def().display_order(4))
                 .subcommand(QueryProposal::def().display_order(4))
@@ -222,6 +223,7 @@ pub mod cmds {
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
             let query_delegations =
                 Self::parse_with_ctx(matches, QueryDelegations);
+            let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
@@ -256,6 +258,7 @@ pub mod cmds {
                 .or(query_bonded_stake)
                 .or(query_slashes)
                 .or(query_delegations)
+                .or(query_account)
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
@@ -324,6 +327,7 @@ pub mod cmds {
         QueryCommissionRate(QueryCommissionRate),
         QuerySlashes(QuerySlashes),
         QueryDelegations(QueryDelegations),
+        QueryAccount(QueryAccount),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
@@ -1418,6 +1422,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryAccount(pub args::QueryAccount);
+
+    impl SubCmd for QueryAccount {
+        const CMD: &'static str = "query-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryAccount(args::QueryAccount::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query data associated with an enstablished address..")
+                .add_args::<args::QueryAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryRawBytes(pub args::QueryRawBytes);
 
     impl SubCmd for QueryRawBytes {
@@ -1723,6 +1749,7 @@ pub mod args {
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
 
+    const ACCOUNT: Arg<WalletAddress> = arg("account");
     const ADDRESS: Arg<WalletAddress> = arg("address");
     const ADDRESS_OPT: ArgOpt<WalletAddress> = ADDRESS.opt();
     const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -3179,6 +3206,28 @@ pub mod args {
                     "The address of the owner of the delegations to find.",
                 ),
             )
+        }
+    }
+
+    /// Query enstablished account storage
+    #[derive(Clone, Debug)]
+    pub struct QueryAccount {
+        /// Common query args
+        pub query: Query,
+        /// Address of an owner
+        pub account: WalletAddress,
+    }
+
+    impl Args for QueryAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let account = ACCOUNT.parse(matches);
+            Self { query, account }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(OWNER.def().about("The address of the account to query"))
         }
     }
 

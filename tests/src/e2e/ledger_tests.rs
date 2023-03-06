@@ -382,8 +382,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         // 5. Submit a tx to initialize a new account
         vec![
             "init-account",
-            "--source",
-            BERTHA,
             "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
@@ -391,6 +389,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             &vp_user,
             "--alias",
             "Test-Account",
+            "--signers",
+            BERTHA,
             "--gas-amount",
             "0",
             "--gas-limit",

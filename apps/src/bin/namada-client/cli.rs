@@ -107,7 +107,10 @@ pub async fn main() -> Result<()> {
                 Sub::QueryPgfCandidates(QueryPgfCandidates(args)) => {
                     rpc::query_pgf_candidates(ctx, args).await;
                 }
-                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await
+                Sub::QueryAccount(QueryAccount(args)) => {
+                    rpc::query_account(ctx, args).await;
+                }
+                Sub::SignTx(SignTx(args)) => rpc::sign_tx(ctx, args).await,
             }
         }
         cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
