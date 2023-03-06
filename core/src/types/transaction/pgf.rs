@@ -97,4 +97,6 @@ pub struct Candidate {
     pub spending_cap: token::Amount,
     /// Arbitrary data associated with the candidate
     pub data: String,
+    /// The init epoch
+    pub epoch: Epoch
 }

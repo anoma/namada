@@ -1505,6 +1505,10 @@ pub async fn query_pgf_candidates(
                     "{:4}Spending cap: {} nam",
                     "", candidate.spending_cap
                 );
+                println!(
+                    "{:4}Created in epoch: {}",
+                    "", candidate.epoch
+                );
                 println!("{:4}Extra data: {}", "", candidate.data);
             }
         }

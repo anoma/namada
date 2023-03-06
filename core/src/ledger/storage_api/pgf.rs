@@ -143,6 +143,7 @@ where
                                 address: address.to_owned(),
                                 spending_cap,
                                 data: counsil_data.data,
+                                epoch: counsil_data.epoch
                             };
                             Some(candidate)
                         }
