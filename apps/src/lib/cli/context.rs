@@ -14,7 +14,7 @@ use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::ShieldedContext;
-use crate::config::genesis::genesis_config;
+use crate::config::genesis;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::{AddressVpType, Wallet};
@@ -92,15 +92,29 @@ impl Context {
         let chain_dir = global_args
             .base_dir
             .join(global_config.default_chain_id.as_str());
-        let genesis_file_path = global_args
-            .base_dir
-            .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
+
+        #[cfg(not(feature = "dev"))]
+        let genesis = genesis::genesis(
+            &global_args.base_dir,
+            &global_config.default_chain_id,
+        );
+        #[cfg(feature = "dev")]
+        let genesis = genesis::genesis(1);
+
         let native_token = genesis.native_token;
-        let default_genesis =
-            genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet =
-            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis);
+        #[cfg(not(feature = "dev"))]
+        let wallet = {
+            let genesis_file_path = global_args.base_dir.join(format!(
+                "{}.toml",
+                global_config.default_chain_id.as_str()
+            ));
+            let default_genesis = genesis::genesis_config::open_genesis_config(
+                genesis_file_path,
+            )?;
+            Wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
+        };
+        #[cfg(feature = "dev")]
+        let wallet = Wallet::load_or_new(&chain_dir);
 
         // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {

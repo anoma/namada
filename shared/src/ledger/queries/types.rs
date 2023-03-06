@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use namada_core::ledger::storage::WlStorage;
 
 use crate::ledger::events::log::EventLog;
@@ -75,7 +77,7 @@ pub trait Router {
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
-    type Error: From<std::io::Error>;
+    type Error: From<std::io::Error> + Display;
 
     /// Send a simple query request at the given path. For more options, use the
     /// `request` method.

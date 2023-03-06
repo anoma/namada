@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
@@ -31,7 +32,7 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{
     self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
 };
-use namada::ledger::queries::{self, RPC};
+use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
 use namada::proto::{SignedTxData, Tx};
 use namada::types::address::{masp, Address};
@@ -125,7 +126,10 @@ pub async fn query_and_print_epoch(args: args::Query) -> Epoch {
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(client: &HttpClient) -> Epoch {
+pub async fn query_epoch<CLIENT>(client: &CLIENT) -> Epoch
+where
+    CLIENT: namada::ledger::queries::Client + Sync,
+{
     unwrap_client_response(RPC.shell().epoch(client).await)
 }
 
@@ -171,7 +175,7 @@ pub async fn query_tx_deltas(
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded.fetch(&ledger_address, &[], &fvks).await;
+    ctx.shielded.fetch(&client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // Required for filtering out rejected transactions from Tendermint
@@ -305,15 +309,14 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
             let amt = ctx
                 .shielded
                 .compute_exchanged_amount(
-                    client.clone(),
+                    &client,
                     amt,
                     epoch,
                     Conversions::new(),
                 )
                 .await
                 .0;
-            let dec =
-                ctx.shielded.decode_amount(client.clone(), amt, epoch).await;
+            let dec = ctx.shielded.decode_amount(&client, amt, epoch).await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -634,10 +637,8 @@ pub async fn query_pinned_balance(ctx: &mut Context, args: args::QueryBalance) {
             (Ok((balance, epoch)), None) => {
                 let mut found_any = false;
                 // Print balances by human-readable token names
-                let balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
+                let balance =
+                    ctx.shielded.decode_amount(&client, balance, epoch).await;
                 for (addr, value) in balance.components() {
                     let asset_value = token::Amount::from(*value as u64);
                     if !found_any {
@@ -896,15 +897,13 @@ pub async fn query_shielded_balance(
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    ctx.shielded
-        .fetch(&args.query.ledger_address, &[], &fvks)
-        .await;
+    // Establish connection with which to do exchange rate queries
+    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
+    ctx.shielded.fetch(&client, &[], &fvks).await;
     // Save the update state so that future fetches can be short-circuited
     let _ = ctx.shielded.save();
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(args.query.clone()).await;
-    // Establish connection with which to do exchange rate queries
-    let client = HttpClient::new(args.query.ledger_address.clone()).unwrap();
     // Map addresses to token names
     let tokens = ctx.tokens();
     match (args.token, owner.is_some()) {
@@ -982,10 +981,8 @@ pub async fn query_shielded_balance(
             // Print non-zero balances whose asset types can be decoded
             for (asset_type, balances) in balances {
                 // Decode the asset type
-                let decoded = ctx
-                    .shielded
-                    .decode_asset_type(client.clone(), asset_type)
-                    .await;
+                let decoded =
+                    ctx.shielded.decode_asset_type(&client, asset_type).await;
                 match decoded {
                     Some((addr, asset_epoch)) if asset_epoch == epoch => {
                         // Only assets with the current timestamp count
@@ -1084,10 +1081,8 @@ pub async fn query_shielded_balance(
                     .compute_shielded_balance(&viewing_key)
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
-                    .decode_all_amounts(client.clone(), balance)
-                    .await;
+                let decoded_balance =
+                    ctx.shielded.decode_all_amounts(&client, balance).await;
                 print_decoded_balance_with_epoch(ctx, decoded_balance);
             } else {
                 balance = ctx
@@ -1100,10 +1095,8 @@ pub async fn query_shielded_balance(
                     .await
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
-                let decoded_balance = ctx
-                    .shielded
-                    .decode_amount(client.clone(), balance, epoch)
-                    .await;
+                let decoded_balance =
+                    ctx.shielded.decode_amount(&client, balance, epoch).await;
                 print_decoded_balance(ctx, decoded_balance);
             }
         }
@@ -1928,17 +1921,20 @@ pub async fn query_conversions(ctx: Context, args: args::QueryConversions) {
 }
 
 /// Query a conversion.
-pub async fn query_conversion(
-    client: HttpClient,
+pub async fn query_conversion<CLIENT>(
+    client: &CLIENT,
     asset_type: AssetType,
 ) -> Option<(
     Address,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
-)> {
+)>
+where
+    CLIENT: namada::ledger::queries::Client + Sync,
+{
     Some(unwrap_client_response(
-        RPC.shell().read_conversion(&client, &asset_type).await,
+        RPC.shell().read_conversion(client, &asset_type).await,
     ))
 }
 
@@ -1969,7 +1965,7 @@ pub async fn query_wasm_code_hash(
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
 pub async fn query_storage_value<T>(
-    client: &HttpClient,
+    client: &(impl namada::ledger::queries::Client + Sync),
     key: &storage::Key,
 ) -> Option<T>
 where
@@ -2609,7 +2605,10 @@ fn lookup_alias(ctx: &Context, addr: &Address) -> String {
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
+fn unwrap_client_response<T, E>(response: Result<T, E>) -> T
+where
+    E: Display,
+{
     response.unwrap_or_else(|err| {
         eprintln!("Error in the query {}", err);
         cli::safe_exit(1)

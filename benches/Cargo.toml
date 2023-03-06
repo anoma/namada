@@ -1,0 +1,56 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+description = "Namada benchmarks"
+edition = "2021"
+license = "GPL-3.0"
+name = "namada_benchmarks"
+resolver = "2"
+version = "0.14.2"
+
+[lib]
+name = "namada_benches"
+path = "mod.rs"
+
+[[bench]]
+name = "whitelisted_txs"
+harness = false
+path = "txs.rs"
+
+[[bench]]
+name = "whitelisted_vps"
+harness = false
+path = "vps.rs"
+
+[[bench]]
+name = "native_vps"
+harness = false
+path = "native_vps.rs"
+
+[[bench]]
+name = "process_wrapper"
+harness = false
+path = "process_wrapper.rs"
+
+[[bench]]
+name = "host_env"
+harness = false
+path = "host_env.rs"
+
+[dependencies]
+async-trait = "0.1.51"
+borsh = "0.9.0"
+ferveo-common = {git = "https://github.com/anoma/ferveo"}
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6afbd10558d12fe96eb1742eee45c" }
+namada = {path = "../shared" }
+namada_apps = {path = "../apps", features = ["dev"]}
+namada_test_utils = {path = "../test_utils"}
+namada_tx_prelude = {path = "../tx_prelude", default-features = false}
+prost = "0.9.0"
+rand = "0.8"
+rand_core = "0.6"
+rust_decimal = "1.26.1" 
+tokio = "1.8.2"
+tempfile = "3.2.0"
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }

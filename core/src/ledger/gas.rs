@@ -15,7 +15,7 @@ pub enum Error {
     GasOverflow,
 }
 
-const TX_SIZE_GAS_PER_BYTE: u64 = 1; //FIXME: value here?
+const TX_SIZE_GAS_PER_BYTE: u64 = 1;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 
@@ -25,8 +25,7 @@ pub const MIN_STORAGE_GAS: u64 = 1;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Gas metering in a block. Tracks the gas in a current block and a current
-/// transaction.
+/// Gas metering in a block.
 #[derive(Debug, Clone)]
 pub struct BlockGasMeter {
     /// The max amount of gas allowed per block, defined by the protocol parameter
@@ -131,6 +130,7 @@ impl TxGasMeter {
 
     /// Add the compiling cost proportionate to the code length
     pub fn add_compiling_fee(&mut self, bytes_len: usize) -> Result<()> {
+        //FIXME: rename to add_compiling_gas
         self.add(bytes_len as u64 * COMPILE_GAS_PER_BYTE)
     }
 

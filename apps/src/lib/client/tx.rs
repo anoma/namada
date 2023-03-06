@@ -644,12 +644,14 @@ impl ShieldedContext {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    pub async fn fetch(
+    pub async fn fetch<CLIENT>(
         &mut self,
-        ledger_address: &TendermintAddress,
+        client: &CLIENT,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
-    ) {
+    ) where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         // First determine which of the keys requested to be fetched are new.
         // Necessary because old transactions will need to be scanned for new
         // keys.
@@ -671,7 +673,7 @@ impl ShieldedContext {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(ledger_address, 0).await;
+            txs = Self::fetch_shielded_transfers(client, 0).await;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
             let mut tx_ctx = ShieldedContext::new(self.context_dir.clone());
@@ -691,9 +693,7 @@ impl ShieldedContext {
             self.merge(tx_ctx);
         } else {
             // Load only transactions accepted from last_txid until this point
-            txs =
-                Self::fetch_shielded_transfers(ledger_address, self.last_txidx)
-                    .await;
+            txs = Self::fetch_shielded_transfers(client, self.last_txidx).await;
             tx_iter = txs.iter();
         }
         // Now that we possess the unspent notes corresponding to both old and
@@ -733,11 +733,13 @@ impl ShieldedContext {
     /// transactions as a vector. More concretely, the HEAD_TX_KEY location
     /// stores the index of the last accepted transaction and each transaction
     /// is stored at a key derived from its index.
-    pub async fn fetch_shielded_transfers(
-        ledger_address: &TendermintAddress,
+    pub async fn fetch_shielded_transfers<CLIENT>(
+        client: &CLIENT,
         last_txidx: u64,
-    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)> {
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
+    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer)>
+    where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         // The address of the MASP account
         let masp_addr = masp();
         // Construct the key where last transaction pointer is stored
@@ -745,7 +747,7 @@ impl ShieldedContext {
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         // Query for the index of the last accepted transaction
-        let head_txidx = query_storage_value::<u64>(&client, &head_tx_key)
+        let head_txidx = query_storage_value::<u64>(client, &head_tx_key)
             .await
             .unwrap_or(0);
         let mut shielded_txs = BTreeMap::new();
@@ -758,7 +760,7 @@ impl ShieldedContext {
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx) =
                 query_storage_value::<(Epoch, BlockHeight, TxIndex, Transfer)>(
-                    &client,
+                    client,
                     &current_tx_key,
                 )
                 .await
@@ -917,11 +919,14 @@ impl ShieldedContext {
 
     /// Query the ledger for the decoding of the given asset type and cache it
     /// if it is found.
-    pub async fn decode_asset_type(
+    pub async fn decode_asset_type<CLIENT>(
         &mut self,
-        client: HttpClient,
+        client: &CLIENT,
         asset_type: AssetType,
-    ) -> Option<(Address, Epoch)> {
+    ) -> Option<(Address, Epoch)>
+    where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
             return decoded.cloned();
@@ -935,12 +940,15 @@ impl ShieldedContext {
 
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it.
-    async fn query_allowed_conversion<'a>(
+    async fn query_allowed_conversion<'a, CLIENT>(
         &'a mut self,
-        client: HttpClient,
+        client: &CLIENT,
         asset_type: AssetType,
         conversions: &'a mut Conversions,
-    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)> {
+    ) -> Option<&'a mut (AllowedConversion, MerklePath<Node>, i64)>
+    where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         match conversions.entry(asset_type) {
             Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
             Entry::Vacant(conv_entry) => {
@@ -973,7 +981,7 @@ impl ShieldedContext {
             // And then exchange balance into current asset types
             Some(
                 self.compute_exchanged_amount(
-                    client,
+                    &client,
                     balance,
                     target_epoch,
                     HashMap::new(),
@@ -1027,13 +1035,16 @@ impl ShieldedContext {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount(
+    pub async fn compute_exchanged_amount<CLIENT>(
         &mut self,
-        client: HttpClient,
+        client: &CLIENT,
         mut input: Amount,
         target_epoch: Epoch,
         mut conversions: Conversions,
-    ) -> (Amount, Conversions) {
+    ) -> (Amount, Conversions)
+    where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         // Where we will store our exchanged value
         let mut output = Amount::zero();
         // Repeatedly exchange assets until it is no longer possible
@@ -1041,14 +1052,14 @@ impl ShieldedContext {
             input.components().next().map(cloned_pair)
         {
             let target_asset_type = self
-                .decode_asset_type(client.clone(), asset_type)
+                .decode_asset_type(client, asset_type)
                 .await
                 .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
                 .unwrap_or(asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
-                    client.clone(),
+                    client,
                     asset_type,
                     &mut conversions,
                 )
@@ -1071,7 +1082,7 @@ impl ShieldedContext {
                 );
             } else if let (Some((conv, _wit, usage)), false) = (
                 self.query_allowed_conversion(
-                    client.clone(),
+                    client,
                     target_asset_type,
                     &mut conversions,
                 )
@@ -1107,9 +1118,9 @@ impl ShieldedContext {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes(
+    pub async fn collect_unspent_notes<CLIENT>(
         &mut self,
-        ledger_address: TendermintAddress,
+        client: &CLIENT,
         vk: &ViewingKey,
         target: Amount,
         target_epoch: Epoch,
@@ -1117,9 +1128,10 @@ impl ShieldedContext {
         Amount,
         Vec<(Diversifier, Note, MerklePath<Node>)>,
         Conversions,
-    ) {
-        // Establish connection with which to do exchange rate queries
-        let client = HttpClient::new(ledger_address.clone()).unwrap();
+    )
+    where
+        CLIENT: namada::ledger::queries::Client + Sync,
+    {
         let mut conversions = HashMap::new();
         let mut val_acc = Amount::zero();
         let mut notes = Vec::new();
@@ -1143,7 +1155,7 @@ impl ShieldedContext {
                     .expect("received note has invalid value or asset type");
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
-                        client.clone(),
+                        client,
                         pre_contr,
                         target_epoch,
                         conversions.clone(),
@@ -1264,7 +1276,7 @@ impl ShieldedContext {
         let client = HttpClient::new(ledger_address.clone()).unwrap();
         // Finally, exchange the balance to the transaction's epoch
         Ok((
-            self.compute_exchanged_amount(client, amt, ep, HashMap::new())
+            self.compute_exchanged_amount(&client, amt, ep, HashMap::new())
                 .await
                 .0,
             ep,
@@ -1276,15 +1288,14 @@ impl ShieldedContext {
     /// the given epoch are ignored.
     pub async fn decode_amount(
         &mut self,
-        client: HttpClient,
+        client: &HttpClient,
         amt: Amount,
         target_epoch: Epoch,
     ) -> Amount<Address> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            let decoded =
-                self.decode_asset_type(client.clone(), *asset_type).await;
+            let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
                 Some((addr, epoch)) if epoch == target_epoch => {
@@ -1300,14 +1311,13 @@ impl ShieldedContext {
     /// Addresses that they decode to.
     pub async fn decode_all_amounts(
         &mut self,
-        client: HttpClient,
+        client: &HttpClient,
         amt: Amount,
     ) -> Amount<(Address, Epoch)> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            let decoded =
-                self.decode_asset_type(client.clone(), *asset_type).await;
+            let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             if let Some((addr, epoch)) = decoded {
                 res += &Amount::from_pair((addr, epoch), *val).unwrap()
@@ -1347,12 +1357,15 @@ fn convert_amount(
 /// transactions balanced, but it is understood that transparent account changes
 /// are effected only by the amounts and signatures specified by the containing
 /// Transfer object.
-async fn gen_shielded_transfer(
+pub async fn gen_shielded_transfer<CLIENT>(
     ctx: &mut Context,
-    client: &HttpClient,
+    client: &CLIENT,
     args: &args::TxTransfer,
     shielded_gas: bool,
-) -> Result<Option<(Transaction, TransactionMetadata, Epoch)>, builder::Error> {
+) -> Result<Option<(Transaction, TransactionMetadata, Epoch)>, builder::Error>
+where
+    CLIENT: namada::ledger::queries::Client + Sync,
+{
     // No shielded components are needed when neither source nor destination
     // are shielded
     let spending_key = ctx.get_cached(&args.source).spending_key();
@@ -1368,9 +1381,7 @@ async fn gen_shielded_transfer(
     // Load the current shielded context given the spending key we
     // possess
     let _ = ctx.shielded.load();
-    ctx.shielded
-        .fetch(&args.tx.ledger_address, &spending_keys, &[])
-        .await;
+    ctx.shielded.fetch(client, &spending_keys, &[]).await;
     // Save the update state so that future fetches can be
     // short-circuited
     let _ = ctx.shielded.save();
@@ -1398,6 +1409,7 @@ async fn gen_shielded_transfer(
             args.tx.fee_amount,
         );
         builder.set_fee(fee.clone())?;
+        // FIXME: fix gas here?
         // If the gas is coming from the shielded pool, then our shielded inputs
         // must also cover the gas fee
         let required_amt = if shielded_gas { amount + fee } else { amount };
@@ -1405,7 +1417,7 @@ async fn gen_shielded_transfer(
         let (_, unspent_notes, used_convs) = ctx
             .shielded
             .collect_unspent_notes(
-                args.tx.ledger_address.clone(),
+                client,
                 &to_viewing_key(&sk).vk,
                 required_amt,
                 epoch,
@@ -1428,6 +1440,7 @@ async fn gen_shielded_transfer(
     } else {
         // No transfer fees come from the shielded transaction for non-MASP
         // sources
+        //FIXME: fix gas here?
         builder.set_fee(Amount::zero())?;
         // We add a dummy UTXO to our transaction, but only the source of the
         // parent Transfer object is used to validate fund availability
@@ -1437,8 +1450,9 @@ async fn gen_shielded_transfer(
         let secp_pk =
             secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
                 .serialize();
-        let hash =
-            ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
+        let hash = ripemd160::Ripemd160::digest(
+            sha2::Sha256::digest(&secp_pk).as_slice(),
+        );
         let script = TransparentAddress::PublicKey(hash.into()).script();
         builder.add_transparent_input(
             secp_sk,
@@ -1470,9 +1484,9 @@ async fn gen_shielded_transfer(
             .expect("target address should be transparent")
             .try_to_vec()
             .expect("target address encoding");
-        let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
-            target_enc.as_ref(),
-        ));
+        let hash = ripemd160::Ripemd160::digest(
+            sha2::Sha256::digest(target_enc.as_ref()).as_slice(),
+        );
         builder.add_transparent_output(
             &TransparentAddress::PublicKey(hash.into()),
             asset_type,

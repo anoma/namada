@@ -1,6 +1,6 @@
 mod abortable;
 mod broadcaster;
-mod shell;
+pub mod shell;
 mod shims;
 pub mod storage;
 pub mod tendermint_node;

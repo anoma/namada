@@ -10,7 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 mod prepare_proposal;
-mod process_proposal;
+pub mod process_proposal;
 mod queries;
 mod stats;
 
@@ -257,7 +257,7 @@ where
     #[allow(dead_code)]
     chain_id: ChainId,
     /// The persistent storage with write log
-    pub(super) wl_storage: WlStorage<D, H>,
+    pub wl_storage: WlStorage<D, H>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -270,9 +270,9 @@ where
     #[allow(dead_code)]
     mode: ShellMode,
     /// VP WASM compilation cache
-    vp_wasm_cache: VpCache<WasmCacheRwAccess>,
+    pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
-    tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Taken from config `storage_read_past_height_limit`. When set, will
     /// limit the how many block heights in the past can the storage be
     /// queried for reading values.

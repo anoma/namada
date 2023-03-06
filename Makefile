@@ -45,6 +45,7 @@ check-abcipp:
 	$(cargo) +$(nightly) check \
 		--workspace \
 		--exclude namada_tests \
+		--exclude namada_benchmarks \
 		--all-targets \
 		--no-default-features \
 		--features "abcipp ibc-mocks-abcipp testing" \
@@ -213,6 +214,9 @@ watch:
 clean:
 	$(cargo) clean
 
+bench:
+	$(cargo) +$(nightly) bench -Z unstable-options
+
 build-doc:
 	$(cargo) doc --no-deps
 
@@ -266,4 +270,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit test-unit-abcipp clippy-abcipp bench-gas

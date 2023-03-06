@@ -1,0 +1,21 @@
+{
+    "tx_bond.wasm": 1,
+    "tx_change_validator_commission.wasm": 1,
+    "tx_ibc.wasm": 1,
+    "tx_init_account.wasm": 1,
+    "tx_init_proposal.wasm": 1,
+    "tx_init_validator.wasm": 1,
+    "tx_reveal_pk.wasm": 1,
+    "tx_transfer.wasm": 1,
+    "tx_unbond.wasm": 1,
+    "tx_update_vp.wasm": 1,
+    "tx_vote_proposal.wasm": 1,
+    "tx_withdraw.wasm": 1,
+    "vp_implicit.wasm": 1,
+    "vp_masp.wasm": 1,
+    "vp_testnet_faucet.wasm": 0,
+    "vp_token.wasm": 1,
+    "vp_user.wasm": 1,
+    "vp_validator.wasm": 1,
+    "single_signature": 1
+}

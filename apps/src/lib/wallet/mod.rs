@@ -258,7 +258,7 @@ impl Wallet {
     }
 
     pub fn find_viewing_key(
-        &mut self,
+        &self,
         alias: impl AsRef<str>,
     ) -> Result<&ExtendedViewingKey, FindKeyError> {
         self.store
