@@ -388,6 +388,8 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
+    // N.B. Calling this when testing pre- and post- reads in
+    // regards to testing native vps is incorrect.
     fn write_bytes(
         &mut self,
         key: &storage::Key,

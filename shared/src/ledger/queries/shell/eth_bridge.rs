@@ -748,7 +748,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -793,7 +792,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -816,7 +814,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -870,7 +867,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -900,7 +896,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -1076,7 +1071,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -1104,7 +1098,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -1256,7 +1249,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;
@@ -1284,7 +1276,6 @@ mod test_ethbridge_router {
         // commit the changes and increase block height
         client
             .wl_storage
-            .storage
             .commit_block()
             .expect("Test failed");
         client.wl_storage.storage.block.height += 1;

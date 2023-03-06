@@ -399,8 +399,6 @@ where
         )?;
     }
 
-    println!("FINISHED GENESIS\n");
-
     Ok(())
 }
 
@@ -527,7 +525,6 @@ pub fn read_validator_stake<S>(
 where
     S: StorageRead,
 {
-    // println!("\nREAD VALIDATOR STAKE AT EPOCH {}", epoch);
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
@@ -755,7 +752,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    println!("BONDING TOKEN AMOUNT {}\n", amount);
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -797,26 +793,15 @@ where
     // TODO: ensure that this method of checking if the bond exists works
 
     if !bond_handle.get_data_handler().is_empty(storage)? {
-        println!("BOND EXISTS TO BEGIN WITH\n");
         let cur_remain = bond_handle
             .get_delta_val(storage, current_epoch + offset, &params)?
             .unwrap_or_default();
-        // println!(
-        //     "Bond remain at offset epoch {}: {}\n",
-        //     current_epoch + offset,
-        //     cur_remain
-        // );
         bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
     } else {
-        println!("BOND DOESNT EXIST YET\n");
         bond_handle.init(storage, amount, current_epoch, offset)?;
     }
-
-    println!("\nUPDATING VALIDATOR SET NOW\n");
-
     // Update the validator set
     update_validator_set(storage, &params, validator, amount, current_epoch)?;
-    println!("UPDATING VALIDATOR DELTAS NOW\n");
 
     // Update the validator and total deltas
     update_validator_deltas(
@@ -837,7 +822,6 @@ where
         source,
         &ADDRESS,
     )?;
-    println!("END BOND_TOKENS\n");
 
     Ok(())
 }
@@ -956,9 +940,6 @@ where
         return Ok(());
     }
     let epoch = current_epoch + params.pipeline_len;
-    println!(
-        "Update epoch for validator set: {epoch}, validator: {validator}\n"
-    );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
@@ -969,9 +950,6 @@ where
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
         .unwrap_or_default();
-
-    // println!("VALIDATOR STAKE BEFORE UPDATE: {}\n", tokens_pre);
-
     let tokens_post = tokens_pre.change() + token_change;
     // TODO: handle overflow or negative vals perhaps with TryFrom
     let tokens_post = token::Amount::from_change(tokens_post);
@@ -991,7 +969,6 @@ where
     let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
     if consensus_vals_pre.contains(storage, &position)? {
-        println!("\nTARGET VALIDATOR IS CONSENSUS\n");
         // It's initially consensus
         let val_address = consensus_vals_pre.get(storage, &position)?;
         assert!(val_address.is_some());
@@ -1005,7 +982,6 @@ where
             )?;
 
         if tokens_post < max_below_capacity_validator_amount {
-            println!("NEED TO SWAP VALIDATORS\n");
             // Place the validator into the below-capacity set and promote the
             // lowest position max below-capacity validator.
 
@@ -1048,7 +1024,6 @@ where
                 params.pipeline_len,
             )?;
         } else {
-            println!("VALIDATOR REMAINS IN CONSENSUS SET\n");
             // The current validator should remain in the consensus set - place
             // it into a new position
             insert_validator_into_set(
@@ -1189,8 +1164,6 @@ where
         below_cap_in_mem.insert((stake, position), address);
     }
 
-    dbg!(&consensus_in_mem);
-
     for ((val_stake, val_position), val_address) in consensus_in_mem.into_iter()
     {
         consensus_validator_set
@@ -1198,11 +1171,6 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
-    println!("NEW VALIDATOR SET SHOULD BE INSERTED:");
-    dbg!(read_consensus_validator_set_addresses(
-        storage,
-        target_epoch
-    )?);
 
     for ((val_stake, val_position), val_address) in below_cap_in_mem.into_iter()
     {
@@ -1346,12 +1314,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let next_position = find_next_position(handle, storage)?;
-    println!(
-        "Inserting validator {} into position {:?} at epoch {}\n",
-        address.clone(),
-        next_position.clone(),
-        epoch.clone()
-    );
     handle.insert(storage, next_position, address.clone())?;
     validator_set_positions_handle().at(epoch).insert(
         storage,
@@ -1373,14 +1335,8 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    println!("UNBONDING TOKEN AMOUNT {amount} at epoch {current_epoch}\n");
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    println!(
-        "Current validator stake at pipeline: {}",
-        read_validator_stake(storage, &params, validator, pipeline_epoch)?
-            .unwrap_or_default()
-    );
 
     if let Some(source) = source {
         if source != validator
@@ -1444,16 +1400,6 @@ where
         .get_data_handler()
         .iter(storage)?
         .collect();
-    // println!("\nBonds before decrementing:");
-    // for ep in Epoch::default().iter_range(params.unbonding_len * 3) {
-    //     println!(
-    //         "bond delta at epoch {}: {}",
-    //         ep,
-    //         bond_remain_handle
-    //             .get_delta_val(storage, ep, &params)?
-    //             .unwrap_or_default()
-    //     )
-    // }
     let mut bond_iter = bonds.into_iter().rev();
 
     // Map: { bond start epoch, (new bond value, unbond value) }
@@ -1498,18 +1444,6 @@ where
         )?;
     }
 
-    // println!("\nBonds after decrementing:");
-    // for ep in Epoch::default().iter_range(params.unbonding_len * 3) {
-    //     println!(
-    //         "bond delta at epoch {}: {}",
-    //         ep,
-    //         bond_remain_handle
-    //             .get_delta_val(storage, ep, &params)?
-    //             .unwrap_or_default()
-    //     )
-    // }
-
-    println!("Updating validator set for unbonding");
     // Update the validator set at the pipeline offset
     update_validator_set(storage, &params, validator, -amount, current_epoch)?;
 
@@ -1655,7 +1589,6 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // println!("WITHDRAWING TOKENS IN EPOCH {current_epoch}\n");
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
 
@@ -1670,7 +1603,6 @@ where
     // TODO: use `find_unbonds`
     let unbond_iter = unbond_handle.iter(storage)?;
     for unbond in unbond_iter {
-        // println!("\nUNBOND ITER\n");
         let (
             NestedSubKey::Data {
                 key: withdraw_epoch,
@@ -1678,8 +1610,6 @@ where
             },
             amount,
         ) = unbond?;
-
-        // dbg!(&end_epoch, &start_epoch, amount);
 
         // TODO: worry about updating this later after PR 740 perhaps
         // 1. cubic slashing
@@ -1715,7 +1645,6 @@ where
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
-        // println!("Remove ({}, {}) from unbond\n", end_epoch, start_epoch);
         unbond_handle
             .at(&withdraw_epoch)
             .remove(storage, &start_epoch)?;

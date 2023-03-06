@@ -488,6 +488,7 @@ mod tests {
             },
         };
         config.init_storage(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
         wl_storage
     }
 
@@ -640,7 +641,8 @@ mod tests {
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -651,7 +653,8 @@ mod tests {
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &escrow_key,
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
@@ -694,7 +697,8 @@ mod tests {
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -705,7 +709,8 @@ mod tests {
         // do not credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &escrow_key,
                 Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
                     .try_to_vec()
@@ -747,7 +752,8 @@ mod tests {
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
                     .try_to_vec()
@@ -758,7 +764,8 @@ mod tests {
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &escrow_key,
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,

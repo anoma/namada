@@ -293,7 +293,7 @@ where
         }
         // The deltas in the escrowed amounts we must check.
         let escrow_checks = self.escrow_check(&transfer)?;
-        // check that gas we correctly escrowed.
+        // check that gas was correctly escrowed.
         if !self.check_nam_escrowed(escrow_checks.gas_check)? {
             return Ok(false);
         }
@@ -543,9 +543,12 @@ mod test_bridge_pool_vp {
                 address::nam(),
                 None,
             ),
-            write_log: new_writelog(),
+            write_log: Default::default(),
         };
         config.init_storage(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
+        wl_storage.write_log = new_writelog();
+        wl_storage.commit_block().expect("Test failed");
         wl_storage
     }
 
@@ -943,7 +946,8 @@ mod test_bridge_pool_vp {
         // add transfer to pool
         let mut keys_changed = {
             wl_storage
-                .write_bytes(
+                .write_log
+                .write(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1027,7 +1031,8 @@ mod test_bridge_pool_vp {
         // add transfer to pool
         let mut keys_changed = {
             wl_storage
-                .write_bytes(
+                .write_log
+                .write(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1096,7 +1101,8 @@ mod test_bridge_pool_vp {
         // add transfer to pool
         let keys_changed = {
             wl_storage
-                .write_bytes(
+                .write_log
+                .write(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1107,7 +1113,8 @@ mod test_bridge_pool_vp {
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200)
                     .try_to_vec()
@@ -1116,7 +1123,8 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
@@ -1124,7 +1132,8 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &eb_account_key,
                 Amount::from(100).try_to_vec().expect("Test failed"),
             )
@@ -1185,7 +1194,8 @@ mod test_bridge_pool_vp {
         // add transfer to pool
         let keys_changed = {
             wl_storage
-                .write_bytes(
+                .write_log
+                .write(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1196,7 +1206,8 @@ mod test_bridge_pool_vp {
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200)
                     .try_to_vec()
@@ -1205,7 +1216,8 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
@@ -1213,7 +1225,8 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &eb_account_key,
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )
@@ -1293,7 +1306,8 @@ mod test_bridge_pool_vp {
         // add transfer to pool
         let keys_changed = {
             wl_storage
-                .write_bytes(
+                .write_log
+                .write(
                     &get_pending_key(&transfer),
                     transfer.try_to_vec().unwrap(),
                 )
@@ -1304,7 +1318,8 @@ mod test_bridge_pool_vp {
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 100)
                     .try_to_vec()
@@ -1312,7 +1327,8 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &gas_payer_balance_key,
                 Amount::from(BERTHA_WEALTH - 100)
                     .try_to_vec()
@@ -1321,7 +1337,8 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100)
                     .try_to_vec()
@@ -1329,7 +1346,8 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage
-            .write_bytes(
+            .write_log
+            .write(
                 &eb_account_key,
                 Amount::from(10).try_to_vec().expect("Test failed"),
             )

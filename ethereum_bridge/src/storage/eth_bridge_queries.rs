@@ -5,6 +5,7 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::{
 };
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthAddress, Uint};
 use namada_core::types::keccak::KeccakHash;
@@ -197,10 +198,8 @@ where
         self,
     ) -> Option<(BridgePoolRootProof, BlockHeight)> {
         self.wl_storage
-            .storage
-            .read(&get_signed_root_key())
+            .read_bytes(&get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.")
-            .0
             .map(|bytes| {
                 BorshDeserialize::try_from_slice(&bytes).expect(
                     "Deserializing the signed bridge pool root from storage \

@@ -165,6 +165,21 @@ pub fn init_storage_with_validators(
         0.into(),
     )
     .expect("Test failed");
+    let config = EthereumBridgeConfig {
+        min_confirmations: Default::default(),
+        contracts: Contracts {
+            native_erc20: wnam(),
+            bridge: UpgradeableContract {
+                address: EthAddress([42; 20]),
+                version: Default::default(),
+            },
+            governance: UpgradeableContract {
+                address: EthAddress([18; 20]),
+                version: Default::default(),
+            },
+        },
+    };
+    config.init_storage(wl_storage);
 
     for (validator, keys) in all_keys.iter() {
         let protocol_key = keys.protocol.ref_to();
@@ -172,6 +187,7 @@ pub fn init_storage_with_validators(
             .write(&protocol_pk_key(validator), protocol_key)
             .expect("Test failed");
     }
+    wl_storage.commit_block().expect("Test failed");
 
     all_keys
 }
