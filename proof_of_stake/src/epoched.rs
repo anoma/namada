@@ -84,24 +84,10 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        self.init(storage, value, current_epoch, 0)
-    }
-
-    /// Initialize new data at the given epoch offset.
-    pub fn init<S>(
-        &self,
-        storage: &mut S,
-        value: Data,
-        current_epoch: Epoch,
-        offset: u64,
-    ) -> storage_api::Result<()>
-    where
-        S: StorageWrite + StorageRead,
-    {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
 
-        self.set_at_epoch(storage, value, current_epoch, offset)
+        self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
     /// Find the value for the given epoch or a nearest epoch before it.
@@ -144,7 +130,7 @@ where
         }
     }
 
-    /// Set the value at the given epoch offset.
+    /// Initialize or set the value at the given epoch offset.
     pub fn set<S>(
         &self,
         storage: &mut S,
@@ -232,6 +218,10 @@ where
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
             }
+        } else {
+            // Set the epoch of the last update to the current epoch
+            let key = self.get_last_update_storage_key();
+            storage.write(&key, current_epoch)?;
         }
         Ok(())
     }
@@ -386,24 +376,9 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        self.init(storage, value, current_epoch, 0)
-    }
-
-    /// Initialize new data at the given epoch offset.
-    pub fn init<S>(
-        &self,
-        storage: &mut S,
-        value: Data,
-        current_epoch: Epoch,
-        offset: u64,
-    ) -> storage_api::Result<()>
-    where
-        S: StorageWrite + StorageRead,
-    {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)?;
-
-        self.set_at_epoch(storage, value, current_epoch, offset)
+        self.set_at_epoch(storage, value, current_epoch, 0)
     }
 
     /// Get the delta value at the given epoch
@@ -459,7 +434,7 @@ where
         }
     }
 
-    /// Set the value at the given epoch offset.
+    /// Initialize or set the value at the given epoch offset.
     pub fn set<S>(
         &self,
         storage: &mut S,
@@ -551,6 +526,10 @@ where
                 let key = self.get_last_update_storage_key();
                 storage.write(&key, current_epoch)?;
             }
+        } else {
+            // Set the epoch of the last update to the current epoch
+            let key = self.get_last_update_storage_key();
+            storage.write(&key, current_epoch)?;
         }
         Ok(())
     }

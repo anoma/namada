@@ -760,21 +760,15 @@ where
 
     // Initialize or update the bond at the pipeline offset
     let offset = params.pipeline_len;
-    if !bond_handle.get_data_handler().is_empty(storage)? {
-        tracing::debug!("Bond exists to begin with");
-        let cur_remain = bond_handle
-            .get_delta_val(storage, current_epoch + offset, &params)?
-            .unwrap_or_default();
-        // tracing::debug!(
-        //     "Bond remain at offset epoch {}: {}",
-        //     current_epoch + offset,
-        //     cur_remain
-        // );
-        bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
-    } else {
-        tracing::debug!("Bond doesn't exist yet");
-        bond_handle.init(storage, amount, current_epoch, offset)?;
-    }
+    let cur_remain = bond_handle
+        .get_delta_val(storage, current_epoch + offset, &params)?
+        .unwrap_or_default();
+    tracing::debug!(
+        "Bond remain at offset epoch {}: {}",
+        current_epoch + offset,
+        cur_remain
+    );
+    bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
 
     // Update the validator set
     update_validator_set(storage, &params, validator, amount, current_epoch)?;
@@ -828,7 +822,7 @@ where
             &target_epoch,
             address,
         )?;
-        validator_state_handle(address).init(
+        validator_state_handle(address).set(
             storage,
             ValidatorState::Consensus,
             current_epoch,
@@ -874,7 +868,7 @@ where
                 &target_epoch,
                 address,
             )?;
-            validator_state_handle(address).init(
+            validator_state_handle(address).set(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
@@ -889,7 +883,7 @@ where
                 &target_epoch,
                 address,
             )?;
-            validator_state_handle(address).init(
+            validator_state_handle(address).set(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -1518,19 +1512,19 @@ where
     )?;
 
     // Epoched validator data
-    validator_consensus_key_handle(address).init(
+    validator_consensus_key_handle(address).set(
         storage,
         consensus_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_commission_rate_handle(address).init(
+    validator_commission_rate_handle(address).set(
         storage,
         commission_rate,
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_deltas_handle(address).init(
+    validator_deltas_handle(address).set(
         storage,
         token::Change::default(),
         current_epoch,

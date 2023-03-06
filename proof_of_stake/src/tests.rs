@@ -795,7 +795,7 @@ fn test_validator_sets() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
@@ -1417,7 +1417,7 @@ fn test_validator_sets_swap() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .init(s, pk.clone(), epoch, params.pipeline_len)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
