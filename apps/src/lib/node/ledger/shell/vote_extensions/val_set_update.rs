@@ -343,6 +343,7 @@ mod test_vote_extensions {
         let voting_powers = {
             shell
                 .wl_storage
+                .ethbridge_queries()
                 .get_active_eth_addresses(Some(next_epoch))
                 .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
@@ -429,8 +430,8 @@ mod test_vote_extensions {
             let next_epoch = signing_epoch.next();
             shell
                 .wl_storage
-                .get_active_eth_addresses(Some(next_epoch))
                 .ethbridge_queries()
+                .get_active_eth_addresses(Some(next_epoch))
                 .iter()
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
@@ -558,7 +559,8 @@ mod test_vote_extensions {
             validators_handle
                 .at(&1.into())
                 .at(&val_stake)
-                .remove(&mut shell.wl_storage, val_position)?;
+                .remove(&mut shell.wl_storage, &val_position)
+                .expect("Test failed");
         }
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();

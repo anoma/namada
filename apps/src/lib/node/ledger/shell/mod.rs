@@ -1144,6 +1144,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::ledger::storage_api::StorageWrite;
     use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1329,7 +1330,7 @@ mod test_utils {
                 tx_wasm_compilation_cache,
                 address::nam(),
             );
-            shell.storage.last_height = height.into();
+            shell.wl_storage.storage.last_height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
         }
 
@@ -1471,8 +1472,8 @@ mod test_utils {
         use namada::eth_bridge::storage::active_key;
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &active_key(),
                 EthBridgeStatus::Disabled.try_to_vec().expect("Test failed"),
             )

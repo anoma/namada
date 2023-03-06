@@ -588,6 +588,7 @@ mod test_vote_extensions {
         let consensus_in_mem = validators_handle
             .at(&1.into())
             .iter(&shell.wl_storage)
+            .expect("Test failed")
             .map(|val| {
                 let (
                     NestedSubKey::Data {
@@ -602,7 +603,8 @@ mod test_vote_extensions {
             validators_handle
                 .at(&1.into())
                 .at(&val_stake)
-                .remove(&mut shell.wl_storage, val_position)?;
+                .remove(&mut shell.wl_storage, &val_position)
+                .expect("Test failed");
         }
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();

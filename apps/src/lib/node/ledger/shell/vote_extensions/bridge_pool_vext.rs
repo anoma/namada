@@ -335,7 +335,7 @@ mod test_bp_vote_extensions {
             eth_cold_key: &cold_key.ref_to(),
             current_epoch: 0.into(),
             commission_rate: Default::default(),
-            max_commission_change_per_epoch: Default::default(),
+            max_commission_rate_change: Default::default(),
         })
         .expect("Test failed");
 
