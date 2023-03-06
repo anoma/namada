@@ -402,7 +402,6 @@ where
 
         let new_epoch = self
             .wl_storage
-            .storage
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
 
@@ -837,7 +836,7 @@ mod test_finalize_block {
             min_duration: DurationSecs(0),
         };
         namada::ledger::parameters::update_epoch_parameter(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &epoch_duration,
         )
         .unwrap();

@@ -140,7 +140,9 @@ where
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
         };
-        parameters.init_storage(&mut self.wl_storage.storage);
+        parameters
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing chain parameters must not fail");
 
         // Initialize governance parameters
         genesis

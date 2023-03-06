@@ -99,21 +99,24 @@ impl TestTxEnv {
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
     ) {
-        let _ = parameters::update_epoch_parameter(
-            &mut self.wl_storage.storage,
+        parameters::update_epoch_parameter(
+            &mut self.wl_storage,
             &epoch_duration.unwrap_or(EpochDuration {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(5),
             }),
-        );
-        let _ = parameters::update_tx_whitelist_parameter(
-            &mut self.wl_storage.storage,
+        )
+        .unwrap();
+        parameters::update_tx_whitelist_parameter(
+            &mut self.wl_storage,
             tx_whitelist.unwrap_or_default(),
-        );
-        let _ = parameters::update_vp_whitelist_parameter(
-            &mut self.wl_storage.storage,
+        )
+        .unwrap();
+        parameters::update_vp_whitelist_parameter(
+            &mut self.wl_storage,
             vp_whitelist.unwrap_or_default(),
-        );
+        )
+        .unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.
