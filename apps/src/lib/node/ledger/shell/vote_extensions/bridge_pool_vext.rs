@@ -303,7 +303,8 @@ mod test_bp_vote_extensions {
                 &mut shell.wl_storage,
                 ValidatorPosition(1),
                 bertha_address(),
-            );
+            )
+            .expect("Test failed");
 
         // register Bertha's protocol key
         let pk_key = protocol_pk_key(&bertha_address());

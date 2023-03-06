@@ -584,9 +584,8 @@ mod test_vote_extensions {
 
         assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
         // remove all validators of the next epoch
-        let validators_handle = consensus_validator_set_handle();
+        let validators_handle = consensus_validator_set_handle().at(&1.into());
         let consensus_in_mem = validators_handle
-            .at(&1.into())
             .iter(&shell.wl_storage)
             .expect("Test failed")
             .map(|val| {
@@ -598,10 +597,10 @@ mod test_vote_extensions {
                     ..,
                 ) = val.expect("Test failed");
                 (stake, position)
-            });
+            })
+            .collect::<Vec<_>>();
         for (val_stake, val_position) in consensus_in_mem.into_iter() {
             validators_handle
-                .at(&1.into())
                 .at(&val_stake)
                 .remove(&mut shell.wl_storage, &val_position)
                 .expect("Test failed");

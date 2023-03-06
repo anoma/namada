@@ -1118,9 +1118,9 @@ mod test_prepare_proposal {
             .pos_queries()
             .get_epoch(FIRST_HEIGHT)
             .expect("Test failed");
-        let validators_handle = consensus_validator_set_handle();
+        let validators_handle =
+            consensus_validator_set_handle().at(&events_epoch);
         let consensus_in_mem = validators_handle
-            .at(&events_epoch)
             .iter(&shell.wl_storage)
             .expect("Test failed")
             .map(|val| {
@@ -1132,15 +1132,14 @@ mod test_prepare_proposal {
                     address,
                 ) = val.expect("Test failed");
                 (stake, position, address)
-            });
+            })
+            .collect::<Vec<_>>();
         for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
             validators_handle
-                .at(&events_epoch)
                 .at(&val_stake)
                 .remove(&mut shell.wl_storage, &val_position)
                 .expect("Test failed");
             validators_handle
-                .at(&events_epoch)
                 .at(&0.into())
                 .insert(&mut shell.wl_storage, val_position, address)
                 .expect("Test failed");
