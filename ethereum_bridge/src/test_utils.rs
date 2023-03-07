@@ -114,7 +114,7 @@ pub fn bootstrap_ethereum_bridge(
 
 /// Returns the number of keys in `storage` which have values present.
 pub fn stored_keys_count(wl_storage: &TestWlStorage) -> usize {
-    let root = Key{segments: vec![]};
+    let root = Key { segments: vec![] };
     wl_storage.iter_prefix(&root).expect("Test failed").count()
 }
 

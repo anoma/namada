@@ -394,7 +394,6 @@ mod tests {
                     amount: Amount::from(10),
                 },
                 gas_fee: GasFee {
-
                     amount: Amount::from(1),
                     payer: payer.clone(),
                 },

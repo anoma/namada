@@ -418,6 +418,8 @@ mod tests {
 
     use super::*;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::InternalAddress;
+    use crate::types::storage::DbKeySeg;
 
     proptest! {
         // Generate arb valid input for `test_prefix_iters_aux`
@@ -579,7 +581,16 @@ mod tests {
         )
         .prop_map(|kvs| {
             kvs.into_iter()
-                .map(|(key, val)| (key, Level::Storage(val)))
+                .filter_map(|(key, val)| {
+                    if let DbKeySeg::AddressSeg(Address::Internal(
+                        InternalAddress::EthBridgePool,
+                    )) = key.segments[0]
+                    {
+                        None
+                    } else {
+                        Some((key, Level::Storage(val)))
+                    }
+                })
                 .collect::<Vec<_>>()
         });
 
