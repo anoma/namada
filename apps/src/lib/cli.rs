@@ -861,8 +861,12 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD)
-                .about("Roll Namada state back to the previous height.")
+            App::new(Self::CMD).about(
+                "Roll Namada state back to the previous height. This command \
+                 does not create a backup of neither the Namada nor the \
+                 Tendermint state before execution: for extra safety, it is \
+                 recommended to make a backup in advance.",
+            )
         }
     }
 
