@@ -16,6 +16,10 @@ abciplus = [
   "ibc",
   "ibc-proto",
   "ibc-relayer",
+  "tendermint",
+  "tendermint-config",
+  "tendermint-proto",
+  "tendermint-rpc",
   "namada/abciplus",
   "namada/ibc-mocks",
   "namada_vp_prelude/abciplus",
@@ -27,6 +31,10 @@ abcipp = [
   "ibc-abcipp",
   "ibc-proto-abcipp",
   "ibc-relayer-abcipp",
+  "tendermint-abcipp",
+  "tendermint-config-abcipp",
+  "tendermint-proto-abcipp",
+  "tendermint-rpc-abcipp",
   "namada/abcipp",
   "namada/ibc-mocks-abcipp",
   "namada_vp_prelude/abcipp",
@@ -56,9 +64,9 @@ sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
 tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-config-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-proto-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
-tendermint-rpc-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
 tendermint = {version = "0.23.6", optional = true}
 tendermint-config = {version = "0.23.6", optional = true}
 tendermint-proto = {version = "0.23.6", optional = true}
