@@ -23,20 +23,10 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::TxBytes;
 use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
-use crate::config::ActionAtHeight;
+use crate::config::{Action, ActionAtHeight};
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::abci::RequestBeginBlock;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
-
-/// An action to be performed at a
-/// certain block height.
-#[derive(Debug, Clone)]
-pub enum Action {
-    /// Stop the chain.
-    Halt(BlockHeight),
-    /// Suspend consensus indefinitely.
-    Suspend(BlockHeight),
-}
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -68,20 +58,10 @@ impl AbcippShim {
     ) -> (Self, AbciService, broadcast::Sender<()>) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
-        let action_at_height = match config.shell.action_at_height {
-            Some(ActionAtHeight {
-                height,
-                action: config::Action::Suspend,
-            }) => Some(Action::Suspend(height)),
-            Some(ActionAtHeight {
-                height,
-                action: config::Action::Halt,
-            }) => Some(Action::Halt(height)),
-            None => None,
-        };
 
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         let (server_shutdown, _) = broadcast::channel::<()>(1);
+        let action_at_height = config.shell.action_at_height.clone();
         (
             Self {
                 service: Shell::new(
@@ -239,14 +219,14 @@ pub struct AbciService {
     /// during suspension.
     shutdown: broadcast::Sender<()>,
     /// An action to be taken at a specified block height.
-    action_at_height: Option<Action>,
+    action_at_height: Option<ActionAtHeight>,
 }
 
 impl AbciService {
     /// Check if we are at a block height with a scheduled action.
     /// If so, perform the action.
     fn maybe_take_action(
-        action_at_height: Option<Action>,
+        action_at_height: Option<ActionAtHeight>,
         check: CheckAction,
         mut shutdown_recv: broadcast::Receiver<()>,
     ) -> (bool, Option<<Self as Service<Req>>::Future>) {
@@ -256,7 +236,10 @@ impl AbciService {
             CheckAction::NoAction => BlockHeight::default(),
         };
         match action_at_height {
-            Some(Action::Suspend(height)) if height <= hght => {
+            Some(ActionAtHeight {
+                height,
+                action: Action::Suspend,
+            }) if height <= hght => {
                 if height == hght {
                     tracing::info!(
                         "Reached block height {}, suspending.",
@@ -283,7 +266,10 @@ impl AbciService {
                     ),
                 )
             }
-            Some(Action::Halt(height)) if height == hght => {
+            Some(ActionAtHeight {
+                height,
+                action: Action::Halt,
+            }) if height == hght => {
                 tracing::info!(
                     "Reached block height {}, halting the chain.",
                     height

@@ -163,4 +163,3 @@ tokio-test = "0.4.2"
 
 [build-dependencies]
 git2 = "0.13.25"
-
