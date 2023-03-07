@@ -937,14 +937,19 @@ where
             .ok_or_err_msg(
                 "Validator must have a stored validator set position",
             )?;
-
     let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
-    if consensus_vals_pre.contains(storage, &position)? {
-        tracing::debug!("Target validator is consensus");
-        // It's initially consensus
+    let in_consensus = if consensus_vals_pre.contains(storage, &position)? {
         let val_address = consensus_vals_pre.get(storage, &position)?;
-        assert!(val_address.is_some());
+        debug_assert!(val_address.is_some());
+        val_address == Some(validator.clone())
+    } else {
+        false
+    };
+
+    if in_consensus {
+        // It's initially consensus
+        tracing::debug!("Target validator is consensus");
 
         consensus_vals_pre.remove(storage, &position)?;
 
