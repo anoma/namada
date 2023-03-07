@@ -19,7 +19,7 @@ use crate::types::storage::{self, DbKeySeg, KeySeg};
 /// construct the set.
 ///
 /// In the [`LazySet`], the type of key `K` can be anything that implements
-/// [`storage::KeySeg`] and this trait is used to turn the keys into key
+/// [`storage::KeySeg`], and this trait is used to turn the keys into key
 /// segments.
 #[derive(Debug)]
 pub struct LazySet<K> {
@@ -144,10 +144,9 @@ where
     /// Inserts a key into the set.
     ///
     /// If the set did not have this key present, `false` is returned.
-    /// If the set did have this key present, `true`.
-    /// value is returned. Unlike in `std::collection::HashSet`, the key is also
-    /// updated; this matters for types that can be `==` without being
-    /// identical.
+    /// If the set did have this key present, `true` is returned. Unlike in
+    /// `std::collection::HashSet`, the key is also updated; this matters
+    /// for types that can be `==` without being identical.
     pub fn insert<S>(&self, storage: &mut S, key: K) -> Result<bool>
     where
         S: StorageWrite + StorageRead,
@@ -197,8 +196,8 @@ where
         iter.count().try_into().into_storage_result()
     }
 
-    /// An iterator visiting all keas. The iterator element type is `Result<K>`,
-    /// because iterator's call to `next` may fail with e.g. out of gas.
+    /// An iterator visiting all keys. The iterator element type is `Result<K>`,
+    /// because the iterator's call to `next` may fail with e.g. out of gas.
     ///
     /// Note that this function shouldn't be used in transactions and VPs code
     /// on unbounded sets to avoid gas usage increasing with the length of the
