@@ -18,17 +18,16 @@ use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
+#[allow(unused_imports)]
+use super::block_space_alloc;
 use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
-    EncryptedTxBatchAllocator, FillingRemainingSpace, NextState,
-    NextStateWithEncryptedTxs, NextStateWithoutEncryptedTxs, TryAlloc,
+    EncryptedTxBatchAllocator, NextState, TryAlloc,
 };
 use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
-#[allow(unused_imports)]
-use crate::node::ledger::shell::block_space_alloc;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::{process_tx, ShellMode};
@@ -48,25 +47,26 @@ where
     /// the proposal is rejected (unless we can simply overwrite
     /// them in the next block).
     pub fn prepare_proposal(
-        &mut self,
+        &self,
         req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
-        // We can safely reset meter, because if the block is rejected,
-        // we'll reset again on the next proposal, until the
-        // proposal is accepted
-        self.gas_meter.reset();
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
-            let alloc = BlockSpaceAllocator::from(&self.wl_storage);
+            let alloc = self.get_encrypted_txs_allocator();
             #[cfg(not(feature = "abcipp"))]
             let mut protocol_tx_indices = VecIndexSet::default();
 
+            // add encrypted txs
+            let (encrypted_txs, alloc) =
+                self.build_encrypted_txs(alloc, &req.txs);
+            let mut txs = encrypted_txs;
+
             // decrypt the wrapper txs included in the previous block
-            let (decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
-            let mut txs = decrypted_txs;
+            let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
+            txs.append(&mut decrypted_txs);
 
             // add vote extension protocol txs
-            let (mut protocol_txs, alloc) = self.build_protocol_txs(
+            let mut protocol_txs = self.build_protocol_txs(
                 alloc,
                 #[cfg(not(feature = "abcipp"))]
                 &mut protocol_tx_indices,
@@ -76,24 +76,6 @@ where
                 &req.txs,
             );
             txs.append(&mut protocol_txs);
-
-            // add encrypted txs
-            let (mut encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs);
-            txs.append(&mut encrypted_txs);
-
-            // fill up the remaining block space with
-            // protocol transactions that haven't been
-            // selected for inclusion yet, and whose
-            // size allows them to fit in the free
-            // space left
-            let mut remaining_txs = self.build_remaining_batch(
-                alloc,
-                #[cfg(not(feature = "abcipp"))]
-                &protocol_tx_indices,
-                req.txs,
-            );
-            txs.append(&mut remaining_txs);
 
             txs
         } else {
@@ -107,6 +89,96 @@ where
         );
 
         response::PrepareProposal { txs }
+    }
+
+    /// Depending on the current block height offset within the epoch,
+    /// transition state accordingly, return a block space allocator
+    /// with or without encrypted txs.
+    ///
+    /// # How to determine which path to take in the states DAG
+    ///
+    /// If we are at the second or third block height offset within an
+    /// epoch, we do not allow encrypted transactions to be included in
+    /// a block, therefore we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithoutEncryptedTxs`] value.
+    /// Otherwise, we return an allocator wrapped in an
+    /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
+    #[inline]
+    fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
+        let pos_queries = self.wl_storage.pos_queries();
+
+        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
+
+        if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
+            tracing::warn!(
+                proposal_height =
+                    ?pos_queries.get_current_decision_height(),
+                "No mempool txs are being included in the current proposal"
+            );
+            EncryptedTxBatchAllocator::WithoutEncryptedTxs(
+                (&self.wl_storage).into(),
+            )
+        } else {
+            EncryptedTxBatchAllocator::WithEncryptedTxs(
+                (&self.wl_storage).into(),
+            )
+        }
+    }
+
+    /// Builds a batch of encrypted transactions, retrieved from
+    /// Tendermint's mempool.
+    fn build_encrypted_txs(
+        &self,
+        mut alloc: EncryptedTxBatchAllocator,
+        txs: &[TxBytes],
+    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
+        let pos_queries = self.wl_storage.pos_queries();
+        let txs = txs
+            .iter()
+            .filter_map(|tx_bytes| {
+                if let Ok(Ok(TxType::Wrapper(_))) =
+                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                {
+                    Some(tx_bytes.clone())
+                } else {
+                    None
+                }
+            })
+            .take_while(|tx_bytes| {
+                alloc.try_alloc(&tx_bytes[..])
+                    .map_or_else(
+                        |status| match status {
+                            AllocFailure::Rejected { bin_space_left } => {
+                                tracing::debug!(
+                                    ?tx_bytes,
+                                    bin_space_left,
+                                    proposal_height =
+                                        ?pos_queries.get_current_decision_height(),
+                                    "Dropping encrypted tx from the current proposal",
+                                );
+                                false
+                            }
+                            AllocFailure::OverflowsBin { bin_size } => {
+                                // TODO: handle tx whose size is greater
+                                // than bin size
+                                tracing::warn!(
+                                    ?tx_bytes,
+                                    bin_size,
+                                    proposal_height =
+                                        ?pos_queries.get_current_decision_height(),
+                                    "Dropping large encrypted tx from the current proposal",
+                                );
+                                true
+                            }
+                        },
+                        |()| true,
+                    )
+            })
+            .collect();
+        let alloc = alloc.next_state();
+
+        (txs, alloc)
     }
 
     /// Builds a batch of DKG decrypted transactions.
@@ -182,21 +254,20 @@ where
         (txs, alloc)
     }
 
-    /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events and, optionally, a validator set update.
+    /// Builds a batch of protocol transactions.
     #[cfg(feature = "abcipp")]
     fn build_protocol_txs(
         &self,
-        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        _alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
-    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
+    ) -> Vec<TxBytes> {
         // genesis should not contain vote extensions.
         //
         // this is because we have not decided any block through
         // consensus yet (hence height 0), which in turn means we
         // have not committed any vote extensions to a block either.
         if self.wl_storage.storage.last_height == BlockHeight(0) {
-            return (vec![], self.get_encrypted_txs_allocator(alloc));
+            return vec![];
         }
 
         let (eth_events, bp_roots, valset_upds) = self.split_vote_extensions(
@@ -241,45 +312,41 @@ where
             .get_protocol_key()
             .expect("Validators should always have a protocol key");
 
-        let txs: Vec<_> = iter_protocol_txs(VoteExtensionDigest {
+        // TODO(feature = "abcipp"):
+        // - alloc space for each protocol tx
+        // - handle space allocation errors
+        // - transition to new allocator state
+        iter_protocol_txs(VoteExtensionDigest {
             ethereum_events,
             bridge_pool_roots: bp_roots,
             validator_set_update,
         })
         .map(|tx| tx.sign(protocol_key).to_bytes())
-        .collect();
-
-        // TODO(feature = "abcipp"):
-        // - alloc space for each protocol tx
-        // - handle space allocation errors
-        // - transition to new allocator state
-
-        (txs, self.get_encrypted_txs_allocator(alloc))
+        .collect()
     }
 
-    /// Builds a batch of vote extension transactions, comprised of Ethereum
-    /// events, signatures over the latest bridge pool root and nonce,
-    /// and, optionally, a validator set update
+    /// Builds a batch of protocol transactions.
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
         protocol_tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
-    ) -> (Vec<TxBytes>, EncryptedTxBatchAllocator) {
+    ) -> Vec<TxBytes> {
         if self.wl_storage.storage.last_height == BlockHeight(0) {
             // genesis should not contain vote extensions.
             //
             // this is because we have not decided any block through
             // consensus yet (hence height 0), which in turn means we
             // have not committed any vote extensions to a block either.
-            return (vec![], self.get_encrypted_txs_allocator(alloc));
+            return vec![];
         }
 
         let deserialized_iter =
             self.deserialize_vote_extensions(txs, protocol_tx_indices);
         let pos_queries = self.wl_storage.pos_queries();
-        let txs = deserialized_iter.take_while(|tx_bytes|
+
+        deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
@@ -317,183 +384,8 @@ where
                     |()| true,
                 )
         )
-        .collect();
-
-        (txs, self.get_encrypted_txs_allocator(alloc))
+        .collect()
     }
-
-    /// Depending on the current block height offset within the epoch,
-    /// transition state accordingly, from a protocol tx batch allocator
-    /// to an encrypted tx batch allocator.
-    ///
-    /// # How to determine which path to take in the states DAG
-    ///
-    /// If we are at the second or third block height offset within an
-    /// epoch, we do not allow encrypted transactions to be included in
-    /// a block, therefore we return an allocator wrapped in an
-    /// [`EncryptedTxBatchAllocator::WithoutEncryptedTxs`] value.
-    /// Otherwise, we return an allocator wrapped in an
-    /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
-    #[inline]
-    fn get_encrypted_txs_allocator(
-        &self,
-        alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-    ) -> EncryptedTxBatchAllocator {
-        let pos_queries = self.wl_storage.pos_queries();
-
-        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
-
-        if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
-            tracing::warn!(
-                proposal_height =
-                    ?pos_queries.get_current_decision_height(),
-                "No mempool txs are being included in the current proposal"
-            );
-            EncryptedTxBatchAllocator::WithoutEncryptedTxs(
-                alloc.next_state_without_encrypted_txs(),
-            )
-        } else {
-            EncryptedTxBatchAllocator::WithEncryptedTxs(
-                alloc.next_state_with_encrypted_txs(),
-            )
-        }
-    }
-
-    /// Builds a batch of encrypted transactions, retrieved from
-    /// Tendermint's mempool.
-    fn build_encrypted_txs(
-        &self,
-        mut alloc: EncryptedTxBatchAllocator,
-        txs: &[TxBytes],
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<FillingRemainingSpace>) {
-        let pos_queries = self.wl_storage.pos_queries();
-        let txs = txs
-            .iter()
-            .filter_map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    Some(tx_bytes.clone())
-                } else {
-                    None
-                }
-            })
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&tx_bytes[..])
-                    .map_or_else(
-                        |status| match status {
-                            AllocFailure::Rejected { bin_space_left } => {
-                                tracing::debug!(
-                                    ?tx_bytes,
-                                    bin_space_left,
-                                    proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
-                                    "Dropping encrypted tx from the current proposal",
-                                );
-                                false
-                            }
-                            AllocFailure::OverflowsBin { bin_size } => {
-                                // TODO: handle tx whose size is greater
-                                // than bin size
-                                tracing::warn!(
-                                    ?tx_bytes,
-                                    bin_size,
-                                    proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
-                                    "Dropping large encrypted tx from the current proposal",
-                                );
-                                true
-                            }
-                        },
-                        |()| true,
-                    )
-            })
-            .collect();
-        let alloc = alloc.next_state();
-
-        (txs, alloc)
-    }
-
-    /// Builds a batch of transactions that can fit in the
-    /// remaining space of the [`BlockSpaceAllocator`].
-    #[cfg(feature = "abcipp")]
-    fn build_remaining_batch(
-        &self,
-        _alloc: BlockSpaceAllocator<FillingRemainingSpace>,
-        _txs: Vec<TxBytes>,
-    ) -> Vec<TxBytes> {
-        vec![]
-    }
-
-    /// Builds a batch of transactions that can fit in the
-    /// remaining space of the [`BlockSpaceAllocator`].
-    #[cfg(not(feature = "abcipp"))]
-    fn build_remaining_batch(
-        &self,
-        mut alloc: BlockSpaceAllocator<FillingRemainingSpace>,
-        protocol_tx_indices: &VecIndexSet<u128>,
-        txs: Vec<TxBytes>,
-    ) -> Vec<TxBytes> {
-        let pos_queries = self.wl_storage.pos_queries();
-        get_remaining_protocol_txs(protocol_tx_indices, txs)
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&tx_bytes[..]).map_or_else(
-                    |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
-                            tracing::debug!(
-                                ?tx_bytes,
-                                bin_space_left,
-                                proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
-                                "Dropping tx from the current proposal",
-                            );
-                            false
-                        }
-                        AllocFailure::OverflowsBin { bin_size } => {
-                            // TODO: handle tx whose size is greater
-                            // than bin size
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_size,
-                                proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
-                                "Dropping large tx from the current proposal",
-                            );
-                            true
-                        }
-                    },
-                    |()| true,
-                )
-            })
-            .collect()
-    }
-}
-
-/// Return a list of the protocol transactions that haven't
-/// been marked for inclusion in the block, yet.
-#[cfg(not(feature = "abcipp"))]
-fn get_remaining_protocol_txs(
-    protocol_tx_indices: &VecIndexSet<u128>,
-    txs: Vec<TxBytes>,
-) -> impl Iterator<Item = TxBytes> + '_ {
-    let mut skip_list = protocol_tx_indices.iter();
-    let mut skip = skip_list.next();
-
-    txs.into_iter().enumerate().filter_map(move |(index, tx)| {
-        // this works bc/ tx indices are ordered
-        // in ascending order
-        if hints::likely(Some(index) == skip) {
-            skip = skip_list.next();
-            return None;
-        }
-        if let Ok(Ok(TxType::Protocol(_))) =
-            Tx::try_from(&tx[..]).map(process_tx)
-        {
-            return Some(tx);
-        }
-        None
-    })
 }
 
 /// Returns a suitable message to be displayed when Tendermint
@@ -561,43 +453,6 @@ mod test_prepare_proposal {
             ProtocolTxType::EthEventsVext(ext) => ext,
             _ => panic!("Test failed"),
         }
-    }
-
-    /// Test if [`get_remaining_protocol_txs`] is working as expected.
-    #[test]
-    #[cfg(not(feature = "abcipp"))]
-    fn test_get_remaining_protocol_txs() {
-        // TODO(feature = "abcipp"): use a different tx type here
-        fn bertha_ext(at_height: u64) -> TxBytes {
-            let key = wallet::defaults::bertha_keypair();
-            let ext = ethereum_events::Vext::empty(
-                at_height.into(),
-                wallet::defaults::bertha_address(),
-            )
-            .sign(&key);
-            ProtocolTxType::EthEventsVext(ext).sign(&key).to_bytes()
-        }
-
-        let excluded_indices = [0, 1, 3, 5, 7];
-        let all_txs: Vec<_> = (0..10).map(bertha_ext).collect();
-        let expected_txs: Vec<_> = [2, 4, 6, 8, 9]
-            .into_iter()
-            .map(bertha_ext)
-            .map(extract_eth_events_vext)
-            .collect();
-
-        let set = {
-            let mut s = VecIndexSet::default();
-            for idx in excluded_indices.iter().copied() {
-                s.insert(idx as usize);
-            }
-            s
-        };
-
-        let got_txs: Vec<_> = get_remaining_protocol_txs(&set, all_txs)
-            .map(extract_eth_events_vext)
-            .collect();
-        assert_eq!(expected_txs, got_txs);
     }
 
     #[cfg(feature = "abcipp")]
@@ -670,7 +525,7 @@ mod test_prepare_proposal {
     // may get lost in the process
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let non_wrapper_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
@@ -1255,7 +1110,7 @@ mod test_prepare_proposal {
     // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
     #[test]
     fn test_error_in_processing_tx() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -1340,9 +1195,9 @@ mod test_prepare_proposal {
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }
-        let expected_txs: Vec<TxBytes> = expected_decrypted
+        let expected_txs: Vec<TxBytes> = expected_wrapper
             .into_iter()
-            .chain(expected_wrapper.into_iter())
+            .chain(expected_decrypted.into_iter())
             // we extract the inner data from the txs for testing
             // equality since otherwise changes in timestamps would
             // fail the test
