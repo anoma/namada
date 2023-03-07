@@ -642,6 +642,12 @@ async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> EthereumOracleTask {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        return EthereumOracleTask::NotEnabled {
+            handle: spawn_dummy_task(()),
+        };
+    }
+
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
