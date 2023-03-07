@@ -82,9 +82,8 @@ clippy-abcipp:
 	$(cargo) +$(nightly) clippy \
 		--all-targets \
 		--manifest-path ./vm_env/Cargo.toml \
-		--no-default-features && \
-	make -C $(wasms) clippy && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+		--no-default-features \
+		--features "abcipp"
 
 clippy-mainnet:
 	$(cargo) +$(nightly) clippy --all-targets --features "mainnet" -- -D warnings

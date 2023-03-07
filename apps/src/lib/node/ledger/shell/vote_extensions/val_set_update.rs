@@ -450,7 +450,7 @@ mod test_vote_extensions {
         #[cfg(feature = "abcipp")]
         {
             let ethereum_events = ethereum_events::Vext::empty(
-                shell.wl_storage.storage.get_current_decision_height(),
+                shell.wl_storage.pos_queries().get_current_decision_height(),
                 validator_addr.clone(),
             )
             .sign(&_protocol_key);

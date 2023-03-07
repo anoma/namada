@@ -30,6 +30,7 @@ abcipp = [
   "ibc-abcipp",
   "tendermint-abcipp",
   "tendermint-proto-abcipp",
+  "namada_tests/abcipp"
 ]
 abciplus = [
   "ibc",

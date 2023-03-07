@@ -994,6 +994,8 @@ where
                                  balance to pay fee",
                             );
                             return response;
+                        } else {
+                            response.log = String::from(VALID_MSG);
                         }
                     }
                     Ok(TxType::Raw(_)) => {
