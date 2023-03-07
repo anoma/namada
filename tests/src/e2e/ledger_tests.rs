@@ -2082,7 +2082,7 @@ fn pos_init_validator() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 2,
+                min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
