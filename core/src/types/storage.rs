@@ -14,6 +14,7 @@ use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::key::common;
 use crate::bytes::ByteBuf;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
@@ -858,6 +859,25 @@ impl KeySeg for Epoch {
 
     fn to_db_key(&self) -> DbKeySeg {
         self.0.to_db_key()
+    }
+}
+
+impl KeySeg for common::PublicKey {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = common::PublicKey::from_str(&string)
+            .map_err(|err| Error::ParseKeySeg(err.to_string()))?;
+        Ok(raw)
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 
