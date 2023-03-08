@@ -25,6 +25,8 @@ where
     /// Create a new genesis for the chain with specified id. This includes
     /// 1. A set of initial users and tokens
     /// 2. Setting up the validity predicates for both users and tokens
+    ///
+    /// INVARIANT: This method must not commit the state changes to DB.
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
@@ -138,12 +140,15 @@ where
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
         };
-        parameters.init_storage(&mut self.wl_storage.storage);
+        parameters
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing chain parameters must not fail");
 
         // Initialize governance parameters
         genesis
             .gov_params
-            .init_storage(&mut self.wl_storage.storage);
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing governance parameters must not fail");
 
         // Depends on parameters being initialized
         self.wl_storage
@@ -342,7 +347,7 @@ where
                 .map(|validator| validator.pos_data),
             current_epoch,
         );
-        ibc::init_genesis_storage(&mut self.wl_storage.storage);
+        ibc::init_genesis_storage(&mut self.wl_storage);
 
         // Set the initial validator set
         for validator in genesis.validators {
@@ -359,10 +364,6 @@ where
             );
             response.validators.push(abci_validator);
         }
-
-        self.wl_storage
-            .commit_genesis()
-            .expect("Must be able to commit genesis state");
 
         Ok(response)
     }
@@ -389,5 +390,61 @@ where
             Entry::Occupied(o) => o.get().clone(),
             Entry::Vacant(v) => v.insert(f()).clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada::ledger::storage::DBIter;
+    use namada::types::chain::ChainId;
+    use namada::types::storage;
+
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::shell::test_utils::TestShell;
+
+    /// Test that the init-chain handler never commits changes directly to the
+    /// DB.
+    #[test]
+    fn test_init_chain_doesnt_commit_db() {
+        let (mut shell, _receiver) = TestShell::new();
+
+        // Collect all storage key-vals into a sorted map
+        let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
+            let prefix: storage::Key = FromStr::from_str("").unwrap();
+            shell
+                .wl_storage
+                .storage
+                .db
+                .iter_prefix(&prefix)
+                .map(|(key, val, _gas)| (key, val))
+                .collect()
+        };
+
+        // Store the full state in sorted map
+        let initial_storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        shell.init_chain(RequestInitChain {
+            time: Some(Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }),
+            chain_id: ChainId::default().to_string(),
+            ..Default::default()
+        });
+
+        // Store the full state again
+        let storage_state: std::collections::BTreeMap<String, Vec<u8>> =
+            store_block_state(&shell);
+
+        // The storage state must be unchanged
+        itertools::assert_equal(
+            initial_storage_state.iter(),
+            storage_state.iter(),
+        );
     }
 }

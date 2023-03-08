@@ -183,7 +183,7 @@ pub fn validate_token_vp_from_tx<'a>(
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
     tx_host_env::with(|env| {
-        init_genesis_storage(&mut env.wl_storage.storage);
+        init_genesis_storage(&mut env.wl_storage);
         // block header to check timeout timestamp
         env.wl_storage
             .storage

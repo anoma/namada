@@ -220,11 +220,13 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let bg_ledger = ledger.background();
     // Wait for a new epoch
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
     epoch_sleep(&test, &validator_one_rpc, 30)?;
 
     // 2. Shut it down
+    let mut ledger = bg_ledger.foreground();
     ledger.send_control('c')?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
@@ -287,7 +289,8 @@ fn ledger_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let vp_user = wasm_abs_path(VP_USER_WASM);
@@ -526,7 +529,8 @@ fn masp_txs_and_queries() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
 
     let _bg_ledger = ledger.background();
 
@@ -792,7 +796,8 @@ fn masp_pinned_txs() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
 
     let _bg_ledger = ledger.background();
 
@@ -955,7 +960,8 @@ fn masp_incentives() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
 
     let _bg_ledger = ledger.background();
 
@@ -1653,9 +1659,9 @@ fn invalid_transactions() -> Result<()> {
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Namada ledger node started")?;
-    // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
 
     let bg_ledger = ledger.background();
 
@@ -1810,7 +1816,8 @@ fn pos_bonds() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2014,7 +2021,8 @@ fn pos_init_validator() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2180,10 +2188,8 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let mut ledger =
         run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-
-    // Wait to commit a block
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let bg_ledger = ledger.background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
@@ -2296,7 +2302,8 @@ fn proposal_submission() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -2647,7 +2654,8 @@ fn proposal_offline() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -3095,6 +3103,11 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
     let _bg_non_validator = non_validator.background();
@@ -3325,7 +3338,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
