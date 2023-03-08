@@ -192,7 +192,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         current_epoch,
     )
     .unwrap();
-    s.commit_genesis().unwrap();
+    s.commit_block().unwrap();
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
@@ -624,7 +624,7 @@ fn test_become_validator_aux(
         current_epoch,
     )
     .unwrap();
-    s.commit_genesis().unwrap();
+    s.commit_block().unwrap();
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
