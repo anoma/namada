@@ -85,6 +85,8 @@ mod tests {
         Insert(TestKey),
         /// Remove a key-val from a [`LazySet`]
         Remove(TestKey),
+        /// Insert a key-val into a [`LazySet`]
+        TryInsert { key: TestKey, is_present: bool },
     }
 
     impl AbstractStateMachine for AbstractLazySetState {
@@ -107,16 +109,23 @@ mod tests {
                 .boxed()
             } else {
                 let keys = state.find_existing_keys();
+                let keys_clone = keys.clone();
                 let arb_existing_set_key =
                     || proptest::sample::select(keys.clone());
                 prop_oneof![
-		    1 => Just(Transition::CommitTx),
-		    1 => Just(Transition::CommitTxAndBlock),
-		    3 => arb_existing_set_key().prop_map(Transition::Remove),
-            5 => (arb_set_key().prop_filter("insert on non-existing keys only", 
-                move |key| !keys.contains(key)))
-                .prop_map(Transition::Insert)
-		]
+                    1 => Just(Transition::CommitTx),
+                    1 => Just(Transition::CommitTxAndBlock),
+                    3 => arb_existing_set_key().prop_map(Transition::Remove),
+                    3 => arb_existing_set_key().prop_map(|key|
+                            Transition::TryInsert {key, is_present: true}),
+                    5 => (arb_set_key().prop_filter("insert on non-existing keys only", 
+                        move |key| !keys.contains(key)))
+                        .prop_map(Transition::Insert),
+                    5 => (arb_set_key().prop_filter("try_insert on non-existing keys only", 
+                        move |key| !keys_clone.contains(key)))
+                        .prop_map(|key|
+                            Transition::TryInsert {key, is_present: false}),
+                ]
                 .boxed()
             }
         }
@@ -158,6 +167,15 @@ mod tests {
                     let keys = state.find_existing_keys();
                     // Ensure that the insert key is not an existing one
                     !keys.contains(key)
+                }
+                Transition::TryInsert { key, is_present } => {
+                    let keys = state.find_existing_keys();
+                    // Ensure that the `is_present` flag is correct
+                    if *is_present {
+                        keys.contains(key)
+                    } else {
+                        !keys.contains(key)
+                    }
                 }
                 _ => true,
             }
@@ -226,6 +244,17 @@ mod tests {
                     assert!(present, "the new item must be added to the set");
 
                     state.assert_validation_accepted();
+                }
+                Transition::TryInsert { key, is_present } => {
+                    let result = state.lazy_set.try_insert(ctx, *key);
+
+                    // Post-conditions:
+                    if *is_present {
+                        assert!(result.is_err());
+                    } else {
+                        assert!(result.is_ok());
+                        state.assert_validation_accepted();
+                    }
                 }
                 Transition::Remove(key) => {
                     let removed = state.lazy_set.remove(ctx, key).unwrap();
@@ -300,6 +329,11 @@ mod tests {
             match trans {
                 Transition::CommitTx | Transition::CommitTxAndBlock => {}
                 Transition::Insert(_) => insert_count += 1,
+                Transition::TryInsert { key: _, is_present } => {
+                    if !is_present {
+                        insert_count += 1
+                    }
+                }
                 Transition::Remove(_) => remove_count += 1,
             }
         }
@@ -384,6 +418,25 @@ mod tests {
                                 }
                             }
                         }
+                        Transition::TryInsert {
+                            key: expected_key,
+                            is_present,
+                        } => {
+                            if !is_present {
+                                for (ix, action) in
+                                    actions_to_check.iter().enumerate()
+                                {
+                                    if let lazy_set::Action::Insert(key) =
+                                        action
+                                    {
+                                        if expected_key == key {
+                                            actions_to_check.remove(ix);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Transition::Remove(expected_key) => {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
@@ -431,12 +484,18 @@ mod tests {
             Transition::Remove(key) => {
                 let _popped = set.remove(key);
             }
+            Transition::TryInsert { key, is_present } => {
+                if !is_present {
+                    set.insert(*key);
+                }
+            }
         }
     }
 
     /// Normalize transitions:
     /// - remove(key) + insert(key) -> no change
-    /// - insert(key) + insert(key) -> insert(key)
+    /// - remove(key) + try_insert{key, is_present: false} -> no change
+    /// - try_insert{is_present: true} -> no change
     ///
     /// Note that the normalizable transitions pairs do not have to be directly
     /// next to each other, but their order does matter.
@@ -455,7 +514,7 @@ mod tests {
                             collapsed_transition
                         {
                             if key == remove_key {
-                                // remove(key) + insert(key, val) -> no change
+                                // remove(key) + insert(key) -> no change
 
                                 // Delete the `Remove` transition
                                 collapsed.remove(ix);
@@ -464,6 +523,33 @@ mod tests {
                         }
                     }
                     collapsed.push(transition.clone());
+                }
+                Transition::TryInsert { key, is_present } => {
+                    if !is_present {
+                        for (ix, collapsed_transition) in
+                            collapsed.iter().enumerate()
+                        {
+                            if let Transition::Remove(remove_key) =
+                                collapsed_transition
+                            {
+                                if key == remove_key {
+                                    // remove(key) + try_insert{key,
+                                    // is_present:false) -> no
+                                    // change
+
+                                    // Delete the `Remove` transition
+                                    collapsed.remove(ix);
+                                    continue 'outer;
+                                }
+                            }
+                        }
+                        collapsed.push(transition.clone());
+                    } else {
+                        // In else case we don't do anything to omit the
+                        // transition:
+                        // try_insert{is_present: true} -> no
+                        // change
+                    }
                 }
             }
         }
