@@ -25,7 +25,7 @@ use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::{
     attempt_wrapped_erc20_transfer, find_wrapped_erc20_balance,
     send_transfer_to_namada_event, setup_single_validator_test,
-    EventsEndpointClient,
+    EventsEndpointClient, DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR,
 };
 use crate::e2e::helpers::{
     find_address, find_balance, get_actor_rpc, init_established_account,
@@ -137,6 +137,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
+        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
 
     // Start the ledger as a validator
@@ -197,6 +198,7 @@ async fn test_bridge_pool_e2e() {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
+        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
     let mut namadan_ledger = run_as!(
         test,
@@ -324,13 +326,7 @@ async fn test_bridge_pool_e2e() {
             .unwrap();
     namadar.exp_string(r#"{"hashes":["#).unwrap();
 
-    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
-    // address that would only work for e2e tests involving a single
-    // validator node - this should become an attribute of the validator under
-    // test once the linked issue is implemented
-    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
-    let mut client =
-        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    let mut client = EventsEndpointClient::default();
 
     let transfers = EthereumEvent::TransfersToEthereum {
         nonce: 0.into(),
@@ -421,6 +417,7 @@ async fn test_wnam_transfer() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
+        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
@@ -442,13 +439,7 @@ async fn test_wnam_transfer() -> Result<()> {
         transfers: vec![wnam_transfer.clone()],
     };
 
-    // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
-    // address that would only work for e2e tests involving a single
-    // validator node - this should become an attribute of the validator under
-    // test once the linked issue is implemented
-    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
-    let mut client =
-        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    let mut client = EventsEndpointClient::default();
     client.send(&transfers).await?;
 
     let mut ledger = bg_ledger.foreground();
@@ -514,14 +505,12 @@ fn test_configure_oracle_from_storage() -> Result<()> {
 
     // start the ledger with the real oracle and wait for a block to be
     // committed
-
-    // TODO(namada#1061): need to start up a fake Ethereum node here for the
-    // oracle to connect to, to avoid errors in the ledger logs
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::RemoteEndpoint,
+        None,
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;

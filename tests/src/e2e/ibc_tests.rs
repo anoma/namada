@@ -97,12 +97,14 @@ fn run_ledger_ibc() -> Result<()> {
         &test_a.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
     set_ethereum_bridge_mode(
         &test_b,
         &test_b.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // Run Chain A
