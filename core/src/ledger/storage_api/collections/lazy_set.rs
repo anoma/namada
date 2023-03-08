@@ -159,6 +159,22 @@ where
         Ok(present)
     }
 
+    /// Tries to inserts a key into the set.
+    ///
+    /// An error is returned if the key is already present.
+    pub fn try_insert<S>(&self, storage: &mut S, key: K) -> Result<()>
+    where
+        S: StorageWrite + StorageRead,
+    {
+        let present = self.contains(storage, &key)?;
+        if present {
+            return Err(storage_api::Error::new_const("Occupied"));
+        }
+
+        let key = self.get_key(&key);
+        storage.write(&key, ())
+    }
+
     /// Removes a key from the set, returning `true` if the key
     /// was in the set.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<bool>
@@ -273,24 +289,29 @@ mod test {
         let key2 = 456;
         lazy_set.insert(&mut storage, key2)?;
 
+        let key3 = 256;
+        lazy_set.try_insert(&mut storage, key3).unwrap();
+
         assert!(!lazy_set.contains(&storage, &0)?);
         assert!(lazy_set.contains(&storage, &key)?);
         assert!(!lazy_set.is_empty(&storage)?);
-        assert!(lazy_set.len(&storage)? == 2);
+        assert!(lazy_set.len(&storage)? == 3);
         let mut set_it = lazy_set.iter(&storage)?;
         assert_eq!(set_it.next().unwrap()?, key);
+        assert_eq!(set_it.next().unwrap()?, key3);
         assert_eq!(set_it.next().unwrap()?, key2);
         drop(set_it);
 
         assert!(!lazy_set.contains(&storage, &0)?);
         assert!(lazy_set.contains(&storage, &key)?);
         assert!(lazy_set.contains(&storage, &key2)?);
+        assert!(lazy_set.try_insert(&mut storage, key3).is_err());
 
         // Remove the values and check the map contents
         let removed = lazy_set.remove(&mut storage, &key)?;
         assert!(removed);
         assert!(!lazy_set.is_empty(&storage)?);
-        assert!(lazy_set.len(&storage)? == 1);
+        assert!(lazy_set.len(&storage)? == 2);
         assert!(!lazy_set.contains(&storage, &0)?);
         assert!(!lazy_set.contains(&storage, &1)?);
         assert!(!lazy_set.contains(&storage, &123)?);
@@ -301,8 +322,14 @@ mod test {
         assert!(!lazy_set.remove(&mut storage, &key)?);
         let removed = lazy_set.remove(&mut storage, &key2)?;
         assert!(removed);
+        assert!(lazy_set.len(&storage)? == 1);
+        let removed = lazy_set.remove(&mut storage, &key3)?;
+        assert!(removed);
         assert!(lazy_set.is_empty(&storage)?);
         assert!(lazy_set.len(&storage)? == 0);
+
+        assert!(lazy_set.try_insert(&mut storage, key).is_ok());
+        assert!(lazy_set.try_insert(&mut storage, key).is_err());
 
         Ok(())
     }
