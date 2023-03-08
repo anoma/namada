@@ -461,8 +461,15 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Unbond the self-bond
-    unbond_tokens(&mut s, None, &validator.address, amount_del, current_epoch)
-        .unwrap();
+    let amount_self_unbond = token::Amount::from(50_000);
+    unbond_tokens(
+        &mut s,
+        None,
+        &validator.address,
+        amount_self_unbond,
+        current_epoch,
+    )
+    .unwrap();
 
     let val_stake_pre = read_validator_stake(
         &s,
@@ -483,33 +490,33 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     .unwrap();
     let unbond = unbond_handle(&validator.address, &validator.address);
 
-    assert_eq!(val_delta, Some(-amount_del.change()));
+    assert_eq!(val_delta, Some(-amount_self_unbond.change()));
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_bond)
-    );
-    assert_eq!(
-        unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
-            .get(&s, &Epoch::default())
-            .unwrap(),
-        Some(amount_del - amount_self_bond)
+        Some(amount_self_unbond)
     );
     assert_eq!(
         val_stake_pre,
         Some(validator.tokens + amount_self_bond + amount_del)
     );
-    assert_eq!(val_stake_post, Some(validator.tokens + amount_self_bond));
+    assert_eq!(
+        val_stake_post,
+        Some(
+            validator.tokens + amount_self_bond + amount_del
+                - amount_self_unbond
+        )
+    );
 
     // Unbond delegation
+    let amount_undel = token::Amount::from(1_000_000);
     unbond_tokens(
         &mut s,
         Some(&delegator),
         &validator.address,
-        amount_self_bond,
+        amount_undel,
         current_epoch,
     )
     .unwrap();
@@ -533,19 +540,29 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     .unwrap();
     let unbond = unbond_handle(&delegator, &validator.address);
 
-    assert_eq!(val_delta, Some(-(amount_self_bond + amount_del).change()));
+    assert_eq!(
+        val_delta,
+        Some(-(amount_self_unbond + amount_undel).change())
+    );
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(delegation_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_bond)
+        Some(amount_undel)
     );
     assert_eq!(
         val_stake_pre,
         Some(validator.tokens + amount_self_bond + amount_del)
     );
-    assert_eq!(val_stake_post, Some(validator.tokens));
+    assert_eq!(
+        val_stake_post,
+        Some(
+            validator.tokens + amount_self_bond - amount_self_unbond
+                + amount_del
+                - amount_undel
+        )
+    );
 
     let withdrawable_offset = params.unbonding_len + params.pipeline_len;
 
@@ -580,7 +597,13 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             &super::ADDRESS,
         ))
         .unwrap();
-    assert_eq!(Some(pos_balance_pre + amount_self_bond), pos_balance);
+    assert_eq!(
+        Some(
+            pos_balance_pre + amount_self_bond - amount_self_unbond
+                + amount_del
+        ),
+        pos_balance
+    );
 
     // Withdraw the delegation unbond
     withdraw_tokens(
@@ -600,7 +623,14 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             &super::ADDRESS,
         ))
         .unwrap();
-    assert_eq!(Some(pos_balance_pre), pos_balance);
+    assert_eq!(
+        Some(
+            pos_balance_pre + amount_self_bond - amount_self_unbond
+                + amount_del
+                - amount_undel
+        ),
+        pos_balance
+    );
 }
 
 /// Test validator initialization.
