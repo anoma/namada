@@ -275,16 +275,11 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
         keypair: &Self::SecretKey,
         data: impl SignableBytes,
     ) -> Self::Signature;
+
     /// Check that the public key matches the signature on the given data.
-    fn verify_signature<T: BorshSerialize + BorshDeserialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError>;
-    /// Check that the public key matches the signature on the given raw data.
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: impl SignableBytes,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError>;
 }
@@ -391,7 +386,7 @@ pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
 /// which can be signed over.
 pub trait SignableBytes: Sized + AsRef<[u8]> {
     /// Calculate a hash value to sign over.
-    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         H::hash(self.as_ref()).into()
     }
 }
@@ -403,13 +398,13 @@ impl<const N: usize> SignableBytes for [u8; N] {}
 impl<const N: usize> SignableBytes for &[u8; N] {}
 
 impl SignableBytes for crate::types::hash::Hash {
-    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
 }
 
 impl SignableBytes for crate::types::keccak::KeccakHash {
-    fn signable_hash<H: StorageHasher>(self) -> [u8; 32] {
+    fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
 }
@@ -546,7 +541,7 @@ macro_rules! sigscheme_test {
                 let sk = <$type>::generate(&mut rng);
                 let sig = <$type>::sign(&sk, b"hello");
                 assert!(
-                    <$type>::verify_signature_raw(&sk.ref_to(), b"hello", &sig)
+                    <$type>::verify_signature(&sk.ref_to(), b"hello", &sig)
                         .is_ok()
                 );
             }

@@ -342,21 +342,9 @@ impl super::SigScheme for SigScheme {
         Signature(keypair.0.sign(&data.signable_hash::<Self::Hasher>()))
     }
 
-    fn verify_signature<T: BorshSerialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        let bytes = data
-            .try_to_vec()
-            .map_err(VerifySigError::DataEncodingError)?;
-        pk.0.verify(&sig.0, &bytes.signable_hash::<Self::Hasher>())
-            .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: impl SignableBytes,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         pk.0.verify(&sig.0, &data.signable_hash::<Self::Hasher>())

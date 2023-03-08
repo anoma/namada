@@ -2763,7 +2763,34 @@ fn proposal_submission() -> Result<()> {
 /// 4. Tally offline
 #[test]
 fn proposal_offline() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let working_dir = setup::working_dir();
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(1),
+                max_proposal_bytes: Default::default(),
+                min_num_of_blocks: 4,
+                max_expected_time_per_block: 1,
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
+                ..genesis.parameters
+            };
+
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
 
     set_ethereum_bridge_mode(
         &test,

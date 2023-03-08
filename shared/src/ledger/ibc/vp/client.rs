@@ -575,7 +575,7 @@ where
             .map_err(|_| Ics02Error::implementation_specific())?;
         match header {
             Some(h) => Ok(TmConsensusState {
-                root: CommitmentRoot::from_bytes(h.hash.as_slice()),
+                root: CommitmentRoot::from_bytes(h.hash.0.as_slice()),
                 timestamp: h.time.try_into().unwrap(),
                 next_validators_hash: h.next_validators_hash.into(),
             }

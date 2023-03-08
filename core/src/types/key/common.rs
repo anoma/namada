@@ -18,6 +18,7 @@ use super::{
 };
 use crate::ledger::storage::DummyHasher;
 use crate::types::ethereum_events::EthAddress;
+use crate::types::key::SignableBytes;
 
 /// Public key
 #[derive(
@@ -336,9 +337,9 @@ impl super::SigScheme for SigScheme {
         }
     }
 
-    fn verify_signature<T: BorshSerialize + BorshDeserialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         match (pk, sig) {
@@ -347,22 +348,6 @@ impl super::SigScheme for SigScheme {
             }
             (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
                 secp256k1::SigScheme::verify_signature(pk, data, sig)
-            }
-            _ => Err(VerifySigError::MismatchedScheme),
-        }
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: impl super::SignableBytes,
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        match (pk, sig) {
-            (PublicKey::Ed25519(pk), Signature::Ed25519(sig)) => {
-                ed25519::SigScheme::verify_signature_raw(pk, data, sig)
-            }
-            (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
-                secp256k1::SigScheme::verify_signature_raw(pk, data, sig)
             }
             _ => Err(VerifySigError::MismatchedScheme),
         }
