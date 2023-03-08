@@ -50,6 +50,7 @@ fn run_ledger() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
@@ -91,12 +92,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
         &Who::Validator(1),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
@@ -206,6 +209,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -250,6 +254,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -331,6 +336,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -577,6 +583,7 @@ fn masp_txs_and_queries() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -850,6 +857,7 @@ fn masp_pinned_txs() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -1020,6 +1028,7 @@ fn masp_incentives() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -1727,6 +1736,7 @@ fn invalid_transactions() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -1890,6 +1900,7 @@ fn pos_bonds() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -2106,6 +2117,7 @@ fn pos_init_validator() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -2285,6 +2297,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -2400,6 +2413,7 @@ fn proposal_submission() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     let namadac_help = vec!["--help"];
@@ -2797,6 +2811,7 @@ fn proposal_offline() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run the ledger node
@@ -3368,12 +3383,14 @@ fn double_signing_gets_slashed() -> Result<()> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
         &Who::Validator(1),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // 1. Run 2 genesis validator ledger nodes

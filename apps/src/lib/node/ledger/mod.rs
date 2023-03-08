@@ -685,6 +685,7 @@ async fn maybe_start_ethereum_oracle(
                     "Ethereum Events Endpoint",
                     move |aborter| async move {
                         oracle::test_tools::events_endpoint::serve(
+                            ethereum_url,
                             eth_sender,
                             control_receiver,
                             oracle_abort_recv,

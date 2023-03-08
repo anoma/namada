@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use borsh::BorshDeserialize;
 use namada::types::ethereum_events::EthereumEvent;
 use tokio::sync::mpsc::Sender as BoundedSender;
@@ -6,9 +8,6 @@ use warp::reply::WithStatus;
 use warp::Filter;
 
 use crate::node::ledger::ethereum_oracle as oracle;
-
-/// The default IP address and port on which the events endpoint will listen.
-const DEFAULT_LISTEN_ADDR: ([u8; 4], u16) = ([0, 0, 0, 0], 3030);
 
 /// The endpoint to which Borsh-serialized Ethereum events should be sent to,
 /// via an HTTP POST request.
@@ -19,21 +18,25 @@ const EVENTS_POST_ENDPOINT: &str = "eth_events";
 /// `abort_recv` channel. Accepts the receive-half of an oracle control channel
 /// (`control_recv`) that will be kept alive until shutdown.
 pub async fn serve(
+    listen_addr: String,
     sender: BoundedSender<EthereumEvent>,
     mut control_recv: oracle::control::Receiver,
     abort_recv: Receiver<Sender<()>>,
 ) {
-    tracing::info!(?DEFAULT_LISTEN_ADDR, "Ethereum event endpoint is starting");
+    let listen_addr: SocketAddr = listen_addr
+        .parse()
+        .expect("Failed to parse the events endpoint listen address");
+    tracing::info!(?listen_addr, "Ethereum event endpoint is starting");
     let eth_events = warp::post()
         .and(warp::path(EVENTS_POST_ENDPOINT))
         .and(warp::body::bytes())
         .then(move |bytes: bytes::Bytes| send(bytes, sender.clone()));
 
     let (_, future) = warp::serve(eth_events).bind_with_graceful_shutdown(
-        DEFAULT_LISTEN_ADDR,
+        listen_addr,
         async move {
             tracing::info!(
-                ?DEFAULT_LISTEN_ADDR,
+                ?listen_addr,
                 "Starting to listen for Borsh-serialized Ethereum events"
             );
             let control_recv_discarder = tokio::spawn(async move {
@@ -61,7 +64,7 @@ pub async fn serve(
                 ),
             };
             tracing::info!(
-                ?DEFAULT_LISTEN_ADDR,
+                ?listen_addr,
                 "Stopping listening for Borsh-serialized Ethereum events"
             );
             control_recv_discarder.abort();

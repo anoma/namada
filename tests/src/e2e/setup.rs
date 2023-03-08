@@ -92,9 +92,13 @@ pub fn set_ethereum_bridge_mode(
     chain_id: &ChainId,
     who: &Who,
     mode: ethereum_bridge::ledger::Mode,
+    rpc_endpoint: Option<&str>,
 ) {
     update_actor_config(test, chain_id, who, |config| {
         config.ledger.ethereum_bridge.mode = mode;
+        if let Some(addr) = rpc_endpoint {
+            config.ledger.ethereum_bridge.oracle_rpc_endpoint = addr.into();
+        }
     });
 }
 
