@@ -31,7 +31,7 @@ use epoched::{EpochOffset, OffsetPipelineLen};
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
-use namada_core::ledger::storage_api::collections::LazyCollection;
+use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
     self, OptionExt, StorageRead, StorageWrite,
@@ -46,10 +46,11 @@ use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rust_decimal::Decimal;
 use storage::{
-    bonds_for_source_prefix, bonds_prefix, get_validator_address_from_bond,
-    into_tm_voting_power, is_bond_key, is_unbond_key, is_validator_slashes_key,
-    mult_amount, mult_change_to_amount, num_consensus_validators_key,
-    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
+    get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
+    is_unbond_key, is_validator_slashes_key, mult_amount,
+    mult_change_to_amount, num_consensus_validators_key, params_key,
+    slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_max_commission_rate_change_key,
     BondDetails, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
     ReverseOrdTokenAmount, UnbondDetails, WeightedValidator,
@@ -308,6 +309,10 @@ where
         max_commission_rate_change,
     } in validators
     {
+        // This will fail if the key is already being used - the uniqueness must
+        // be enforced in the genesis configuration to prevent it
+        try_insert_consensus_key(storage, &consensus_key)?;
+
         total_bonded += tokens;
 
         // Insert the validator into a validator set and write its epoched
@@ -1534,6 +1539,9 @@ pub fn become_validator<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    // This will fail if the key is already being used
+    try_insert_consensus_key(storage, consensus_key)?;
+
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
     write_validator_max_commission_rate_change(
@@ -1821,6 +1829,34 @@ where
         tracing::error!("PoS system transfer error, the source has no balance");
     }
     Ok(())
+}
+
+/// Check if the given consensus key is already being used to ensure uniqueness.
+///
+/// If it's not being used, it will be inserted into the set that's being used
+/// for this. If it's already used, this will return an Error.
+pub fn try_insert_consensus_key<S>(
+    storage: &mut S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = consensus_keys_key();
+    LazySet::open(key).try_insert(storage, consensus_key.clone())
+}
+
+/// Check if the given consensus key is already being used to ensure uniqueness.
+pub fn is_consensus_key_used<S>(
+    storage: &S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let key = consensus_keys_key();
+    let handle = LazySet::open(key);
+    handle.contains(storage, consensus_key)
 }
 
 /// NEW: Get the total bond amount for a given bond ID at a given epoch
