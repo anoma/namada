@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::{token, StorageRead};
-use namada_core::types::address::Address;
+use namada_core::types::address::{self, Address};
+use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use proptest::prelude::*;
@@ -18,7 +19,7 @@ use rust_decimal::Decimal;
 use test_log::test;
 
 use super::arb_genesis_validators;
-use crate::parameters::testing::arb_pos_params;
+use crate::parameters::testing::{arb_pos_params, arb_rate};
 use crate::parameters::PosParams;
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, ValidatorState,
@@ -372,9 +373,30 @@ impl ConcretePosState {
         let consensus_val = consensus_set.get(&weighted);
         let below_cap_val = below_cap_set.get(&weighted);
 
-        // Post-condition: The validator should be updated in exactly one of the
-        // validator sets
+        // Post-condition: The validator should be updated in exactly once in
+        // the validator sets
         assert!(consensus_val.is_some() ^ below_cap_val.is_some());
+
+        // Post-condition: The stake of the validators in the consensus set is
+        // greater than or equal to below-capacity validators
+        for WeightedValidator {
+            bonded_stake: consensus_stake,
+            address: consensus_addr,
+        } in consensus_set.iter()
+        {
+            for WeightedValidator {
+                bonded_stake: below_cap_stake,
+                address: below_cap_addr,
+            } in below_cap_set.iter()
+            {
+                assert!(
+                    consensus_stake >= below_cap_stake,
+                    "Consensus validator {consensus_addr} with stake \
+                     {consensus_stake} and below-capacity {below_cap_addr} \
+                     with stake {below_cap_stake} should be swapped."
+                );
+            }
+        }
     }
 
     fn check_init_validator_post_conditions(
