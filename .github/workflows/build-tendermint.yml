@@ -21,15 +21,15 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         make:
-          - name: tendermint-unreleased
-            repository: heliaxdev/tendermint
-            tendermint_version: v0.1.4-abciplus
+          - name: cometbft
+            repository: cometbft/cometbft
+            tendermint_version: v0.37.0
 
     steps:
       - name: Build ${{ matrix.make.name }}
         run: |
-          git clone https://github.com/${{ matrix.make.repository }}.git && cd tendermint
-          git checkout ${{ matrix.make.tendermint_version }} && make build
+          git clone https://github.com/${{ matrix.make.repository }}.git && cd cometbft
+          git checkout ${{ matrix.make.tendermint_version }} && make build && mv build/cometbft build/tendermint
       - name: Upload ${{ matrix.make.name }} binary
         uses: actions/upload-artifact@v3
         with:
