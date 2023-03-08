@@ -509,6 +509,27 @@ impl AbstractStateMachine for AbstractPosState {
         prop_oneof![
             Just(Transition::NextEpoch),
             add_arb_bond_amount(state),
+            (
+                address::testing::arb_established_address(),
+                key::testing::arb_common_keypair(),
+                arb_rate(),
+                arb_rate(),
+            )
+                .prop_map(
+                    |(
+                        addr,
+                        consensus_key,
+                        commission_rate,
+                        max_commission_rate_change,
+                    )| {
+                        Transition::InitValidator {
+                            address: Address::Established(addr),
+                            consensus_key: consensus_key.to_public(),
+                            commission_rate,
+                            max_commission_rate_change,
+                        }
+                    },
+                ),
             // TODO: add other transitions
         ]
         .boxed()
