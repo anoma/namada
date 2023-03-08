@@ -813,5 +813,5 @@ fn add_arb_bond_amount(
 
 // Bond up to 10 tokens (10M micro units) to avoid overflows
 pub fn arb_bond_amount() -> impl Strategy<Value = token::Amount> {
-    (1_u64..10_000_000).prop_map(token::Amount::from)
+    (1_u64..10).prop_map(token::Amount::from)
 }

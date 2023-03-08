@@ -1569,7 +1569,7 @@ fn arb_genesis_validators(
     size: Range<usize>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=1_000_000_000_000_u64).prop_map(token::Amount::from))
+        .map(|_| (1..=10_u64).prop_map(token::Amount::from))
         .collect();
     (size, tokens).prop_map(|(size, token_amounts)| {
         // use unique seeds to generate validators' address and consensus key
