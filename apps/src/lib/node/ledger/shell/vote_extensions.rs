@@ -30,28 +30,30 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 /// The error yielded from validating faulty vote extensions in the shell
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
-    #[error("The vote extension was issued for an unexpected block height.")]
+    #[error("The Ethereum bridge is currently deactivated")]
+    BridgeDeactivated,
+    #[error("The vote extension was issued for an unexpected block height")]
     UnexpectedBlockHeight,
-    #[error("The vote extension was issued for an unexpected epoch.")]
+    #[error("The vote extension was issued for an unexpected epoch")]
     UnexpectedEpoch,
     #[error(
-        "The vote extension contains duplicate or non-sorted Ethereum events."
+        "The vote extension contains duplicate or non-sorted Ethereum events"
     )]
     HaveDupesOrNonSorted,
     #[error(
         "The public key of the vote extension's associated validator could \
-         not be found in storage."
+         not be found in storage"
     )]
     PubKeyNotInStorage,
-    #[error("The vote extension's signature is invalid.")]
+    #[error("The vote extension's signature is invalid")]
     VerifySigFailed,
     #[error(
-        "Validator is missing from an expected field in the vote extension."
+        "Validator is missing from an expected field in the vote extension"
     )]
     ValidatorMissingFromExtension,
     #[error(
         "Found value for a field in the vote extension diverging from the \
-         equivalent field in storage."
+         equivalent field in storage"
     )]
     DivergesFromStorage,
     #[error("The signature of the Bridge pool root is invalid")]
@@ -61,7 +63,7 @@ pub enum VoteExtensionError {
          not active"
     )]
     EthereumBridgeInactive,
-    #[error("A vote extension for the Ethereum bridge is missing.")]
+    #[error("A vote extension for the Ethereum bridge is missing")]
     MissingBridgeVext,
 }
 
