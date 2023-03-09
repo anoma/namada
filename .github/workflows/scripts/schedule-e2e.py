@@ -6,7 +6,7 @@ import sys
 N_OF_MACHINES = 2
 
 E2E_FILE = ".github/workflows/scripts/e2e.json"
-CARGO_TEST_COMMAND = "cargo test {} -- --test-threads=1 --nocapture"
+CARGO_TEST_COMMAND = "cargo +nightly-2022-11-03 test {} -Z unstable-options -- --test-threads=1 --nocapture"
 
 MACHINES = [{'tasks': [], 'total_time': 0} for _ in range(N_OF_MACHINES)]
 
