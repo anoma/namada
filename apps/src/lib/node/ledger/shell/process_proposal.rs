@@ -703,7 +703,7 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.eth_ev_digest_num
                 == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
@@ -715,7 +715,7 @@ where
     /// root vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             meta.digests.bridge_pool_roots
                 == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
@@ -727,16 +727,24 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
-        if self
-            .wl_storage
+        self.wl_storage
             .ethbridge_queries()
-            .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
-        {
-            meta.digests.valset_upd_digest_num
-                == usize::from(self.wl_storage.storage.last_height.0 != 0)
-        } else {
-            true
-        }
+            .is_bridge_active()
+            .then(|| {
+                if self
+                    .wl_storage
+                    .ethbridge_queries()
+                    .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
+                {
+                    meta.digests.valset_upd_digest_num
+                        == usize::from(
+                            self.wl_storage.storage.last_height.0 != 0,
+                        )
+                } else {
+                    true
+                }
+            })
+            .unwrap_or_else(|| meta.digests.valset_upd_digest_num == 0)
     }
 
     /// Checks if it is not possible to include encrypted txs at the current

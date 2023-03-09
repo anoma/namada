@@ -4,8 +4,6 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-use std::num::NonZeroU64;
-
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
@@ -100,7 +98,7 @@ where
     pub fn extend_vote_with_ethereum_events(
         &mut self,
     ) -> Option<Signed<ethereum_events::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             return None;
         }
         let validator_addr = self
@@ -141,7 +139,7 @@ where
     pub fn extend_vote_with_bp_roots(
         &self,
     ) -> Option<Signed<bridge_pool_roots::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             return None;
         }
         let validator_addr = self
@@ -178,10 +176,12 @@ where
     pub fn extend_vote_with_valset_update(
         &mut self,
     ) -> Option<validator_set_update::SignedVext> {
+        let next_epoch = self.wl_storage.storage.get_current_epoch().0.next();
+
         if !self
             .wl_storage
             .ethbridge_queries()
-            .is_bridge_active(NonZeroU64::new(2))
+            .is_bridge_active_at(next_epoch)
         {
             return None;
         }
@@ -196,8 +196,6 @@ where
             .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
-                let next_epoch =
-                    self.wl_storage.storage.get_current_epoch().0.next();
                 let voting_powers = self
                     .wl_storage
                     .ethbridge_queries()
@@ -290,7 +288,7 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<Signed<ethereum_events::Vext>>,
     ) -> bool {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             ext.is_none()
         } else if let Some(ext) = ext {
             self.validate_eth_events_vext(
@@ -319,7 +317,7 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<bridge_pool_roots::SignedVext>,
     ) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
+        if self.wl_storage.ethbridge_queries().is_bridge_active() {
             if let Some(ext) = ext {
                 self.validate_bp_roots_vext(
                     ext,
@@ -464,7 +462,7 @@ where
         let mut bp_roots = vec![];
         let mut valset_upds = vec![];
         let bridge_active =
-            self.wl_storage.ethbridge_queries().is_bridge_active(None);
+            self.wl_storage.ethbridge_queries().is_bridge_active();
 
         for ext in deserialize_vote_extensions(vote_extensions) {
             if let Some(validator_set_update) = ext.validator_set_update {
