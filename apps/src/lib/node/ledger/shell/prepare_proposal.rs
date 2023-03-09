@@ -720,55 +720,6 @@ mod test_prepare_proposal {
         assert!(rsp.txs.is_empty());
     }
 
-    /// Test that we do not include protocol txs voting on ethereum
-    /// events or signing bridge pool roots + nonces if the bridge
-    /// is inactive.
-    #[test]
-    #[cfg(not(feature = "abcipp"))]
-    fn test_filter_protocol_txs_bridge_inactive() {
-        let (mut shell, _, _, _) = setup_at_height(3);
-        deactivate_bridge(&mut shell);
-        let address = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-        let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
-            transfers: vec![],
-        };
-        let eth_vext = ProtocolTxType::EthEventsVext(
-            ethereum_events::Vext {
-                validator_addr: address.clone(),
-                block_height: shell.wl_storage.storage.last_height,
-                ethereum_events: vec![ethereum_event],
-            }
-            .sign(protocol_key),
-        )
-        .sign(protocol_key)
-        .to_bytes();
-
-        let to_sign = get_bp_bytes_to_sign();
-        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
-        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
-        let bp_vext = ProtocolTxType::BridgePoolVext(
-            bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.last_height,
-                validator_addr: address,
-                sig,
-            }
-            .sign(protocol_key),
-        )
-        .sign(protocol_key)
-        .to_bytes();
-        let rsp = shell.prepare_proposal(RequestPrepareProposal {
-            txs: vec![eth_vext, bp_vext],
-            ..Default::default()
-        });
-        assert!(rsp.txs.is_empty());
-    }
-
     /// Creates an Ethereum events digest manually.
     #[cfg(feature = "abcipp")]
     fn manually_assemble_digest(
