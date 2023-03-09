@@ -76,9 +76,6 @@ where
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
 
-        let validator = &ext.data.validator_addr;
-        // get the public key associated with this validator
-        //
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
@@ -96,6 +93,21 @@ where
                 return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active_at(ext_height_epoch)
+        {
+            tracing::error!(
+                vext_epoch = ?ext_height_epoch,
+                "The Ethereum bridge was not enabled when the pool
+                 root's vote extension was cast",
+            );
+            return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
+
+        // get the public key associated with this validator
+        let validator = &ext.data.validator_addr;
         let (voting_power, pk) = self
             .wl_storage
             .pos_queries()

@@ -75,6 +75,19 @@ where
             );
             return Err(VoteExtensionError::UnexpectedEpoch);
         }
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active_at(signing_epoch.next())
+        {
+            let next_epoch = signing_epoch.next();
+            tracing::error!(
+                ?next_epoch,
+                "The Ethereum bridge was not enabled when the valset
+                 upd's vote extension was cast",
+            );
+            return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
         // verify if the new epoch validators' voting powers in storage match
         // the voting powers in the vote extension
         for (eth_addr_book, namada_addr, namada_power) in self

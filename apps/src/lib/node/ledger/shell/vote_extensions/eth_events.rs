@@ -78,6 +78,35 @@ where
             tracing::error!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
+        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // `last_height` here, instead of `ext.data.block_height`
+        let ext_height_epoch = match self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::error!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the Ethereum events vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedEpoch);
+            }
+        };
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active_at(ext_height_epoch)
+        {
+            tracing::error!(
+                vext_epoch = ?ext_height_epoch,
+                "The Ethereum bridge was not enabled when the Ethereum
+                 events' vote extension was cast",
+            );
+            return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
         // verify if we have any duplicate Ethereum events,
         // and if these are sorted in ascending order
         let have_dupes_or_non_sorted = {
@@ -97,24 +126,6 @@ where
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        //
-        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
-        // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch = match self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(ext.data.block_height)
-        {
-            Some(epoch) => epoch,
-            _ => {
-                tracing::error!(
-                    block_height = ?ext.data.block_height,
-                    "The epoch of the Ethereum events vote extension's \
-                     block height should always be known",
-                );
-                return Err(VoteExtensionError::UnexpectedEpoch);
-            }
-        };
         let (voting_power, pk) = self
             .wl_storage
             .pos_queries()
