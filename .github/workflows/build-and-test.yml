@@ -172,6 +172,12 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Remove some unused data in github runners
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -273,6 +279,12 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Remove some unused data in github runners
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -386,6 +398,12 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Remove some unused data in github runners
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
