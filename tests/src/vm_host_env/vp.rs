@@ -4,6 +4,7 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
+use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::proto::Tx;
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
@@ -35,10 +36,10 @@ pub mod vp_host_env {
 }
 
 /// Host environment structures required for transactions.
+#[derive(Debug)]
 pub struct TestVpEnv {
     pub addr: Address,
-    pub storage: TestStorage,
-    pub write_log: WriteLog,
+    pub wl_storage: WlStorage<MockDB, Sha256Hasher>,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: VpGasMeter,
     pub tx: Tx,
@@ -49,6 +50,8 @@ pub struct TestVpEnv {
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
+    #[cfg(not(feature = "mainnet"))]
+    pub has_valid_pow: bool,
 }
 
 impl Default for TestVpEnv {
@@ -63,8 +66,10 @@ impl Default for TestVpEnv {
 
         Self {
             addr: address::testing::established_address_1(),
-            storage: TestStorage::default(),
-            write_log: WriteLog::default(),
+            wl_storage: WlStorage {
+                storage: TestStorage::default(),
+                write_log: WriteLog::default(),
+            },
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
             tx: Tx::new(vec![], None),
@@ -75,17 +80,22 @@ impl Default for TestVpEnv {
             result_buffer: None,
             vp_wasm_cache,
             vp_cache_dir,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
         }
     }
 }
 
 impl TestVpEnv {
     pub fn all_touched_storage_keys(&self) -> BTreeSet<Key> {
-        self.write_log.get_keys()
+        self.wl_storage.write_log.get_keys()
     }
 
     pub fn get_verifiers(&self) -> BTreeSet<Address> {
-        self.write_log.verifiers_and_changed_keys(&self.verifiers).0
+        self.wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&self.verifiers)
+            .0
     }
 }
 
@@ -181,7 +191,7 @@ mod native_vp_host_env {
         // Write an empty validity predicate for the address, because it's used
         // to check if the address exists when we write into its storage
         let vp_key = Key::validity_predicate(&addr);
-        tx_env.storage.write(&vp_key, vec![]).unwrap();
+        tx_env.wl_storage.storage.write(&vp_key, vec![]).unwrap();
 
         tx_host_env::set(tx_env);
         apply_tx(&addr);
@@ -189,6 +199,7 @@ mod native_vp_host_env {
         let tx_env = tx_host_env::take();
         let verifiers_from_tx = &tx_env.verifiers;
         let (verifiers, keys_changed) = tx_env
+            .wl_storage
             .write_log
             .verifiers_and_changed_keys(verifiers_from_tx);
         if !verifiers.contains(&addr) {
@@ -201,8 +212,7 @@ mod native_vp_host_env {
 
         let vp_env = TestVpEnv {
             addr,
-            storage: tx_env.storage,
-            write_log: tx_env.write_log,
+            wl_storage: tx_env.wl_storage,
             keys_changed,
             verifiers,
             ..Default::default()
@@ -242,24 +252,25 @@ mod native_vp_host_env {
                     extern "C" fn extern_fn_name( $($arg: $type),* ) {
                         with(|TestVpEnv {
                                 addr,
-                                storage,
-                                write_log,
+                                wl_storage,
                                 iterators,
                                 gas_meter,
-                            tx,
-                            tx_index,
+                                tx,
+                                tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
                                 addr,
-                                storage,
-                                write_log,
+                                &wl_storage.storage,
+                                &wl_storage.write_log,
                                 iterators,
                                 gas_meter,
                                 tx,
@@ -269,6 +280,8 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
+                                #[cfg(not(feature = "mainnet"))]
+                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -286,24 +299,25 @@ mod native_vp_host_env {
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestVpEnv {
                                 addr,
-                                storage,
-                                write_log,
+                                wl_storage,
                                 iterators,
                                 gas_meter,
-                            tx,
-                            tx_index,
+                                tx,
+                                tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
                                 addr,
-                                storage,
-                                write_log,
+                                &wl_storage.storage,
+                                &wl_storage.write_log,
                                 iterators,
                                 gas_meter,
                                 tx,
@@ -313,6 +327,8 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
+                                #[cfg(not(feature = "mainnet"))]
+                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -331,10 +347,9 @@ mod native_vp_host_env {
     native_host_fn!(vp_result_buffer(result_ptr: u64));
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);
-    native_host_fn!(vp_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-    native_host_fn!(vp_rev_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
-    native_host_fn!(vp_iter_pre_next(iter_id: u64) -> i64);
-    native_host_fn!(vp_iter_post_next(iter_id: u64) -> i64);
+    native_host_fn!(vp_iter_prefix_pre(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(vp_iter_prefix_post(prefix_ptr: u64, prefix_len: u64) -> u64);
+    native_host_fn!(vp_iter_next(iter_id: u64) -> i64);
     native_host_fn!(vp_get_chain_id(result_ptr: u64));
     native_host_fn!(vp_get_block_height() -> u64);
     native_host_fn!(vp_get_tx_index() -> u32);
@@ -354,5 +369,6 @@ mod native_vp_host_env {
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64);
+    native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
 }

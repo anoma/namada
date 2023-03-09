@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::voting_power::FractionalVotingPower;
@@ -89,7 +89,7 @@ impl IntoIterator for NewVotes {
 /// votes from `vote_info` should be applied, and the returned changed keys will
 /// be empty.
 pub(in super::super) fn calculate<D, H, T>(
-    store: &mut Storage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
     vote_info: NewVotes,
 ) -> Result<(Tally, ChangedKeys)>
@@ -103,7 +103,7 @@ where
         validators = ?vote_info.voters(),
         "Calculating validators' votes applied to an existing tally"
     );
-    let tally_pre = super::storage::read(store, keys)?;
+    let tally_pre = super::storage::read(wl_storage, keys)?;
     if tally_pre.seen {
         return Ok((tally_pre, ChangedKeys::default()));
     }
@@ -192,7 +192,7 @@ fn keys_changed<T>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::EthereumEvent;
 
@@ -216,7 +216,7 @@ mod tests {
 
         /// Writes an initial [`Tally`] to storage, based on the passed `votes`.
         pub(super) fn setup_tally(
-            storage: &mut TestStorage,
+            wl_storage: &mut TestWlStorage,
             event: &EthereumEvent,
             keys: &vote_tallies::Keys<EthereumEvent>,
             votes: HashSet<(Address, BlockHeight, FractionalVotingPower)>,
@@ -228,7 +228,7 @@ mod tests {
                 seen_by: votes.into_iter().map(|(a, h, _)| (a, h)).collect(),
                 seen: voting_power > FractionalVotingPower::TWO_THIRDS,
             };
-            votes::storage::write(storage, keys, event, &tally, false)?;
+            votes::storage::write(wl_storage, keys, event, &tally, false)?;
             Ok(tally)
         }
     }
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_apply_duplicate_votes() -> Result<()> {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
 
         let validator = address::testing::established_address_1();
         let already_voted_height = BlockHeight(100);
@@ -305,7 +305,7 @@ mod tests {
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
-            &mut storage,
+            &mut wl_storage,
             &event,
             &keys,
             HashSet::from([(
@@ -332,11 +332,11 @@ mod tests {
     /// already recorded as having been seen.
     #[test]
     fn test_calculate_already_seen() -> Result<()> {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
-            &mut storage,
+            &mut wl_storage,
             &event,
             &keys,
             HashSet::from([(
@@ -355,7 +355,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut storage, &keys, vote_info)?;
+            calculate(&mut wl_storage, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -365,11 +365,11 @@ mod tests {
     /// Tests that an unchanged tally is returned if no votes are passed.
     #[test]
     fn test_calculate_empty() -> Result<()> {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = setup_tally(
-            &mut storage,
+            &mut wl_storage,
             &event,
             &keys,
             HashSet::from([(
@@ -381,7 +381,7 @@ mod tests {
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut storage, &keys, vote_info)?;
+            calculate(&mut wl_storage, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -392,12 +392,12 @@ mod tests {
     /// not yet seen.
     #[test]
     fn test_calculate_one_vote_not_seen() -> Result<()> {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
 
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let _tally_pre = setup_tally(
-            &mut storage,
+            &mut wl_storage,
             &event,
             &keys,
             HashSet::from([(
@@ -416,7 +416,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut storage, &keys, vote_info)?;
+            calculate(&mut wl_storage, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,
@@ -440,12 +440,12 @@ mod tests {
     /// seen.
     #[test]
     fn test_calculate_one_vote_seen() -> Result<()> {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
 
         let event = arbitrary_event();
         let keys = vote_tallies::Keys::from(&event);
         let _tally_pre = setup_tally(
-            &mut storage,
+            &mut wl_storage,
             &event,
             &keys,
             HashSet::from([(
@@ -464,7 +464,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut storage, &keys, vote_info)?;
+            calculate(&mut wl_storage, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,

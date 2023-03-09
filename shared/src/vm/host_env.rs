@@ -261,6 +261,10 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
+    #[cfg(not(feature = "mainnet"))]
+    /// This is true when the wrapper of this tx contained a valid
+    /// `testnet_pow::Solution`
+    has_valid_pow: bool,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -317,6 +321,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -332,6 +337,8 @@ where
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         );
 
         Self { memory, ctx }
@@ -382,6 +389,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let address = unsafe { HostRef::new(address) };
         let storage = unsafe { HostRef::new(storage) };
@@ -412,6 +420,8 @@ where
             vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         }
     }
 }
@@ -440,6 +450,8 @@ where
             vp_wasm_cache: self.vp_wasm_cache.clone(),
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: self.has_valid_pow,
         }
     }
 }
@@ -684,7 +696,7 @@ pub fn tx_iter_prefix<MEM, DB, H, CA>(
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -694,47 +706,17 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_add_gas(env, gas)?;
 
-    tracing::debug!("tx_iter_prefix {}, prefix {}", prefix, prefix_ptr);
+    tracing::debug!("tx_iter_prefix {}", prefix);
 
     let prefix =
         Key::parse(prefix).map_err(TxRuntimeError::StorageDataError)?;
 
+    let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
+    let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
+    tx_add_gas(env, gas)?;
+
     let iterators = unsafe { env.ctx.iterators.get() };
-    let (iter, gas) = storage.iter_prefix(&prefix);
-    tx_add_gas(env, gas)?;
-    Ok(iterators.insert(iter).id())
-}
-
-/// Storage prefix iterator function exposed to the wasm VM Tx environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, reverse ordered by storage keys.
-pub fn tx_rev_iter_prefix<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    prefix_ptr: u64,
-    prefix_len: u64,
-) -> TxResult<u64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let (prefix, gas) = env
-        .memory
-        .read_string(prefix_ptr, prefix_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
-
-    tracing::debug!("tx_rev_iter_prefix {}, prefix {}", prefix, prefix_ptr);
-
-    let prefix =
-        Key::parse(prefix).map_err(TxRuntimeError::StorageDataError)?;
-
-    let storage = unsafe { env.ctx.storage.get() };
-    let iterators = unsafe { env.ctx.iterators.get() };
-    let (iter, gas) = storage.rev_iter_prefix(&prefix);
-    tx_add_gas(env, gas)?;
     Ok(iterators.insert(iter).id())
 }
 
@@ -1203,7 +1185,9 @@ where
     let key =
         Key::parse(key).map_err(vp_host_fns::RuntimeError::StorageDataError)?;
     let storage = unsafe { env.ctx.storage.get() };
-    let present = vp_host_fns::has_key_pre(gas_meter, storage, &key)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let present =
+        vp_host_fns::has_key_pre(gas_meter, storage, write_log, &key)?;
     Ok(HostEnvResult::from(present).to_i64())
 }
 
@@ -1240,17 +1224,18 @@ where
     Ok(HostEnvResult::from(present).to_i64())
 }
 
-/// Storage prefix iterator function exposed to the wasm VM VP environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, ordered by storage keys.
-pub fn vp_iter_prefix<MEM, DB, H, EVAL, CA>(
+/// Storage prefix iterator function for prior state (before tx execution)
+/// exposed to the wasm VM VP environment. It will try to get an iterator from
+/// the storage and return the corresponding ID of the iterator, ordered by
+/// storage keys.
+pub fn vp_iter_prefix_pre<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1262,27 +1247,32 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
+    tracing::debug!("vp_iter_prefix_pre {}", prefix);
+
     let prefix = Key::parse(prefix)
         .map_err(vp_host_fns::RuntimeError::StorageDataError)?;
-    tracing::debug!("vp_iter_prefix {}", prefix);
 
+    let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let iter = vp_host_fns::iter_prefix(gas_meter, storage, &prefix)?;
+    let iter =
+        vp_host_fns::iter_prefix_pre(gas_meter, write_log, storage, &prefix)?;
+
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
 }
 
-/// Storage prefix iterator function exposed to the wasm VM VP environment.
-/// It will try to get an iterator from the storage and return the corresponding
-/// ID of the iterator, reverse ordered by storage keys.
-pub fn vp_rev_iter_prefix<MEM, DB, H, EVAL, CA>(
+/// Storage prefix iterator function for posterior state (after tx execution)
+/// exposed to the wasm VM VP environment. It will try to get an iterator from
+/// the storage and return the corresponding ID of the iterator, ordered by
+/// storage keys.
+pub fn vp_iter_prefix_post<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1294,22 +1284,26 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
 
+    tracing::debug!("vp_iter_prefix_post {}", prefix);
+
     let prefix = Key::parse(prefix)
         .map_err(vp_host_fns::RuntimeError::StorageDataError)?;
-    tracing::debug!("vp_rev_iter_prefix {}", prefix);
 
+    let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let iter = vp_host_fns::rev_iter_prefix(gas_meter, storage, &prefix)?;
+    let iter =
+        vp_host_fns::iter_prefix_post(gas_meter, write_log, storage, &prefix)?;
+
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
 }
 
-/// Storage prefix iterator for prior state (before tx execution) function
-/// exposed to the wasm VM VP environment. It will try to read from the storage.
+/// Storage prefix iterator for prior or posterior state function
+/// exposed to the wasm VM VP environment.
 ///
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
-pub fn vp_iter_pre_next<MEM, DB, H, EVAL, CA>(
+pub fn vp_iter_next<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     iter_id: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1320,57 +1314,13 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    tracing::debug!("vp_iter_pre_next iter_id {}", iter_id);
+    tracing::debug!("vp_iter_next iter_id {}", iter_id);
 
     let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some(iter) = iterators.get_mut(iter_id) {
         let gas_meter = unsafe { env.ctx.gas_meter.get() };
-        if let Some((key, val)) =
-            vp_host_fns::iter_pre_next::<DB>(gas_meter, iter)?
-        {
-            let key_val = KeyVal { key, val }
-                .try_to_vec()
-                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-            let len: i64 = key_val
-                .len()
-                .try_into()
-                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(key_val);
-            return Ok(len);
-        }
-    }
-    Ok(HostEnvResult::Fail.to_i64())
-}
-
-/// Storage prefix iterator next for posterior state (after tx execution)
-/// function exposed to the wasm VM VP environment. It will try to read from the
-/// write log first and if no entry found then from the storage.
-///
-/// Returns `-1` when the key is not present, or the length of the data when
-/// the key is present (the length may be `0`).
-pub fn vp_iter_post_next<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    iter_id: u64,
-) -> vp_host_fns::EnvResult<i64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    tracing::debug!("vp_iter_post_next iter_id {}", iter_id);
-
-    let iterators = unsafe { env.ctx.iterators.get() };
-    let iter_id = PrefixIteratorId::new(iter_id);
-    if let Some(iter) = iterators.get_mut(iter_id) {
-        let gas_meter = unsafe { env.ctx.gas_meter.get() };
-        let write_log = unsafe { env.ctx.write_log.get() };
-        if let Some((key, val)) =
-            vp_host_fns::iter_post_next::<DB>(gas_meter, write_log, iter)?
-        {
+        if let Some((key, val)) = vp_host_fns::iter_next(gas_meter, iter)? {
             let key_val = KeyVal { key, val }
                 .try_to_vec()
                 .map_err(vp_host_fns::RuntimeError::EncodingError)?;
@@ -1938,6 +1888,33 @@ where
     vp_host_fns::add_gas(gas_meter, gas)
 }
 
+/// Find if the wrapper tx had a valid `testnet_pow::Solution`
+pub fn vp_has_valid_pow<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    #[cfg(feature = "mainnet")]
+    let _ = env;
+
+    #[cfg(not(feature = "mainnet"))]
+    let has_valid_pow = env.ctx.has_valid_pow;
+    #[cfg(feature = "mainnet")]
+    let has_valid_pow = false;
+
+    Ok(if has_valid_pow {
+        HostEnvResult::Success
+    } else {
+        HostEnvResult::Fail
+    }
+    .to_i64())
+}
+
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
@@ -2020,6 +1997,7 @@ pub mod testing {
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> VpVmEnv<'static, NativeMemory, DB, H, EVAL, CA>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -2042,6 +2020,8 @@ pub mod testing {
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
         )
     }
 }

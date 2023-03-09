@@ -52,7 +52,7 @@ where
             let key_type: KeyType = key.into();
             match key_type {
                 KeyType::PARAMETER => governance::utils::is_proposal_accepted(
-                    self.ctx.storage,
+                    &self.ctx.pre(),
                     tx_data,
                 )
                 .unwrap_or(false),

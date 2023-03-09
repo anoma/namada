@@ -97,12 +97,14 @@ fn run_ledger_ibc() -> Result<()> {
         &test_a.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
     set_ethereum_bridge_mode(
         &test_b,
         &test_b.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
+        None,
     );
 
     // Run Chain A
@@ -115,6 +117,11 @@ fn run_ledger_ibc() -> Result<()> {
     ledger_b.exp_string("Namada ledger node started")?;
     ledger_a.exp_string("This node is a validator")?;
     ledger_b.exp_string("This node is a validator")?;
+
+    // Wait for a first block
+    ledger_a.exp_string("Committed block hash")?;
+    ledger_b.exp_string("Committed block hash")?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 

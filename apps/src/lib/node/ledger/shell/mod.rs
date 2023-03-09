@@ -12,6 +12,7 @@ mod init_chain;
 mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
+mod stats;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
@@ -28,23 +29,28 @@ use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::pos::namada_proof_of_stake::types::{
-    ActiveValidator, ValidatorSetUpdate,
+    ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::protocol::ShellParams;
-use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, DB};
+use namada::ledger::storage::{
+    DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
+};
+use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{pos, protocol};
+use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
+use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
+use namada::types::token::{self};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, WrapperTx,
+    EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
@@ -104,6 +110,8 @@ pub enum Error {
     BadProposal(u64, String),
     #[error("Error reading wasm: {0}")]
     ReadingWasm(#[from] eyre::Error),
+    #[error("Error reading from or writing to storage: {0}")]
+    StorageApi(#[from] storage_api::Error),
 }
 
 impl From<Error> for TxResult {
@@ -320,12 +328,10 @@ where
     /// The id of the current chain
     #[allow(dead_code)]
     chain_id: ChainId,
-    /// The persistent storage
-    pub(super) storage: Storage<D, H>,
+    /// The persistent storage with write log
+    pub(super) wl_storage: WlStorage<D, H>,
     /// Gas meter for the current block
-    pub(super) gas_meter: BlockGasMeter,
-    /// Write log for the current block
-    pub(super) write_log: WriteLog,
+    gas_meter: BlockGasMeter,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
     byzantine_validators: Vec<Evidence>,
@@ -470,11 +476,14 @@ where
             TendermintMode::Seed => ShellMode::Seed,
         };
 
+        let wl_storage = WlStorage {
+            storage,
+            write_log: WriteLog::default(),
+        };
         let mut shell = Self {
             chain_id,
-            storage,
+            wl_storage,
             gas_meter: BlockGasMeter::default(),
-            write_log: WriteLog::default(),
             byzantine_validators: vec![],
             base_dir,
             wasm_dir,
@@ -510,15 +519,15 @@ where
 
     /// Iterate over the wrapper txs in order
     #[allow(dead_code)]
-    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTx> {
-        self.storage.tx_queue.iter()
+    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &WrapperTxInQueue> {
+        self.wl_storage.storage.tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&mut self) -> response::Info {
         let mut response = response::Info::default();
-        let result = self.storage.get_state();
+        let result = self.wl_storage.storage.get_state();
 
         match result {
             Some((root, height)) => {
@@ -546,7 +555,7 @@ where
     where
         T: Clone + BorshDeserialize,
     {
-        let result = self.storage.read(key);
+        let result = self.wl_storage.storage.read(key);
 
         match result {
             Ok((bytes, _gas)) => match bytes {
@@ -562,7 +571,7 @@ where
 
     /// Read the bytes for a storage key dropping any error
     pub fn read_storage_key_bytes(&self, key: &Key) -> Option<Vec<u8>> {
-        let result = self.storage.read(key);
+        let result = self.wl_storage.storage.read(key);
 
         match result {
             Ok((bytes, _gas)) => bytes,
@@ -575,8 +584,9 @@ where
         if !self.byzantine_validators.is_empty() {
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
-            let pos_params = self.storage.read_pos_params();
-            let current_epoch = self.storage.block.epoch;
+            // TODO: resolve this unwrap() better
+            let pos_params = read_pos_params(&self.wl_storage).unwrap();
+            let current_epoch = self.wl_storage.storage.block.epoch;
             for evidence in byzantine_validators {
                 tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
@@ -590,6 +600,7 @@ where
                     }
                 };
                 let evidence_epoch = match self
+                    .wl_storage
                     .storage
                     .block
                     .pred_epochs
@@ -645,19 +656,23 @@ where
                         continue;
                     }
                 };
-                let validator = match self
-                    .storage
-                    .read_validator_address_raw_hash(&validator_raw_hash)
-                {
-                    Some(validator) => validator,
-                    None => {
-                        tracing::error!(
-                            "Cannot find validator's address from raw hash {}",
-                            validator_raw_hash
-                        );
-                        continue;
-                    }
-                };
+                let validator =
+                    match proof_of_stake::find_validator_by_raw_hash(
+                        &self.wl_storage,
+                        &validator_raw_hash,
+                    )
+                    .expect("Must be able to read storage")
+                    {
+                        Some(validator) => validator,
+                        None => {
+                            tracing::error!(
+                                "Cannot find validator's address from raw \
+                                 hash {}",
+                                validator_raw_hash
+                            );
+                            continue;
+                        }
+                    };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {}",
                     validator,
@@ -665,7 +680,8 @@ where
                     evidence_epoch,
                     evidence_height
                 );
-                if let Err(err) = self.storage.slash(
+                if let Err(err) = slash(
+                    &mut self.wl_storage,
                     &pos_params,
                     current_epoch,
                     evidence_epoch,
@@ -683,12 +699,8 @@ where
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
         let mut response = response::Commit::default();
-        // commit changes from the write-log to storage
-        self.write_log
-            .commit_block(&mut self.storage)
-            .expect("Expected committing block write log success");
-        // store the block's data in DB
-        self.storage.commit().unwrap_or_else(|e| {
+        // commit block's data from write log and store the in DB
+        self.wl_storage.commit_block().unwrap_or_else(|e| {
             tracing::error!(
                 "Encountered a storage error while committing a block {:?}",
                 e
@@ -698,11 +710,11 @@ where
         // NOTE: the oracle isn't started through governance votes, so we don't
         // check to see if we need to start it after epoch transitions
 
-        let root = self.storage.merkle_root();
+        let root = self.wl_storage.storage.merkle_root();
         tracing::info!(
             "Committed block hash: {}, height: {}",
             root,
-            self.storage.last_height,
+            self.wl_storage.storage.last_height,
         );
         response.data = root.0.to_vec();
 
@@ -723,7 +735,7 @@ where
                          block is {}",
                         eth_height
                     );
-                    self.storage.ethereum_height = Some(eth_height);
+                    self.wl_storage.storage.ethereum_height = Some(eth_height);
                 }
                 None => tracing::info!(
                     "Ethereum oracle has not yet fully processed any Ethereum \
@@ -781,8 +793,8 @@ where
             // this key is present here because we may be starting up the shell
             // for the first time ever, in which case the chain hasn't been
             // initialized yet.
-            let (has_key, _) = self
-                .storage
+            let has_key = self
+                .wl_storage
                 .has_key(&eth_bridge::storage::active_key())
                 .expect(
                     "We should always be able to check whether a key exists \
@@ -795,20 +807,24 @@ where
                 );
                 return;
             }
-            if !self.storage.is_bridge_active() {
+            if !self.wl_storage.ethbridge_queries().is_bridge_active() {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge is disabled"
                 );
                 return;
             }
-            let Some(config) = EthereumBridgeConfig::read(&self.storage) else {
+            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
                 );
                 return;
             };
-            let start_block =
-                self.storage.ethereum_height.clone().unwrap_or_default();
+            let start_block = self
+                .wl_storage
+                .storage
+                .ethereum_height
+                .clone()
+                .unwrap_or_default();
             tracing::info!(
                 ?start_block,
                 "Found Ethereum height from which the Ethereum oracle should \
@@ -879,7 +895,7 @@ where
                         if let Err(err) = self
                             .validate_eth_events_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                self.wl_storage.storage.last_height,
                             )
                         {
                             response.code = 1;
@@ -899,7 +915,7 @@ where
                         if let Err(err) = self
                             .validate_bp_roots_vext_and_get_it_back(
                                 ext,
-                                self.storage.last_height,
+                                self.wl_storage.storage.last_height,
                             )
                         {
                             response.code = 1;
@@ -927,7 +943,7 @@ where
                                 // committed to storage, so `last_epoch`
                                 // reflects the current value of the
                                 // epoch.
-                                self.storage.last_epoch,
+                                self.wl_storage.storage.last_epoch,
                             )
                         {
                             response.code = 1;
@@ -949,8 +965,38 @@ where
                              added to the mempool"
                         );
                     }
-                    Ok(TxType::Wrapper(_)) => {
-                        response.log = String::from(VALID_MSG);
+                    Ok(TxType::Wrapper(wrapper)) => {
+                        // Check balance for fee
+                        let fee_payer = if wrapper.pk != masp_tx_key().ref_to()
+                        {
+                            wrapper.fee_payer()
+                        } else {
+                            masp()
+                        };
+                        // check that the fee payer has sufficient balance
+                        let balance =
+                            self.get_balance(&wrapper.fee.token, &fee_payer);
+
+                        // In testnets with a faucet, tx is allowed to skip fees
+                        // if it includes a valid PoW
+                        #[cfg(not(feature = "mainnet"))]
+                        let has_valid_pow =
+                            self.has_valid_pow_solution(&wrapper);
+                        #[cfg(feature = "mainnet")]
+                        let has_valid_pow = false;
+
+                        if !has_valid_pow
+                            && self.get_wrapper_tx_fees() > balance
+                        {
+                            response.code = 1;
+                            response.log = String::from(
+                                "The address given does not have sufficient \
+                                 balance to pay fee",
+                            );
+                            return response;
+                        } else {
+                            response.log = String::from(VALID_MSG);
+                        }
                     }
                     Ok(TxType::Raw(_)) => {
                         response.code = 1;
@@ -994,26 +1040,84 @@ where
             genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
         );
         self.mode.get_validator_address().map(|addr| {
-            let pk_bytes = self
-                .storage
+            let sk: common::SecretKey = self
+                .wl_storage
                 .read(&pk_key(addr))
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
                 )
-                .0
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
                 );
-            let pk = common::SecretKey::deserialize(&mut pk_bytes.as_slice())
-                .expect("Validator's public key should be deserializable")
-                .ref_to();
+            let pk = sk.ref_to();
             wallet.find_key_by_pk(&pk).expect(
                 "A validator's established keypair should be stored in its \
                  wallet",
             )
         })
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Check if the tx has a valid PoW solution. Unlike
+    /// `apply_pow_solution_if_valid`, this won't invalidate the solution.
+    fn has_valid_pow_solution(
+        &self,
+        tx: &namada::types::transaction::WrapperTx,
+    ) -> bool {
+        if let Some(solution) = &tx.pow_solution {
+            if let (Some(faucet_address), _gas) =
+                namada::ledger::parameters::read_faucet_account_parameter(
+                    &self.wl_storage.storage,
+                )
+                .expect("Must be able to read faucet account parameter")
+            {
+                let source = Address::from(&tx.pk);
+                return solution
+                    .validate(&self.wl_storage, &faucet_address, source)
+                    .expect("Must be able to validate PoW solutions");
+            }
+        }
+        false
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Get fixed amount of fees for wrapper tx
+    fn get_wrapper_tx_fees(&self) -> token::Amount {
+        let (fees, _gas) =
+            namada::ledger::parameters::read_wrapper_tx_fees_parameter(
+                &self.wl_storage.storage,
+            )
+            .expect("Must be able to read wrapper tx fees parameter");
+        fees.unwrap_or(token::Amount::whole(MIN_FEE))
+    }
+
+    #[cfg(not(feature = "mainnet"))]
+    /// Check if the tx has a valid PoW solution and if so invalidate it to
+    /// prevent replay.
+    fn invalidate_pow_solution_if_valid(
+        &mut self,
+        tx: &namada::types::transaction::WrapperTx,
+    ) -> bool {
+        if let Some(solution) = &tx.pow_solution {
+            if let (Some(faucet_address), _gas) =
+                namada::ledger::parameters::read_faucet_account_parameter(
+                    &self.wl_storage.storage,
+                )
+                .expect("Must be able to read faucet account parameter")
+            {
+                let source = Address::from(&tx.pk);
+                return solution
+                    .invalidate_if_valid(
+                        &mut self.wl_storage,
+                        &faucet_address,
+                        &source,
+                    )
+                    .expect("Must be able to validate PoW solutions");
+            }
+        }
+        false
     }
 }
 
@@ -1024,10 +1128,9 @@ where
     H: 'static + StorageHasher + Sync,
 {
     fn from(shell: &'a mut Shell<D, H>) -> Self {
-        Self {
+        ShellParams::Mutating {
             block_gas_meter: &mut shell.gas_meter,
-            write_log: &mut shell.write_log,
-            storage: &shell.storage,
+            wl_storage: &mut shell.wl_storage,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
             tx_wasm_cache: &mut shell.tx_wasm_cache,
         }
@@ -1043,6 +1146,7 @@ mod test_utils {
 
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
+    use namada::ledger::storage_api::StorageWrite;
     use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1051,7 +1155,7 @@ mod test_utils {
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
-    use namada::types::transaction::Fee;
+    use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1228,7 +1332,7 @@ mod test_utils {
                 tx_wasm_compilation_cache,
                 address::nam(),
             );
-            shell.storage.last_height = height.into();
+            shell.wl_storage.storage.block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
         }
 
@@ -1294,7 +1398,15 @@ mod test_utils {
         /// in the current block proposal
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, wrapper: WrapperTx) {
-            self.shell.storage.tx_queue.push(wrapper);
+            self.shell
+                .wl_storage
+                .storage
+                .tx_queue
+                .push(WrapperTxInQueue {
+                    tx: wrapper,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                });
         }
     }
 
@@ -1326,6 +1438,7 @@ mod test_utils {
             chain_id: ChainId::default().to_string(),
             ..Default::default()
         });
+        test.wl_storage.commit_block().expect("Test failed");
         (test, receiver, eth_receiver, control_receiver)
     }
 
@@ -1362,8 +1475,8 @@ mod test_utils {
         use namada::eth_bridge::storage::active_key;
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &active_key(),
                 EthBridgeStatus::Disabled.try_to_vec().expect("Test failed"),
             )
@@ -1420,8 +1533,14 @@ mod test_utils {
             0.into(),
             tx,
             Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
         );
-        shell.storage.tx_queue.push(wrapper);
+        shell.wl_storage.storage.tx_queue.push(WrapperTxInQueue {
+            tx: wrapper,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
@@ -1430,6 +1549,7 @@ mod test_utils {
         let pred_epochs = Default::default();
         let address_gen = EstablishedAddressGen::new("test");
         shell
+            .wl_storage
             .storage
             .db
             .write_block(BlockStateWrite {
@@ -1443,8 +1563,12 @@ mod test_utils {
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: &address_gen,
                 results: &BlockResults::default(),
-                tx_queue: &shell.storage.tx_queue,
-                ethereum_height: shell.storage.ethereum_height.as_ref(),
+                tx_queue: &shell.wl_storage.storage.tx_queue,
+                ethereum_height: shell
+                    .wl_storage
+                    .storage
+                    .ethereum_height
+                    .as_ref(),
             })
             .expect("Test failed");
 
@@ -1475,6 +1599,6 @@ mod test_utils {
             tx_wasm_compilation_cache,
             address::nam(),
         );
-        assert!(!shell.storage.tx_queue.is_empty());
+        assert!(!shell.wl_storage.storage.tx_queue.is_empty());
     }
 }

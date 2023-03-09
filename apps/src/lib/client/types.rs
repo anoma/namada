@@ -18,6 +18,8 @@ use crate::facade::tendermint_config::net::Address as TendermintAddress;
 pub struct ParsedTxArgs {
     /// Simulate applying the transaction
     pub dry_run: bool,
+    /// Dump the transaction bytes
+    pub dump_tx: bool,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
     /// Do not wait for the transaction to be added to the blockchain
@@ -53,7 +55,7 @@ pub struct ParsedTxTransferArgs {
     pub amount: token::Amount,
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait ShieldedTransferContext {
     async fn collect_unspent_notes(
         &mut self,
@@ -70,7 +72,7 @@ pub trait ShieldedTransferContext {
     async fn query_epoch(&self, ledger_address: TendermintAddress) -> Epoch;
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl ShieldedTransferContext for Context {
     async fn collect_unspent_notes(
         &mut self,
@@ -89,6 +91,6 @@ impl ShieldedTransferContext for Context {
     }
 
     async fn query_epoch(&self, ledger_address: TendermintAddress) -> Epoch {
-        rpc::query_epoch(args::Query { ledger_address }).await
+        rpc::query_and_print_epoch(args::Query { ledger_address }).await
     }
 }

@@ -5,8 +5,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
-use namada_core::ledger::storage::Storage;
-use namada_core::ledger::storage_api::StorageRead;
+use namada_core::ledger::storage::WlStorage;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::Key;
 use serde::{Deserialize, Serialize};
@@ -143,7 +143,7 @@ impl EthereumBridgeConfig {
     ///
     /// If these parameters are initialized, the storage subspaces
     /// for the Ethereum bridge VPs are also initialized.
-    pub fn init_storage<DB, H>(&self, storage: &mut Storage<DB, H>)
+    pub fn init_storage<DB, H>(&self, wl_storage: &mut WlStorage<DB, H>)
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: storage::traits::StorageHasher,
@@ -162,33 +162,35 @@ impl EthereumBridgeConfig {
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let governance_contract_key = bridge_storage::governance_contract_key();
-        storage
-            .write(
+        wl_storage
+            .write_bytes(
                 &active_key,
                 encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
             )
             .unwrap();
-        storage
-            .write(&min_confirmations_key, encode(min_confirmations))
+        wl_storage
+            .write_bytes(&min_confirmations_key, encode(min_confirmations))
             .unwrap();
-        storage
-            .write(&native_erc20_key, encode(native_erc20))
+        wl_storage
+            .write_bytes(&native_erc20_key, encode(native_erc20))
             .unwrap();
-        storage.write(&bridge_contract_key, encode(bridge)).unwrap();
-        storage
-            .write(&governance_contract_key, encode(governance))
+        wl_storage
+            .write_bytes(&bridge_contract_key, encode(bridge))
+            .unwrap();
+        wl_storage
+            .write_bytes(&governance_contract_key, encode(governance))
             .unwrap();
         // Initialize the storage for the Ethereum Bridge VP.
-        vp::init_storage(storage);
+        vp::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
-        bridge_pool_vp::init_storage(storage);
+        bridge_pool_vp::init_storage(wl_storage);
     }
 
     /// Reads the latest [`EthereumBridgeConfig`] from storage. If it is not
     /// present, `None` will be returned - this could be the case if the bridge
     /// has not been bootstrapped yet. Panics if the storage appears to be
     /// corrupt.
-    pub fn read<DB, H>(storage: &Storage<DB, H>) -> Option<Self>
+    pub fn read<DB, H>(wl_storage: &WlStorage<DB, H>) -> Option<Self>
     where
         DB: storage::DB + for<'iter> storage::DBIter<'iter>,
         H: storage::traits::StorageHasher,
@@ -199,7 +201,7 @@ impl EthereumBridgeConfig {
         let governance_contract_key = bridge_storage::governance_contract_key();
 
         let Some(min_confirmations) = StorageRead::read::<MinimumConfirmations>(
-            storage,
+            wl_storage,
             &min_confirmations_key,
         )
         .unwrap_or_else(|err| {
@@ -211,10 +213,10 @@ impl EthereumBridgeConfig {
 
         // These reads must succeed otherwise the storage is corrupt or a
         // read failed
-        let native_erc20 = must_read_key(storage, &native_erc20_key);
-        let bridge_contract = must_read_key(storage, &bridge_contract_key);
+        let native_erc20 = must_read_key(wl_storage, &native_erc20_key);
+        let bridge_contract = must_read_key(wl_storage, &bridge_contract_key);
         let governance_contract =
-            must_read_key(storage, &governance_contract_key);
+            must_read_key(wl_storage, &governance_contract_key);
 
         Some(Self {
             min_confirmations,
@@ -228,12 +230,9 @@ impl EthereumBridgeConfig {
 }
 
 /// Get the Ethereum address for wNam from storage, if possible
-pub fn read_native_erc20_address<DB, H>(
-    storage: &Storage<DB, H>,
-) -> Result<EthAddress>
+pub fn read_native_erc20_address<S>(storage: &S) -> Result<EthAddress>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::traits::StorageHasher,
+    S: StorageRead,
 {
     let native_erc20 = bridge_storage::native_erc20_key();
     match StorageRead::read(storage, &native_erc20) {
@@ -252,14 +251,14 @@ where
 /// Reads the value of `key` from `storage` and deserializes it, or panics
 /// otherwise.
 fn must_read_key<DB, H, T: BorshDeserialize>(
-    storage: &Storage<DB, H>,
+    wl_storage: &WlStorage<DB, H>,
     key: &Key,
 ) -> T
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::traits::StorageHasher,
 {
-    StorageRead::read::<T>(storage, key).map_or_else(
+    StorageRead::read::<T>(wl_storage, key).map_or_else(
         |err| panic!("Could not read {key}: {err:?}"),
         |value| {
             value.unwrap_or_else(|| {
@@ -275,7 +274,7 @@ where
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use namada_core::ledger::storage::testing::TestStorage;
+    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
@@ -312,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -327,17 +326,17 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut storage);
+        config.init_storage(&mut wl_storage);
 
-        let read = EthereumBridgeConfig::read(&storage).unwrap();
+        let read = EthereumBridgeConfig::read(&wl_storage).unwrap();
 
         assert_eq!(config, read);
     }
 
     #[test]
     fn test_ethereum_bridge_config_uninitialized() {
-        let storage = TestStorage::default();
-        let read = EthereumBridgeConfig::read(&storage);
+        let wl_storage = TestWlStorage::default();
+        let read = EthereumBridgeConfig::read(&wl_storage);
 
         assert!(read.is_none());
     }
@@ -345,7 +344,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         let config = EthereumBridgeConfig {
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -360,14 +359,14 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut storage);
+        config.init_storage(&mut wl_storage);
         let min_confirmations_key = bridge_storage::min_confirmations_key();
-        storage
-            .write(&min_confirmations_key, vec![42, 1, 2, 3, 4])
+        wl_storage
+            .write_bytes(&min_confirmations_key, vec![42, 1, 2, 3, 4])
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
-        EthereumBridgeConfig::read(&storage);
+        EthereumBridgeConfig::read(&wl_storage);
     }
 
     #[test]
@@ -375,17 +374,17 @@ mod tests {
         expected = "Ethereum bridge appears to be only partially configured!"
     )]
     fn test_ethereum_bridge_config_storage_partially_configured() {
-        let mut storage = TestStorage::default();
+        let mut wl_storage = TestWlStorage::default();
         // Write a valid min_confirmations value
         let min_confirmations_key = bridge_storage::min_confirmations_key();
-        storage
-            .write(
+        wl_storage
+            .write_bytes(
                 &min_confirmations_key,
                 MinimumConfirmations::default().try_to_vec().unwrap(),
             )
             .unwrap();
 
         // This should panic as the other config values are not written
-        EthereumBridgeConfig::read(&storage);
+        EthereumBridgeConfig::read(&wl_storage);
     }
 }

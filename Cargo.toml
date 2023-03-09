@@ -7,6 +7,7 @@ members = [
   "ethereum_bridge",
   "proof_of_stake",
   "shared",
+  "test_utils",
   "tests",
   "tx_prelude",
   "vm_env",

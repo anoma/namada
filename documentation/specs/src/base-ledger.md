@@ -1,3 +1,3 @@
 ## Base ledger
 
-The base ledger of Namada includes a [consensus system](./base-ledger/core-concepts.md), validity predicate-based [execution system](./base-ledger/execution.md), and signalling-based [governance mechanism](./base-ledger/governance.md). Namada's ledger also includes proof-of-stake, slashing, fees, and inflation funding for staking rewards, shielded pool incentives, and public goods -- these are specified in the [economics section](./economics.md)
+The base ledger of Namada includes a [consensus system](./base-ledger/consensus.md), validity predicate-based [execution system](./base-ledger/execution.md), and signalling-based [governance mechanism](./base-ledger/governance.md). Namada's ledger also includes proof-of-stake, slashing, fees, and inflation funding for staking rewards, shielded pool incentives, and public goods — these are specified in the [economics section](./economics.md).

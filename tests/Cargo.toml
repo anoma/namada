@@ -5,37 +5,72 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_tests"
 resolver = "2"
-version = "0.12.1"
+version = "0.14.1"
 
 [features]
 default = ["abciplus", "wasm-runtime"]
+mainnet = [
+  "namada/mainnet",
+]
 abciplus = [
+  "ibc",
+  "ibc-proto",
+  "ibc-relayer",
+  "tendermint",
+  "tendermint-config",
+  "tendermint-proto",
+  "tendermint-rpc",
   "namada/abciplus",
   "namada/ibc-mocks",
   "namada_vp_prelude/abciplus",
   "namada_tx_prelude/abciplus",
+  "namada_apps/abciplus"
+]
+
+abcipp = [
+  "ibc-abcipp",
+  "ibc-proto-abcipp",
+  "ibc-relayer-abcipp",
+  "tendermint-abcipp",
+  "tendermint-config-abcipp",
+  "tendermint-proto-abcipp",
+  "tendermint-rpc-abcipp",
+  "namada/abcipp",
+  "namada/ibc-mocks-abcipp",
+  "namada_vp_prelude/abcipp",
+  "namada_tx_prelude/abcipp",
+  "namada_apps/abcipp",
 ]
 wasm-runtime = ["namada/wasm-runtime"]
 
 [dependencies]
 namada = {path = "../shared", default-features = false, features = ["testing"]}
 namada_core = {path = "../core", default-features = false, features = ["testing"]}
+namada_test_utils = {path = "../test_utils"}
 namada_vp_prelude = {path = "../vp_prelude", default-features = false}
 namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 concat-idents = "1.1.2"
-ibc = {version = "0.14.0", default-features = false}
-ibc-proto = {version = "0.17.1", default-features = false}
-ibc-relayer = {version = "0.14.0", default-features = false}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/ibc-rs", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a", default-features = false, optional = true}
+ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-rs", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a", default-features = false, optional = true}
+ibc-relayer-abcipp = {package = "ibc-relayer", git = "https://github.com/heliaxdev/ibc-rs", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a", default-features = false, optional = true}
+ibc = {version = "0.14.0", default-features = false, optional = true}
+ibc-proto = {version = "0.17.1", default-features = false, optional = true}
+ibc-relayer = {version = "0.14.0", default-features = false, optional = true}
 prost = "0.9.0"
+regex = "1.7.0"
 serde_json = {version = "1.0.65"}
 sha2 = "0.9.3"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tempfile = "3.2.0"
-tendermint = "0.23.6"
-tendermint-config = "0.23.6"
-tendermint-proto = "0.23.6"
-tendermint-rpc = {version = "0.23.6", features = ["http-client"]}
+tendermint-abcipp = {package = "tendermint", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-config-abcipp = {package = "tendermint-config", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-rpc-abcipp = {package = "tendermint-rpc", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint = {version = "0.23.6", optional = true}
+tendermint-config = {version = "0.23.6", optional = true}
+tendermint-proto = {version = "0.23.6", optional = true}
+tendermint-rpc = {version = "0.23.6", features = ["http-client"], optional = true}
 tokio = {version = "1.8.2", features = ["full"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
@@ -44,7 +79,7 @@ rust_decimal = "1.26.1"
 rust_decimal_macros = "1.26.1"
 
 [dev-dependencies]
-namada_apps = {path = "../apps", default-features = false, features = ["abciplus", "testing"]}
+namada_apps = {path = "../apps", default-features = false, features = ["testing"]}
 assert_cmd = "1.0.7"
 borsh = "0.9.1"
 color-eyre = "0.5.11"

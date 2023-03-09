@@ -10,7 +10,7 @@
 pub use tendermint_rpc;
 #[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
-#[cfg(feature = "abciplus")]
+#[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]
 pub use {

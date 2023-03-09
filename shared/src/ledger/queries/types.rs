@@ -1,5 +1,7 @@
+use namada_core::ledger::storage::WlStorage;
+
 use crate::ledger::events::log::EventLog;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api;
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::storage::BlockHeight;
@@ -16,8 +18,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    /// Reference to the ledger's [`Storage`].
-    pub storage: &'shell Storage<D, H>,
+    /// Reference to the ledger's [`WlStorage`].
+    pub wl_storage: &'shell WlStorage<D, H>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     pub event_log: &'shell EventLog,
     /// Cache of VP wasm compiled artifacts.
@@ -69,7 +71,7 @@ pub trait Router {
 /// A client with async request dispatcher method, which can be used to invoke
 /// type-safe methods from a root [`Router`], generated via `router!` macro.
 #[cfg(any(test, feature = "async-client"))]
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
@@ -146,7 +148,7 @@ impl RequestQuery {
     /// to use the latest committed block height as per tendermint ABCI Query
     /// spec. A negative block height will cause an error.
     pub fn try_from_tm<D, H>(
-        storage: &Storage<D, H>,
+        storage: &WlStorage<D, H>,
         crate::tendermint_proto::abci::RequestQuery {
             data,
             path,
@@ -161,7 +163,7 @@ impl RequestQuery {
         let height = match height {
             0 => {
                 // `0` means last committed height
-                storage.last_height
+                storage.storage.last_height
             }
             _ => BlockHeight(height.try_into().map_err(|_| {
                 format!("Query height cannot be negative, got: {}", height)

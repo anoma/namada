@@ -6,6 +6,7 @@ use namada_core::ledger::ibc::actions::{
     make_create_client_event, make_update_client_event,
     make_upgrade_client_event,
 };
+use namada_core::ledger::storage_api::StorageRead;
 use thiserror::Error;
 
 use super::super::storage::{
@@ -479,14 +480,13 @@ where
         height: Height,
     ) -> Ics02Result<Option<AnyConsensusState>> {
         let prefix = consensus_state_prefix(client_id);
-        let mut iter = self
-            .ctx
+        let pre = self.ctx.pre();
+        let mut iter = pre
             .iter_prefix(&prefix)
             .map_err(|_| Ics02Error::implementation_specific())?;
         let mut lowest_height_value = None;
-        while let Some((key, value)) = self
-            .ctx
-            .iter_pre_next(&mut iter)
+        while let Some((key, value)) = pre
+            .iter_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
             let key = Key::parse(key)
@@ -520,14 +520,13 @@ where
         height: Height,
     ) -> Ics02Result<Option<AnyConsensusState>> {
         let prefix = consensus_state_prefix(client_id);
-        let mut iter = self
-            .ctx
+        let pre = self.ctx.pre();
+        let mut iter = pre
             .iter_prefix(&prefix)
             .map_err(|_| Ics02Error::implementation_specific())?;
         let mut highest_height_value = None;
-        while let Some((key, value)) = self
-            .ctx
-            .iter_pre_next(&mut iter)
+        while let Some((key, value)) = pre
+            .iter_next(&mut iter)
             .map_err(|_| Ics02Error::implementation_specific())?
         {
             let key = Key::parse(key)
@@ -576,7 +575,7 @@ where
             .map_err(|_| Ics02Error::implementation_specific())?;
         match header {
             Some(h) => Ok(TmConsensusState {
-                root: CommitmentRoot::from_bytes(h.hash.as_slice()),
+                root: CommitmentRoot::from_bytes(h.hash.0.as_slice()),
                 timestamp: h.time.try_into().unwrap(),
                 next_validators_hash: h.next_validators_hash.into(),
             }

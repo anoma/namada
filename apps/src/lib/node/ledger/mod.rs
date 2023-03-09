@@ -26,6 +26,7 @@ use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
+use crate::cli::args;
 use crate::config::utils::num_of_threads;
 use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
@@ -63,15 +64,16 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 impl Shell {
     fn load_proposals(&mut self) {
         let proposals_key = gov_storage::get_commiting_proposals_prefix(
-            self.storage.last_epoch.0,
+            self.wl_storage.storage.last_epoch.0,
         );
 
-        let (proposal_iter, _) = self.storage.iter_prefix(&proposals_key);
+        let (proposal_iter, _) =
+            self.wl_storage.storage.iter_prefix(&proposals_key);
         for (key, _, _) in proposal_iter {
             let key =
                 Key::from_str(key.as_str()).expect("Key should be parsable");
             if gov_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.storage.last_epoch.0
+                != self.wl_storage.storage.last_epoch.0
             {
                 // NOTE: `iter_prefix` iterate over the matching prefix. In this
                 // case  a proposal with grace_epoch 110 will be
@@ -201,6 +203,23 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
 /// Resets the tendermint_node state and removes database files
 pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
     shell::reset(config)
+}
+
+/// Dump Namada ledger node's DB from a block into a file
+pub fn dump_db(
+    config: config::Ledger,
+    args::LedgerDumpDb {
+        // block_height,
+        out_file_path,
+    }: args::LedgerDumpDb,
+) {
+    use namada::ledger::storage::DB;
+
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    db.dump_last_block(out_file_path);
 }
 
 /// Runs and monitors a few concurrent tasks.
@@ -479,11 +498,8 @@ fn start_abci_broadcaster_shell(
                 TendermintMode::Validator => {
                     tracing::info!("This node is a validator");
                 }
-                TendermintMode::Full => {
-                    tracing::info!("This node is a fullnode");
-                }
-                TendermintMode::Seed => {
-                    tracing::info!("This node is a seednode");
+                TendermintMode::Full | TendermintMode::Seed => {
+                    tracing::info!("This node is not a validator");
                 }
             }
             shell.run()
@@ -626,6 +642,12 @@ async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> EthereumOracleTask {
+    if !matches!(config.tendermint.tendermint_mode, TendermintMode::Validator) {
+        return EthereumOracleTask::NotEnabled {
+            handle: spawn_dummy_task(()),
+        };
+    }
+
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
 
     // Start the oracle for listening to Ethereum events
@@ -663,6 +685,7 @@ async fn maybe_start_ethereum_oracle(
                     "Ethereum Events Endpoint",
                     move |aborter| async move {
                         oracle::test_tools::events_endpoint::serve(
+                            ethereum_url,
                             eth_sender,
                             control_receiver,
                             oracle_abort_recv,

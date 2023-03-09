@@ -65,7 +65,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
 
     fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error> {
         match self.get(&H::hash(key.to_string()).into()) {
-            Ok(hash) => Ok(hash.to_vec()),
+            Ok(hash) => Ok(hash.0.to_vec()),
             Err(err) => Err(Error::MerkleTree(err.to_string())),
         }
     }

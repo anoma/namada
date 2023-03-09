@@ -4,6 +4,8 @@
 
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
+faucet_pow_difficulty = 1
+faucet_withdrawal_limit = "1_000"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
@@ -30,7 +32,7 @@ vp = "vp_token"
 Albert = 1000000
 "Albert.public_key" = 100
 Bertha = 1000000
-"Bertha.public_key" = 100
+"Bertha.public_key" = 2000
 Christel = 1000000
 "Christel.public_key" = 100
 Daewon = 1000000
@@ -168,7 +170,7 @@ pos_gain_d = 0.1
 
 # Proof of stake parameters.
 [pos_params]
-# Maximum number of active validators.
+# Maximum number of consensus validators.
 max_validator_slots = 128
 # Pipeline length (in epochs). Any change in the validator set made in
 # epoch 'n' will become active in epoch 'n + pipeline_len'.

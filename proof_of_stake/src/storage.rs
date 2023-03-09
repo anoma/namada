@@ -1,16 +1,12 @@
-//! Proof-of-Stake storage keys and storage integration via [`PosBase`] trait.
+//! Proof-of-Stake storage keys and storage integration.
 
-use namada_core::ledger::storage::types::{decode, encode};
-use namada_core::ledger::storage::{self, Storage, StorageHasher};
+use namada_core::ledger::storage_api::collections::{lazy_map, lazy_vec};
 use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
-use namada_core::types::{key, token};
-use rust_decimal::Decimal;
+use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
 
 use super::ADDRESS;
-use crate::parameters::PosParams;
+use crate::epoched::LAZY_MAP_SUB_KEY;
 pub use crate::types::*;
-use crate::{types, PosBase, PosReadOnly};
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_STORAGE_PREFIX: &str = "validator";
@@ -26,8 +22,12 @@ const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
 const SLASHES_PREFIX: &str = "slash";
 const BOND_STORAGE_KEY: &str = "bond";
 const UNBOND_STORAGE_KEY: &str = "unbond";
-const VALIDATOR_SET_STORAGE_KEY: &str = "validator_set";
+const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
+const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
+const NUM_CONSENSUS_VALIDATORS_STORAGE_KEY: &str = "num_consensus";
+const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
+const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -250,9 +250,14 @@ pub fn is_validator_deltas_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::AddressSeg(validator),
             DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(_epoch),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_DELTAS_STORAGE_KEY =>
+            && key == VALIDATOR_DELTAS_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
         {
             Some(validator)
         }
@@ -274,15 +279,26 @@ pub fn validator_slashes_key(validator: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for validator's slashes?
-pub fn is_validator_slashes_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-        ] if addr == &ADDRESS && prefix == SLASHES_PREFIX => Some(validator),
-        _ => None,
+/// NEW: Is storage key for validator's slashes
+pub fn is_validator_slashes_key(key: &Key) -> Option<Address> {
+    if key.segments.len() >= 5 {
+        match &key.segments[..] {
+            [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(prefix),
+                DbKeySeg::AddressSeg(validator),
+                DbKeySeg::StringSeg(data),
+                DbKeySeg::StringSeg(_index),
+            ] if addr == &ADDRESS
+                && prefix == SLASHES_PREFIX
+                && data == lazy_vec::DATA_SUBKEY =>
+            {
+                Some(validator.clone())
+            }
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 
@@ -307,19 +323,36 @@ pub fn bond_key(bond_id: &BondId) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for a bond?
-pub fn is_bond_key(key: &Key) -> Option<BondId> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(source),
-            DbKeySeg::AddressSeg(validator),
-        ] if addr == &ADDRESS && prefix == BOND_STORAGE_KEY => Some(BondId {
-            source: source.clone(),
-            validator: validator.clone(),
-        }),
-        _ => None,
+/// Is storage key for a bond? Returns the bond ID and bond start epoch if so.
+pub fn is_bond_key(key: &Key) -> Option<(BondId, Epoch)> {
+    if key.segments.len() >= 7 {
+        match &key.segments[..7] {
+            [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(prefix),
+                DbKeySeg::AddressSeg(source),
+                DbKeySeg::AddressSeg(validator),
+                DbKeySeg::StringSeg(lazy_map),
+                DbKeySeg::StringSeg(data),
+                DbKeySeg::StringSeg(epoch_str),
+            ] if addr == &ADDRESS
+                && prefix == BOND_STORAGE_KEY
+                && lazy_map == crate::epoched::LAZY_MAP_SUB_KEY
+                && data == lazy_map::DATA_SUBKEY =>
+            {
+                let start = Epoch::parse(epoch_str.clone()).ok()?;
+                Some((
+                    BondId {
+                        source: source.clone(),
+                        validator: validator.clone(),
+                    },
+                    start,
+                ))
+            }
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 
@@ -344,32 +377,79 @@ pub fn unbond_key(bond_id: &BondId) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for a unbond?
-pub fn is_unbond_key(key: &Key) -> Option<BondId> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(source),
-            DbKeySeg::AddressSeg(validator),
-        ] if addr == &ADDRESS && prefix == UNBOND_STORAGE_KEY => Some(BondId {
-            source: source.clone(),
-            validator: validator.clone(),
-        }),
-        _ => None,
+/// Is storage key for an unbond? Returns the bond ID and unbond start and
+/// withdraw epoch if it is.
+pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
+    if key.segments.len() >= 8 {
+        match &key.segments[..8] {
+            [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(prefix),
+                DbKeySeg::AddressSeg(source),
+                DbKeySeg::AddressSeg(validator),
+                DbKeySeg::StringSeg(data_1),
+                DbKeySeg::StringSeg(withdraw_epoch_str),
+                DbKeySeg::StringSeg(data_2),
+                DbKeySeg::StringSeg(start_epoch_str),
+            ] if addr == &ADDRESS
+                && prefix == UNBOND_STORAGE_KEY
+                && data_1 == lazy_map::DATA_SUBKEY
+                && data_2 == lazy_map::DATA_SUBKEY =>
+            {
+                let withdraw = Epoch::parse(withdraw_epoch_str.clone()).ok()?;
+                let start = Epoch::parse(start_epoch_str.clone()).ok()?;
+                Some((
+                    BondId {
+                        source: source.clone(),
+                        validator: validator.clone(),
+                    },
+                    start,
+                    withdraw,
+                ))
+            }
+            _ => None,
+        }
+    } else {
+        None
     }
 }
 
-/// Storage key for validator set (active and inactive).
-pub fn validator_set_key() -> Key {
+/// Storage prefix for validator sets.
+pub fn validator_sets_prefix() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .push(&VALIDATOR_SETS_STORAGE_PREFIX.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for a validator set?
-pub fn is_validator_set_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == VALIDATOR_SET_STORAGE_KEY)
+/// Storage key for consensus validator set
+pub fn consensus_validator_set_key() -> Key {
+    validator_sets_prefix()
+        .push(&CONSENSUS_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the number of consensus validators
+pub fn num_consensus_validators_key() -> Key {
+    validator_sets_prefix()
+        .push(&NUM_CONSENSUS_VALIDATORS_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for below-capacity validator set
+pub fn below_capacity_validator_set_key() -> Key {
+    validator_sets_prefix()
+        .push(&BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for the consensus validator set?
+pub fn is_consensus_validator_set_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == CONSENSUS_VALIDATOR_SET_STORAGE_KEY && lazy_map == LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
+}
+
+/// Is storage key for the below-capacity validator set?
+pub fn is_below_capacity_validator_set_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY && lazy_map == LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
 }
 
 /// Storage key for total deltas of all validators.
@@ -380,10 +460,23 @@ pub fn total_deltas_key() -> Key {
 }
 
 /// Is storage key for total deltas of all validators?
-pub fn is_total_deltas_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-                [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-                    if addr == &ADDRESS && key == TOTAL_DELTAS_STORAGE_KEY)
+pub fn is_total_deltas_key(key: &Key) -> Option<&String> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
+        ] if addr == &ADDRESS
+            && key == TOTAL_DELTAS_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
+        {
+            Some(epoch)
+        }
+        _ => None,
+    }
 }
 
 /// Get validator address from bond key
@@ -397,428 +490,9 @@ pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
     }
 }
 
-impl<D, H> PosBase for Storage<D, H>
-where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-{
-    const POS_ADDRESS: namada_core::types::address::Address = super::ADDRESS;
-    const POS_SLASH_POOL_ADDRESS: namada_core::types::address::Address =
-        super::SLASH_POOL_ADDRESS;
-
-    fn staking_token_address(&self) -> namada_core::types::address::Address {
-        self.native_token.clone()
-    }
-
-    fn read_pos_params(&self) -> PosParams {
-        let (value, _gas) = self.read(&params_key()).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_address_raw_hash(
-        &self,
-        raw_hash: impl AsRef<str>,
-    ) -> Option<namada_core::types::address::Address> {
-        let (value, _gas) = self
-            .read(&validator_address_raw_hash_key(raw_hash))
-            .unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_consensus_key(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> Option<ValidatorConsensusKeys> {
-        let (value, _gas) =
-            self.read(&validator_consensus_key_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_state(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> Option<ValidatorStates> {
-        let (value, _gas) = self.read(&validator_state_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_deltas(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> Option<types::ValidatorDeltas> {
-        let (value, _gas) = self.read(&validator_deltas_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_slashes(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> types::Slashes {
-        let (value, _gas) = self.read(&validator_slashes_key(key)).unwrap();
-        value
-            .map(|value| decode(value).unwrap())
-            .unwrap_or_default()
-    }
-
-    fn read_validator_commission_rate(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> CommissionRates {
-        let (value, _gas) =
-            self.read(&validator_commission_rate_key(key)).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_max_commission_rate_change(
-        &self,
-        key: &namada_core::types::address::Address,
-    ) -> Decimal {
-        let (value, _gas) = self
-            .read(&validator_max_commission_rate_change_key(key))
-            .unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_set(&self) -> ValidatorSets {
-        let (value, _gas) = self.read(&validator_set_key()).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_total_deltas(&self) -> TotalDeltas {
-        let (value, _gas) = self.read(&total_deltas_key()).unwrap();
-        decode(value.unwrap()).unwrap()
-    }
-
-    fn read_validator_eth_cold_key(
-        &self,
-        key: &Address,
-    ) -> Option<types::ValidatorEthKey> {
-        let (value, _gas) =
-            self.read(&validator_eth_cold_key_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn read_validator_eth_hot_key(
-        &self,
-        key: &Address,
-    ) -> Option<types::ValidatorEthKey> {
-        let (value, _gas) = self.read(&validator_eth_hot_key_key(key)).unwrap();
-        value.map(|value| decode(value).unwrap())
-    }
-
-    fn write_pos_params(&mut self, params: &PosParams) {
-        self.write(&params_key(), encode(params)).unwrap();
-    }
-
-    fn write_validator_address_raw_hash(
-        &mut self,
-        address: &namada_core::types::address::Address,
-        consensus_key: &namada_core::types::key::common::PublicKey,
-    ) {
-        let raw_hash = key::tm_consensus_key_raw_hash(consensus_key);
-        self.write(&validator_address_raw_hash_key(raw_hash), encode(address))
-            .unwrap();
-    }
-
-    fn write_validator_commission_rate(
-        &mut self,
-        key: &namada_core::types::address::Address,
-        value: &CommissionRates,
-    ) {
-        self.write(&validator_commission_rate_key(key), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_max_commission_rate_change(
-        &mut self,
-        key: &namada_core::types::address::Address,
-        value: &rust_decimal::Decimal,
-    ) {
-        self.write(
-            &validator_max_commission_rate_change_key(key),
-            encode(value),
-        )
-        .unwrap();
-    }
-
-    fn write_validator_consensus_key(
-        &mut self,
-        key: &namada_core::types::address::Address,
-        value: &ValidatorConsensusKeys,
-    ) {
-        self.write(&validator_consensus_key_key(key), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_state(
-        &mut self,
-        key: &namada_core::types::address::Address,
-        value: &ValidatorStates,
-    ) {
-        self.write(&validator_state_key(key), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_deltas(
-        &mut self,
-        key: &namada_core::types::address::Address,
-        value: &ValidatorDeltas,
-    ) {
-        self.write(&validator_deltas_key(key), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_slash(
-        &mut self,
-        validator: &namada_core::types::address::Address,
-        value: types::Slash,
-    ) {
-        let mut slashes = PosBase::read_validator_slashes(self, validator);
-        slashes.push(value);
-        self.write(&validator_slashes_key(validator), encode(&slashes))
-            .unwrap();
-    }
-
-    fn write_bond(&mut self, key: &BondId, value: &Bonds) {
-        self.write(&bond_key(key), encode(value)).unwrap();
-    }
-
-    fn write_validator_set(&mut self, value: &ValidatorSets) {
-        self.write(&validator_set_key(), encode(value)).unwrap();
-    }
-
-    fn write_validator_eth_cold_key(
-        &mut self,
-        address: &Address,
-        value: &types::ValidatorEthKey,
-    ) {
-        self.write(&validator_eth_cold_key_key(address), encode(value))
-            .unwrap();
-    }
-
-    fn write_validator_eth_hot_key(
-        &mut self,
-        address: &Address,
-        value: &types::ValidatorEthKey,
-    ) {
-        self.write(&validator_eth_hot_key_key(address), encode(value))
-            .unwrap();
-    }
-
-    fn write_total_deltas(&mut self, value: &TotalDeltas) {
-        self.write(&total_deltas_key(), encode(value)).unwrap();
-    }
-
-    fn credit_tokens(
-        &mut self,
-        token: &namada_core::types::address::Address,
-        target: &namada_core::types::address::Address,
-        amount: namada_core::types::token::Amount,
-    ) {
-        let key = token::balance_key(token, target);
-        let new_balance = match self
-            .read(&key)
-            .expect("Unable to read token balance for PoS system")
-        {
-            (Some(balance), _gas) => {
-                let balance: namada_core::types::token::Amount =
-                    decode(balance).unwrap_or_default();
-                balance + amount
-            }
-            _ => amount,
-        };
-        self.write(&key, encode(&new_balance))
-            .expect("Unable to write token balance for PoS system");
-    }
-
-    fn transfer(
-        &mut self,
-        token: &namada_core::types::address::Address,
-        amount: namada_core::types::token::Amount,
-        src: &namada_core::types::address::Address,
-        dest: &namada_core::types::address::Address,
-    ) {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
-        if let (Some(src_balance), _gas) = self
-            .read(&src_key)
-            .expect("Unable to read token balance for PoS system")
-        {
-            let mut src_balance: namada_core::types::token::Amount =
-                decode(src_balance).unwrap_or_default();
-            if src_balance < amount {
-                tracing::error!(
-                    "PoS system transfer error, the source doesn't have \
-                     sufficient balance. It has {}, but {} is required",
-                    src_balance,
-                    amount
-                );
-                return;
-            }
-            src_balance.spend(&amount);
-            let (dest_balance, _gas) = self.read(&dest_key).unwrap_or_default();
-            let mut dest_balance: namada_core::types::token::Amount =
-                dest_balance
-                    .and_then(|b| decode(b).ok())
-                    .unwrap_or_default();
-            dest_balance.receive(&amount);
-            self.write(&src_key, encode(&src_balance))
-                .expect("Unable to write token balance for PoS system");
-            self.write(&dest_key, encode(&dest_balance))
-                .expect("Unable to write token balance for PoS system");
-        } else {
-            tracing::error!(
-                "PoS system transfer error, the source has no balance"
-            );
-        }
-    }
-}
-
-/// Implement `PosReadOnly` for a type that implements
-/// [`trait@namada_core::ledger::storage_api::StorageRead`].
-///
-/// Excuse the horrible syntax - we haven't found a better way to use this
-/// for native_vp `CtxPreStorageRead`/`CtxPostStorageRead`, which have
-/// generics and explicit lifetimes.
-///
-/// # Examples
-///
-/// ```ignore
-/// impl_pos_read_only! { impl PosReadOnly for X }
-/// ```
-#[macro_export]
-macro_rules! impl_pos_read_only {
-    (
-        // Matches anything, so that we can use lifetimes and generic types.
-        // This expects `impl(<.*>)? PoSReadOnly for $ty(<.*>)?`.
-        $( $any:tt )* )
-    => {
-        $( $any )*
-        {
-            const POS_ADDRESS: namada_core::types::address::Address = $crate::ADDRESS;
-
-            fn staking_token_address(&self) -> namada_core::types::address::Address {
-                namada_core::ledger::storage_api::StorageRead::get_native_token(self)
-                    .expect("Native token must be available")
-            }
-
-            fn read_pos_params(&self) -> namada_core::ledger::storage_api::Result<PosParams> {
-                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &params_key())?.unwrap();
-                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
-            }
-
-            fn read_validator_consensus_key(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorConsensusKeys>> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_consensus_key_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_commission_rate(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Option<CommissionRates>> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_commission_rate_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_max_commission_rate_change(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Option<Decimal>> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_max_commission_rate_change_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_state(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorStates>> {
-                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_state_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_deltas(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Option<ValidatorDeltas>> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_deltas_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_slashes(
-                &self,
-                key: &namada_core::types::address::Address,
-            ) -> namada_core::ledger::storage_api::Result<Vec<types::Slash>> {
-                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_slashes_key(key))?;
-                Ok(value
-                    .map(|value| namada_core::ledger::storage::types::decode(value).unwrap())
-                    .unwrap_or_default())
-            }
-
-            fn read_bond(
-                &self,
-                key: &BondId,
-            ) -> namada_core::ledger::storage_api::Result<Option<Bonds>> {
-                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &bond_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_unbond(
-                &self,
-                key: &BondId,
-            ) -> namada_core::ledger::storage_api::Result<Option<Unbonds>> {
-                let value = namada_core::ledger::storage_api::StorageRead::read_bytes(self, &unbond_key(key))?;
-                Ok(value.map(|value| namada_core::ledger::storage::types::decode(value).unwrap()))
-            }
-
-            fn read_validator_set(
-                &self,
-            ) -> namada_core::ledger::storage_api::Result<ValidatorSets> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_set_key())?.unwrap();
-                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
-            }
-
-            fn read_total_deltas(
-                &self,
-            ) -> namada_core::ledger::storage_api::Result<TotalDeltas> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &total_deltas_key())?.unwrap();
-                Ok(namada_core::ledger::storage::types::decode(value).unwrap())
-            }
-
-            // TODO: return result
-            fn read_validator_eth_cold_key(
-                &self,
-                key: &Address,
-            ) -> Option<types::ValidatorEthKey> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_cold_key_key(key)).unwrap().unwrap();
-                Some(namada_core::ledger::storage::types::decode(value).unwrap())
-            }
-
-            // TODO: return result
-            fn read_validator_eth_hot_key(
-                &self,
-                key: &Address,
-            ) -> Option<types::ValidatorEthKey> {
-                let value =
-                    namada_core::ledger::storage_api::StorageRead::read_bytes(self, &validator_eth_hot_key_key(key)).unwrap().unwrap();
-                Some(namada_core::ledger::storage::types::decode(value).unwrap())
-            }
-        }
-    }
-}
-
-impl_pos_read_only! {
-    impl<DB, H> PosReadOnly for Storage<DB, H>
-        where
-            DB: storage::DB + for<'iter> storage::DBIter<'iter> +'static,
-            H: StorageHasher +'static,
+/// Storage key for validator set positions
+pub fn validator_set_positions_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }

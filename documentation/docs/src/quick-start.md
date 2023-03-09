@@ -14,18 +14,16 @@ This guide is for those interested in operating a Namada validator node and assu
 
 ## Installing Namada
 
-See [the installation guide](user-guide/install.md) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your $PATH.
+See [the installation guide](./user-guide/install/) for details on installing the Namada binaries. Commands in this guide will assume you have the Namada binaries (`namada`, `namadan`, `namadaw`, `namadac`) on your $PATH.
 
 A simple way to add these binaries to one's path is to run
 ```shell
 cp namada/target/release/namada* /usr/local/bin/
 ```
 
-
-
 ## Joining a network
 
-See [the testnets page](testnets) for details of how to join a testnet. The rest of this guide will assume you have joined a testnet chain using the `namadac utils join-network` command.
+See [the testnets page](./testnets) for details of how to join a testnet. The rest of this guide will assume you have joined a testnet chain using the `namadac utils join-network` command.
 
 ## Run a ledger node
 
@@ -105,7 +103,7 @@ namadac transfer \
   --target example-established \
   --token NAM \
   --amount 1000 \
-  --signer example-established
+  --signer example-implicit
 
 ➜ Jan 06 22:24:32.926  INFO namada_apps::cli::context: Chain ID: namada-testnet-1.2.bf0181d9f7e0
 ➜ Looking-up public key of atest1v4ehgw36ggmyzwp5g9prgsekgsu5y32z8ycnsvpeggcnys35gv65yvzxg3zrjwphgcu5gde4lvmstw from the ledger...

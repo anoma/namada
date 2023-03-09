@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_tx_prelude"
 resolver = "2"
-version = "0.12.1"
+version = "0.14.1"
 
 [features]
 default = ["abciplus"]
@@ -12,6 +12,12 @@ abciplus = [
   "namada_core/abciplus",
   "namada_proof_of_stake/abciplus",
   "namada_vm_env/abciplus",
+]
+
+abcipp = [
+  "namada_core/abcipp",
+  "namada_proof_of_stake/abcipp",
+  "namada_vm_env/abcipp",
 ]
 
 [dependencies]

@@ -3339,7 +3339,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "async-trait",
  "bellman",
@@ -3390,7 +3390,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3415,6 +3415,7 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "namada_macros",
  "num-rational",
  "num-traits",
  "num256",
@@ -3450,6 +3451,8 @@ dependencies = [
  "namada_core",
  "namada_proof_of_stake",
  "rand 0.8.5",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "serde_json",
  "tendermint",
@@ -3460,20 +3463,21 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "derivative",
- "ferveo-common",
  "namada_core",
+ "once_cell",
  "proptest",
  "rust_decimal",
  "rust_decimal_macros",
@@ -3483,8 +3487,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_test_utils"
+version = "0.14.1"
+dependencies = [
+ "borsh",
+ "namada_core",
+]
+
+[[package]]
 name = "namada_tests"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "chrono",
  "concat-idents",
@@ -3494,9 +3506,11 @@ dependencies = [
  "ibc-relayer",
  "namada",
  "namada_core",
+ "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "prost",
+ "regex",
  "rust_decimal",
  "rust_decimal_macros",
  "serde_json",
@@ -3514,7 +3528,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3529,7 +3543,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "hex",
@@ -3540,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3553,7 +3567,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -5979,7 +5993,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",
@@ -6120,7 +6134,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "getrandom 0.2.8",

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{threshold, AllocFailure, BlockSpaceAllocator, TxBin};
+use super::super::{AllocFailure, BlockSpaceAllocator, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
 };
@@ -19,12 +19,9 @@ impl NextStateImpl for BlockSpaceAllocator<BuildingDecryptedTxBatch> {
     fn next_state_impl(mut self) -> Self::Next {
         self.decrypted_txs.shrink_to_fit();
 
-        // reserve half of the remaining block space for protocol txs.
-        // using this strategy, we will eventually converge to 1/3 of
-        // the allotted block space for protocol txs
+        // the remaining space is allocated to protocol txs
         let remaining_free_space = self.uninitialized_space_in_bytes();
-        self.protocol_txs =
-            TxBin::init_over_ratio(remaining_free_space, threshold::ONE_HALF);
+        self.protocol_txs = TxBin::init(remaining_free_space);
 
         // cast state
         let Self {

@@ -81,20 +81,24 @@ where
         //
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch =
-            match self.storage.get_epoch(ext.data.block_height) {
-                Some(epoch) => epoch,
-                _ => {
-                    tracing::error!(
-                        block_height = ?ext.data.block_height,
-                        "The epoch of the Bridge pool root's vote extension's \
-                         block height should always be known",
-                    );
-                    return Err(VoteExtensionError::UnexpectedEpoch);
-                }
-            };
+        let ext_height_epoch = match self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::error!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the Bridge pool root's vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedEpoch);
+            }
+        };
         let (voting_power, pk) = self
-            .storage
+            .wl_storage
+            .pos_queries()
             .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
                 tracing::error!(
@@ -119,26 +123,29 @@ where
         })?;
 
         let bp_root = if cfg!(feature = "abcipp") {
-            self.storage.get_bridge_pool_root().0
+            self.wl_storage.ethbridge_queries().get_bridge_pool_root().0
         } else {
-            self.storage
+            self.wl_storage
+                .ethbridge_queries()
                 .get_bridge_pool_root_at_height(ext.data.block_height)
                 .0
         };
-        let nonce = self.storage.get_bridge_pool_nonce().to_bytes();
+        let nonce = self
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_pool_nonce()
+            .to_bytes();
         let signed = Signed::<_, SignableEthMessage>::new_from(
             keccak_hash([bp_root, nonce].concat()),
             ext.data.sig.clone(),
         );
-        let epoched_pk = self
-            .storage
-            .read_validator_eth_hot_key(validator)
+        let pk = self
+            .wl_storage
+            .pos_queries()
+            .read_validator_eth_hot_key(validator, Some(ext_height_epoch))
             .expect("A validator should have an Ethereum hot key in storage.");
-        let pk = epoched_pk
-            .get(ext_height_epoch)
-            .expect("We should have an Ethereum hot key for the given epoch");
         signed
-            .verify(pk)
+            .verify(&pk)
             .map_err(|err| {
                 tracing::error!(
                     ?err,
@@ -171,7 +178,7 @@ where
         vote_extensions.into_iter().map(|vote_extension| {
             self.validate_bp_roots_vext_and_get_it_back(
                 vote_extension,
-                self.storage.last_height,
+                self.wl_storage.storage.last_height,
             )
         })
     }
@@ -201,12 +208,18 @@ where
         &self,
         vote_extensions: Vec<Signed<bridge_pool_roots::Vext>>,
     ) -> Option<bridge_pool_roots::MultiSignedVext> {
-        let vexts_epoch =
-            self.storage.get_epoch(self.storage.last_height).expect(
+        let vexts_epoch = self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(self.wl_storage.storage.last_height)
+            .expect(
                 "The epoch of the last block height should always be known",
             );
-        let total_voting_power =
-            u64::from(self.storage.get_total_voting_power(Some(vexts_epoch)));
+        let total_voting_power = u64::from(
+            self.wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(vexts_epoch)),
+        );
         let mut voting_power = FractionalVotingPower::default();
 
         let mut bp_root_sigs = bridge_pool_roots::MultiSignedVext::default();
@@ -252,12 +265,12 @@ mod test_bp_vote_extensions {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     #[cfg(not(feature = "abcipp"))]
     use namada::ledger::eth_bridge::EthBridgeQueries;
-    use namada::ledger::pos;
-    use namada::ledger::pos::namada_proof_of_stake::PosBase;
-    use namada::ledger::pos::{
-        PosQueries, ValidatorConsensusKeys, WeightedValidator,
+    use namada::ledger::pos::PosQueries;
+    use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::types::Position as ValidatorPosition;
+    use namada::proof_of_stake::{
+        become_validator, consensus_validator_set_handle, BecomeValidator,
     };
-    use namada::proof_of_stake::types::ValidatorEthKey;
     use namada::proto::{SignableEthMessage, Signed};
     #[cfg(not(feature = "abcipp"))]
     use namada::types::ethereum_events::Uint;
@@ -265,6 +278,7 @@ mod test_bp_vote_extensions {
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
+    use namada::types::token;
     use namada::types::vote_extensions::bridge_pool_roots;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
@@ -281,30 +295,22 @@ mod test_bp_vote_extensions {
     fn add_validator(shell: &mut TestShell) {
         // We make a change so that there Bertha is
         // a validator in the next epoch
-        let mut current_validators = shell.storage.read_validator_set();
-        let mut vals = current_validators
-            .get(0)
-            .expect("Test failed")
-            .active
-            .clone();
-        vals.insert(WeightedValidator {
-            bonded_stake: 100,
-            address: bertha_address(),
-        });
-        current_validators.data.insert(
-            1,
-            Some(pos::types::ValidatorSet {
-                active: vals,
-                inactive: Default::default(),
-            }),
-        );
-        shell.storage.write_validator_set(&current_validators);
+        let validators_handle = consensus_validator_set_handle();
+        validators_handle
+            .at(&1.into())
+            .at(&token::Amount::whole(100))
+            .insert(
+                &mut shell.wl_storage,
+                ValidatorPosition(1),
+                bertha_address(),
+            )
+            .expect("Test failed");
 
         // register Bertha's protocol key
         let pk_key = protocol_pk_key(&bertha_address());
         shell
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &pk_key,
                 bertha_keypair()
                     .ref_to()
@@ -314,50 +320,50 @@ mod test_bp_vote_extensions {
             .expect("Test failed.");
 
         // change pipeline length to 1
-        let mut params = shell.storage.read_pos_params();
+        let mut params = shell.wl_storage.pos_queries().get_pos_params();
         params.pipeline_len = 1;
 
-        // register Bertha's consensus key
         let consensus_key = gen_keypair();
-        shell.storage.write_validator_consensus_key(
-            &bertha_address(),
-            &ValidatorConsensusKeys::init(consensus_key.ref_to(), 0, &params),
-        );
-
-        // register Bertha's ethereum keys.
         let hot_key = gen_secp256k1_keypair();
         let cold_key = gen_secp256k1_keypair();
-        shell.storage.write_validator_eth_hot_key(
-            &bertha_address(),
-            &ValidatorEthKey::init(hot_key.ref_to(), 0, &params),
-        );
-        shell.storage.write_validator_eth_cold_key(
-            &bertha_address(),
-            &ValidatorEthKey::init(cold_key.ref_to(), 0, &params),
-        );
+
+        become_validator(BecomeValidator {
+            storage: &mut shell.wl_storage,
+            params: &params,
+            address: &bertha_address(),
+            consensus_key: &consensus_key.ref_to(),
+            eth_hot_key: &hot_key.ref_to(),
+            eth_cold_key: &cold_key.ref_to(),
+            current_epoch: 0.into(),
+            commission_rate: Default::default(),
+            max_commission_rate_change: Default::default(),
+        })
+        .expect("Test failed");
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.storage.last_height = BlockHeight(15);
+        shell.wl_storage.storage.last_height = BlockHeight(15);
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
-        assert_eq!(shell.storage.get_current_epoch().0.0, 1);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 1);
 
         // Check that Bertha's vote extensions pass validation.
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(&hot_key, to_sign).sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: bertha_address(),
             sig,
         }
         .sign(&bertha_keypair());
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
-        assert!(
-            shell.validate_bp_roots_vext(vote_ext, shell.storage.last_height,)
-        );
+        assert!(shell.validate_bp_roots_vext(
+            vote_ext,
+            shell.wl_storage.storage.last_height
+        ));
     }
 
     /// Test that the function crafting the bridge pool root
@@ -372,7 +378,8 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -381,7 +388,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
@@ -390,9 +397,10 @@ mod test_bp_vote_extensions {
             vote_ext,
             shell.extend_vote_with_bp_roots().expect("Test failed")
         );
-        assert!(
-            shell.validate_bp_roots_vext(vote_ext, shell.storage.last_height,)
-        )
+        assert!(shell.validate_bp_roots_vext(
+            vote_ext,
+            shell.wl_storage.storage.last_height,
+        ))
     }
 
     /// Test that signed bridge pool Merkle roots and nonces
@@ -419,7 +427,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address.clone(),
             sig,
         }
@@ -451,7 +459,8 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -460,7 +469,7 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
@@ -487,20 +496,21 @@ mod test_bp_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        shell.storage.block.height = shell.storage.last_height;
+        shell.wl_storage.storage.block.height =
+            shell.wl_storage.storage.last_height;
         shell.commit();
         let to_sign = get_bp_bytes_to_sign();
         let sig =
             Signed::<_, SignableEthMessage>::new(&signing_key, to_sign).sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.storage.get_current_decision_height(),
+            shell.wl_storage.pos_queries().get_current_decision_height(),
         ))
     }
 
@@ -523,14 +533,15 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
         .sign(&bertha_keypair());
-        assert!(
-            !shell.validate_bp_roots_vext(bp_root, shell.storage.last_height,)
-        )
+        assert!(!shell.validate_bp_roots_vext(
+            bp_root,
+            shell.wl_storage.storage.last_height
+        ))
     }
 
     fn reject_incorrect_block_number(height: BlockHeight, shell: &TestShell) {
@@ -548,9 +559,10 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert!(
-            !shell.validate_bp_roots_vext(bp_root, shell.storage.last_height)
-        )
+        assert!(!shell.validate_bp_roots_vext(
+            bp_root,
+            shell.wl_storage.storage.last_height
+        ))
     }
 
     /// Test that an [`bridge_pool_roots::Vext`] that labels its included
@@ -558,7 +570,10 @@ mod test_bp_vote_extensions {
     #[test]
     fn test_block_height_too_high() {
         let (shell, _, _, _) = setup_at_height(3u64);
-        reject_incorrect_block_number(shell.storage.last_height + 1, &shell);
+        reject_incorrect_block_number(
+            shell.wl_storage.storage.last_height + 1,
+            &shell,
+        );
     }
 
     /// Test that an [`bridge_pool_roots::Vext`] that labels its included
@@ -568,7 +583,7 @@ mod test_bp_vote_extensions {
     fn test_block_height_too_low() {
         let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(
-            (shell.storage.last_height.0 - 1).into(),
+            (shell.wl_storage.storage.last_height.0 - 1).into(),
             &shell,
         );
     }
@@ -594,14 +609,15 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(
-            !shell.validate_bp_roots_vext(bp_root, shell.storage.last_height)
-        )
+        assert!(!shell.validate_bp_roots_vext(
+            bp_root,
+            shell.wl_storage.storage.last_height
+        ))
     }
 
     /// Test that a bridge pool root vext is rejected
@@ -617,14 +633,15 @@ mod test_bp_vote_extensions {
         )
         .sig;
         let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.storage.last_height,
+            block_height: shell.wl_storage.storage.last_height,
             validator_addr: address,
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(
-            !shell.validate_bp_roots_vext(bp_root, shell.storage.last_height)
-        )
+        assert!(!shell.validate_bp_roots_vext(
+            bp_root,
+            shell.wl_storage.storage.last_height
+        ))
     }
 
     /// Test that we can verify vext from several block heights
@@ -634,10 +651,12 @@ mod test_bp_vote_extensions {
     fn test_vext_for_old_height() {
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
-        shell.storage.block.height = 4.into();
+        shell.wl_storage.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height = shell.storage.block.height.try_to_vec().unwrap();
+        let height =
+            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
         shell
+            .wl_storage
             .storage
             .block
             .tree
@@ -645,14 +664,25 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
         shell.commit();
         assert_eq!(
-            shell.storage.get_bridge_pool_root_at_height(4.into()),
+            shell
+                .wl_storage
+                .ethbridge_queries()
+                .get_bridge_pool_root_at_height(4.into()),
             KeccakHash([1; 32])
         );
-        shell.storage.block.height = 5.into();
-        shell.storage.block.tree.delete(&key).expect("Test failed");
-        let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height = shell.storage.block.height.try_to_vec().unwrap();
+        shell.wl_storage.storage.block.height = 5.into();
         shell
+            .wl_storage
+            .storage
+            .block
+            .tree
+            .delete(&key)
+            .expect("Test failed");
+        let key = get_key_from_hash(&KeccakHash([2; 32]));
+        let height =
+            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        shell
+            .wl_storage
             .storage
             .block
             .tree
@@ -660,7 +690,10 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
         shell.commit();
         assert_eq!(
-            shell.storage.get_bridge_pool_root_at_height(5.into()),
+            shell
+                .wl_storage
+                .ethbridge_queries()
+                .get_bridge_pool_root_at_height(5.into()),
             KeccakHash([2; 32])
         );
         let to_sign = keccak_hash([[1; 32], Uint::from(0).to_bytes()].concat());
@@ -677,7 +710,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
             bp_root,
-            shell.storage.get_current_decision_height()
+            shell.wl_storage.pos_queries().get_current_decision_height()
         ));
         let to_sign = keccak_hash([[2; 32], Uint::from(0).to_bytes()].concat());
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -693,7 +726,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
             bp_root,
-            shell.storage.get_current_decision_height()
+            shell.wl_storage.pos_queries().get_current_decision_height()
         ));
     }
 
@@ -704,10 +737,12 @@ mod test_bp_vote_extensions {
     fn test_wrong_height_for_root() {
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(3u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
-        shell.storage.block.height = 4.into();
+        shell.wl_storage.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height = shell.storage.block.height.try_to_vec().unwrap();
+        let height =
+            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
         shell
+            .wl_storage
             .storage
             .block
             .tree
@@ -715,14 +750,25 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
         shell.commit();
         assert_eq!(
-            shell.storage.get_bridge_pool_root_at_height(4.into()),
+            shell
+                .wl_storage
+                .ethbridge_queries()
+                .get_bridge_pool_root_at_height(4.into()),
             KeccakHash([1; 32])
         );
-        shell.storage.block.height = 5.into();
-        shell.storage.block.tree.delete(&key).expect("Test failed");
-        let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height = shell.storage.block.height.try_to_vec().unwrap();
+        shell.wl_storage.storage.block.height = 5.into();
         shell
+            .wl_storage
+            .storage
+            .block
+            .tree
+            .delete(&key)
+            .expect("Test failed");
+        let key = get_key_from_hash(&KeccakHash([2; 32]));
+        let height =
+            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        shell
+            .wl_storage
             .storage
             .block
             .tree
@@ -730,7 +776,10 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
         shell.commit();
         assert_eq!(
-            shell.storage.get_bridge_pool_root_at_height(5.into()),
+            shell
+                .wl_storage
+                .ethbridge_queries()
+                .get_bridge_pool_root_at_height(5.into()),
             KeccakHash([2; 32])
         );
         let to_sign = keccak_hash([[1; 32], Uint::from(0).to_bytes()].concat());
@@ -747,7 +796,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root,
-            shell.storage.get_current_decision_height()
+            shell.wl_storage.pos_queries().get_current_decision_height()
         ));
     }
 }

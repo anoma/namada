@@ -76,26 +76,22 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol::{self, ShellParams};
-    use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
 
-    let mut gas_meter = BlockGasMeter::default();
-    let mut write_log = WriteLog::default();
     let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     let data = protocol::apply_wasm_tx(
         tx,
         request.data.len(),
         &TxIndex(0),
-        ShellParams {
-            block_gas_meter: &mut gas_meter,
-            write_log: &mut write_log,
-            storage: ctx.storage,
+        ShellParams::DryRun {
+            storage: &ctx.wl_storage.storage,
             vp_wasm_cache: &mut ctx.vp_wasm_cache,
             tx_wasm_cache: &mut ctx.tx_wasm_cache,
         },
+        #[cfg(not(feature = "mainnet"))]
+        true,
     )
     .into_storage_result()?;
     let data = data.try_to_vec().into_storage_result()?;
@@ -114,9 +110,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let (iter, _gas) = ctx.storage.iter_results();
-    let mut results =
-        vec![BlockResults::default(); ctx.storage.block.height.0 as usize + 1];
+    let (iter, _gas) = ctx.wl_storage.storage.iter_results();
+    let mut results = vec![
+        BlockResults::default();
+        ctx.wl_storage.storage.block.height.0 as usize + 1
+    ];
     iter.for_each(|(key, value, _gas)| {
         let key = key
             .parse::<usize>()
@@ -138,8 +136,12 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some((addr, epoch, conv, pos)) =
-        ctx.storage.conversion_state.assets.get(&asset_type)
+    if let Some((addr, epoch, conv, pos)) = ctx
+        .wl_storage
+        .storage
+        .conversion_state
+        .assets
+        .get(&asset_type)
     {
         Ok((
             addr.clone(),
@@ -147,7 +149,7 @@ where
             Into::<masp_primitives::transaction::components::Amount>::into(
                 conv.clone(),
             ),
-            ctx.storage.conversion_state.tree.path(*pos),
+            ctx.wl_storage.storage.conversion_state.tree.path(*pos),
         ))
     } else {
         Err(storage_api::Error::new(std::io::Error::new(
@@ -174,7 +176,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let data = ctx.storage.last_epoch;
+    let data = ctx.wl_storage.storage.last_epoch;
     Ok(data)
 }
 
@@ -192,7 +194,9 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
-        if request.height.0 + past_height_limit < ctx.storage.last_height.0 {
+        if request.height.0 + past_height_limit
+            < ctx.wl_storage.storage.last_height.0
+        {
             return Err(storage_api::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
@@ -205,6 +209,7 @@ where
     }
 
     match ctx
+        .wl_storage
         .storage
         .read_with_height(&storage_key, request.height)
         .into_storage_result()?
@@ -212,6 +217,7 @@ where
         (Some(value), _gas) => {
             let proof = if request.prove {
                 let proof = ctx
+                    .wl_storage
                     .storage
                     .get_existence_proof(&storage_key, &value, request.height)
                     .into_storage_result()?;
@@ -228,6 +234,7 @@ where
         (None, _gas) => {
             let proof = if request.prove {
                 let proof = ctx
+                    .wl_storage
                     .storage
                     .get_non_existence_proof(&storage_key, request.height)
                     .into_storage_result()?;
@@ -255,7 +262,7 @@ where
 {
     require_latest_height(&ctx, request)?;
 
-    let iter = storage_api::iter_prefix_bytes(ctx.storage, &storage_key)?;
+    let iter = storage_api::iter_prefix_bytes(ctx.wl_storage, &storage_key)?;
     let data: storage_api::Result<Vec<PrefixValue>> = iter
         .map(|iter_result| {
             let (key, value) = iter_result?;
@@ -266,7 +273,8 @@ where
     let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let mut proof: Proof = ctx
+            let mut proof: crate::tendermint::merkle::proof::Proof = ctx
+                .wl_storage
                 .storage
                 .get_existence_proof(key, value, request.height)
                 .into_storage_result()?;
@@ -294,7 +302,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let data = StorageRead::has_key(ctx.storage, &storage_key)?;
+    let data = StorageRead::has_key(ctx.wl_storage, &storage_key)?;
     Ok(data)
 }
 
@@ -374,7 +382,7 @@ mod test {
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
-        let current_epoch = client.storage.last_epoch;
+        let current_epoch = client.wl_storage.storage.last_epoch;
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
@@ -419,7 +427,10 @@ mod test {
 
         // Then write some balance ...
         let balance = token::Amount::from(1000);
-        StorageWrite::write(&mut client.storage, &balance_key, balance)?;
+        StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
+        // It has to be committed to be visible in a query
+        client.wl_storage.commit_tx();
+        client.wl_storage.commit_block().unwrap();
         // ... there should be the same value now
         let read_balance = RPC
             .shell()

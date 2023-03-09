@@ -4630,7 +4630,7 @@ dependencies = [
 
 [[package]]
 name = "namada"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4694,7 +4694,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4794,7 +4794,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4822,6 +4822,8 @@ dependencies = [
  "itertools",
  "libsecp256k1",
  "masp_primitives",
+ "namada_macros",
+ "namada_tests",
  "num-rational 0.4.1",
  "num-traits 0.2.15",
  "num256",
@@ -4853,7 +4855,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "itertools",
@@ -4876,6 +4878,8 @@ dependencies = [
  "namada_core",
  "namada_proof_of_stake",
  "rand 0.8.5",
+ "rust_decimal",
+ "rust_decimal_macros",
  "serde 1.0.147",
  "serde_json",
  "tendermint 0.23.5",
@@ -4890,32 +4894,45 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "derivative",
- "ferveo-common",
  "namada_core",
+ "once_cell",
  "proptest",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
  "rust_decimal",
  "rust_decimal_macros",
  "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
+ "test-log",
  "thiserror",
  "tracing 0.1.37",
+ "tracing-subscriber 0.3.16",
+]
+
+[[package]]
+name = "namada_test_utils"
+version = "0.14.1"
+dependencies = [
+ "borsh",
+ "namada_core",
 ]
 
 [[package]]
 name = "namada_tests"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "assert_cmd",
  "borsh",
@@ -4937,20 +4954,26 @@ dependencies = [
  "namada",
  "namada_apps",
  "namada_core",
+ "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
  "pretty_assertions",
  "proptest",
  "prost",
  "rand 0.8.5",
+ "regex",
  "rust_decimal",
  "rust_decimal_macros",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",
+ "tendermint 0.23.5",
  "tendermint 0.23.6",
+ "tendermint-config 0.23.5",
  "tendermint-config 0.23.6",
+ "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
+ "tendermint-rpc 0.23.5",
  "tendermint-rpc 0.23.6",
  "test-log",
  "tokio",
@@ -4961,7 +4984,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4976,7 +4999,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "hex",
@@ -4987,7 +5010,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -8490,6 +8513,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
+dependencies = [
+ "serde 1.0.147",
+ "tracing-core 0.1.30",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8510,12 +8543,15 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex",
+ "serde 1.0.147",
+ "serde_json",
  "sharded-slab",
  "smallvec 1.10.0",
  "thread_local",
  "tracing 0.1.37",
  "tracing-core 0.1.30",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]

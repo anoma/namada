@@ -589,42 +589,9 @@ impl super::SigScheme for SigScheme {
         }
     }
 
-    fn verify_signature<T: BorshSerialize>(
+    fn verify_signature(
         pk: &Self::PublicKey,
-        data: &T,
-        sig: &Self::Signature,
-    ) -> Result<(), VerifySigError> {
-        #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]
-        {
-            // to avoid `unused-variables` warn
-            let _ = (pk, data, sig);
-            panic!("\"secp256k1-sign-verify\" feature must be enabled");
-        }
-
-        #[cfg(any(test, feature = "secp256k1-sign-verify"))]
-        {
-            let bytes = &data
-                .try_to_vec()
-                .map_err(VerifySigError::DataEncodingError)?;
-            let message = libsecp256k1::Message::parse_slice(
-                &bytes.signable_hash::<Self::Hasher>(),
-            )
-            .expect("Message encoding should not fail");
-            let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
-            if is_valid {
-                Ok(())
-            } else {
-                Err(VerifySigError::SigVerifyError(format!(
-                    "Error verifying secp256k1 signature: {}",
-                    libsecp256k1::Error::InvalidSignature
-                )))
-            }
-        }
-    }
-
-    fn verify_signature_raw(
-        pk: &Self::PublicKey,
-        data: impl SignableBytes,
+        data: &impl SignableBytes,
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError> {
         #[cfg(not(any(test, feature = "secp256k1-sign-verify")))]

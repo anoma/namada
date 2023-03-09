@@ -12,6 +12,7 @@ pub mod ledger;
 pub mod proto;
 pub mod types;
 
+pub use ferveo_common;
 #[cfg(not(feature = "abcipp"))]
 pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 #[cfg(feature = "abcipp")]

@@ -106,7 +106,7 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    let Some(contract) = StorageRead::read(ctx.storage, key)? else {
+    let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
         return Err(storage_api::Error::SimpleMessage(
             "Failed to read contract: The Ethereum bridge \
              storage is not initialized",
@@ -164,7 +164,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(read_ethereum_bridge_pool_at_height(
-        ctx.storage.last_height,
+        ctx.wl_storage.storage.last_height,
         ctx,
     ))
 }
@@ -180,7 +180,8 @@ where
 {
     // get the latest signed merkle root of the Ethereum bridge pool
     let (_, height) = ctx
-        .storage
+        .wl_storage
+        .ethbridge_queries()
         .get_signed_bridge_pool_root()
         .ok_or(storage_api::Error::SimpleMessage(
             "No signed root for the Ethereum bridge pool exists in storage.",
@@ -201,6 +202,7 @@ where
     // get the backing store of the merkle tree corresponding
     // at the specified height.
     let stores = ctx
+        .wl_storage
         .storage
         .db
         .read_merkle_tree_stores(height)
@@ -216,13 +218,10 @@ where
     let transfers: Vec<PendingTransfer> = store
         .keys()
         .map(|hash| {
-            let res = ctx
-                .storage
+            ctx.wl_storage
                 .read(&get_key_from_hash(hash))
                 .unwrap()
-                .0
-                .unwrap();
-            BorshDeserialize::try_from_slice(res.as_slice()).unwrap()
+                .unwrap()
         })
         .collect();
     transfers
@@ -243,7 +242,8 @@ where
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx
-            .storage
+            .wl_storage
+            .ethbridge_queries()
             .get_signed_bridge_pool_root()
             .ok_or(storage_api::Error::SimpleMessage(
                 "No signed root for the Ethereum bridge pool exists in \
@@ -253,7 +253,8 @@ where
 
         // get the merkle tree corresponding to the above root.
         let tree = MerkleTree::<H>::new(
-            ctx.storage
+            ctx.wl_storage
+                .storage
                 .db
                 .read_merkle_tree_stores(height)
                 .expect("We should always be able to read the database")
@@ -268,8 +269,8 @@ where
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
-                match ctx.storage.read(&key) {
-                    Ok((Some(bytes), _)) => Some((key, bytes)),
+                match ctx.wl_storage.read_bytes(&key) {
+                    Ok(Some(bytes)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
                         None
@@ -301,8 +302,10 @@ where
             values.iter().map(|v| v.as_slice()).collect(),
         ) {
             Ok(BridgePool(proof)) => {
-                let (validator_args, voting_powers) =
-                    ctx.storage.get_validator_set_args(None);
+                let (validator_args, voting_powers) = ctx
+                    .wl_storage
+                    .ethbridge_queries()
+                    .get_validator_set_args(None);
                 let data = RelayProof {
                     validator_set_args: validator_args.into(),
                     signatures: sort_sigs(
@@ -346,9 +349,8 @@ where
 {
     let mut pending_events = HashMap::new();
     for (mut key, value) in ctx
-        .storage
-        .iter_prefix(&eth_msgs_prefix())
-        .0
+        .wl_storage
+        .iter_prefix(&eth_msgs_prefix())?
         .filter_map(|(k, v, _)| {
             let key = Key::from_str(&k).expect(
                 "Iterating over keys from storage shouldn't not yield \
@@ -371,10 +373,13 @@ where
             *key.segments.last_mut().unwrap() =
                 DbKeySeg::StringSeg(VOTING_POWER_KEY_SEGMENT.into());
             let voting_power = <(u64, u64)>::try_from_slice(
-                &ctx.storage.read(&key).into_storage_result()?.0.expect(
-                    "Iterating over storage should not yield keys without \
-                     values.",
-                ),
+                &ctx.wl_storage
+                    .read_bytes(&key)
+                    .into_storage_result()?
+                    .expect(
+                        "Iterating over storage should not yield keys without \
+                         values.",
+                    ),
             )
             .unwrap();
             let voting_power =
@@ -410,7 +415,7 @@ where
                 .into(),
         )));
     }
-    let current_epoch = ctx.storage.last_epoch;
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
         return Err(storage_api::Error::Custom(CustomError(
             format!(
@@ -423,7 +428,7 @@ where
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
 
-    let seen = StorageRead::read(ctx.storage, &valset_upd_keys.seen())?
+    let seen = StorageRead::read(ctx.wl_storage, &valset_upd_keys.seen())?
         .unwrap_or(false);
     if !seen {
         return Err(storage_api::Error::Custom(CustomError(
@@ -436,7 +441,7 @@ where
     }
 
     let proof: EthereumProof<VotingPowersMap> =
-        StorageRead::read(ctx.storage, &valset_upd_keys.body())?.expect(
+        StorageRead::read(ctx.wl_storage, &valset_upd_keys.body())?.expect(
             "EthereumProof is seen in storage, therefore it must exist",
         );
 
@@ -456,7 +461,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.storage.last_epoch;
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
         Err(storage_api::Error::Custom(CustomError(
             format!(
@@ -466,7 +471,12 @@ where
             .into(),
         )))
     } else {
-        Ok(ctx.storage.get_validator_set_args(Some(epoch)).0.encode())
+        Ok(ctx
+            .wl_storage
+            .ethbridge_queries()
+            .get_validator_set_args(Some(epoch))
+            .0
+            .encode())
     }
 }
 
@@ -480,8 +490,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = ctx.storage.get_epoch(height);
-    let (_, voting_powers) = ctx.storage.get_validator_set_args(epoch);
+    let epoch = ctx.wl_storage.pos_queries().get_epoch(height);
+    let (_, voting_powers) = ctx
+        .wl_storage
+        .ethbridge_queries()
+        .get_validator_set_args(epoch);
     Ok(voting_powers)
 }
 
@@ -493,6 +506,7 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::vote_extensions::validator_set_update;
@@ -521,13 +535,17 @@ mod test_ethbridge_router {
     async fn test_read_active_valset() {
         let mut client = TestClient::new(RPC);
         let epoch = Epoch(0);
-        assert_eq!(client.storage.last_epoch, epoch);
+        assert_eq!(client.wl_storage.storage.last_epoch, epoch);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let validator_set = RPC
@@ -537,12 +555,17 @@ mod test_ethbridge_router {
             .await
             .unwrap();
         let expected = {
-            let total_power =
-                client.storage.get_total_voting_power(Some(epoch)).into();
+            let total_power = client
+                .wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(epoch))
+                .into();
 
             let voting_powers_map: VotingPowersMap = client
-                .storage
+                .wl_storage
+                .ethbridge_queries()
                 .get_active_eth_addresses(Some(epoch))
+                .iter()
                 .map(|(addr_book, _, power)| (addr_book, power))
                 .collect();
             let (validators, voting_powers) = voting_powers_map
@@ -573,13 +596,17 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_active_valset_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let result = RPC
@@ -602,10 +629,10 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        let keys = test_utils::setup_default_storage(&mut client.storage);
+        let keys = test_utils::init_default_storage(&mut client.wl_storage);
 
         // write proof to storage
         let vext = validator_set_update::Vext {
@@ -620,14 +647,18 @@ mod test_ethbridge_router {
                 .eth_bridge,
         );
         let tx_result = aggregate_votes(
-            &mut client.storage,
+            &mut client.wl_storage,
             validator_set_update::VextDigest::singleton(vext.clone()),
         )
         .expect("Test failed");
         assert!(!tx_result.changed_keys.is_empty());
 
         // commit the changes
-        client.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let proof = RPC
@@ -641,7 +672,8 @@ mod test_ethbridge_router {
                 EthereumProof::new((1.into(), vext.data.voting_powers));
             proof.attach_signature(
                 client
-                    .storage
+                    .wl_storage
+                    .ethbridge_queries()
                     .get_eth_addr_book(&established_address_1(), Some(0.into()))
                     .expect("Test failed"),
                 vext.sig,
@@ -657,13 +689,17 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // commit the changes
-        client.storage.commit().expect("Test failed");
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
 
         // check the response
         let result = RPC
@@ -702,16 +738,16 @@ mod test_ethbridge_router {
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // check the response
         let pool = RPC
@@ -743,35 +779,35 @@ mod test_ethbridge_router {
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         client
-            .storage
+            .wl_storage
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
         let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // check the response
         let pool = RPC
@@ -802,12 +838,12 @@ mod test_ethbridge_router {
         };
 
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
@@ -820,15 +856,15 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
@@ -836,8 +872,8 @@ mod test_ethbridge_router {
 
         // add the signature for the pool at the previous block height
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_signed_root_key(),
                 (signed_root.clone(), BlockHeight::from(0))
                     .try_to_vec()
@@ -846,8 +882,8 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         let resp = RPC
             .shell()
@@ -873,8 +909,10 @@ mod test_ethbridge_router {
             .get_membership_proof(vec![transfer.clone()])
             .expect("Test failed");
 
-        let (validator_args, voting_powers) =
-            client.storage.get_validator_set_args(None);
+        let (validator_args, voting_powers) = client
+            .wl_storage
+            .ethbridge_queries()
+            .get_validator_set_args(None);
         let data = RelayProof {
             validator_set_args: validator_args.into(),
             signatures: sort_sigs(&voting_powers, &signed_root.signatures),
@@ -908,12 +946,12 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
@@ -926,15 +964,19 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
@@ -942,16 +984,20 @@ mod test_ethbridge_router {
 
         // add the signature for the pool at the previous block height
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_signed_root_key(),
                 (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // this is in the pool, but its merkle root has not been signed yet
         let resp = RPC
@@ -990,12 +1036,12 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
@@ -1008,15 +1054,15 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
@@ -1024,16 +1070,16 @@ mod test_ethbridge_router {
 
         // add the signature for the pool at the previous block height
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_signed_root_key(),
                 (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1061,12 +1107,12 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
@@ -1089,37 +1135,45 @@ mod test_ethbridge_router {
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
         let voting_power = FractionalVotingPower::new(1, 2).unwrap();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &eth_msg_key.body(),
                 eth_event.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &eth_msg_key.voting_power(),
                 voting_power.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client
+            .wl_storage
+            .storage
+            .commit_block()
+            .expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1142,7 +1196,7 @@ mod test_ethbridge_router {
     async fn test_cannot_get_proof_for_removed_transfer() {
         let mut client = TestClient::new(RPC);
         // write validator to storage
-        test_utils::setup_default_storage(&mut client.storage);
+        test_utils::init_default_storage(&mut client.wl_storage);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
@@ -1158,8 +1212,8 @@ mod test_ethbridge_router {
 
         // write a transfer into the bridge pool
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer),
                 transfer.try_to_vec().expect("Test failed"),
             )
@@ -1172,15 +1226,15 @@ mod test_ethbridge_router {
         };
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_pending_key(&transfer2),
                 transfer2.try_to_vec().expect("Test failed"),
             )
@@ -1188,16 +1242,16 @@ mod test_ethbridge_router {
 
         // add the signature for the pool at the previous block height
         client
-            .storage
-            .write(
+            .wl_storage
+            .write_bytes(
                 &get_signed_root_key(),
                 (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
             )
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.storage.commit().expect("Test failed");
-        client.storage.block.height = client.storage.block.height + 1;
+        client.wl_storage.commit_block().expect("Test failed");
+        client.wl_storage.storage.block.height += 1;
         // this was in the pool, covered by an old signed Merkle root.
         let resp = RPC
             .shell()
@@ -1217,7 +1271,7 @@ mod test_ethbridge_router {
 
         // remove a transfer from the pool.
         client
-            .storage
+            .wl_storage
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
 
@@ -1241,145 +1295,11 @@ mod test_ethbridge_router {
     }
 }
 
-// temporary home for test utils lol.
-// this code is borrowed from the `ethereum_bridge` crate.
 #[cfg(any(feature = "testing", test))]
 #[allow(dead_code)]
 mod test_utils {
-    use std::collections::{BTreeSet, HashMap};
-
-    use borsh::BorshSerialize;
-    use namada_core::ledger::storage::testing::TestStorage;
-    use namada_core::types::address::{self, Address};
-    use namada_core::types::key::{
-        self, protocol_pk_key, RefTo, SecretKey, SigScheme,
-    };
-    use namada_core::types::token;
-    use namada_proof_of_stake::epoched::Epoched;
-    use namada_proof_of_stake::types::{
-        ValidatorConsensusKeys, ValidatorEthKey, ValidatorSet,
-        WeightedValidator,
-    };
-    use namada_proof_of_stake::PosBase;
-    use rand::prelude::ThreadRng;
-    use rand::thread_rng;
-
-    /// Validator keys used for testing purposes.
-    pub struct TestValidatorKeys {
-        /// Consensus keypair.
-        pub consensus: key::common::SecretKey,
-        /// Protocol keypair.
-        pub protocol: key::common::SecretKey,
-        /// Ethereum hot keypair.
-        pub eth_bridge: key::common::SecretKey,
-        /// Ethereum cold keypair.
-        pub eth_gov: key::common::SecretKey,
-    }
-
-    /// Set up a [`TestStorage`] initialized at genesis with a single
-    /// validator.
-    ///
-    /// The validator's address is [`address::testing::established_address_1`].
-    #[inline]
-    pub fn setup_default_storage(
-        storage: &mut TestStorage,
-    ) -> HashMap<Address, TestValidatorKeys> {
-        setup_storage_with_validators(
-            storage,
-            HashMap::from_iter([(
-                address::testing::established_address_1(),
-                100_u64.into(),
-            )]),
-        )
-    }
-
-    /// Set up a [`TestStorage`] initialized at genesis with the given
-    /// validators.
-    pub fn setup_storage_with_validators(
-        storage: &mut TestStorage,
-        active_validators: HashMap<Address, token::Amount>,
-    ) -> HashMap<Address, TestValidatorKeys> {
-        // write validator set
-        let validator_set = ValidatorSet {
-            active: active_validators
-                .iter()
-                .map(|(address, bonded_stake)| WeightedValidator {
-                    bonded_stake: u64::from(*bonded_stake),
-                    address: address.clone(),
-                })
-                .collect(),
-            inactive: BTreeSet::default(),
-        };
-        let validator_sets = Epoched::init_at_genesis(validator_set, 0);
-        storage.write_validator_set(&validator_sets);
-
-        // write validator keys
-        let mut all_keys = HashMap::new();
-        for validator in active_validators.into_keys() {
-            let keys = setup_storage_validator(storage, &validator);
-            all_keys.insert(validator, keys);
-        }
-
-        all_keys
-    }
-
-    /// Set up a single validator in [`TestStorage`] with some
-    /// arbitrary keys.
-    fn setup_storage_validator(
-        storage: &mut TestStorage,
-        validator: &Address,
-    ) -> TestValidatorKeys {
-        // register protocol key
-        let protocol_key = gen_ed25519_keypair();
-        storage
-            .write(
-                &protocol_pk_key(validator),
-                protocol_key.ref_to().try_to_vec().expect("Test failed"),
-            )
-            .expect("Test failed");
-
-        // register consensus key
-        let consensus_key = gen_ed25519_keypair();
-        storage.write_validator_consensus_key(
-            validator,
-            &ValidatorConsensusKeys::init_at_genesis(consensus_key.ref_to(), 0),
-        );
-
-        // register ethereum keys
-        let hot_key = gen_secp256k1_keypair();
-        let cold_key = gen_secp256k1_keypair();
-        storage.write_validator_eth_hot_key(
-            validator,
-            &ValidatorEthKey::init_at_genesis(hot_key.ref_to(), 0),
-        );
-        storage.write_validator_eth_cold_key(
-            validator,
-            &ValidatorEthKey::init_at_genesis(cold_key.ref_to(), 0),
-        );
-
-        TestValidatorKeys {
-            consensus: consensus_key,
-            protocol: protocol_key,
-            eth_bridge: hot_key,
-            eth_gov: cold_key,
-        }
-    }
-
-    /// Generate a random [`key::secp256k1`] keypair.
-    pub fn gen_secp256k1_keypair() -> key::common::SecretKey {
-        let mut rng: ThreadRng = thread_rng();
-        key::secp256k1::SigScheme::generate(&mut rng)
-            .try_to_sk()
-            .unwrap()
-    }
-
-    /// Generate a random [`key::ed25519`] keypair.
-    pub fn gen_ed25519_keypair() -> key::common::SecretKey {
-        let mut rng: ThreadRng = thread_rng();
-        key::ed25519::SigScheme::generate(&mut rng)
-            .try_to_sk()
-            .unwrap()
-    }
+    use namada_core::types::address::Address;
+    pub use namada_ethereum_bridge::test_utils::*;
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {

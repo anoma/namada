@@ -2,15 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
-use namada_core::ledger::storage::{DBIter, Storage, StorageHasher, DB};
+use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::token;
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::WeightedValidator;
-
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
@@ -30,7 +28,7 @@ pub(super) trait GetVoters {
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.
 pub(super) fn get_voting_powers<D, H, P>(
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     proof: &P,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), FractionalVotingPower>>
 where
@@ -38,11 +36,12 @@ where
     H: 'static + StorageHasher + Sync,
     P: GetVoters + ?Sized,
 {
-    let voters = proof.get_voters(storage.get_epoch_start_height());
+    let voters =
+        proof.get_voters(wl_storage.pos_queries().get_epoch_start_height());
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let active_validators = get_active_validators(
-        storage,
+        wl_storage,
         voters.iter().map(|(_, h)| h.to_owned()).collect(),
     );
     tracing::debug!(
@@ -61,8 +60,9 @@ where
     Ok(voting_powers)
 }
 
+// TODO: we might be able to remove allocation here
 pub(super) fn get_active_validators<D, H>(
-    storage: &Storage<D, H>,
+    wl_storage: &WlStorage<D, H>,
     block_heights: HashSet<BlockHeight>,
 ) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>
 where
@@ -71,11 +71,17 @@ where
 {
     let mut active_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
-        let epoch = storage.get_epoch(height).expect(
+        let epoch = wl_storage.pos_queries().get_epoch(height).expect(
             "The epoch of the last block height should always be known",
         );
-        _ = active_validators
-            .insert(height, storage.get_active_validators(Some(epoch)));
+        _ = active_validators.insert(
+            height,
+            wl_storage
+                .pos_queries()
+                .get_active_validators(Some(epoch))
+                .iter()
+                .collect(),
+        );
     }
     active_validators
 }
@@ -120,7 +126,7 @@ pub(super) fn get_voting_powers_for_selected(
                 Ok((
                     (addr, height),
                     FractionalVotingPower::new(
-                        individual_voting_power,
+                        individual_voting_power.into(),
                         total_voting_power.into(),
                     )?,
                 ))
@@ -144,7 +150,7 @@ pub(super) fn sum_voting_powers(
 ) -> token::Amount {
     validators
         .iter()
-        .map(|validator| validator.bonded_stake)
+        .map(|validator| u64::from(validator.bonded_stake))
         .sum::<u64>()
         .into()
 }
@@ -166,7 +172,7 @@ mod tests {
         let sole_validator = address::testing::established_address_1();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: sole_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![(
@@ -200,7 +206,7 @@ mod tests {
         let missing_validator = address::testing::established_address_2();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_present_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: present_validator.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -242,11 +248,11 @@ mod tests {
         let bonded_stake_1 = token::Amount::from(100);
         let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            bonded_stake: bonded_stake_1.into(),
+            bonded_stake: bonded_stake_1,
             address: validator_1.clone(),
         };
         let weighted_validator_2 = WeightedValidator {
-            bonded_stake: bonded_stake_2.into(),
+            bonded_stake: bonded_stake_2,
             address: validator_2.clone(),
         };
         let validators = HashSet::from_iter(vec![
@@ -286,7 +292,7 @@ mod tests {
         let sole_validator = address::testing::established_address_1();
         let bonded_stake = arbitrary_bonded_stake();
         let weighted_sole_validator = WeightedValidator {
-            bonded_stake: bonded_stake.into(),
+            bonded_stake,
             address: sole_validator,
         };
         let validators = BTreeSet::from_iter(vec![weighted_sole_validator]);
@@ -305,11 +311,11 @@ mod tests {
         let bonded_stake_1 = token::Amount::from(100);
         let bonded_stake_2 = token::Amount::from(200);
         let weighted_validator_1 = WeightedValidator {
-            bonded_stake: bonded_stake_1.into(),
+            bonded_stake: bonded_stake_1,
             address: validator_1,
         };
         let weighted_validator_2 = WeightedValidator {
-            bonded_stake: bonded_stake_2.into(),
+            bonded_stake: bonded_stake_2,
             address: validator_2,
         };
         let validators = BTreeSet::from_iter(vec![

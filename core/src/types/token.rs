@@ -38,6 +38,9 @@ pub const MAX_DECIMAL_PLACES: u32 = 6;
 /// Decimal scale of token [`Amount`] and [`Change`].
 pub const SCALE: u64 = 1_000_000;
 
+/// The largest value that can be represented by this integer type
+pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
+
 /// A change in tokens amount
 pub type Change = i128;
 
@@ -71,6 +74,20 @@ impl Amount {
         Self { micro: u64::MAX }
     }
 
+    /// Checked addition. Returns `None` on overflow.
+    pub fn checked_add(&self, amount: Amount) -> Option<Self> {
+        self.micro
+            .checked_add(amount.micro)
+            .map(|result| Self { micro: result })
+    }
+
+    /// Checked subtraction. Returns `None` on underflow.
+    pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
+        self.micro
+            .checked_sub(amount.micro)
+            .map(|result| Self { micro: result })
+    }
+
     /// Create amount from Change
     ///
     /// # Panics
@@ -80,20 +97,6 @@ impl Amount {
         Self {
             micro: change as u64,
         }
-    }
-
-    /// Checked addition on amounts
-    pub fn checked_add(&self, amount: &Amount) -> Option<Self> {
-        self.micro
-            .checked_add(amount.micro)
-            .map(|micro| Self { micro })
-    }
-
-    /// Checked subtraction on amounts
-    pub fn checked_sub(&self, amount: &Amount) -> Option<Self> {
-        self.micro
-            .checked_sub(amount.micro)
-            .map(|micro| Self { micro })
     }
 }
 
@@ -210,6 +213,24 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.micro -= rhs.micro
+    }
+}
+
+impl KeySeg for Amount {
+    fn parse(string: String) -> super::storage::Result<Self>
+    where
+        Self: Sized,
+    {
+        let micro = u64::parse(string)?;
+        Ok(Self { micro })
+    }
+
+    fn raw(&self) -> String {
+        self.micro.raw()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        self.micro.to_db_key()
     }
 }
 
@@ -497,6 +518,37 @@ mod tests {
 
         let zero = Amount::from(0);
         assert_eq!("0", zero.to_string());
+    }
+
+    #[test]
+    fn test_amount_checked_sub() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_sub(zero), Some(zero));
+        assert_eq!(zero.checked_sub(one), None);
+        assert_eq!(zero.checked_sub(max), None);
+
+        assert_eq!(max.checked_sub(zero), Some(max));
+        assert_eq!(max.checked_sub(one), Some(max - one));
+        assert_eq!(max.checked_sub(max), Some(zero));
+    }
+
+    #[test]
+    fn test_amount_checked_add() {
+        let max = Amount::from(u64::MAX);
+        let one = Amount::from(1);
+        let zero = Amount::from(0);
+
+        assert_eq!(zero.checked_add(zero), Some(zero));
+        assert_eq!(zero.checked_add(one), Some(one));
+        assert_eq!(zero.checked_add(max - one), Some(max - one));
+        assert_eq!(zero.checked_add(max), Some(max));
+
+        assert_eq!(max.checked_add(zero), Some(max));
+        assert_eq!(max.checked_add(one), None);
+        assert_eq!(max.checked_add(max), None);
     }
 }
 

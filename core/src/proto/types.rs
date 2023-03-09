@@ -189,7 +189,7 @@ impl<T, S: Signable<T>> Signed<T, S> {
         pk: &common::PublicKey,
     ) -> std::result::Result<(), VerifySigError> {
         let signed_bytes = S::as_signable(&self.data);
-        common::SigScheme::verify_signature_raw(pk, signed_bytes, &self.sig)
+        common::SigScheme::verify_signature(pk, &signed_bytes, &self.sig)
     }
 }
 
@@ -256,7 +256,7 @@ impl SigningTx {
             timestamp: self.timestamp,
         };
         let signed_data = tx.hash();
-        common::SigScheme::verify_signature_raw(pk, signed_data, sig)
+        common::SigScheme::verify_signature(pk, &signed_data, sig)
     }
 
     /// Expand this reduced Tx using the supplied code only if the the code
@@ -353,7 +353,11 @@ impl From<Tx> for ResponseDeliverTx {
             x
         }
         match process_tx(tx) {
-            Ok(TxType::Decrypted(DecryptedTx::Decrypted(tx))) => {
+            Ok(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx,
+                #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: _,
+            })) => {
                 let empty_vec = vec![];
                 let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
                 let signed =

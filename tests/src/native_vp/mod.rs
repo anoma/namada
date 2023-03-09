@@ -50,8 +50,8 @@ impl TestNativeVpEnv {
         let ctx = Ctx {
             iterators: Default::default(),
             gas_meter: Default::default(),
-            storage: &self.tx_env.storage,
-            write_log: &self.tx_env.write_log,
+            storage: &self.tx_env.wl_storage.storage,
+            write_log: &self.tx_env.wl_storage.write_log,
             tx: &self.tx_env.tx,
             tx_index: &self.tx_env.tx_index,
             vp_wasm_cache: self.tx_env.vp_wasm_cache.clone(),
