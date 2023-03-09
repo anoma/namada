@@ -1,7 +1,5 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-#[cfg(not(feature = "abcipp"))]
-use index_set::vec::VecIndexSet;
 use namada::core::hints;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
@@ -53,8 +51,6 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = self.get_encrypted_txs_allocator();
-            #[cfg(not(feature = "abcipp"))]
-            let mut protocol_tx_indices = VecIndexSet::default();
 
             // add encrypted txs
             let (encrypted_txs, alloc) =
@@ -68,8 +64,6 @@ where
             // add vote extension protocol txs
             let mut protocol_txs = self.build_protocol_txs(
                 alloc,
-                #[cfg(not(feature = "abcipp"))]
-                &mut protocol_tx_indices,
                 #[cfg(feature = "abcipp")]
                 req.local_last_commit,
                 #[cfg(not(feature = "abcipp"))]
@@ -330,7 +324,6 @@ where
     fn build_protocol_txs(
         &self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-        protocol_tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
     ) -> Vec<TxBytes> {
         if self.wl_storage.storage.last_height == BlockHeight(0) {
@@ -342,8 +335,7 @@ where
             return vec![];
         }
 
-        let deserialized_iter =
-            self.deserialize_vote_extensions(txs, protocol_tx_indices);
+        let deserialized_iter = self.deserialize_vote_extensions(txs);
         let pos_queries = self.wl_storage.pos_queries();
 
         deserialized_iter.take_while(|tx_bytes|

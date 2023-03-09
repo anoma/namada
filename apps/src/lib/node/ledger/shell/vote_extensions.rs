@@ -6,8 +6,6 @@ pub mod val_set_update;
 
 use std::num::NonZeroU64;
 
-#[cfg(not(feature = "abcipp"))]
-use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
@@ -407,12 +405,11 @@ where
     pub fn deserialize_vote_extensions<'shell>(
         &'shell self,
         txs: &'shell [TxBytes],
-        protocol_tx_indices: &'shell mut VecIndexSet<u128>,
     ) -> impl Iterator<Item = TxBytes> + 'shell {
         use namada::types::transaction::protocol::ProtocolTx;
         let current_epoch = self.wl_storage.storage.get_current_epoch().0;
 
-        txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
+        txs.iter().filter_map(move |tx_bytes| {
             let tx = match Tx::try_from(tx_bytes.as_slice()) {
                 Ok(tx) => tx,
                 Err(err) => {
@@ -430,19 +427,11 @@ where
                         ProtocolTxType::EthEventsVext(_)
                         | ProtocolTxType::BridgePoolVext(_),
                     ..
-                }) => {
-                    // mark tx for inclusion
-                    protocol_tx_indices.insert(index);
-                    Some(tx_bytes.clone())
-                }
+                }) => Some(tx_bytes.clone()),
                 TxType::Protocol(ProtocolTx {
                     tx: ProtocolTxType::ValSetUpdateVext(ext),
                     ..
                 }) => {
-                    // mark tx, so it's skipped when
-                    // building the batch of remaining txs
-                    protocol_tx_indices.insert(index);
-
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long
                     // enough in the mempool for it to no longer be
