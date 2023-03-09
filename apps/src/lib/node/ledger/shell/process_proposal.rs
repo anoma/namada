@@ -453,76 +453,42 @@ where
                     .into(),
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                ProtocolTxType::EthEventsVext(ext) => {
-                    if !self
-                        .wl_storage
-                        .ethbridge_queries()
-                        .is_bridge_active(None)
-                    {
-                        TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: "Process proposal rejected this proposal \
-                                   because an Ethereum events vote extensions \
-                                   was included but the bridge is not active."
-                                .into(),
-                        }
-                    } else {
-                        self.validate_eth_events_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.last_height,
-                        )
-                        .map(|_| TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: format!(
-                                    "Process proposal rejected this proposal \
-                                     because one of the included Ethereum \
-                                     events vote extensions was invalid: {err}"
-                                ),
-                            }
-                        })
-                    }
-                }
-                ProtocolTxType::BridgePoolVext(ext) => {
-                    if !self
-                        .wl_storage
-                        .ethbridge_queries()
-                        .is_bridge_active(None)
-                    {
-                        TxResult {
-                            code: ErrorCodes::InvalidVoteExtension.into(),
-                            info: "Process proposal rejected this proposal \
-                                   because an Brige pool root vote extensions \
-                                   was included but the bridge is not active."
-                                .into(),
-                        }
-                    } else {
-                        self.validate_bp_roots_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.last_height,
-                        )
-                        .map(|_| TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process Proposal accepted this transaction"
-                                .into(),
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
-                                info: format!(
-                                    "Process proposal rejected this proposal \
-                                     because one of the included Bridge pool \
-                                     root's vote extensions was invalid: {err}"
-                                ),
-                            }
-                        })
-                    }
-                }
+                ProtocolTxType::EthEventsVext(ext) => self
+                    .validate_eth_events_vext_and_get_it_back(
+                        ext,
+                        self.wl_storage.storage.last_height,
+                    )
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|err| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: format!(
+                            "Process proposal rejected this proposal because \
+                             one of the included Ethereum events vote \
+                             extensions was invalid: {err}"
+                        ),
+                    }),
+                ProtocolTxType::BridgePoolVext(ext) => self
+                    .validate_bp_roots_vext_and_get_it_back(
+                        ext,
+                        self.wl_storage.storage.last_height,
+                    )
+                    .map(|_| TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process Proposal accepted this transaction"
+                            .into(),
+                    })
+                    .unwrap_or_else(|err| TxResult {
+                        code: ErrorCodes::InvalidVoteExtension.into(),
+                        info: format!(
+                            "Process proposal rejected this proposal because \
+                             one of the included Bridge pool root's vote \
+                             extensions was invalid: {err}"
+                        ),
+                    }),
                 ProtocolTxType::ValSetUpdateVext(ext) => self
                     .validate_valset_upd_vext_and_get_it_back(
                         ext,
