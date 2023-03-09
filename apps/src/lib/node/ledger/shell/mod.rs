@@ -807,7 +807,7 @@ where
                 );
                 return;
             }
-            if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+            if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge is disabled"
                 );

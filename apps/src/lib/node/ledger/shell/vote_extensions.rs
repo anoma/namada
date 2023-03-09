@@ -100,7 +100,7 @@ where
     pub fn extend_vote_with_ethereum_events(
         &mut self,
     ) -> Option<Signed<ethereum_events::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             return None;
         }
         let validator_addr = self
@@ -141,7 +141,7 @@ where
     pub fn extend_vote_with_bp_roots(
         &self,
     ) -> Option<Signed<bridge_pool_roots::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             return None;
         }
         let validator_addr = self
@@ -282,7 +282,7 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<Signed<ethereum_events::Vext>>,
     ) -> bool {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if !self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             ext.is_none()
         } else if let Some(ext) = ext {
             self.validate_eth_events_vext(
@@ -311,7 +311,7 @@ where
         req: &request::VerifyVoteExtension,
         ext: Option<bridge_pool_roots::SignedVext>,
     ) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             if let Some(ext) = ext {
                 self.validate_bp_roots_vext(
                     ext,
@@ -424,7 +424,7 @@ where
                     protocol_tx_indices.insert(index);
                     self.wl_storage
                         .ethbridge_queries()
-                        .is_bridge_active()
+                        .is_bridge_active(None)
                         .then_some(tx_bytes.clone())
                 }
                 TxType::Protocol(ProtocolTx {
@@ -469,7 +469,7 @@ where
         let mut bp_roots = vec![];
         let mut valset_upds = vec![];
         let bridge_active =
-            self.wl_storage.ethbridge_queries().is_bridge_active();
+            self.wl_storage.ethbridge_queries().is_bridge_active(None);
 
         for ext in deserialize_vote_extensions(vote_extensions) {
             if let Some(validator_set_update) = ext.validator_set_update {

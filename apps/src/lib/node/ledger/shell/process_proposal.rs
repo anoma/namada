@@ -454,7 +454,11 @@ where
             },
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthEventsVext(ext) => {
-                    if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+                    if !self
+                        .wl_storage
+                        .ethbridge_queries()
+                        .is_bridge_active(None)
+                    {
                         TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected this proposal \
@@ -485,7 +489,11 @@ where
                     }
                 }
                 ProtocolTxType::BridgePoolVext(ext) => {
-                    if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+                    if !self
+                        .wl_storage
+                        .ethbridge_queries()
+                        .is_bridge_active(None)
+                    {
                         TxResult {
                             code: ErrorCodes::InvalidVoteExtension.into(),
                             info: "Process proposal rejected this proposal \
@@ -729,7 +737,7 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             meta.digests.eth_ev_digest_num
                 == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {
@@ -741,7 +749,7 @@ where
     /// root vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active() {
+        if self.wl_storage.ethbridge_queries().is_bridge_active(None) {
             meta.digests.bridge_pool_roots
                 == usize::from(self.wl_storage.storage.last_height.0 != 0)
         } else {

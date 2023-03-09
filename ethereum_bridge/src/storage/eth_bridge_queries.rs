@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
@@ -123,9 +125,13 @@ where
         .expect("Deserializing the Ethereum bridge active key shouldn't fail.")
     }
 
-    /// Returns a boolean indicating whether the bridge
-    /// is currently active.
-    pub fn is_bridge_active(self) -> bool {
+    /// Returns a boolean indicating whether the bridge is currently active,
+    /// or if it will be active within the provided epoch offset
+    /// (i.e. `current_epoch + in_num_of_epochs`).
+    pub fn is_bridge_active(
+        self,
+        in_num_of_epochs: Option<NonZeroU64>,
+    ) -> bool {
         match self.check_bridge_status() {
             EthBridgeStatus::Disabled => false,
             EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis) => true,
@@ -134,7 +140,8 @@ where
             )) => {
                 let current_epoch =
                     self.wl_storage.storage.get_current_epoch().0;
-                current_epoch >= enabled_epoch
+                let offset = in_num_of_epochs.map(NonZeroU64::get).unwrap_or(0);
+                current_epoch + offset >= enabled_epoch
             }
         }
     }
