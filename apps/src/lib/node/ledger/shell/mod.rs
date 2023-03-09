@@ -868,8 +868,8 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
-    // TODO: move this to another file after 0.11 merges,
-    // since this method has become fairly large at this point
+    // TODO: move this to another file, since this method has become fairly
+    // large at this point
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -1615,9 +1615,9 @@ mod tests {
         deactivate_bridge, get_bp_bytes_to_sign, setup_at_height,
     };
 
-    /// Test that we do not include protocol txs voting on ethereum
-    /// events or signing bridge pool roots + nonces if the bridge
-    /// is inactive.
+    /// Test that we do not include protocol txs in the mempool,
+    /// voting on ethereum events or signing bridge pool roots
+    /// and nonces if the bridge is inactive.
     #[test]
     #[cfg(not(feature = "abcipp"))]
     fn test_mempool_filter_protocol_txs_bridge_inactive() {
