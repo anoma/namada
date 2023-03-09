@@ -310,9 +310,10 @@ impl ShellMode {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
+    #[default]
     NewTransaction,
     /// A transaction that has been validated at some previous level that may
     /// need to be validated again
@@ -1610,7 +1611,6 @@ mod tests {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
-    use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
     use crate::node::ledger::shell::test_utils::{
         deactivate_bridge, get_bp_bytes_to_sign, setup_at_height,
     };
@@ -1657,10 +1657,13 @@ mod tests {
         )
         .sign(protocol_key)
         .to_bytes();
-        let rsp = shell.prepare_proposal(RequestPrepareProposal {
-            txs: vec![eth_vext, bp_vext],
-            ..Default::default()
-        });
-        assert!(rsp.txs.is_empty());
+        let txs_to_validate = [
+            (eth_vext, "Incorrectly validated eth events vext"),
+            (bp_vext, "Incorrectly validated bp roots vext"),
+        ];
+        for (tx_bytes, err_msg) in txs_to_validate {
+            let rsp = shell.mempool_validate(&tx_bytes, Default::default());
+            assert!(rsp.code == 1, "{err_msg}");
+        }
     }
 }
