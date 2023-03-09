@@ -727,6 +727,7 @@ where
     /// vote extensions in [`DigestCounters`].
     #[cfg(feature = "abcipp")]
     fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
+        // TODO: check if this logic is correct for ABCI++
         self.wl_storage
             .ethbridge_queries()
             .is_bridge_active()
