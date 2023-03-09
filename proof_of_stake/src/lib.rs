@@ -1581,10 +1581,7 @@ where
         ) = unbond?;
 
         tracing::debug!(
-            "unbond epochs {}..{}, amount {}",
-            withdraw_epoch,
-            &start_epoch,
-            amount
+            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {amount}",
         );
 
         // TODO: worry about updating this later after PR 740 perhaps
@@ -1592,6 +1589,7 @@ where
         // 2. adding slash rates in same epoch, applying cumulatively in dif
         // epochs
         if withdraw_epoch > current_epoch {
+            tracing::debug!("Not yet withdrawable");
             continue;
         }
         for slash in slashes.iter(storage)? {
@@ -1618,6 +1616,7 @@ where
         unbonds_to_remove.push((withdraw_epoch, start_epoch));
     }
     withdrawable_amount -= slashed;
+    tracing::debug!("Withdrawing total {withdrawable_amount}");
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
