@@ -45,17 +45,22 @@ struct AbstractPosState {
     params: PosParams,
     /// Genesis validator
     genesis_validators: Vec<GenesisValidator>,
-    /// Bonds delta values
+    /// Bonds delta values. The outer key for Epoch is pipeline offset from
+    /// epoch in which the bond is applied
     bonds: BTreeMap<Epoch, HashMap<BondId, token::Change>>,
-    /// Validator stakes delta values (sum of all their bonds deltas)
+    /// Validator stakes delta values (sum of all their bonds deltas).
+    /// Pipelined.
     total_stakes: BTreeMap<Epoch, HashMap<Address, token::Change>>,
-    /// Consensus validator set
+    /// Consensus validator set. Pipelined.
     consensus_set: BTreeMap<Epoch, BTreeMap<token::Amount, VecDeque<Address>>>,
-    /// Below-capacity validator set
+    /// Below-capacity validator set. Pipelined.
     below_capacity_set:
         BTreeMap<Epoch, BTreeMap<ReverseOrdTokenAmount, VecDeque<Address>>>,
-    /// Validator states
+    /// Validator states. Pipelined.
     validator_states: BTreeMap<Epoch, HashMap<Address, ValidatorState>>,
+    /// Unbonded bonds. The outer key for Epoch is pipeline + unbonding offset
+    /// from epoch in which the unbond is applied.
+    unbonds: BTreeMap<Epoch, HashMap<BondId, token::Amount>>,
 }
 
 /// The PoS system under test
@@ -177,6 +182,7 @@ impl StateMachineTest for ConcretePosState {
 
                 // Credit tokens to ensure we can apply the bond
                 let native_token = state.s.get_native_token().unwrap();
+                let pos = address::POS;
                 token::credit_tokens(
                     &mut state.s,
                     &native_token,
@@ -184,6 +190,12 @@ impl StateMachineTest for ConcretePosState {
                     amount,
                 )
                 .unwrap();
+
+                let src_balance_pre =
+                    token::read_balance(&state.s, &native_token, &id.source)
+                        .unwrap();
+                let pos_balance_pre =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
 
                 // This must be ensured by both transitions generator and
                 // pre-conditions!
@@ -198,6 +210,8 @@ impl StateMachineTest for ConcretePosState {
                     "{} is not a validator",
                     id.validator
                 );
+
+                // Apply the bond
                 super::bond_tokens(
                     &mut state.s,
                     Some(&id.source),
@@ -210,14 +224,127 @@ impl StateMachineTest for ConcretePosState {
                 state.check_bond_post_conditions(
                     epoch,
                     &params,
-                    id,
+                    id.clone(),
                     amount,
                     validator_stake_before_bond_cur,
                     validator_stake_before_bond_pipeline,
                 );
+
+                let src_balance_post =
+                    token::read_balance(&state.s, &native_token, &id.source)
+                        .unwrap();
+                let pos_balance_post =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+
+                // Post-condition: PoS balance should increase
+                assert!(pos_balance_pre < pos_balance_post);
+                // Post-condition: The difference in PoS balance should be the
+                // same as in the source
+                assert_eq!(
+                    pos_balance_post - pos_balance_pre,
+                    src_balance_pre - src_balance_post
+                );
             }
-            Transition::Unbond { id: _, amount: _ } => todo!(),
-            Transition::Withdraw { id: _ } => todo!(),
+            Transition::Unbond { id, amount } => {
+                let epoch = state.current_epoch();
+                let pipeline = epoch + params.pipeline_len;
+                let native_token = state.s.get_native_token().unwrap();
+                let pos = address::POS;
+                let src_balance_pre =
+                    token::read_balance(&state.s, &native_token, &id.source)
+                        .unwrap();
+                let pos_balance_pre =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+
+                let validator_stake_before_bond_cur =
+                    crate::read_validator_stake(
+                        &state.s,
+                        &params,
+                        &id.validator,
+                        epoch,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
+                let validator_stake_before_bond_pipeline =
+                    crate::read_validator_stake(
+                        &state.s,
+                        &params,
+                        &id.validator,
+                        pipeline,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
+
+                // Apply the unbond
+                super::unbond_tokens(
+                    &mut state.s,
+                    Some(&id.source),
+                    &id.validator,
+                    amount,
+                    epoch,
+                )
+                .unwrap();
+
+                state.check_unbond_post_conditions(
+                    epoch,
+                    &params,
+                    id.clone(),
+                    amount,
+                    validator_stake_before_bond_cur,
+                    validator_stake_before_bond_pipeline,
+                );
+
+                let src_balance_post =
+                    token::read_balance(&state.s, &native_token, &id.source)
+                        .unwrap();
+                let pos_balance_post =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+
+                // Post-condition: PoS balance should not change
+                assert_eq!(pos_balance_pre, pos_balance_post);
+                // Post-condition: Source balance should not change
+                assert_eq!(src_balance_post, src_balance_pre);
+            }
+            Transition::Withdraw {
+                id: BondId { source, validator },
+            } => {
+                let epoch = state.current_epoch();
+                let native_token = state.s.get_native_token().unwrap();
+                let pos = address::POS;
+                let src_balance_pre =
+                    token::read_balance(&state.s, &native_token, &source)
+                        .unwrap();
+                let pos_balance_pre =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+
+                // Apply the withdrawal
+                let withdrawn = super::withdraw_tokens(
+                    &mut state.s,
+                    Some(&source),
+                    &validator,
+                    epoch,
+                )
+                .unwrap();
+
+                let src_balance_post =
+                    token::read_balance(&state.s, &native_token, &source)
+                        .unwrap();
+                let pos_balance_post =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+
+                // Post-condition: PoS balance should decrease or not change if
+                // nothing was withdrawn
+                assert!(pos_balance_pre >= pos_balance_post);
+                // Post-condition: The difference in PoS balance should be the
+                // same as in the source
+                assert_eq!(
+                    pos_balance_pre - pos_balance_post,
+                    src_balance_post - src_balance_pre
+                );
+                // Post-condition: The increment in source balance should be
+                // equal to the withdrawn amount
+                assert_eq!(src_balance_post - src_balance_pre, withdrawn,);
+            }
         }
         state
     }
@@ -330,6 +457,71 @@ impl ConcretePosState {
             validator_stake_before_bond_pipeline + amount
         );
 
+        self.check_bond_and_unbond_post_conditions(
+            submit_epoch,
+            params,
+            id,
+            stake_at_pipeline,
+        );
+    }
+
+    fn check_unbond_post_conditions(
+        &self,
+        submit_epoch: Epoch,
+        params: &PosParams,
+        id: BondId,
+        amount: token::Amount,
+        validator_stake_before_bond_cur: token::Amount,
+        validator_stake_before_bond_pipeline: token::Amount,
+    ) {
+        let pipeline = submit_epoch + params.pipeline_len;
+
+        let cur_stake = super::read_validator_stake(
+            &self.s,
+            params,
+            &id.validator,
+            submit_epoch,
+        )
+        .unwrap()
+        .unwrap_or_default();
+
+        // Post-condition: the validator stake at the current epoch should not
+        // change
+        assert_eq!(cur_stake, validator_stake_before_bond_cur);
+
+        let stake_at_pipeline = super::read_validator_stake(
+            &self.s,
+            params,
+            &id.validator,
+            pipeline,
+        )
+        .unwrap()
+        .unwrap_or_default();
+
+        // Post-condition: the validator stake at the pipeline should be
+        // decremented by the bond amount
+        assert_eq!(
+            stake_at_pipeline,
+            validator_stake_before_bond_pipeline - amount
+        );
+
+        self.check_bond_and_unbond_post_conditions(
+            submit_epoch,
+            params,
+            id,
+            stake_at_pipeline,
+        );
+    }
+
+    /// These post-conditions apply to bonding and unbonding
+    fn check_bond_and_unbond_post_conditions(
+        &self,
+        submit_epoch: Epoch,
+        params: &PosParams,
+        id: BondId,
+        stake_at_pipeline: token::Amount,
+    ) {
+        let pipeline = submit_epoch + params.pipeline_len;
         // Read the consensus sets data using iterator
         let consensus_set = crate::consensus_validator_set_handle()
             .at(&pipeline)
@@ -453,6 +645,7 @@ impl AbstractStateMachine for AbstractPosState {
                         .sorted_by(|a, b| Ord::cmp(&a.tokens, &b.tokens))
                         .collect(),
                     bonds: Default::default(),
+                    unbonds: Default::default(),
                     total_stakes: Default::default(),
                     consensus_set: Default::default(),
                     below_capacity_set: Default::default(),
@@ -528,9 +721,15 @@ impl AbstractStateMachine for AbstractPosState {
     }
 
     fn transitions(state: &Self::State) -> BoxedStrategy<Self::Transition> {
-        prop_oneof![
+        let unbondable = state.bond_sums().into_iter().collect::<Vec<_>>();
+        let withdrawable =
+            state.withdrawable_unbonds().into_iter().collect::<Vec<_>>();
+
+        // Transitions that can be applied if there are no bonds and unbonds
+        let basic = prop_oneof![
             Just(Transition::NextEpoch),
             add_arb_bond_amount(state),
+            arb_delegation(state),
             (
                 address::testing::arb_established_address(),
                 key::testing::arb_common_keypair(),
@@ -552,9 +751,33 @@ impl AbstractStateMachine for AbstractPosState {
                         }
                     },
                 ),
-            // TODO: add other transitions
-        ]
-        .boxed()
+        ];
+
+        if unbondable.is_empty() {
+            basic.boxed()
+        } else {
+            let arb_unbondable = prop::sample::select(unbondable);
+            let arb_unbond =
+                arb_unbondable.prop_flat_map(|(id, deltas_sum)| {
+                    // Generate an amount to unbond, up to the sum
+                    assert!(deltas_sum > 0);
+                    (0..deltas_sum).prop_map(move |to_unbond| {
+                        let id = id.clone();
+                        let amount = token::Amount::from_change(to_unbond);
+                        Transition::Unbond { id, amount }
+                    })
+                });
+
+            if withdrawable.is_empty() {
+                prop_oneof![basic, arb_unbond].boxed()
+            } else {
+                let arb_withdrawable = prop::sample::select(withdrawable);
+                let arb_withdrawal = arb_withdrawable
+                    .prop_map(|(id, _)| Transition::Withdraw { id });
+
+                prop_oneof![basic, arb_unbond, arb_withdrawal].boxed()
+            }
+        }
     }
 
     fn apply_abstract(
@@ -620,8 +843,26 @@ impl AbstractStateMachine for AbstractPosState {
                 state.update_bond(id, change);
                 state.update_validator_total_stake(&id.validator, change);
                 state.update_validator_sets(&id.validator, change);
+
+                let withdrawal_epoch = state.epoch
+                    + state.params.pipeline_len
+                    + state.params.unbonding_len
+                    + 1_u64;
+                let unbonds =
+                    state.unbonds.entry(withdrawal_epoch).or_default();
+                let unbond = unbonds.entry(id.clone()).or_default();
+                *unbond += *amount;
             }
-            Transition::Withdraw { id: _ } => todo!(),
+            Transition::Withdraw { id } => {
+                // Remove all withdrawable unbonds with this bond ID
+                for (epoch, unbonds) in state.unbonds.iter_mut() {
+                    if *epoch <= state.epoch {
+                        unbonds.remove(id);
+                    }
+                }
+                // Remove any epochs that have no unbonds left
+                state.unbonds.retain(|_epoch, unbonds| !unbonds.is_empty());
+            }
         }
         state
     }
@@ -644,11 +885,37 @@ impl AbstractStateMachine for AbstractPosState {
             }
             Transition::Bond { id, amount: _ } => {
                 let pipeline = state.epoch + state.params.pipeline_len;
-                // A bond's validator must be known
+                // The validator must be known
                 state.is_validator(&id.validator, pipeline)
             }
-            Transition::Unbond { id: _, amount: _ } => todo!(),
-            Transition::Withdraw { id: _ } => todo!(),
+            Transition::Unbond { id, amount } => {
+                let pipeline = state.epoch + state.params.pipeline_len;
+
+                let is_unbondable = state
+                    .bond_sums()
+                    .get(id)
+                    .map(|sum| *sum >= token::Change::from(*amount))
+                    .unwrap_or_default();
+
+                // The validator must be known
+                state.is_validator(&id.validator, pipeline)
+                    // The amount must be available to unbond
+                    && is_unbondable
+            }
+            Transition::Withdraw { id } => {
+                let pipeline = state.epoch + state.params.pipeline_len;
+
+                let is_withdrawable = state
+                    .withdrawable_unbonds()
+                    .get(id)
+                    .map(|amount| *amount >= token::Amount::default())
+                    .unwrap_or_default();
+
+                // The validator must be known
+                state.is_validator(&id.validator, pipeline)
+                    // The amount must be available to unbond
+                    && is_withdrawable
+            }
         }
     }
 }
@@ -676,7 +943,12 @@ impl AbstractPosState {
     /// Update a bond with bonded or unbonded change
     fn update_bond(&mut self, id: &BondId, change: token::Change) {
         let bonds = self.bonds.entry(self.pipeline()).or_default();
-        bonds.insert(id.clone(), change);
+        let bond = bonds.entry(id.clone()).or_default();
+        *bond += change;
+        // Remove fully unbonded entries
+        if *bond == 0 {
+            bonds.remove(id);
+        }
     }
 
     /// Update validator's total stake with bonded or unbonded change
@@ -834,6 +1106,41 @@ impl AbstractPosState {
             .iter()
             .any(|(_stake, vals)| vals.iter().any(|val| val == validator))
     }
+
+    /// Find the sums of the bonds across all epochs
+    fn bond_sums(&self) -> HashMap<BondId, token::Change> {
+        self.bonds.iter().fold(
+            HashMap::<BondId, token::Change>::new(),
+            |mut acc, (_epoch, bonds)| {
+                for (id, delta) in bonds {
+                    let entry = acc.entry(id.clone()).or_default();
+                    *entry += delta;
+                    // Remove entries that are fully unbonded
+                    if *entry == 0 {
+                        acc.remove(id);
+                    }
+                }
+                acc
+            },
+        )
+    }
+
+    /// Find the sums of withdrawable unbonds
+    fn withdrawable_unbonds(&self) -> HashMap<BondId, token::Amount> {
+        self.unbonds.iter().fold(
+            HashMap::<BondId, token::Amount>::new(),
+            |mut acc, (epoch, unbonds)| {
+                if *epoch <= self.epoch {
+                    for (id, amount) in unbonds {
+                        if *amount > token::Amount::default() {
+                            *acc.entry(id.clone()).or_default() += *amount;
+                        }
+                    }
+                }
+                acc
+            },
+        )
+    }
 }
 
 /// Arbitrary bond transition that adds tokens to an existing bond
@@ -852,6 +1159,35 @@ fn add_arb_bond_amount(
     let arb_bond_id = prop::sample::select(bond_ids);
     (arb_bond_id, arb_bond_amount())
         .prop_map(|(id, amount)| Transition::Bond { id, amount })
+}
+
+/// Arbitrary delegation to one of the validators
+fn arb_delegation(
+    state: &AbstractPosState,
+) -> impl Strategy<Value = Transition> {
+    let validators = state.consensus_set.iter().fold(
+        HashSet::new(),
+        |mut acc, (_epoch, vals)| {
+            for vals in vals.values() {
+                for validator in vals {
+                    acc.insert(validator.clone());
+                }
+            }
+            acc
+        },
+    );
+    let validator_vec = validators.clone().into_iter().collect::<Vec<_>>();
+    let arb_source = address::testing::arb_non_internal_address()
+        .prop_filter("Must be a non-validator address", move |addr| {
+            !validators.contains(addr)
+        });
+    let arb_validator = prop::sample::select(validator_vec);
+    (arb_source, arb_validator, arb_bond_amount()).prop_map(
+        |(source, validator, amount)| Transition::Bond {
+            id: BondId { source, validator },
+            amount,
+        },
+    )
 }
 
 // Bond up to 10 tokens (10M micro units) to avoid overflows
