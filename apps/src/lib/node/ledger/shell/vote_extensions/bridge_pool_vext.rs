@@ -53,7 +53,7 @@ where
     > {
         #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
-            tracing::error!(
+            tracing::debug!(
                 ext_height = ?ext.data.block_height,
                 ?last_height,
                 "Bridge pool root's vote extension issued for a block height \
@@ -63,7 +63,7 @@ where
         }
         #[cfg(not(feature = "abcipp"))]
         if ext.data.block_height > last_height {
-            tracing::error!(
+            tracing::debug!(
                 ext_height = ?ext.data.block_height,
                 ?last_height,
                 "Bridge pool root's vote extension issued for a block height \
@@ -72,7 +72,7 @@ where
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if last_height.0 == 0 {
-            tracing::error!("Dropping vote extension issued at genesis");
+            tracing::debug!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
 
@@ -85,7 +85,7 @@ where
         {
             Some(epoch) => epoch,
             _ => {
-                tracing::error!(
+                tracing::debug!(
                     block_height = ?ext.data.block_height,
                     "The epoch of the Bridge pool root's vote extension's \
                      block height should always be known",
@@ -98,7 +98,7 @@ where
             .ethbridge_queries()
             .is_bridge_active_at(ext_height_epoch)
         {
-            tracing::error!(
+            tracing::debug!(
                 vext_epoch = ?ext_height_epoch,
                 "The Ethereum bridge was not enabled when the pool
                  root's vote extension was cast",
@@ -113,7 +113,7 @@ where
             .pos_queries()
             .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     %validator,
                     "Could not get public key from Storage for some validator, \
@@ -123,7 +123,7 @@ where
             })?;
         // verify the signature of the vote extension
         ext.verify(&pk).map_err(|err| {
-            tracing::error!(
+            tracing::debug!(
                 ?err,
                 ?ext.sig,
                 ?pk,
@@ -159,7 +159,7 @@ where
         signed
             .verify(&pk)
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     ?signed.sig,
                     ?pk,

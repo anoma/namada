@@ -60,14 +60,14 @@ where
         VoteExtensionError,
     > {
         if self.wl_storage.storage.last_height.0 == 0 {
-            tracing::error!(
+            tracing::debug!(
                 "Dropping validator set update vote extension issued at \
                  genesis"
             );
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         if ext.data.signing_epoch != signing_epoch {
-            tracing::error!(
+            tracing::debug!(
                 vext_epoch = ?ext.data.signing_epoch,
                 expected_epoch = ?signing_epoch,
                 "Validator set update vote extension issued for an epoch \
@@ -81,7 +81,7 @@ where
             .is_bridge_active_at(signing_epoch.next())
         {
             let next_epoch = signing_epoch.next();
-            tracing::error!(
+            tracing::debug!(
                 ?next_epoch,
                 "The Ethereum bridge was not enabled when the valset
                  upd's vote extension was cast",
@@ -99,7 +99,7 @@ where
             let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
                 Some(voting_power) => voting_power,
                 _ => {
-                    tracing::error!(
+                    tracing::debug!(
                         ?eth_addr_book,
                         "Could not find expected Ethereum addresses in valset \
                          upd vote extension",
@@ -110,7 +110,7 @@ where
                 }
             };
             if namada_power != ext_power {
-                tracing::error!(
+                tracing::debug!(
                     validator = %namada_addr,
                     expected = ?namada_power,
                     got = ?ext_power,
@@ -126,7 +126,7 @@ where
             .pos_queries()
             .get_validator_from_address(validator, Some(signing_epoch))
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     %validator,
                     "Could not get public key from Storage for some validator, \
@@ -142,7 +142,7 @@ where
         // verify the signature of the vote extension
         ext.verify(&pk)
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     ?ext.sig,
                     ?pk,
