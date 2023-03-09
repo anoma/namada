@@ -4,6 +4,8 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
+use std::num::NonZeroU64;
+
 #[cfg(not(feature = "abcipp"))]
 use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
@@ -180,6 +182,14 @@ where
     pub fn extend_vote_with_valset_update(
         &mut self,
     ) -> Option<validator_set_update::SignedVext> {
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active(NonZeroU64::new(2))
+        {
+            return None;
+        }
+
         let validator_addr = self
             .mode
             .get_validator_address()
@@ -421,13 +431,9 @@ where
                         | ProtocolTxType::BridgePoolVext(_),
                     ..
                 }) => {
-                    // mark tx for inclusion or it is skipped
-                    // if the bridge is inactive
+                    // mark tx for inclusion
                     protocol_tx_indices.insert(index);
-                    self.wl_storage
-                        .ethbridge_queries()
-                        .is_bridge_active(None)
-                        .then_some(tx_bytes.clone())
+                    Some(tx_bytes.clone())
                 }
                 TxType::Protocol(ProtocolTx {
                     tx: ProtocolTxType::ValSetUpdateVext(ext),
