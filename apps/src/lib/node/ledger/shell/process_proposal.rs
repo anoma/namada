@@ -745,7 +745,7 @@ where
                     true
                 }
             })
-            .unwrap_or_else(|| meta.digests.valset_upd_digest_num == 0)
+            .unwrap_or(meta.digests.valset_upd_digest_num == 0)
     }
 
     /// Checks if it is not possible to include encrypted txs at the current

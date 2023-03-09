@@ -402,6 +402,8 @@ mod test_prepare_proposal {
     };
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
+    #[cfg(feature = "abcipp")]
+    use namada::proto::SignableEthMessage;
     use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
@@ -423,6 +425,10 @@ mod test_prepare_proposal {
     };
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::deactivate_bridge;
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, TestShell,
     };

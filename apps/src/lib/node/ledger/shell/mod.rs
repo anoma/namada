@@ -1604,7 +1604,7 @@ mod test_utils {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "abcipp")))]
 mod tests {
     use namada::proto::{SignableEthMessage, Signed};
     use namada::types::ethereum_events::EthereumEvent;
@@ -1619,7 +1619,6 @@ mod tests {
     /// voting on ethereum events or signing bridge pool roots
     /// and nonces if the bridge is inactive.
     #[test]
-    #[cfg(not(feature = "abcipp"))]
     fn test_mempool_filter_protocol_txs_bridge_inactive() {
         let (mut shell, _, _, _) = setup_at_height(3);
         deactivate_bridge(&mut shell);
