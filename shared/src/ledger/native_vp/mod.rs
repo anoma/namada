@@ -5,6 +5,7 @@ pub mod ethereum_bridge;
 pub mod governance;
 pub mod parameters;
 pub mod slash_fund;
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
@@ -17,7 +18,7 @@ use super::vp_host_fns;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage;
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{Storage, StorageHasher, WlStorageRef};
+use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
@@ -85,22 +86,6 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
-}
-
-impl<'shell, DB, H, CA> From<&Ctx<'shell, DB, H, CA>>
-    for WlStorageRef<'shell, DB, H>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    #[inline]
-    fn from(ctx: &Ctx<'shell, DB, H, CA>) -> Self {
-        Self {
-            storage: ctx.storage,
-            write_log: ctx.write_log,
-        }
-    }
 }
 
 /// Read access to the prior storage (state before tx execution) via

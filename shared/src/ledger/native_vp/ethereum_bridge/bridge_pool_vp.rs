@@ -23,7 +23,7 @@ use namada_ethereum_bridge::storage::wrapped_erc20s;
 use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, WlStorageRef, DB};
+use crate::ledger::storage::{DBIter, DB};
 use crate::proto::SignedTxData;
 use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_bridge_pool::PendingTransfer;
@@ -131,9 +131,7 @@ where
         Ok(
             if transfer.gas_fee.payer == transfer.transfer.sender
                 && transfer.transfer.asset
-                    == read_native_erc20_address(&WlStorageRef::from(
-                        &self.ctx,
-                    ))?
+                    == read_native_erc20_address(&self.ctx.pre())?
             {
                 let debit = transfer
                     .gas_fee
@@ -299,8 +297,7 @@ where
         }
         // if we are going to mint wNam on Ethereum, the appropriate
         // amount of Nam must be escrowed in the Ethereum bridge VP's storage.
-        let wnam_address =
-            read_native_erc20_address(&WlStorageRef::from(&self.ctx))?;
+        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
         if transfer.transfer.asset == wnam_address {
             // check that correct amount of Nam was put into escrow.
             return if self.check_nam_escrowed(escrow_checks.token_check)? {
