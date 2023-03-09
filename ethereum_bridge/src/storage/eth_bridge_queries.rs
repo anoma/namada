@@ -128,8 +128,22 @@ where
     /// Returns a boolean indicating whether the bridge is currently active,
     /// or if it will be active within the provided epoch offset
     /// (i.e. `current_epoch + in_num_of_epochs`).
+    #[inline]
     pub fn is_bridge_active(
         self,
+        in_num_of_epochs: Option<NonZeroU64>,
+    ) -> bool {
+        self.is_bridge_active_at(
+            self.wl_storage.storage.get_current_epoch().0,
+            in_num_of_epochs,
+        )
+    }
+
+    /// Behaves exactly like [`Self::is_bridge_active`], but performs
+    /// the check at the given [`Epoch`].
+    pub fn is_bridge_active_at(
+        self,
+        epoch: Epoch,
         in_num_of_epochs: Option<NonZeroU64>,
     ) -> bool {
         match self.check_bridge_status() {
@@ -138,10 +152,9 @@ where
             EthBridgeStatus::Enabled(EthBridgeEnabled::AtEpoch(
                 enabled_epoch,
             )) => {
-                let current_epoch =
-                    self.wl_storage.storage.get_current_epoch().0;
                 let offset = in_num_of_epochs.map(NonZeroU64::get).unwrap_or(0);
-                current_epoch + offset >= enabled_epoch
+                let queried_epoch = epoch + offset;
+                queried_epoch >= enabled_epoch
             }
         }
     }
