@@ -1605,6 +1605,16 @@ mod test_utils {
 
 #[cfg(test)]
 mod tests {
+    use namada::proto::{SignableEthMessage, Signed};
+    use namada::types::ethereum_events::EthereumEvent;
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
+
+    use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+    use crate::node::ledger::shell::test_utils::{
+        deactivate_bridge, get_bp_bytes_to_sign, setup_at_height,
+    };
+
     /// Test that we do not include protocol txs voting on ethereum
     /// events or signing bridge pool roots + nonces if the bridge
     /// is inactive.

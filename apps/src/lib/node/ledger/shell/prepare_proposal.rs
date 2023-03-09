@@ -402,7 +402,7 @@ mod test_prepare_proposal {
     };
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
-    use namada::proto::{SignableEthMessage, Signed, SignedTxData};
+    use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -411,17 +411,20 @@ mod test_prepare_proposal {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::bridge_pool_roots;
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
-    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::deactivate_bridge;
     use crate::node::ledger::shell::test_utils::{
-        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        setup_at_height, TestShell,
+        self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
