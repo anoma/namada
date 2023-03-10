@@ -69,7 +69,7 @@ pub struct WriteLog {
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
-    ibc_events: Vec<IbcEvent>,
+    ibc_events: BTreeSet<IbcEvent>,
 }
 
 /// Write log prefix iterator
@@ -94,7 +94,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
-            ibc_events: Vec::new(),
+            ibc_events: BTreeSet::new(),
         }
     }
 }
@@ -334,7 +334,7 @@ impl WriteLog {
             .attributes
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        self.ibc_events.push(event);
+        self.ibc_events.insert(event);
         len as _
     }
 
@@ -381,13 +381,13 @@ impl WriteLog {
     }
 
     /// Take the IBC event of the current transaction
-    pub fn take_ibc_events(&mut self) -> Vec<IbcEvent> {
-        std::mem::replace(&mut self.ibc_events, Vec::new())
+    pub fn take_ibc_events(&mut self) -> BTreeSet<IbcEvent> {
+        std::mem::replace(&mut self.ibc_events, BTreeSet::new())
     }
 
     /// Get the IBC event of the current transaction
-    pub fn get_ibc_events(&self) -> &Vec<IbcEvent> {
-        self.ibc_events.as_ref()
+    pub fn get_ibc_events(&self) -> &BTreeSet<IbcEvent> {
+        &self.ibc_events
     }
 
     /// Commit the current transaction's write log to the block when it's

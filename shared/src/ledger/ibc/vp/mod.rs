@@ -226,17 +226,30 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
+    use borsh::BorshSerialize;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use prost::Message;
+    use sha2::Digest;
 
     use super::super::storage::{
-        channel_counter_key, channel_key, client_connections_key,
-        client_counter_key, client_state_key, client_type_key,
-        client_update_height_key, client_update_timestamp_key,
-        connection_counter_key, connection_key, consensus_state_key,
-        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        ack_key, calc_hash, channel_counter_key, channel_key,
+        client_connections_key, client_counter_key, client_state_key,
+        client_type_key, client_update_height_key, client_update_timestamp_key,
+        commitment_key, connection_counter_key, connection_key,
+        consensus_state_key, ibc_denom_key, next_sequence_ack_key,
+        next_sequence_recv_key, next_sequence_send_key, receipt_key,
     };
     use super::{get_dummy_header, *};
+    use crate::core::types::address::nam;
+    use crate::core::types::address::testing::established_address_1;
+    use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
+    use crate::ibc::applications::transfer::coin::PrefixedCoin;
+    use crate::ibc::applications::transfer::denom::TracePrefix;
+    use crate::ibc::applications::transfer::events::{
+        AckEvent, DenomTraceEvent, TimeoutEvent, TransferEvent,
+    };
+    use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+    use crate::ibc::applications::transfer::packet::PacketData;
     use crate::ibc::applications::transfer::VERSION;
     use crate::ibc::core::ics02_client::client_state::ClientState;
     use crate::ibc::core::ics02_client::events::{CreateClient, UpdateClient};
@@ -259,15 +272,25 @@ mod tests {
     use crate::ibc::core::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
+    use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
     use crate::ibc::core::ics04_channel::events::{
-        OpenAck as ChanOpenAck, OpenConfirm as ChanOpenConfirm,
-        OpenInit as ChanOpenInit, OpenTry as ChanOpenTry,
+        AcknowledgePacket, OpenAck as ChanOpenAck,
+        OpenConfirm as ChanOpenConfirm, OpenInit as ChanOpenInit,
+        OpenTry as ChanOpenTry, ReceivePacket, SendPacket, TimeoutPacket,
+        WriteAcknowledgement,
+    };
+    use crate::ibc::core::ics04_channel::msgs::acknowledgement::{
+        Acknowledgement, MsgAcknowledgement,
     };
     use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
     use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
     use crate::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
     use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-    use crate::ibc::core::ics04_channel::packet::Sequence;
+    use crate::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
+    use crate::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
+    use crate::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+    use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
+    use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
     use crate::ibc::core::ics04_channel::Version as ChanVersion;
     use crate::ibc::core::ics23_commitment::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
@@ -275,7 +298,7 @@ mod tests {
     use crate::ibc::core::ics24_host::identifier::{
         ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
     };
-    use crate::ibc::events::IbcEvent as RawIbcEvent;
+    use crate::ibc::events::{IbcEvent as RawIbcEvent, ModuleEvent};
     use crate::ibc::mock::client_state::{
         client_type, MockClientState, MOCK_CLIENT_TYPE,
     };
@@ -285,17 +308,18 @@ mod tests {
     use crate::ibc::timestamp::Timestamp;
     use crate::ibc::tx_msg::Msg;
     use crate::ibc::Height;
+    use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use crate::ibc_proto::google::protobuf::Any;
     use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
     use crate::ibc_proto::protobuf::Protobuf;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::init_genesis_storage;
-    use crate::ledger::storage::testing::TestStorage;
     use crate::proto::Tx;
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
+    use crate::types::token::{balance_key, Amount};
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -443,8 +467,8 @@ mod tests {
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
 
-    fn get_next_seq(storage: &TestStorage, key: &Key) -> Sequence {
-        let (val, _) = storage.read(key).expect("read failed");
+    fn get_next_seq(wl_storage: &TestWlStorage, key: &Key) -> Sequence {
+        let (val, _) = wl_storage.storage.read(key).expect("read failed");
         match val {
             Some(v) => {
                 // IBC related data is encoded without borsh
@@ -474,6 +498,57 @@ mod tests {
 
     fn dummy_proof() -> CommitmentProofBytes {
         CommitmentProofBytes::try_from(vec![0]).unwrap()
+    }
+
+    fn packet_from_message(
+        msg: &MsgTransfer,
+        sequence: Sequence,
+        counterparty: &ChanCounterparty,
+    ) -> Packet {
+        let coin: PrefixedCoin =
+            msg.token.clone().try_into().expect("invalid token");
+        let packet_data = PacketData {
+            token: coin,
+            sender: msg.sender.clone(),
+            receiver: msg.receiver.clone(),
+        };
+        let data = serde_json::to_vec(&packet_data)
+            .expect("Encoding PacketData failed");
+
+        Packet {
+            sequence,
+            port_on_a: msg.port_on_a.clone(),
+            chan_on_a: msg.chan_on_a.clone(),
+            port_on_b: counterparty.port_id.clone(),
+            chan_on_b: counterparty
+                .channel_id()
+                .expect("the counterparty channel should exist")
+                .clone(),
+            data,
+            timeout_height_on_b: msg.timeout_height_on_b,
+            timeout_timestamp_on_b: msg.timeout_timestamp_on_b,
+        }
+    }
+
+    fn commitment(packet: &Packet) -> PacketCommitment {
+        let timeout = packet.timeout_timestamp_on_b.nanoseconds().to_be_bytes();
+        let revision_number = packet
+            .timeout_height_on_b
+            .commitment_revision_number()
+            .to_be_bytes();
+        let revision_height = packet
+            .timeout_height_on_b
+            .commitment_revision_height()
+            .to_be_bytes();
+        let data = sha2::Sha256::digest(&packet.data);
+        let input = [
+            &timeout,
+            &revision_number,
+            &revision_height,
+            data.as_slice(),
+        ]
+        .concat();
+        sha2::Sha256::digest(&input).to_vec().into()
     }
 
     #[test]
@@ -1416,7 +1491,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut wl_storage = insert_init_states();
 
-        // insert an opend connection
+        // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec().expect("encoding failed");
@@ -1530,7 +1605,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut wl_storage = insert_init_states();
 
-        // insert an opend connection
+        // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec().expect("encoding failed");
@@ -1628,7 +1703,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut wl_storage = insert_init_states();
 
-        // insert an opend connection
+        // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec().expect("encoding failed");
@@ -1719,12 +1794,718 @@ mod tests {
         );
     }
 
-    // TODO test_close_init_channel()
-    // TODO test_close_confirm_channel()
+    // skip test_close_init_channel() and test_close_confirm_channel() since it
+    // is not allowed to close the transfer channel
 
-    // TODO test_token_transfer()
-    // TODO test_recv_packet()
-    // TODO test_ack_packet()
-    // TODO test_timeout_packet()
-    // TODO test_timeout_on_close_packet()
+    #[test]
+    fn test_send_packet() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = insert_init_states();
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an Open channel
+        let channel_key = channel_key(&get_port_channel_id());
+        let channel = get_channel(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        // init balance
+        let sender = established_address_1();
+        let balance_key = balance_key(&nam(), &sender);
+        let amount = Amount::whole(100);
+        wl_storage
+            .write_log
+            .write(&balance_key, amount.try_to_vec().unwrap())
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let msg = MsgTransfer {
+            port_on_a: get_port_id(),
+            chan_on_a: get_channel_id(),
+            token: Coin {
+                denom: nam().to_string(),
+                amount: 100u64.to_string(),
+            },
+            sender: Signer::from_str(&sender.to_string())
+                .expect("invalid signer"),
+            receiver: Signer::from_str("receiver").expect("invalid signer"),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+
+        // the sequence send
+        let seq_key = next_sequence_send_key(&get_port_channel_id());
+        let sequence = get_next_seq(&wl_storage, &seq_key);
+        wl_storage
+            .write_log
+            .write(&seq_key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
+            .expect("write failed");
+        keys_changed.insert(seq_key);
+        // packet commitment
+        let packet =
+            packet_from_message(&msg, sequence, &get_channel_counterparty());
+        let commitment_key = commitment_key(
+            &msg.port_on_a.clone(),
+            &msg.chan_on_a.clone(),
+            sequence,
+        );
+        let commitment = commitment(&packet);
+        let bytes = commitment.into_vec();
+        wl_storage
+            .write_log
+            .write(&commitment_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(commitment_key);
+        // event
+        let transfer_event = TransferEvent {
+            sender: msg.sender.clone(),
+            receiver: msg.receiver.clone(),
+        };
+        let event = RawIbcEvent::AppModule(ModuleEvent::from(transfer_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::SendPacket(SendPacket::new(
+            packet,
+            Order::Unordered,
+            get_connection_id(),
+        ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_recv_packet() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = insert_init_states();
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an open channel
+        let channel_key = channel_key(&get_port_channel_id());
+        let channel = get_channel(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let receiver = established_address_1();
+        let transfer_msg = MsgTransfer {
+            port_on_a: get_port_id(),
+            chan_on_a: get_channel_id(),
+            token: Coin {
+                denom: nam().to_string(),
+                amount: 100u64.to_string(),
+            },
+            sender: Signer::from_str("sender").expect("invalid signer"),
+            receiver: Signer::from_str(&receiver.to_string())
+                .expect("invalid signer"),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+        let counterparty = get_channel_counterparty();
+        let mut packet =
+            packet_from_message(&transfer_msg, 1.into(), &counterparty);
+        packet.port_on_a = counterparty.port_id().clone();
+        packet.chan_on_a = counterparty.channel_id().cloned().unwrap();
+        packet.port_on_b = get_port_id();
+        packet.chan_on_b = get_channel_id();
+        let msg = MsgRecvPacket {
+            packet: packet.clone(),
+            proof_commitment_on_a: dummy_proof(),
+            proof_height_on_a: Height::new(0, 1).unwrap(),
+            signer: Signer::from_str("account0").expect("invalid signer"),
+        };
+
+        // the sequence send
+        let receipt_key = receipt_key(
+            &msg.packet.port_on_b,
+            &msg.packet.chan_on_b,
+            msg.packet.sequence,
+        );
+        let bytes = [1_u8].to_vec();
+        wl_storage
+            .write_log
+            .write(&receipt_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(receipt_key);
+        // packet commitment
+        let ack_key = ack_key(
+            &packet.port_on_b.clone(),
+            &packet.chan_on_b.clone(),
+            msg.packet.sequence,
+        );
+        let transfer_ack = TokenTransferAcknowledgement::success();
+        let acknowledgement = Acknowledgement::from(transfer_ack);
+        let bytes = sha2::Sha256::digest(acknowledgement.as_ref()).to_vec();
+        wl_storage
+            .write_log
+            .write(&ack_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(ack_key);
+        // denom
+        let mut coin: PrefixedCoin = transfer_msg
+            .token
+            .clone()
+            .try_into()
+            .expect("invalid token");
+        coin.denom.add_trace_prefix(TracePrefix::new(
+            packet.port_on_b.clone(),
+            packet.chan_on_b.clone(),
+        ));
+        let trace_hash = calc_hash(coin.denom.to_string());
+        let denom_key = ibc_denom_key(&trace_hash);
+        let bytes = coin.denom.to_string().as_bytes().to_vec();
+        wl_storage
+            .write_log
+            .write(&denom_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(denom_key);
+        // event
+        let denom_trace_event = DenomTraceEvent {
+            trace_hash: Some(trace_hash),
+            denom: coin.denom,
+        };
+        let event =
+            RawIbcEvent::AppModule(ModuleEvent::from(denom_trace_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::ReceivePacket(ReceivePacket::new(
+            msg.packet.clone(),
+            Order::Unordered,
+            get_connection_id(),
+        ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event =
+            RawIbcEvent::WriteAcknowledgement(WriteAcknowledgement::new(
+                packet,
+                acknowledgement,
+                get_connection_id(),
+            ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_ack_packet() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = insert_init_states();
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an Open channel
+        let channel_key = channel_key(&get_port_channel_id());
+        let channel = get_channel(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        // commitment
+        let sender = established_address_1();
+        let transfer_msg = MsgTransfer {
+            port_on_a: get_port_id(),
+            chan_on_a: get_channel_id(),
+            token: Coin {
+                denom: nam().to_string(),
+                amount: 100u64.to_string(),
+            },
+            sender: Signer::from_str(&sender.to_string())
+                .expect("invalid signer"),
+            receiver: Signer::from_str("receiver").expect("invalid signer"),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+        let sequence = 1.into();
+        let packet = packet_from_message(
+            &transfer_msg,
+            sequence,
+            &get_channel_counterparty(),
+        );
+        let commitment_key = commitment_key(
+            &transfer_msg.port_on_a.clone(),
+            &transfer_msg.chan_on_a.clone(),
+            sequence,
+        );
+        let commitment = commitment(&packet);
+        let bytes = commitment.into_vec();
+        wl_storage
+            .write_log
+            .write(&commitment_key, bytes)
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let transfer_ack = TokenTransferAcknowledgement::success();
+        let acknowledgement = Acknowledgement::from(transfer_ack.clone());
+        let msg = MsgAcknowledgement {
+            packet: packet.clone(),
+            acknowledgement,
+            proof_acked_on_b: dummy_proof(),
+            proof_height_on_b: Height::new(0, 1).unwrap(),
+            signer: Signer::from_str("account0").expect("invalid signer"),
+        };
+
+        // delete the commitment
+        wl_storage
+            .write_log
+            .delete(&commitment_key)
+            .expect("delete failed");
+        keys_changed.insert(commitment_key);
+        // event
+        let data = serde_json::from_slice::<PacketData>(&packet.data)
+            .expect("decoding packet data failed");
+        let ack_event = AckEvent {
+            receiver: data.receiver,
+            denom: data.token.denom,
+            amount: data.token.amount,
+            acknowledgement: transfer_ack,
+        };
+        let event = RawIbcEvent::AppModule(ModuleEvent::from(ack_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::AcknowledgePacket(AcknowledgePacket::new(
+            packet.clone(),
+            Order::Unordered,
+            get_connection_id(),
+        ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_timeout_packet() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = insert_init_states();
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an Open channel
+        let channel_key = channel_key(&get_port_channel_id());
+        let channel = get_channel(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        // init the escrow balance
+        let balance_key =
+            balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
+        let amount = Amount::whole(100);
+        wl_storage
+            .write_log
+            .write(&balance_key, amount.try_to_vec().unwrap())
+            .expect("write failed");
+        // commitment
+        let sender = established_address_1();
+        let transfer_msg = MsgTransfer {
+            port_on_a: get_port_id(),
+            chan_on_a: get_channel_id(),
+            token: Coin {
+                denom: nam().to_string(),
+                amount: 100u64.to_string(),
+            },
+            sender: Signer::from_str(&sender.to_string())
+                .expect("invalid signer"),
+            receiver: Signer::from_str("receiver").expect("invalid signer"),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+        let sequence = 1.into();
+        let packet = packet_from_message(
+            &transfer_msg,
+            sequence,
+            &get_channel_counterparty(),
+        );
+        let commitment_key = commitment_key(
+            &transfer_msg.port_on_a.clone(),
+            &transfer_msg.chan_on_a.clone(),
+            sequence,
+        );
+        let commitment = commitment(&packet);
+        let bytes = commitment.into_vec();
+        wl_storage
+            .write_log
+            .write(&commitment_key, bytes)
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let msg = MsgTimeout {
+            packet: packet.clone(),
+            next_seq_recv_on_b: sequence,
+            proof_unreceived_on_b: dummy_proof(),
+            proof_height_on_b: Height::new(0, 1).unwrap(),
+            signer: Signer::from_str("account0").expect("invalid signer"),
+        };
+
+        // delete the commitment
+        wl_storage
+            .write_log
+            .delete(&commitment_key)
+            .expect("delete failed");
+        keys_changed.insert(commitment_key);
+        // event
+        let data = serde_json::from_slice::<PacketData>(&packet.data)
+            .expect("decoding packet data failed");
+        let timeout_event = TimeoutEvent {
+            refund_receiver: data.sender,
+            refund_denom: data.token.denom,
+            refund_amount: data.token.amount,
+        };
+        let event = RawIbcEvent::AppModule(ModuleEvent::from(timeout_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::TimeoutPacket(TimeoutPacket::new(
+            packet,
+            Order::Unordered,
+        ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_timeout_on_close_packet() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = insert_init_states();
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an Open channel
+        let channel_key = channel_key(&get_port_channel_id());
+        let channel = get_channel(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec().expect("encoding failed");
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        // init the escrow balance
+        let balance_key =
+            balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
+        let amount = Amount::whole(100);
+        wl_storage
+            .write_log
+            .write(&balance_key, amount.try_to_vec().unwrap())
+            .expect("write failed");
+        // commitment
+        let sender = established_address_1();
+        let transfer_msg = MsgTransfer {
+            port_on_a: get_port_id(),
+            chan_on_a: get_channel_id(),
+            token: Coin {
+                denom: nam().to_string(),
+                amount: 100u64.to_string(),
+            },
+            sender: Signer::from_str(&sender.to_string())
+                .expect("invalid signer"),
+            receiver: Signer::from_str("receiver").expect("invalid signer"),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+        let sequence = 1.into();
+        let packet = packet_from_message(
+            &transfer_msg,
+            sequence,
+            &get_channel_counterparty(),
+        );
+        let commitment_key = commitment_key(
+            &transfer_msg.port_on_a.clone(),
+            &transfer_msg.chan_on_a.clone(),
+            sequence,
+        );
+        let commitment = commitment(&packet);
+        let bytes = commitment.into_vec();
+        wl_storage
+            .write_log
+            .write(&commitment_key, bytes)
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let msg = MsgTimeoutOnClose {
+            packet: packet.clone(),
+            next_seq_recv_on_b: sequence,
+            proof_unreceived_on_b: dummy_proof(),
+            proof_close_on_b: dummy_proof(),
+            proof_height_on_b: Height::new(0, 1).unwrap(),
+            signer: Signer::from_str("account0").expect("invalid signer"),
+        };
+
+        // delete the commitment
+        wl_storage
+            .write_log
+            .delete(&commitment_key)
+            .expect("delete failed");
+        keys_changed.insert(commitment_key);
+        // event
+        let data = serde_json::from_slice::<PacketData>(&packet.data)
+            .expect("decoding packet data failed");
+        let timeout_event = TimeoutEvent {
+            refund_receiver: data.sender,
+            refund_denom: data.token.denom,
+            refund_amount: data.token.amount,
+        };
+        let event = RawIbcEvent::AppModule(ModuleEvent::from(timeout_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::TimeoutPacket(TimeoutPacket::new(
+            packet,
+            Order::Unordered,
+        ));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx::new(tx_code, Some(tx_data)).sign(&keypair_1());
+        let gas_meter = VpGasMeter::new(0);
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(
+                tx.data.as_ref().unwrap(),
+                &keys_changed,
+                &verifiers
+            )
+            .expect("validation failed")
+        );
+    }
 }

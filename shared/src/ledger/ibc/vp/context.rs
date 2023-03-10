@@ -1,8 +1,9 @@
 //! Contexts for IBC validity predicate
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{
     IbcCommonContext, IbcStorageContext, ProofSpec,
 };
@@ -31,7 +32,7 @@ where
     /// Context to read the previous value
     ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
     /// IBC event
-    pub event: Vec<IbcEvent>,
+    pub event: BTreeSet<IbcEvent>,
 }
 
 impl<'view, 'a, DB, H, CA> PseudoExecutionContext<'view, 'a, DB, H, CA>
@@ -44,12 +45,12 @@ where
         Self {
             store: HashMap::new(),
             ctx,
-            event: Vec::new(),
+            event: BTreeSet::new(),
         }
     }
 
     pub fn get_changed_keys(&self) -> HashSet<&Key> {
-        self.store.keys().collect()
+        self.store.keys().filter(|k| is_ibc_key(k)).collect()
     }
 
     pub fn get_changed_value(&self, key: &Key) -> Option<&StorageModification> {
@@ -111,7 +112,7 @@ where
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
-        self.event.push(event);
+        self.event.insert(event);
         Ok(())
     }
 

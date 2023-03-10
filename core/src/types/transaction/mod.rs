@@ -52,7 +52,7 @@ pub struct TxResult {
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
     /// IBC events emitted by the transaction
-    pub ibc_events: Vec<IbcEvent>,
+    pub ibc_events: BTreeSet<IbcEvent>,
 }
 
 impl TxResult {
