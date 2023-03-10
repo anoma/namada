@@ -1,6 +1,6 @@
 mod abortable;
 mod broadcaster;
-mod ethereum_oracle;
+pub mod ethereum_oracle;
 mod shell;
 mod shims;
 pub mod storage;
