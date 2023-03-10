@@ -375,7 +375,7 @@ fn decode_tx(
     tv.output_expert.push(format!(
         "{} | Code hash: {}",
         j,
-        HEXLOWER.encode(&tx.code_hash())
+        HEXLOWER.encode(&tx.code)
     ));
     j += 1;
 
