@@ -17,7 +17,6 @@ use tokio::task::LocalSet;
 use tokio::time::Instant;
 #[cfg(not(test))]
 use web30::client::Web3;
-#[cfg(not(test))]
 use web30::jsonrpc::error::Web3Error;
 
 use self::events::{signatures, PendingEvent};
@@ -89,8 +88,9 @@ impl Deref for Oracle {
 }
 
 /// Fetch the sync status of an Ethereum node.
-#[cfg(not(test))]
-pub async fn eth_syncing_status(client: &Web3) -> Result<SyncStatus, Error> {
+pub async fn eth_syncing_status(
+    client: &web30::client::Web3,
+) -> Result<SyncStatus, Error> {
     match client.eth_block_number().await {
         Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
         Ok(height) => Ok(SyncStatus::AtHeight(height)),
