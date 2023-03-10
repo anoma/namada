@@ -437,27 +437,6 @@ mod test_prepare_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
-    /// Extract an [`ethereum_events::SignedVext`], from a set of
-    /// serialized [`TxBytes`].
-    #[cfg(not(feature = "abcipp"))]
-    fn extract_eth_events_vext(
-        tx_bytes: TxBytes,
-    ) -> ethereum_events::SignedVext {
-        let got = Tx::try_from(&tx_bytes[..]).unwrap();
-        let got_signed_tx =
-            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-        let protocol_tx =
-            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
-        let protocol_tx = match protocol_tx {
-            TxType::Protocol(protocol_tx) => protocol_tx.tx,
-            _ => panic!("Test failed"),
-        };
-        match protocol_tx {
-            ProtocolTxType::EthEventsVext(ext) => ext,
-            _ => panic!("Test failed"),
-        }
-    }
-
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
         let validator_addr = shell
@@ -825,53 +804,6 @@ mod test_prepare_proposal {
         );
 
         assert_eq!(rsp_digest, digest);
-    }
-
-    /// Test if Ethereum events validation and inclusion in a block
-    /// behaves as expected, considering honest validators.
-    #[cfg(not(feature = "abcipp"))]
-    #[test]
-    fn test_prepare_proposal_vext_normal_op() {
-        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
-
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let validator_addr = wallet::defaults::validator_address();
-
-        let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
-            transfers: vec![],
-        };
-        let ext = {
-            let ext = ethereum_events::Vext {
-                validator_addr,
-                block_height: LAST_HEIGHT,
-                ethereum_events: vec![ethereum_event],
-            }
-            .sign(&protocol_key);
-            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-            ext
-        };
-
-        let rsp_ext = {
-            let tx = ProtocolTxType::EthEventsVext(ext.clone())
-                .sign(&protocol_key)
-                .to_bytes();
-            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                txs: vec![tx],
-                ..Default::default()
-            });
-            assert_eq!(rsp.txs.len(), 1);
-
-            let tx_bytes = rsp.txs.remove(0);
-            extract_eth_events_vext(tx_bytes)
-        };
-
-        assert_eq!(rsp_ext, ext);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
