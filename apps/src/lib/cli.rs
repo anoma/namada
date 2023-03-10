@@ -2017,6 +2017,7 @@ pub mod args {
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
+    const DAEMON_MODE: ArgFlag = flag("daemon");
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
@@ -2553,6 +2554,9 @@ pub mod args {
 
     #[derive(Debug, Clone)]
     pub struct ValidatorSetUpdateRelay {
+        /// Run in daemon mode, which will continuously
+        /// perform validator set updates.
+        pub daemon: bool,
         /// The query parameters.
         pub query: Query,
         /// The number of block confirmations on Ethereum.
@@ -2577,6 +2581,7 @@ pub mod args {
 
     impl Args for ValidatorSetUpdateRelay {
         fn parse(matches: &ArgMatches) -> Self {
+            let daemon = DAEMON_MODE.parse(matches);
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
             let gas = ETH_GAS.parse(matches);
@@ -2587,6 +2592,7 @@ pub mod args {
             let sync = ETH_SYNC.parse(matches);
             Self {
                 sync,
+                daemon,
                 query,
                 epoch,
                 gas,
@@ -2599,6 +2605,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query>()
+                .arg(DAEMON_MODE.def().about(
+                    "Run in daemon mode, which will continuously perform \
+                     validator set updates.",
+                ))
                 .arg(ETH_ADDRESS_OPT.def().about(
                     "The address of the Ethereum wallet to pay the gas fees. \
                      If unset, the default wallet is used.",
