@@ -71,7 +71,7 @@ where
             );
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
-        if last_height.0 == 0 {
+        if ext.data.block_height.0 == 0 {
             tracing::debug!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
