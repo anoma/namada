@@ -1606,9 +1606,12 @@ mod test_utils {
 
 #[cfg(all(test, not(feature = "abcipp")))]
 mod mempool_tests {
+    use borsh::BorshSerialize;
     use namada::proto::{SignableEthMessage, Signed, Tx};
     use namada::types::ethereum_events::EthereumEvent;
+    use namada::types::storage::Epoch;
     use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use crate::node::ledger::shell::test_utils;
@@ -1674,6 +1677,42 @@ mod mempool_tests {
         )
         .to_bytes();
         let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
+        assert_eq!(rsp.code, 1);
+    }
+
+    /// Test that if an error is encountered while trying to process a tx,
+    /// it is prohibited from making its way onto the mempool.
+    #[test]
+    fn test_error_in_processing_tx() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let keypair = test_utils::gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+        );
+        // an unsigned wrapper will cause an error in processing
+        let wrapper = Tx::new(
+            "".as_bytes().to_owned(),
+            Some(
+                WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    tx,
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            ),
+        )
+        .to_bytes();
+        let rsp = shell.mempool_validate(&wrapper, Default::default());
         assert_eq!(rsp.code, 1);
     }
 }

@@ -396,7 +396,9 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    #[cfg(feature = "abcipp")]
+    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -1023,53 +1025,6 @@ mod test_prepare_proposal {
 
             assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
         }
-    }
-
-    /// Test that if an error is encountered while
-    /// trying to process a tx from the mempool,
-    /// we simply exclude it from the proposal
-    // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
-    #[test]
-    fn test_error_in_processing_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-        );
-        // an unsigned wrapper will cause an error in processing
-        let wrapper = Tx::new(
-            "".as_bytes().to_owned(),
-            Some(
-                WrapperTx::new(
-                    Fee {
-                        amount: 0.into(),
-                        token: shell.wl_storage.storage.native_token.clone(),
-                    },
-                    &keypair,
-                    Epoch(0),
-                    0.into(),
-                    tx,
-                    Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
-                )
-                .try_to_vec()
-                .expect("Test failed"),
-            ),
-        )
-        .to_bytes();
-        #[allow(clippy::redundant_clone)]
-        let req = RequestPrepareProposal {
-            #[cfg(feature = "abcipp")]
-            local_last_commit: get_local_last_commit(&shell),
-            txs: vec![wrapper.clone()],
-            ..Default::default()
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
-        #[cfg(not(feature = "abcipp"))]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
 
     /// Test that the decrypted txs are included
