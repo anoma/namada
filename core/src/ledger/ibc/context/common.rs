@@ -39,7 +39,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         &self,
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        let key = storage::client_state_key(&client_id);
+        let key = storage::client_state_key(client_id);
         match self.read(&key) {
             Ok(Some(value)) => {
                 let any = Any::decode(&value[..]).map_err(|e| {
@@ -98,7 +98,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         &self,
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
-        let key = storage::connection_key(&connection_id);
+        let key = storage::connection_key(connection_id);
         match self.read(&key) {
             Ok(Some(value)) => {
                 ConnectionEnd::decode_vec(&value).map_err(|_| {
@@ -173,7 +173,7 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Calculate the hash
     fn hash(&self, value: &[u8]) -> Vec<u8> {
-        sha2::Sha256::digest(&value).to_vec()
+        sha2::Sha256::digest(value).to_vec()
     }
 
     /// Calculate the packet commitment
@@ -215,7 +215,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         }
 
         Err(ContextError::ClientError(ClientError::ClientSpecific {
-            description: format!("Unknown client state"),
+            description: "Unknown client state".to_string(),
         }))
     }
 
@@ -234,13 +234,13 @@ pub trait IbcCommonContext: IbcStorageContext {
         }
 
         Err(ContextError::ClientError(ClientError::ClientSpecific {
-            description: format!("Unknown consensus state"),
+            description: "Unknown consensus state".to_string(),
         }))
     }
 
     /// Read a counter
     fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
-        match self.read(&key) {
+        match self.read(key) {
             Ok(Some(value)) => {
                 let value: [u8; 8] = value.try_into().map_err(|_| {
                     ContextError::ClientError(ClientError::Other {
@@ -261,7 +261,7 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Read a sequence
     fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
-        match self.read(&key) {
+        match self.read(key) {
             Ok(Some(value)) => {
                 let value: [u8; 8] = value.try_into().map_err(|_| {
                     ContextError::ChannelError(ChannelError::Other {
@@ -276,7 +276,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             // when the sequence has never been used, returns the initial value
             Ok(None) => Ok(1.into()),
             Err(_) => {
-                let sequence = storage::port_channel_sequence_id(&key)
+                let sequence = storage::port_channel_sequence_id(key)
                     .expect("The key should have sequence")
                     .2;
                 Err(ContextError::ChannelError(ChannelError::Other {
@@ -326,7 +326,7 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Increment and write the counter
     fn increase_counter(&mut self, key: &Key) -> Result<(), ContextError> {
         let count = self.read_counter(key)?;
-        self.write(&key, (count + 1).to_be_bytes().to_vec())
+        self.write(key, (count + 1).to_be_bytes().to_vec())
             .map_err(|_| {
                 ContextError::ClientError(ClientError::Other {
                     description: format!(
@@ -343,7 +343,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         key: &Key,
         sequence: Sequence,
     ) -> Result<(), ContextError> {
-        self.write(&key, u64::from(sequence).to_be_bytes().to_vec())
+        self.write(key, u64::from(sequence).to_be_bytes().to_vec())
             .map_err(|_| {
                 ContextError::PacketError(PacketError::Channel(
                     ChannelError::Other {

@@ -288,7 +288,7 @@ where
                 description: "Getting the chain ID failed".to_string(),
             }
         })?;
-        if client_state.chain_id().to_string() != chain_id.to_string() {
+        if client_state.chain_id().to_string() != chain_id {
             return Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "The chain ID mismatched: in the client state {}",
@@ -556,7 +556,7 @@ where
         let key = get_max_expected_time_per_block_key();
         match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => {
-                crate::ledger::storage::types::decode::<DurationSecs>(&value)
+                crate::ledger::storage::types::decode::<DurationSecs>(value)
                     .expect("Decoding max_expected_time_per_block failed")
                     .into()
             }

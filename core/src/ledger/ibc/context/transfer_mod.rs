@@ -586,7 +586,7 @@ where
     ) -> Result<(), ContextError> {
         self.ctx
             .borrow_mut()
-            .store_next_sequence_send(&seq_send_path, seq)
+            .store_next_sequence_send(seq_send_path, seq)
     }
 
     fn store_packet_commitment(
@@ -596,7 +596,7 @@ where
     ) -> Result<(), ContextError> {
         self.ctx
             .borrow_mut()
-            .store_packet_commitment(&commitment_path, commitment)
+            .store_packet_commitment(commitment_path, commitment)
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) {

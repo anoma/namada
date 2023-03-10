@@ -88,7 +88,7 @@ where
     }
 
     fn get_route_by_port(&self, port_id: &PortId) -> Option<&dyn Module> {
-        self.lookup_module_by_port(&port_id)
+        self.lookup_module_by_port(port_id)
             .and_then(|id| self.get_route(&id))
     }
 
@@ -96,13 +96,13 @@ where
         &mut self,
         port_id: &PortId,
     ) -> Option<&mut dyn Module> {
-        self.lookup_module_by_port(&port_id)
+        self.lookup_module_by_port(port_id)
             .and_then(|id| self.get_route_mut(&id))
     }
 
     /// Execute according to the message in an IBC transaction or VP
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
-        let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        let msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
                 let msg =
@@ -173,7 +173,7 @@ where
                 };
                 let prefix = TracePrefix::new(
                     msg.packet.port_on_b.clone(),
-                    msg.packet.chan_on_b.clone(),
+                    msg.packet.chan_on_b,
                 );
                 let mut coin = data.token;
                 coin.denom.add_trace_prefix(prefix);
@@ -192,7 +192,7 @@ where
 
     /// Validate according to the message in IBC VP
     pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
-        let msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        let msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
                 let msg =

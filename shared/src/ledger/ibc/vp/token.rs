@@ -1,14 +1,12 @@
 //! IBC token transfer validation as a native validity predicate
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use prost::Message;
 use thiserror::Error;
 
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
-use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
@@ -186,10 +184,9 @@ where
         let mut coin = msg.token.clone();
         // lookup the original denom with the IBC token hash
         if let Some(token_hash) =
-            ibc_storage::token_hash_from_denom(&coin.denom.to_string())
-                .map_err(|e| {
-                    Error::Denom(format!("Invalid denom: error {}", e))
-                })?
+            ibc_storage::token_hash_from_denom(&coin.denom).map_err(|e| {
+                Error::Denom(format!("Invalid denom: error {}", e))
+            })?
         {
             let denom_key = ibc_storage::ibc_denom_key(token_hash);
             coin.denom = match self.ctx.read_bytes_pre(&denom_key) {
@@ -207,9 +204,8 @@ where
                 }
             };
         }
-        let coin =
-            PrefixedCoin::try_from(coin.clone()).map_err(Error::MsgTransfer)?;
-        let token = ibc_storage::token(&coin.denom.to_string())
+        let coin = PrefixedCoin::try_from(coin).map_err(Error::MsgTransfer)?;
+        let token = ibc_storage::token(coin.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount = Amount::try_from(coin.amount).map_err(Error::Amount)?;
 
@@ -261,7 +257,7 @@ where
     fn validate_receiving_token(&self, packet: &Packet) -> Result<bool> {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .map_err(Error::DecodingPacketData)?;
-        let token = ibc_storage::token(&data.token.denom.to_string())
+        let token = ibc_storage::token(data.token.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;
@@ -313,7 +309,7 @@ where
     fn validate_refunding_token(&self, packet: &Packet) -> Result<bool> {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .map_err(Error::DecodingPacketData)?;
-        let token = ibc_storage::token(&data.token.denom.to_string())
+        let token = ibc_storage::token(data.token.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;

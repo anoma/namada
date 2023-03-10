@@ -382,7 +382,7 @@ impl WriteLog {
 
     /// Take the IBC event of the current transaction
     pub fn take_ibc_events(&mut self) -> BTreeSet<IbcEvent> {
-        std::mem::replace(&mut self.ibc_events, BTreeSet::new())
+        std::mem::take(&mut self.ibc_events)
     }
 
     /// Get the IBC event of the current transaction

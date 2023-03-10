@@ -134,10 +134,10 @@ where
         for key in changed_ibc_keys {
             match self
                 .ctx
-                .read_bytes_post(&key)
+                .read_bytes_post(key)
                 .map_err(Error::NativeVpError)?
             {
-                Some(v) => match ctx.borrow().get_changed_value(&key) {
+                Some(v) => match ctx.borrow().get_changed_value(key) {
                     Some(StorageModification::Write { value }) => {
                         if v != *value {
                             return Err(Error::StateChange(format!(
@@ -155,7 +155,7 @@ where
                     }
                 },
                 None => {
-                    match ctx.borrow().get_changed_value(&key) {
+                    match ctx.borrow().get_changed_value(key) {
                         Some(StorageModification::Delete) => {
                             // the key was deleted expectedly
                         }
@@ -725,7 +725,7 @@ mod tests {
         // make a correct message
         let msg = MsgCreateClient {
             client_state: client_state.into(),
-            consensus_state: consensus_state.clone().into(),
+            consensus_state: consensus_state.into(),
             signer: Signer::from_str("account0").expect("invalid signer"),
         };
 
@@ -844,7 +844,7 @@ mod tests {
         // event
         let consensus_height = client_state.latest_height();
         let event = RawIbcEvent::UpdateClient(UpdateClient::new(
-            client_id.clone(),
+            client_id,
             client_state.client_type(),
             consensus_height,
             vec![consensus_height],
@@ -1412,7 +1412,7 @@ mod tests {
         counterparty.channel_id = None;
         let channel = ChannelEnd::new(
             ChanState::Init,
-            msg.ordering.clone(),
+            msg.ordering,
             counterparty.clone(),
             msg.connection_hops_on_a.clone(),
             msg.version_proposal.clone(),
@@ -1861,11 +1861,8 @@ mod tests {
         // packet commitment
         let packet =
             packet_from_message(&msg, sequence, &get_channel_counterparty());
-        let commitment_key = commitment_key(
-            &msg.port_on_a.clone(),
-            &msg.chan_on_a.clone(),
-            sequence,
-        );
+        let commitment_key =
+            commitment_key(&msg.port_on_a, &msg.chan_on_a, sequence);
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
         wl_storage
@@ -1998,11 +1995,8 @@ mod tests {
             .expect("write failed");
         keys_changed.insert(receipt_key);
         // packet commitment
-        let ack_key = ack_key(
-            &packet.port_on_b.clone(),
-            &packet.chan_on_b.clone(),
-            msg.packet.sequence,
-        );
+        let ack_key =
+            ack_key(&packet.port_on_b, &packet.chan_on_b, msg.packet.sequence);
         let transfer_ack = TokenTransferAcknowledgement::success();
         let acknowledgement = Acknowledgement::from(transfer_ack);
         let bytes = sha2::Sha256::digest(acknowledgement.as_ref()).to_vec();
@@ -2012,11 +2006,8 @@ mod tests {
             .expect("write failed");
         keys_changed.insert(ack_key);
         // denom
-        let mut coin: PrefixedCoin = transfer_msg
-            .token
-            .clone()
-            .try_into()
-            .expect("invalid token");
+        let mut coin: PrefixedCoin =
+            transfer_msg.token.try_into().expect("invalid token");
         coin.denom.add_trace_prefix(TracePrefix::new(
             packet.port_on_b.clone(),
             packet.chan_on_b.clone(),
@@ -2132,8 +2123,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a.clone(),
-            &transfer_msg.chan_on_a.clone(),
+            &transfer_msg.port_on_a,
+            &transfer_msg.chan_on_a,
             sequence,
         );
         let commitment = commitment(&packet);
@@ -2185,7 +2176,7 @@ mod tests {
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
         let event = RawIbcEvent::AcknowledgePacket(AcknowledgePacket::new(
-            packet.clone(),
+            packet,
             Order::Unordered,
             get_connection_id(),
         ));
@@ -2276,8 +2267,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a.clone(),
-            &transfer_msg.chan_on_a.clone(),
+            &transfer_msg.port_on_a,
+            &transfer_msg.chan_on_a,
             sequence,
         );
         let commitment = commitment(&packet);
@@ -2416,8 +2407,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a.clone(),
-            &transfer_msg.chan_on_a.clone(),
+            &transfer_msg.port_on_a,
+            &transfer_msg.chan_on_a,
             sequence,
         );
         let commitment = commitment(&packet);

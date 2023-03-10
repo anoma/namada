@@ -189,7 +189,7 @@ where
                         ),
                     })
                 })?;
-                format!("{},{}", list, conn_id.to_string())
+                format!("{},{}", list, conn_id)
             }
             Ok(None) => conn_id.to_string(),
             Err(_) => {
@@ -227,7 +227,7 @@ where
     ) -> Result<(), ContextError> {
         self.ctx
             .borrow_mut()
-            .store_packet_commitment(&path, commitment)
+            .store_packet_commitment(path, commitment)
     }
 
     fn delete_packet_commitment(

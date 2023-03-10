@@ -614,7 +614,7 @@ pub fn received_packet(
     let counterparty = dummy_channel_counterparty();
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let coin = PrefixedCoin {
-        denom: token.to_string().parse().expect("invalid denom"),
+        denom: token.parse().expect("invalid denom"),
         amount: 100.into(),
     };
     let sender = address::testing::gen_established_address().to_string();

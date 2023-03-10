@@ -586,7 +586,7 @@ mod tests {
         // Start a transaction to update the client
         tx_host_env::set(env);
         let client_id = ibc::client_id();
-        let msg = ibc::msg_update_client(client_id.clone());
+        let msg = ibc::msg_update_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1167,7 +1167,7 @@ mod tests {
 
         // packet
         let packet = ibc::received_packet(
-            port_id.clone(),
+            port_id,
             channel_id,
             ibc::Sequence::from(1),
             token.to_string(),
@@ -1323,7 +1323,7 @@ mod tests {
             ibc::Sequence::from(1),
             &counterparty,
         );
-        let msg = ibc::msg_timeout(packet.clone(), ibc::Sequence::from(1));
+        let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1396,8 +1396,7 @@ mod tests {
             ibc::Sequence::from(1),
             &counterparty,
         );
-        let msg =
-            ibc::msg_timeout_on_close(packet.clone(), ibc::Sequence::from(1));
+        let msg = ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {

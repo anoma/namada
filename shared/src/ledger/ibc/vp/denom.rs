@@ -37,7 +37,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     pub(super) fn validate_denom(&self, tx_data: &[u8]) -> Result<()> {
-        let ibc_msg = Any::decode(&tx_data[..]).map_err(Error::DecodingData)?;
+        let ibc_msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
         let envelope: MsgEnvelope = ibc_msg.try_into().map_err(|e| {
             Error::IbcMessage(format!(
                 "Decoding a MsgRecvPacket failed: Error {}",
