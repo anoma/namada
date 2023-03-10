@@ -512,37 +512,6 @@ mod test_prepare_proposal {
         })
     }
 
-    /// Test that if a tx from the mempool is not a
-    /// WrapperTx type, it is not included in the
-    /// proposed block.
-    // TODO: remove this test after CheckTx implements
-    // filtering of invalid txs; otherwise, we would have
-    // needed to return invalid txs from PrepareProposal,
-    // for these to get removed from a node's mempool.
-    // not returning invalid txs from PrepareProposal is
-    // a DoS vector, because the mempool will slowly fill
-    // up with garbage. luckily, Tendermint implements a
-    // mempool eviction policy, but honest client's txs
-    // may get lost in the process
-    #[test]
-    fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let non_wrapper_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-        );
-        let req = RequestPrepareProposal {
-            #[cfg(feature = "abcipp")]
-            local_last_commit: get_local_last_commit(&shell),
-            txs: vec![non_wrapper_tx.to_bytes()],
-            ..Default::default()
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
-        #[cfg(not(feature = "abcipp"))]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
-    }
-
     /// Check if we are filtering out an invalid vote extension `vext`
     fn check_eth_events_filtering(
         shell: &mut TestShell,
