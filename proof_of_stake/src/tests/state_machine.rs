@@ -881,12 +881,18 @@ impl AbstractStateMachine for AbstractPosState {
             } => {
                 let pipeline = state.epoch + state.params.pipeline_len;
                 // The address must not belong to an existing validator
-                !state.is_validator(address, pipeline)
+                !state.is_validator(address, pipeline) &&
+                   // There must be no delegations from this address
+                   !state.bond_sums().into_iter().any(|(id, _sum)|
+                        &id.source != address)
             }
             Transition::Bond { id, amount: _ } => {
                 let pipeline = state.epoch + state.params.pipeline_len;
                 // The validator must be known
                 state.is_validator(&id.validator, pipeline)
+                    && (id.validator == id.source
+                        // If it's not a self-bond, the source must not be a validator
+                        || !state.is_validator(&id.source, pipeline))
             }
             Transition::Unbond { id, amount } => {
                 let pipeline = state.epoch + state.params.pipeline_len;
