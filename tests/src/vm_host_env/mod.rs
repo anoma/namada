@@ -23,7 +23,9 @@ mod tests {
     use itertools::Itertools;
     use namada::ibc::tx_msg::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
-    use namada::ledger::ibc::vp::get_dummy_header as tm_dummy_header;
+    use namada::ledger::ibc::vp::{
+        get_dummy_header as tm_dummy_header, Error as IbcError,
+    };
     use namada::ledger::tx_env::TxEnv;
     use namada::proto::{SignedTxData, Tx};
     use namada::types::key::*;
@@ -31,6 +33,8 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
+    use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
+    use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -614,8 +618,6 @@ mod tests {
             .unwrap();
     }
 
-    // TODO test_ibc_client_fail()
-
     #[test]
     fn test_ibc_connection_init_and_open() {
         // The environment must be initialized first
@@ -922,14 +924,19 @@ mod tests {
         }
         .sign(&key::testing::keypair_1());
         // close the channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
-            .expect("creating a client failed");
+        let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
+        let dummy_module = DummyTransferModule {};
+        actions.add_transfer_route(dummy_module.module_id(), dummy_module);
+        actions.execute(&tx_data).expect("creating a client failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        // VP should fail because the transfer channel cannot be closed
+        assert!(matches!(
+            result.expect_err("validation succeeded unexpectedly"),
+            IbcError::IbcAction(IbcActionError::Execution(_)),
+        ));
     }
 
     #[test]
@@ -1076,7 +1083,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
+        let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
         let key = token::multitoken_balance_key(&key_prefix, &sender);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());
@@ -1091,9 +1098,7 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let msg =
-            ibc::msg_transfer(port_id.clone(), channel_id, denom, &sender);
+        let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {

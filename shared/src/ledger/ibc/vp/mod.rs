@@ -118,7 +118,7 @@ where
 
         let mut actions = IbcActions::new(ctx.clone());
         let module = TransferModule::new(ctx.clone());
-        actions.add_route(module.module_id(), module);
+        actions.add_transfer_route(module.module_id(), module);
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -198,7 +198,7 @@ where
 
         let mut actions = IbcActions::new(ctx.clone());
         let module = TransferModule::new(ctx);
-        actions.add_route(module.module_id(), module);
+        actions.add_transfer_route(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 }
@@ -886,9 +886,6 @@ mod tests {
             .expect("validation failed")
         );
     }
-
-    // TODO test_misbehaviour()
-    // TODO test_upgrade(): upgrade_client feature is not supported in ibc-rs
 
     #[test]
     fn test_init_connection() {

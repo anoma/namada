@@ -454,11 +454,10 @@ where
         {
             token::balance_key(&token, from)
         } else {
-            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
                 .map_err(|_| TokenTransferError::InvalidCoin {
                     coin: coin.to_string(),
                 })?;
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             token::multitoken_balance_key(&prefix, from)
         };
 
@@ -505,11 +504,10 @@ where
         let dest = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, account)
         } else {
-            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
                 .map_err(|_| TokenTransferError::InvalidCoin {
                     coin: coin.to_string(),
                 })?;
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             token::multitoken_balance_key(&prefix, account)
         };
 
@@ -549,11 +547,10 @@ where
         let src = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, account)
         } else {
-            let sub_prefix = storage::ibc_token_prefix(coin.denom.to_string())
+            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
                 .map_err(|_| TokenTransferError::InvalidCoin {
                     coin: coin.to_string(),
                 })?;
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
             token::multitoken_balance_key(&prefix, account)
         };
 
@@ -624,5 +621,196 @@ fn into_channel_error(error: TokenTransferError) -> ChannelError {
 fn into_packet_error(error: TokenTransferError) -> PacketError {
     PacketError::AppModule {
         description: error.to_string(),
+    }
+}
+
+/// Helpers for testing
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use super::*;
+    use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
+
+    /// Dummy IBC module for token transfer
+    #[derive(Debug)]
+    pub struct DummyTransferModule {}
+
+    impl DummyTransferModule {
+        /// Get the module ID
+        pub fn module_id(&self) -> ModuleId {
+            ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+        }
+    }
+
+    impl ModuleWrapper for DummyTransferModule {
+        fn as_module(&self) -> &dyn Module {
+            self
+        }
+
+        fn as_module_mut(&mut self) -> &mut dyn Module {
+            self
+        }
+    }
+
+    impl Module for DummyTransferModule {
+        #[allow(clippy::too_many_arguments)]
+        fn on_chan_open_init_validate(
+            &self,
+            _order: Order,
+            _connection_hops: &[ConnectionId],
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty: &Counterparty,
+            version: &Version,
+        ) -> Result<Version, ChannelError> {
+            Ok(version.clone())
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn on_chan_open_init_execute(
+            &mut self,
+            _order: Order,
+            _connection_hops: &[ConnectionId],
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty: &Counterparty,
+            version: &Version,
+        ) -> Result<(ModuleExtras, Version), ChannelError> {
+            Ok((ModuleExtras::empty(), version.clone()))
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn on_chan_open_try_validate(
+            &self,
+            _order: Order,
+            _connection_hops: &[ConnectionId],
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty: &Counterparty,
+            counterparty_version: &Version,
+        ) -> Result<Version, ChannelError> {
+            Ok(counterparty_version.clone())
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn on_chan_open_try_execute(
+            &mut self,
+            _order: Order,
+            _connection_hops: &[ConnectionId],
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty: &Counterparty,
+            counterparty_version: &Version,
+        ) -> Result<(ModuleExtras, Version), ChannelError> {
+            Ok((ModuleExtras::empty(), counterparty_version.clone()))
+        }
+
+        fn on_chan_open_ack_validate(
+            &self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty_version: &Version,
+        ) -> Result<(), ChannelError> {
+            Ok(())
+        }
+
+        fn on_chan_open_ack_execute(
+            &mut self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+            _counterparty_version: &Version,
+        ) -> Result<ModuleExtras, ChannelError> {
+            Ok(ModuleExtras::empty())
+        }
+
+        fn on_chan_open_confirm_validate(
+            &self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<(), ChannelError> {
+            Ok(())
+        }
+
+        fn on_chan_open_confirm_execute(
+            &mut self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<ModuleExtras, ChannelError> {
+            Ok(ModuleExtras::empty())
+        }
+
+        fn on_chan_close_init_validate(
+            &self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<(), ChannelError> {
+            Ok(())
+        }
+
+        fn on_chan_close_init_execute(
+            &mut self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<ModuleExtras, ChannelError> {
+            Ok(ModuleExtras::empty())
+        }
+
+        fn on_chan_close_confirm_validate(
+            &self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<(), ChannelError> {
+            Ok(())
+        }
+
+        fn on_chan_close_confirm_execute(
+            &mut self,
+            _port_id: &PortId,
+            _channel_id: &ChannelId,
+        ) -> Result<ModuleExtras, ChannelError> {
+            Ok(ModuleExtras::empty())
+        }
+
+        fn on_recv_packet_execute(
+            &mut self,
+            _packet: &Packet,
+            _relayer: &Signer,
+        ) -> (ModuleExtras, Acknowledgement) {
+            let transfer_ack = TokenTransferAcknowledgement::success();
+            (ModuleExtras::empty(), transfer_ack.into())
+        }
+
+        fn on_acknowledgement_packet_validate(
+            &self,
+            _packet: &Packet,
+            _acknowledgement: &Acknowledgement,
+            _relayer: &Signer,
+        ) -> Result<(), PacketError> {
+            Ok(())
+        }
+
+        fn on_acknowledgement_packet_execute(
+            &mut self,
+            _packet: &Packet,
+            _acknowledgement: &Acknowledgement,
+            _relayer: &Signer,
+        ) -> (ModuleExtras, Result<(), PacketError>) {
+            (ModuleExtras::empty(), Ok(()))
+        }
+
+        fn on_timeout_packet_validate(
+            &self,
+            _packet: &Packet,
+            _relayer: &Signer,
+        ) -> Result<(), PacketError> {
+            Ok(())
+        }
+
+        fn on_timeout_packet_execute(
+            &mut self,
+            _packet: &Packet,
+            _relayer: &Signer,
+        ) -> (ModuleExtras, Result<(), PacketError>) {
+            (ModuleExtras::empty(), Ok(()))
+        }
     }
 }

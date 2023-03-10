@@ -1,6 +1,6 @@
 //! IBC library code
 
-mod context;
+pub mod context;
 pub mod storage;
 
 use std::cell::RefCell;
@@ -77,8 +77,8 @@ where
         }
     }
 
-    /// Add a route to IBC actions
-    pub fn add_route(
+    /// Add TokenTransfer route
+    pub fn add_transfer_route(
         &mut self,
         module_id: ModuleId,
         module: impl ModuleWrapper,

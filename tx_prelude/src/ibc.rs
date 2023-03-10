@@ -21,7 +21,7 @@ pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone());
     let module = TransferModule::new(ctx);
-    actions.add_route(module.module_id(), module);
+    actions.add_transfer_route(module.module_id(), module);
     actions
 }
 

@@ -257,7 +257,7 @@ where
     fn validate_receiving_token(&self, packet: &Packet) -> Result<bool> {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .map_err(Error::DecodingPacketData)?;
-        let token = ibc_storage::token(&data.token.to_string())
+        let token = ibc_storage::token(&data.token.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;
@@ -309,7 +309,7 @@ where
     fn validate_refunding_token(&self, packet: &Packet) -> Result<bool> {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .map_err(Error::DecodingPacketData)?;
-        let token = ibc_storage::token(&data.token.to_string())
+        let token = ibc_storage::token(&data.token.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount =
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;

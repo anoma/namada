@@ -52,9 +52,7 @@ use namada::ibc::Height;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
-use namada::ibc_proto::ibc::core::connection::v1::{
-    MsgConnectionOpenTry as RawMsgConnectionOpenTry, Version as RawVersion,
-};
+use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
 use namada::ibc_proto::ics23::CommitmentProof;
 use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
@@ -77,7 +75,7 @@ use namada::types::address::{self, Address, InternalAddress};
 use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
-use namada_tx_prelude::StorageWrite;
+use namada_tx_prelude::BorshSerialize;
 
 use crate::tx::{self, *};
 
@@ -214,7 +212,10 @@ pub fn init_storage() -> (Address, Address) {
     let account = tx::ctx().init_account(code).unwrap();
     let key = token::balance_key(&token, &account);
     let init_bal = Amount::from(1_000_000_000u64);
-    tx::ctx().write(&key, init_bal).unwrap();
+    let bytes = init_bal.try_to_vec().expect("encoding failed");
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
     (token, account)
 }
 
@@ -394,7 +395,7 @@ pub fn msg_connection_open_try(
         client_state: Some(client_state),
         counterparty: Some(dummy_connection_counterparty().into()),
         delay_period: 0,
-        counterparty_versions: vec![RawVersion::default()],
+        counterparty_versions: vec![ConnVersion::default().into()],
         proof_init: dummy_proof().into(),
         proof_height: Some(dummy_proof_height().into()),
         proof_consensus: dummy_proof().into(),
@@ -443,7 +444,7 @@ fn dummy_proof() -> CommitmentProofBytes {
 }
 
 fn dummy_proof_height() -> Height {
-    Height::new(0, 10).unwrap()
+    Height::new(0, 1).unwrap()
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
