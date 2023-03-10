@@ -250,8 +250,6 @@ where
 
         let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
 
-        // TODO: check if tx queue still has txs left in it
-
         let status = if will_reject_proposal {
             ProposalStatus::Reject
         } else {
@@ -1107,8 +1105,14 @@ mod test_process_proposal {
             shell.process_proposal(request)
         {
             if let [resp1, resp2] = resp.as_slice() {
-                assert_eq!(resp1.result.code, u32::from(ErrorCodes::Ok));
-                assert_eq!(resp2.result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(
+                    resp1.result.code,
+                    u32::from(ErrorCodes::InvalidVoteExtension)
+                );
+                assert_eq!(
+                    resp2.result.code,
+                    u32::from(ErrorCodes::InvalidVoteExtension)
+                );
             } else {
                 panic!("Test failed")
             }
