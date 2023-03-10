@@ -1,3 +1,4 @@
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
@@ -7,9 +8,13 @@ use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
+use tokio::time::{Duration, Instant};
+use web30::client::Web3;
 
 use crate::cli::args;
 use crate::facade::tendermint_rpc::HttpClient;
+use crate::node::ledger::ethereum_oracle::eth_syncing_status;
+use crate::timeouts::TimeoutStrategy;
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
@@ -130,4 +135,19 @@ where
 {
     let decoded: (D,) = AbiDecode::decode(data).unwrap();
     decoded.0
+}
+
+/// Block until Ethereum finishes synchronizing.
+#[allow(dead_code)]
+async fn block_on_eth_sync(deadline: Instant, url: &str) {
+    TimeoutStrategy::LinearBackoff {
+        delta: Duration::from_secs(1),
+    }
+    .timeout(deadline, || async {
+        let client = Web3::new(url, std::time::Duration::from_secs(30));
+        eth_syncing_status(&client).await.unwrap();
+        ControlFlow::Break(())
+    })
+    .await
+    .unwrap();
 }
