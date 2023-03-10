@@ -60,6 +60,13 @@ pub enum SyncStatus {
     AtHeight(Uint256),
 }
 
+impl SyncStatus {
+    /// Returns true if [`SyncStatus`] reflects a synchronized node.
+    pub fn is_synchronized(&self) -> bool {
+        matches!(self, SyncStatus::AtHeight(_))
+    }
+}
+
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process

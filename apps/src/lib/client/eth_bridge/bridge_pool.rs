@@ -17,9 +17,11 @@ use namada::types::eth_bridge_pool::{
 use namada::types::keccak::KeccakHash;
 use namada::types::token::Amount;
 use serde::{Deserialize, Serialize};
+use tokio::time::{Duration, Instant};
 
 use super::super::signing::TxSigningKey;
 use super::super::tx::process_tx;
+use super::block_on_eth_sync;
 use crate::cli::{args, safe_exit, Context};
 use crate::facade::tendermint_rpc::HttpClient;
 
@@ -250,6 +252,9 @@ pub async fn construct_proof(args: args::BridgePoolProof) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
+    let eth_sync_deadline = Instant::now() + Duration::from_secs(60);
+    block_on_eth_sync(eth_sync_deadline, &args.eth_rpc_endpoint).await;
+
     let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
     let bp_proof =
         construct_bridge_pool_proof(&nam_client, &args.transfers, args.relayer)
