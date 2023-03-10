@@ -1743,8 +1743,8 @@ mod mempool_tests {
         assert_eq!(rsp.code, 1);
     }
 
-    /// Test if Ethereum events validation and inclusion in a block
-    /// behaves as expected, considering honest validators.
+    /// Test if Ethereum events validation behaves as expected,
+    /// considering honest validators.
     #[test]
     fn test_mempool_eth_events_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
