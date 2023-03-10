@@ -1,12 +1,14 @@
 //! IBC token transfer validation as a native validity predicate
 
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use prost::Message;
 use thiserror::Error;
 
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
+use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
@@ -20,7 +22,6 @@ use crate::ibc::core::ics04_channel::packet::Packet;
 use crate::ibc::core::ics26_routing::error::RouterError;
 use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
 use crate::ibc_proto::google::protobuf::Any;
-use crate::ibc_proto::ibc::applications::transfer::v1::DenomTrace as RawPrefixedDenom;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
@@ -182,8 +183,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn validate_sending_token(&self, msg: &MsgTransfer) -> Result<bool> {
-        let mut coin = PrefixedCoin::try_from(msg.token.clone())
-            .map_err(Error::MsgTransfer)?;
+        let mut coin = msg.token.clone();
         // lookup the original denom with the IBC token hash
         if let Some(token_hash) =
             ibc_storage::token_hash_from_denom(&coin.denom.to_string())
@@ -192,8 +192,13 @@ where
                 })?
         {
             let denom_key = ibc_storage::ibc_denom_key(token_hash);
-            let value = match self.ctx.read_bytes_pre(&denom_key) {
-                Ok(Some(v)) => v,
+            coin.denom = match self.ctx.read_bytes_pre(&denom_key) {
+                Ok(Some(v)) => String::from_utf8(v).map_err(|e| {
+                    Error::Denom(format!(
+                        "Decoding the denom string failed: {}",
+                        e
+                    ))
+                })?,
                 _ => {
                     return Err(Error::Denom(format!(
                         "No original denom: denom_key {}",
@@ -201,10 +206,9 @@ where
                     )));
                 }
             };
-            let denom = RawPrefixedDenom::decode(&value[..])
-                .map_err(Error::DecodingIbcData)?;
-            coin.denom = denom.try_into().map_err(Error::MsgTransfer)?;
         }
+        let coin =
+            PrefixedCoin::try_from(coin.clone()).map_err(Error::MsgTransfer)?;
         let token = ibc_storage::token(&coin.denom.to_string())
             .map_err(|e| Error::Denom(e.to_string()))?;
         let amount = Amount::try_from(coin.amount).map_err(Error::Amount)?;

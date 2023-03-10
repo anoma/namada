@@ -598,7 +598,7 @@ mod tests {
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("updating a client failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -648,7 +648,7 @@ mod tests {
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("creating a connection failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -678,7 +678,7 @@ mod tests {
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("opening the connection failed");
 
         // Check
         let env = tx_host_env::take();
@@ -719,7 +719,7 @@ mod tests {
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("creating a connection failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -749,7 +749,7 @@ mod tests {
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("opening the connection failed");
 
         // Check
         let env = tx_host_env::take();
@@ -790,7 +790,7 @@ mod tests {
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("creating a channel failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -815,7 +815,7 @@ mod tests {
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("opening the channel failed");
 
         // Check
         let env = tx_host_env::take();
@@ -858,7 +858,7 @@ mod tests {
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("creating a channel failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -883,7 +883,7 @@ mod tests {
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("opening the channel failed");
 
         // Check
         let env = tx_host_env::take();
@@ -927,7 +927,9 @@ mod tests {
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         let dummy_module = DummyTransferModule {};
         actions.add_transfer_route(dummy_module.module_id(), dummy_module);
-        actions.execute(&tx_data).expect("creating a client failed");
+        actions
+            .execute(&tx_data)
+            .expect("closing the channel failed");
 
         // Check
         let env = tx_host_env::take();
@@ -975,7 +977,7 @@ mod tests {
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("closing the channel failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1022,7 +1024,7 @@ mod tests {
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("sending a token failed");
 
         // Check
         let mut env = tx_host_env::take();
@@ -1060,7 +1062,7 @@ mod tests {
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("ack failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1087,6 +1089,10 @@ mod tests {
         let key = token::multitoken_balance_key(&key_prefix, &sender);
         let init_bal = Amount::from(1_000_000_000u64);
         writes.insert(key, init_bal.try_to_vec().unwrap());
+        // original denom
+        let hash = ibc_storage::calc_hash(&denom);
+        let denom_key = ibc_storage::ibc_denom_key(&hash);
+        writes.insert(denom_key, denom.as_bytes().to_vec());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.wl_storage
@@ -1098,7 +1104,12 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
+        let ibc_token = address::Address::Internal(
+            address::InternalAddress::IbcToken(hash),
+        );
+        let hashed_denom =
+            format!("{}/{}", ibc_storage::MULTITOKEN_STORAGE_KEY, ibc_token);
+        let msg = ibc::msg_transfer(port_id, channel_id, hashed_denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
@@ -1110,7 +1121,7 @@ mod tests {
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("sending a token failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1176,7 +1187,7 @@ mod tests {
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("receiving the token failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1255,7 +1266,7 @@ mod tests {
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("receiving a token failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1300,7 +1311,7 @@ mod tests {
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("sending a token failed");
 
         // Commit
         tx_host_env::commit_tx_and_block();
@@ -1322,10 +1333,10 @@ mod tests {
         }
         .sign(&key::testing::keypair_1());
 
-        // close the channel with the message
+        // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("timeout failed");
 
         // Check
         let env = tx_host_env::take();
@@ -1373,7 +1384,7 @@ mod tests {
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("sending a token failed");
 
         // Commit
         tx_host_env::commit_tx_and_block();
@@ -1396,10 +1407,10 @@ mod tests {
         }
         .sign(&key::testing::keypair_1());
 
-        // close the channel with the message
+        // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
-            .expect("creating a client failed");
+            .expect("timeout on close failed");
 
         // Check
         let env = tx_host_env::take();

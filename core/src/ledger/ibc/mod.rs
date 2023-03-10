@@ -111,6 +111,8 @@ where
                 match self.get_route_mut_by_port(&port_id) {
                     Some(_module) => {
                         let mut module = TransferModule::new(self.ctx.clone());
+                        // restore the denom if it is hashed
+                        let msg = self.restore_denom(msg)?;
                         send_transfer_execute(&mut module, msg)
                             .map_err(Error::TokenTransfer)
                     }
@@ -124,6 +126,35 @@ where
                 self.store_denom(msg)
             }
         }
+    }
+
+    /// Restore the denom when it is hashed, i.e. the denom is `ibc/{hash}`.
+    fn restore_denom(&self, msg: MsgTransfer) -> Result<MsgTransfer, Error> {
+        let mut msg = msg;
+        // lookup the original denom with the IBC token hash
+        if let Some(token_hash) =
+            storage::token_hash_from_denom(&msg.token.denom).map_err(|e| {
+                Error::Denom(format!("Invalid denom: error {}", e))
+            })?
+        {
+            let denom_key = storage::ibc_denom_key(token_hash);
+            let denom = match self.ctx.borrow().read(&denom_key) {
+                Ok(Some(v)) => String::from_utf8(v).map_err(|e| {
+                    Error::Denom(format!(
+                        "Decoding the denom string failed: {}",
+                        e
+                    ))
+                })?,
+                _ => {
+                    return Err(Error::Denom(format!(
+                        "No original denom: denom_key {}",
+                        denom_key
+                    )));
+                }
+            };
+            msg.token.denom = denom;
+        }
+        Ok(msg)
     }
 
     /// Store the denom when transfer with MsgRecvPacket
@@ -170,6 +201,8 @@ where
                 match self.get_route_by_port(&port_id) {
                     Some(_module) => {
                         let module = TransferModule::new(self.ctx.clone());
+                        // restore the denom if it is hashed
+                        let msg = self.restore_denom(msg)?;
                         send_transfer_validate(&module, msg)
                             .map_err(Error::TokenTransfer)
                     }
