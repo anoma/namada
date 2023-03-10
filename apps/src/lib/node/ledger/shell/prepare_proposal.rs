@@ -572,7 +572,7 @@ mod test_prepare_proposal {
                 ext
             };
 
-            check_eth_events_filtering(&shell, signed_vote_extension);
+            check_eth_events_filtering(shell, signed_vote_extension);
         }
 
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
