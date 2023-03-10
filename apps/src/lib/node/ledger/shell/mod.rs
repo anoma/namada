@@ -1710,7 +1710,7 @@ mod mempool_tests {
     /// Test that if an error is encountered while trying to process a tx,
     /// it is prohibited from making its way onto the mempool.
     #[test]
-    fn test_error_in_processing_tx() {
+    fn test_mempool_error_in_processing_tx() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = test_utils::gen_keypair();
         let tx = Tx::new(
