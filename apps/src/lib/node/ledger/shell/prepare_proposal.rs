@@ -495,13 +495,23 @@ mod test_prepare_proposal {
 
     /// Check if we are filtering out an invalid vote extension `vext`
     fn check_eth_events_filtering(
-        shell: &mut TestShell,
+        shell: &TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let filtered_votes: Vec<_> =
-            shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
-
-        assert_eq!(filtered_votes, vec![]);
+        #[cfg(feature = "abcipp")]
+        {
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
+            assert_eq!(filtered_votes, vec![]);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let tx = ProtocolTxType::EthEventsVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+                .to_bytes();
+            let rsp = shell.mempool_validate(&tx, Default::default());
+            assert!(rsp.code != 0, "{}", rsp.log);
+        }
     }
 
     /// Test if we are filtering out Ethereum events with bad
@@ -533,53 +543,48 @@ mod test_prepare_proposal {
             ext
         };
 
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
+        check_eth_events_filtering(&shell, signed_vote_extension);
     }
 
     /// Test if we are filtering out Ethereum events seen at
-    /// block heights different than the last height.
+    /// unexpected block heights.
+    ///
+    /// In case of ABCI++, we should only accept vote extensions
+    /// from `last_height`, whereas with ABCI+, vote extensions
+    /// before `last_height` are accepted. In either case, vote
+    /// extensions after `last_height` aren't accepted.
     #[test]
     fn test_prepare_proposal_filter_out_bad_vext_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        fn check_invalid(shell: &TestShell, height: BlockHeight) {
+            let (protocol_key, _, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
 
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+            let signed_vote_extension = {
+                let ext = ethereum_events::Vext {
+                    validator_addr,
+                    block_height: height,
+                    ethereum_events: vec![],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let validator_addr = wallet::defaults::validator_address();
-
-        let signed_vote_extension = {
-            let ext = ethereum_events::Vext {
-                validator_addr,
-                block_height: PRED_LAST_HEIGHT,
-                ethereum_events: vec![],
-            }
-            .sign(&protocol_key);
-            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-            ext
-        };
-
-        #[cfg(feature = "abcipp")]
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
-
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let filtered_votes: Vec<_> = shell
-                .filter_invalid_eth_events_vexts(vec![
-                    signed_vote_extension.clone(),
-                ])
-                .collect();
-            assert_eq!(
-                filtered_votes,
-                vec![(
-                    test_utils::get_validator_bonded_stake(),
-                    signed_vote_extension
-                )]
-            )
+            check_eth_events_filtering(&shell, signed_vote_extension);
         }
+
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+        assert_eq!(shell.wl_storage.storage.last_height, LAST_HEIGHT);
+
+        check_invalid(&shell, LAST_HEIGHT + 2);
+        check_invalid(&shell, LAST_HEIGHT + 1);
+        check_invalid(&shell, 0.into());
+        #[cfg(feature = "abcipp")]
+        check_invalid(&shell, LAST_HEIGHT - 1);
+        #[cfg(feature = "abcipp")]
+        check_invalid(&shell, LAST_HEIGHT - 2);
     }
 
     /// Test if we are filtering out Ethereum events seen by
@@ -610,12 +615,13 @@ mod test_prepare_proposal {
             ext
         };
 
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
+        check_eth_events_filtering(&shell, signed_vote_extension);
     }
 
     /// Test if we are filtering out duped Ethereum events in
     /// prepare proposals.
     #[test]
+    #[cfg(feature = "abcipp")]
     fn test_prepare_proposal_filter_duped_ethereum_events() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
@@ -646,21 +652,11 @@ mod test_prepare_proposal {
         let maybe_digest =
             shell.compress_ethereum_events(vec![signed_vote_extension]);
 
-        #[cfg(feature = "abcipp")]
-        {
-            // we should be filtering out the vote extension with
-            // duped ethereum events; therefore, no valid vote
-            // extensions will remain, and we will get no
-            // digest from compressing nil vote extensions
-            assert!(maybe_digest.is_none());
-        }
-
-        #[cfg(not(feature = "abcipp"))]
-        {
-            use assert_matches::assert_matches;
-
-            assert_matches!(maybe_digest, Some(d) if d.signatures.is_empty());
-        }
+        // we should be filtering out the vote extension with
+        // duped ethereum events; therefore, no valid vote
+        // extensions will remain, and we will get no
+        // digest from compressing nil vote extensions
+        assert!(maybe_digest.is_none());
     }
 
     /// Test that we do not include vote extensions voting on ethereum

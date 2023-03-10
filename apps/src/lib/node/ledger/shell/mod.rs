@@ -1439,6 +1439,7 @@ mod test_utils {
     /// Get the only validator's voting power.
     #[inline]
     #[cfg(not(feature = "abcipp"))]
+    #[allow(dead_code)]
     pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
         200_000_000_000.into()
     }
