@@ -88,6 +88,17 @@ impl Deref for Oracle {
     }
 }
 
+/// Fetch the sync status of an Ethereum node.
+#[cfg(not(test))]
+pub async fn eth_syncing_status(client: &Web3) -> Result<SyncStatus, Error> {
+    match client.eth_block_number().await {
+        Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
+        Ok(height) => Ok(SyncStatus::AtHeight(height)),
+        Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
+        Err(error) => Err(Error::FetchHeight(error.to_string())),
+    }
+}
+
 impl Oracle {
     /// Construct a new [`Oracle`]. Note that it can not do anything until it
     /// has been sent a configuration via the passed in `control` channel.
@@ -118,17 +129,17 @@ impl Oracle {
     /// number is 0 or not.
     #[cfg(not(test))]
     async fn syncing(&self) -> Result<SyncStatus, Error> {
-        match self.client.eth_block_number().await {
-            Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
-            Ok(height) => match &*self.last_processed_block.borrow() {
-                Some(last) if <&Uint256>::from(last) < &height => {
-                    Ok(SyncStatus::AtHeight(height))
+        match eth_syncing_status(&self.client).await? {
+            s @ SyncStatus::Syncing => Ok(s),
+            SyncStatus::AtHeight(height) => {
+                match &*self.last_processed_block.borrow() {
+                    Some(last) if <&Uint256>::from(last) < &height => {
+                        Ok(SyncStatus::AtHeight(height))
+                    }
+                    None => Ok(SyncStatus::AtHeight(height)),
+                    _ => Err(Error::FallenBehind),
                 }
-                None => Ok(SyncStatus::AtHeight(height)),
-                _ => Err(Error::FallenBehind),
-            },
-            Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
-            Err(error) => Err(Error::FetchHeight(error.to_string())),
+            }
         }
     }
 
