@@ -1630,6 +1630,7 @@ pub mod args {
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const TX_HASH: Arg<String> = arg("tx-hash");
+    const UNCHECKED: ArgFlag = flag("unchecked");
     const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     const VALIDATOR: Arg<WalletAddress> = arg("validator");
@@ -2743,6 +2744,8 @@ pub mod args {
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
+        /// The epoch in which to construct transaction
+        pub epoch: Option<Epoch>,
         /// The amount being payed to include the transaction
         pub fee_amount: token::Amount,
         /// The token in which the fee is being paid
@@ -2753,13 +2756,17 @@ pub mod args {
         pub signing_key: Option<WalletKeypair>,
         /// Sign the tx with the keypair of the public key of the given address
         pub signer: Option<WalletAddress>,
+        /// Do not attempt client checks
+        pub unchecked: bool,
     }
 
     impl Tx {
         pub fn parse_from_context(&self, ctx: &mut Context) -> ParsedTxArgs {
             ParsedTxArgs {
                 dry_run: self.dry_run,
+                epoch: self.epoch,
                 force: self.force,
+                unchecked: self.unchecked,
                 broadcast_only: self.broadcast_only,
                 ledger_address: self.ledger_address.clone(),
                 initialized_account_alias: self
@@ -2783,6 +2790,11 @@ pub mod args {
                 DRY_RUN_TX
                     .def()
                     .about("Simulate the transaction application."),
+            )
+            .arg(
+                EPOCH
+                    .def()
+                    .about("The epoch in which to construct transaction."),
             )
             .arg(FORCE.def().about(
                 "Submit the transaction even if it doesn't pass client checks.",
@@ -2826,6 +2838,12 @@ pub mod args {
                     )
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
+            .arg(
+                UNCHECKED
+                    .def()
+                    .about("Do not attempt client checks.")
+                    .conflicts_with(FORCE.name),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -2834,23 +2852,27 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let epoch = EPOCH.parse(matches);
             let fee_amount = GAS_AMOUNT.parse(matches);
             let fee_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).into();
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);
             let signer = SIGNER.parse(matches);
+            let unchecked = UNCHECKED.parse(matches);
             Self {
                 dry_run,
                 force,
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
+                epoch,
                 fee_amount,
                 fee_token,
                 gas_limit,
                 signing_key,
                 signer,
+                unchecked,
             }
         }
     }

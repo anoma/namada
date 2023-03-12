@@ -27,6 +27,8 @@ pub struct ParsedTxArgs {
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
+    /// The epoch in which to construct transaction
+    pub epoch: Option<Epoch>,
     /// The amount being payed to include the transaction
     pub fee_amount: token::Amount,
     /// The token in which the fee is being paid
@@ -37,6 +39,8 @@ pub struct ParsedTxArgs {
     pub signing_key: Option<key::common::SecretKey>,
     /// Sign the tx with the keypair of the public key of the given address
     pub signer: Option<Address>,
+    /// Do not attempt client checks
+    pub unchecked: bool,
 }
 
 #[derive(Clone, Debug)]

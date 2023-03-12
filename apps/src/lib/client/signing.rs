@@ -176,10 +176,14 @@ pub async fn sign_tx(
     let unsigned_tx = tx.clone();
     let tx = tx.sign(&keypair);
 
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.ledger_address.clone(),
-    })
-    .await;
+    let epoch = if let Some(epoch) = args.epoch {
+        epoch
+    } else {
+        rpc::query_epoch(args::Query {
+            ledger_address: args.ledger_address.clone(),
+        })
+        .await
+    };
     let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
@@ -217,6 +221,8 @@ pub async fn sign_wrapper(
 
     let fee_amount = if cfg!(feature = "mainnet") {
         Amount::whole(MIN_FEE)
+    } else if args.unchecked {
+        args.fee_amount
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
         rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
@@ -226,17 +232,21 @@ pub async fn sign_wrapper(
     let fee_token = ctx.get(&args.fee_token);
     let source = Address::from(&keypair.ref_to());
     let balance_key = token::balance_key(&fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<token::Amount>(&client, &balance_key)
-            .await
-            .unwrap_or_default();
-    if balance < fee_amount {
-        eprintln!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {fee_amount}, got {balance}."
-        );
-        if !args.force && cfg!(feature = "mainnet") {
-            cli::safe_exit(1);
+    let mut is_bal_sufficient = true;
+    if !args.unchecked {
+        let balance =
+            rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+                .await
+                .unwrap_or_default();
+        is_bal_sufficient = fee_amount <= balance;
+        if !is_bal_sufficient {
+            eprintln!(
+                "The wrapper transaction source doesn't have enough balance \
+                 to pay fee {fee_amount}, got {balance}."
+            );
+            if !args.force && cfg!(feature = "mainnet") {
+                cli::safe_exit(1);
+            }
         }
     }
 
@@ -245,7 +255,7 @@ pub async fn sign_wrapper(
     let pow_solution: Option<namada::core::ledger::testnet_pow::Solution> = {
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || balance < fee_amount {
+        if requires_pow || !is_bal_sufficient {
             println!(
                 "The transaction requires the completion of a PoW challenge."
             );
@@ -429,10 +439,7 @@ fn decode_tx(
                 "6 | Maximum commission rate change: {}",
                 init_validator.max_commission_rate_change
             ),
-            format!(
-                "7 | Validator VP type: {}",
-                vp_code,
-            ),
+            format!("7 | Validator VP type: {}", vp_code,),
         ]);
 
         tv.output_expert.extend(vec![
