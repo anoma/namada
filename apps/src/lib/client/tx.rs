@@ -141,35 +141,38 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
 
-    // Check that the address is established and exists on chain
-    match &addr {
-        Address::Established(_) => {
-            let exists =
-                rpc::known_address(&addr, args.tx.ledger_address.clone()).await;
-            if !exists {
-                eprintln!("The address {} doesn't exist on chain.", addr);
+    if !args.tx.unchecked {
+        // Check that the address is established and exists on chain
+        match &addr {
+            Address::Established(_) => {
+                let exists =
+                    rpc::known_address(&addr, args.tx.ledger_address.clone())
+                        .await;
+                if !exists {
+                    eprintln!("The address {} doesn't exist on chain.", addr);
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            Address::Implicit(_) => {
+                eprintln!(
+                    "A validity predicate of an implicit address cannot be \
+                     directly updated. You can use an established address for \
+                     this purpose."
+                );
                 if !args.tx.force {
                     safe_exit(1)
                 }
             }
-        }
-        Address::Implicit(_) => {
-            eprintln!(
-                "A validity predicate of an implicit address cannot be \
-                 directly updated. You can use an established address for \
-                 this purpose."
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-        Address::Internal(_) => {
-            eprintln!(
-                "A validity predicate of an internal address cannot be \
-                 directly updated."
-            );
-            if !args.tx.force {
-                safe_exit(1)
+            Address::Internal(_) => {
+                eprintln!(
+                    "A validity predicate of an internal address cannot be \
+                     directly updated."
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
@@ -1515,35 +1518,39 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     let parsed_args = args.parse_from_context(&mut ctx);
     let source = parsed_args.source.effective_address();
     let target = parsed_args.target.effective_address();
-    // Check that the source address exists on chain
-    let source_exists =
-        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
-    if !source_exists {
-        eprintln!("The source address {} doesn't exist on chain.", source);
-        if !args.tx.force {
-            safe_exit(1)
+    if !args.tx.unchecked {
+        // Check that the source address exists on chain
+        let source_exists =
+            rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+        if !source_exists {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
-    }
-    // Check that the target address exists on chain
-    let target_exists =
-        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
-    if !target_exists {
-        eprintln!("The target address {} doesn't exist on chain.", target);
-        if !args.tx.force {
-            safe_exit(1)
+        // Check that the target address exists on chain
+        let target_exists =
+            rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+        if !target_exists {
+            eprintln!("The target address {} doesn't exist on chain.", target);
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
-    }
-    // Check that the token address exists on chain
-    let token_exists =
-        rpc::known_address(&parsed_args.token, args.tx.ledger_address.clone())
-            .await;
-    if !token_exists {
-        eprintln!(
-            "The token address {} doesn't exist on chain.",
-            parsed_args.token
-        );
-        if !args.tx.force {
-            safe_exit(1)
+        // Check that the token address exists on chain
+        let token_exists = rpc::known_address(
+            &parsed_args.token,
+            args.tx.ledger_address.clone(),
+        )
+        .await;
+        if !token_exists {
+            eprintln!(
+                "The token address {} doesn't exist on chain.",
+                parsed_args.token
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
     }
     // Check source balance
@@ -1561,32 +1568,35 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
         None => (None, token::balance_key(&parsed_args.token, &source)),
     };
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                        source, parsed_args.token, args.amount, balance
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            None => {
                 eprintln!(
-                    "The balance of the source {} of token {} is lower than \
-                     the amount to be transferred. Amount to transfer is {} \
-                     and the balance is {}.",
-                    source, parsed_args.token, args.amount, balance
+                    "No balance found for the source {} of token {}",
+                    source, parsed_args.token
                 );
                 if !args.tx.force {
                     safe_exit(1)
                 }
             }
-        }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, parsed_args.token
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
-        }
-    };
+        };
+    }
 
     let masp_addr = masp();
     // For MASP sources, use a special sentinel key recognized by VPs as default
@@ -1627,8 +1637,9 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     };
 
     #[cfg(not(feature = "mainnet"))]
-    let is_source_faucet =
-        rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
+    let is_source_faucet = !args.tx.unchecked
+        && rpc::is_faucet_account(&source, args.tx.ledger_address.clone())
+            .await;
 
     let shielded = {
         let spending_key = parsed_args.source.spending_key();
@@ -1728,26 +1739,28 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
 
 pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     let source = ctx.get(&args.source);
-    // Check that the source address exists on chain
-    let source_exists =
-        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
-    if !source_exists {
-        eprintln!("The source address {} doesn't exist on chain.", source);
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
-
-    // We cannot check the receiver
-
     let token = ctx.get(&args.token);
-    // Check that the token address exists on chain
-    let token_exists =
-        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
-    if !token_exists {
-        eprintln!("The token address {} doesn't exist on chain.", token);
-        if !args.tx.force {
-            safe_exit(1)
+    if !args.tx.unchecked {
+        // Check that the source address exists on chain
+        let source_exists =
+            rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+        if !source_exists {
+            eprintln!("The source address {} doesn't exist on chain.", source);
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
+
+        // We cannot check the receiver
+
+        // Check that the token address exists on chain
+        let token_exists =
+            rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+        if !token_exists {
+            eprintln!("The token address {} doesn't exist on chain.", token);
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
     }
     // Check source balance
@@ -1762,29 +1775,32 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
         }
         None => (None, token::balance_key(&token, &source)),
     };
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            None => {
                 eprintln!(
-                    "The balance of the source {} of token {} is lower than \
-                     the amount to be transferred. Amount to transfer is {} \
-                     and the balance is {}.",
-                    source, token, args.amount, balance
+                    "No balance found for the source {} of token {}",
+                    source, token
                 );
                 if !args.tx.force {
                     safe_exit(1)
                 }
-            }
-        }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, token
-            );
-            if !args.tx.force {
-                safe_exit(1)
             }
         }
     }
@@ -1854,63 +1870,73 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
-    let governance_parameters = rpc::get_governance_parameters(&client).await;
-    let current_epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let mut governance_parameters = None;
+    let current_epoch = match args.tx.epoch {
+        Some(epoch) if args.tx.unchecked => epoch,
+        _ => {
+            rpc::query_epoch(args::Query {
+                ledger_address: args.tx.ledger_address.clone(),
+            })
+                .await
+        }
+    };
 
-    if proposal.voting_start_epoch <= current_epoch
-        || proposal.voting_start_epoch.0
-            % governance_parameters.min_proposal_period
-            != 0
-    {
-        println!("{}", proposal.voting_start_epoch <= current_epoch);
-        println!(
-            "{}",
-            proposal.voting_start_epoch.0
+    if !args.tx.unchecked {
+        governance_parameters =
+            Some(rpc::get_governance_parameters(&client).await);
+        let governance_parameters = governance_parameters.as_ref().unwrap();
+        if proposal.voting_start_epoch <= current_epoch
+            || proposal.voting_start_epoch.0
                 % governance_parameters.min_proposal_period
-                == 0
-        );
-        eprintln!(
-            "Invalid proposal start epoch: {} must be greater than current \
-             epoch {} and a multiple of {}",
-            proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < governance_parameters.min_proposal_period
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            > governance_parameters.max_proposal_period
-        || proposal.voting_end_epoch.0 % 3 != 0
-    {
-        eprintln!(
-            "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and at max {} and end epoch \
-             must be a multiple of {}",
-            governance_parameters.min_proposal_period,
-            governance_parameters.max_proposal_period,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.grace_epoch <= proposal.voting_end_epoch
-        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-            < governance_parameters.min_proposal_grace_epochs
-    {
-        eprintln!(
-            "Invalid proposal grace epoch: difference between proposal grace \
-             and end epoch must be at least {}",
-            governance_parameters.min_proposal_grace_epochs
-        );
-        if !args.tx.force {
-            safe_exit(1)
+                != 0
+        {
+            println!("{}", proposal.voting_start_epoch <= current_epoch);
+            println!(
+                "{}",
+                proposal.voting_start_epoch.0
+                    % governance_parameters.min_proposal_period
+                    == 0
+            );
+            eprintln!(
+                "Invalid proposal start epoch: {} must be greater than \
+                 current epoch {} and a multiple of {}",
+                proposal.voting_start_epoch,
+                current_epoch,
+                governance_parameters.min_proposal_period
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
+            || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+                < governance_parameters.min_proposal_period
+            || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
+                > governance_parameters.max_proposal_period
+            || proposal.voting_end_epoch.0 % 3 != 0
+        {
+            eprintln!(
+                "Invalid proposal end epoch: difference between proposal \
+                 start and end epoch must be at least {} and at max {} and \
+                 end epoch must be a multiple of {}",
+                governance_parameters.min_proposal_period,
+                governance_parameters.max_proposal_period,
+                governance_parameters.min_proposal_period
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        } else if proposal.grace_epoch <= proposal.voting_end_epoch
+            || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
+                < governance_parameters.min_proposal_grace_epochs
+        {
+            eprintln!(
+                "Invalid proposal grace epoch: difference between proposal \
+                 grace and end epoch must be at least {}",
+                governance_parameters.min_proposal_grace_epochs
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
     }
 
@@ -1952,28 +1978,31 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             safe_exit(1)
         };
 
-        let balance = rpc::get_token_balance(
-            &client,
-            &ctx.native_token,
-            &proposal.author,
-        )
-        .await
-        .unwrap_or_default();
-        if balance
-            < token::Amount::from(governance_parameters.min_proposal_fund)
-        {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
-            safe_exit(1);
-        }
+        if !args.tx.unchecked {
+            let governance_parameters = governance_parameters.unwrap();
+            let balance = rpc::get_token_balance(
+                &client,
+                &ctx.native_token,
+                &proposal.author,
+            )
+            .await
+            .unwrap_or_default();
+            if balance
+                < token::Amount::from(governance_parameters.min_proposal_fund)
+            {
+                eprintln!(
+                    "Address {} doesn't have enough funds.",
+                    &proposal.author
+                );
+                safe_exit(1);
+            }
 
-        if init_proposal_data.content.len()
-            > governance_parameters.max_proposal_content_size as usize
-        {
-            eprintln!("Proposal content size too big.",);
-            safe_exit(1);
+            if init_proposal_data.content.len()
+                > governance_parameters.max_proposal_content_size as usize
+            {
+                eprintln!("Proposal content size too big.",);
+                safe_exit(1);
+            }
         }
 
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
@@ -2016,15 +2045,17 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
 
         let proposal: OfflineProposal =
             serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = rpc::get_public_key(
-            &proposal.address,
-            args.tx.ledger_address.clone(),
-        )
-        .await
-        .expect("Public key should exist.");
-        if !proposal.check_signature(&public_key) {
-            eprintln!("Proposal signature mismatch!");
-            safe_exit(1)
+        if !args.tx.unchecked {
+            let public_key = rpc::get_public_key(
+                &proposal.address,
+                args.tx.ledger_address.clone(),
+            )
+            .await
+            .expect("Public key should exist.");
+            if !proposal.check_signature(&public_key) {
+                eprintln!("Proposal signature mismatch!");
+                safe_exit(1)
+            }
         }
 
         let signing_key = find_keypair(
@@ -2059,10 +2090,15 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
         }
     } else {
         let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-        let current_epoch = rpc::query_epoch(args::Query {
-            ledger_address: args.tx.ledger_address.clone(),
-        })
-        .await;
+        let current_epoch = match args.tx.epoch {
+            Some(epoch) if args.tx.unchecked => epoch,
+            _ => {
+                rpc::query_epoch(args::Query {
+                    ledger_address: args.tx.ledger_address.clone(),
+                })
+                    .await
+            }
+        };
 
         let voter_address = ctx.get(signer);
         let proposal_id = args.proposal_id.unwrap();
@@ -2172,7 +2208,9 @@ pub async fn reveal_pk_if_needed(
 ) -> bool {
     let addr: Address = public_key.into();
     // Check if PK revealed
-    if args.force || !has_revealed_pk(&addr, args.ledger_address.clone()).await
+    if args.force
+        || args.unchecked
+        || !has_revealed_pk(&addr, args.ledger_address.clone()).await
     {
         // If not, submit it
         submit_reveal_pk_aux(ctx, public_key, args).await;
@@ -2224,10 +2262,15 @@ pub async fn submit_reveal_pk_aux(
     };
     tx.add_section(Section::Signature(Signature::new(&tx.data_sechash(), &keypair)));
     tx.add_section(Section::Signature(Signature::new(&tx.code_sechash(), &keypair)));
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.ledger_address.clone(),
-    })
-    .await;
+    let epoch = match args.epoch {
+        Some(epoch) if args.unchecked => epoch,
+        _ => {
+            rpc::query_epoch(args::Query {
+                ledger_address: args.ledger_address.clone(),
+            })
+                .await
+        }
+    };
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(tx)
     } else {
@@ -2353,27 +2396,33 @@ async fn filter_delegations(
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
-    if !is_validator {
-        eprintln!(
-            "The address {} doesn't belong to any known validator account.",
-            validator
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
     let source = ctx.get_opt(&args.source);
-    // Check that the source address exists on chain
-    if let Some(source) = &source {
-        let source_exists =
-            rpc::known_address(source, args.tx.ledger_address.clone()).await;
-        if !source_exists {
-            eprintln!("The source address {} doesn't exist on chain.", source);
+    if !args.tx.unchecked {
+        // Check that the validator address exists on chain
+        let is_validator =
+            rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+        if !is_validator {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
             if !args.tx.force {
                 safe_exit(1)
+            }
+        }
+        // Check that the source address exists on chain
+        if let Some(source) = &source {
+            let source_exists =
+                rpc::known_address(source, args.tx.ledger_address.clone())
+                    .await;
+            if !source_exists {
+                eprintln!(
+                    "The source address {} doesn't exist on chain.",
+                    source
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
         }
     }
@@ -2381,26 +2430,29 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&ctx.native_token, bond_source);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                eprintln!(
-                    "The balance of the source {} is lower than the amount to \
-                     be transferred. Amount to transfer is {} and the balance \
-                     is {}.",
-                    bond_source, args.amount, balance
-                );
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        match rpc::query_storage_value::<token::Amount>(&client, &balance_key)
+            .await
+        {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
+                        "The balance of the source {} is lower than the \
+                         amount to be transferred. Amount to transfer is {} \
+                         and the balance is {}.",
+                        bond_source, args.amount, balance
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            None => {
+                eprintln!("No balance found for the source {}", bond_source);
                 if !args.tx.force {
                     safe_exit(1)
                 }
-            }
-        }
-        None => {
-            eprintln!("No balance found for the source {}", bond_source);
-            if !args.tx.force {
-                safe_exit(1)
             }
         }
     }
@@ -2429,16 +2481,18 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
-    if !is_validator {
-        eprintln!(
-            "The address {} doesn't belong to any known validator account.",
-            validator
-        );
-        if !args.tx.force {
-            safe_exit(1)
+    if !args.tx.unchecked {
+        // Check that the validator address exists on chain
+        let is_validator =
+            rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+        if !is_validator {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
     }
 
@@ -2452,32 +2506,34 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::bond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let bonds = rpc::query_storage_value::<Bonds>(&client, &bond_key).await;
-    match bonds {
-        Some(bonds) => {
-            let mut bond_amount: token::Amount = 0.into();
-            for bond in bonds.iter() {
-                for delta in bond.pos_deltas.values() {
-                    bond_amount += *delta;
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let bonds = rpc::query_storage_value::<Bonds>(&client, &bond_key).await;
+        match bonds {
+            Some(bonds) => {
+                let mut bond_amount: token::Amount = 0.into();
+                for bond in bonds.iter() {
+                    for delta in bond.pos_deltas.values() {
+                        bond_amount += *delta;
+                    }
+                }
+                if args.amount > bond_amount {
+                    eprintln!(
+                        "The total bonds of the source {} is lower than the \
+                         amount to be unbonded. Amount to unbond is {} and \
+                         the total bonds is {}.",
+                        bond_source, args.amount, bond_amount
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
                 }
             }
-            if args.amount > bond_amount {
-                eprintln!(
-                    "The total bonds of the source {} is lower than the \
-                     amount to be unbonded. Amount to unbond is {} and the \
-                     total bonds is {}.",
-                    bond_source, args.amount, bond_amount
-                );
+            None => {
+                eprintln!("No bonds found");
                 if !args.tx.force {
                     safe_exit(1)
                 }
-            }
-        }
-        None => {
-            eprintln!("No bonds found");
-            if !args.tx.force {
-                safe_exit(1)
             }
         }
     }
@@ -2505,22 +2561,29 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let epoch = match args.tx.epoch {
+        Some(epoch) if args.tx.unchecked => epoch,
+        _ => {
+            rpc::query_epoch(args::Query {
+                ledger_address: args.tx.ledger_address.clone(),
+            })
+                .await
+        }
+    };
 
     let validator = ctx.get(&args.validator);
-    // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
-    if !is_validator {
-        eprintln!(
-            "The address {} doesn't belong to any known validator account.",
-            validator
-        );
-        if !args.tx.force {
-            safe_exit(1)
+    if !args.tx.unchecked {
+        // Check that the validator address exists on chain
+        let is_validator =
+            rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+        if !is_validator {
+            eprintln!(
+                "The address {} doesn't belong to any known validator account.",
+                validator
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
     }
 
@@ -2534,31 +2597,34 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let unbonds = rpc::query_storage_value::<Unbonds>(&client, &bond_key).await;
-    match unbonds {
-        Some(unbonds) => {
-            let mut unbonded_amount: token::Amount = 0.into();
-            if let Some(unbond) = unbonds.get(epoch) {
-                for delta in unbond.deltas.values() {
-                    unbonded_amount += *delta;
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        let unbonds =
+            rpc::query_storage_value::<Unbonds>(&client, &bond_key).await;
+        match unbonds {
+            Some(unbonds) => {
+                let mut unbonded_amount: token::Amount = 0.into();
+                if let Some(unbond) = unbonds.get(epoch) {
+                    for delta in unbond.deltas.values() {
+                        unbonded_amount += *delta;
+                    }
+                }
+                if unbonded_amount == 0.into() {
+                    eprintln!(
+                        "There are no unbonded bonds ready to withdraw in the \
+                         current epoch {}.",
+                        epoch
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
                 }
             }
-            if unbonded_amount == 0.into() {
-                eprintln!(
-                    "There are no unbonded bonds ready to withdraw in the \
-                     current epoch {}.",
-                    epoch
-                );
+            None => {
+                eprintln!("No unbonded bonds found");
                 if !args.tx.force {
                     safe_exit(1)
                 }
-            }
-        }
-        None => {
-            eprintln!("No unbonded bonds found");
-            if !args.tx.force {
-                safe_exit(1)
             }
         }
     }
@@ -2585,64 +2651,76 @@ pub async fn submit_validator_commission_change(
     ctx: Context,
     args: args::TxCommissionRateChange,
 ) {
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let epoch = match args.tx.epoch {
+        Some(epoch) if args.tx.unchecked => epoch,
+        _ => {
+            rpc::query_epoch(args::Query {
+                ledger_address: args.tx.ledger_address.clone(),
+            })
+                .await
+        }
+    };
 
     let tx_code = ctx.read_wasm(TX_CHANGE_COMMISSION_WASM);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let validator = ctx.get(&args.validator);
-    if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
-        if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
-            eprintln!("Invalid new commission rate, received {}", args.rate);
-            if !args.tx.force {
-                safe_exit(1)
+    if !args.tx.unchecked {
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+        if rpc::is_validator(&validator, args.tx.ledger_address.clone()).await {
+            if args.rate < Decimal::ZERO || args.rate > Decimal::ONE {
+                eprintln!(
+                    "Invalid new commission rate, received {}",
+                    args.rate
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
             }
-        }
 
-        let commission_rate_key =
-            ledger::pos::validator_commission_rate_key(&validator);
-        let max_commission_rate_change_key =
-            ledger::pos::validator_max_commission_rate_change_key(&validator);
-        let commission_rates = rpc::query_storage_value::<CommissionRates>(
-            &client,
-            &commission_rate_key,
-        )
-        .await;
-        let max_change = rpc::query_storage_value::<Decimal>(
-            &client,
-            &max_commission_rate_change_key,
-        )
-        .await;
+            let commission_rate_key =
+                ledger::pos::validator_commission_rate_key(&validator);
+            let max_commission_rate_change_key =
+                ledger::pos::validator_max_commission_rate_change_key(
+                    &validator,
+                );
+            let commission_rates = rpc::query_storage_value::<CommissionRates>(
+                &client,
+                &commission_rate_key,
+            )
+            .await;
+            let max_change = rpc::query_storage_value::<Decimal>(
+                &client,
+                &max_commission_rate_change_key,
+            )
+            .await;
 
-        match (commission_rates, max_change) {
-            (Some(rates), Some(max_change)) => {
-                // Assuming that pipeline length = 2
-                let rate_next_epoch = rates.get(epoch.next()).unwrap();
-                if (args.rate - rate_next_epoch).abs() > max_change {
-                    eprintln!(
-                        "New rate is too large of a change with respect to \
-                         the predecessor epoch in which the rate will take \
-                         effect."
-                    );
+            match (commission_rates, max_change) {
+                (Some(rates), Some(max_change)) => {
+                    // Assuming that pipeline length = 2
+                    let rate_next_epoch = rates.get(epoch.next()).unwrap();
+                    if (args.rate - rate_next_epoch).abs() > max_change {
+                        eprintln!(
+                            "New rate is too large of a change with respect \
+                             to the predecessor epoch in which the rate will \
+                             take effect."
+                        );
+                        if !args.tx.force {
+                            safe_exit(1)
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("Error retrieving from storage");
                     if !args.tx.force {
                         safe_exit(1)
                     }
                 }
             }
-            _ => {
-                eprintln!("Error retrieving from storage");
-                if !args.tx.force {
-                    safe_exit(1)
-                }
+        } else {
+            eprintln!("The given address {validator} is not a validator.");
+            if !args.tx.force {
+                safe_exit(1)
             }
-        }
-    } else {
-        eprintln!("The given address {validator} is not a validator.");
-        if !args.tx.force {
-            safe_exit(1)
         }
     }
 
