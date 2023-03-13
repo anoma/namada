@@ -83,11 +83,6 @@ where
         let addr_bal: token::Amount = wl_storage
             .read(&token::balance_key(addr, &masp_addr))?
             .unwrap_or_default();
-        // The reward for each reward.1 units of the current asset is
-        // reward.0 units of the reward token
-        // Since floor(a) + floor(b) <= floor(a+b), there will always be
-        // enough rewards to reimburse users
-        total_reward += (addr_bal * reward).0;
         // Provide an allowed conversion from previous timestamp. The
         // negative sign allows each instance of the old asset to be
         // cancelled out/replaced with the new asset
@@ -119,6 +114,10 @@ where
                         .unwrap())
                 .into(),
             );
+            // The reward for each reward.1 units of the current asset is
+            // reward.0 units of the reward token
+            total_reward +=
+                (addr_bal * (new_normed_inflation, *normed_inflation)).0 - addr_bal;
             // Save the new normed inflation
             *normed_inflation = new_normed_inflation;
         } else {
@@ -135,6 +134,11 @@ where
                         .unwrap())
                 .into(),
             );
+            // The reward for each reward.1 units of the current asset is
+            // reward.0 units of the reward token
+            total_reward +=
+                ((addr_bal * (real_reward, reward.1)).0 *
+                (*normed_inflation, ref_inflation)).0;
         }
         // Add a conversion from the previous asset type
         wl_storage.storage.conversion_state.assets.insert(
