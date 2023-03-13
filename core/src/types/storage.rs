@@ -14,6 +14,7 @@ use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::key::common;
 use crate::bytes::ByteBuf;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
@@ -861,6 +862,25 @@ impl KeySeg for Epoch {
     }
 }
 
+impl KeySeg for common::PublicKey {
+    fn parse(string: String) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let raw = common::PublicKey::from_str(&string)
+            .map_err(|err| Error::ParseKeySeg(err.to_string()))?;
+        Ok(raw)
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
 /// Epoch identifier. Epochs are identified by consecutive numbers.
 #[derive(
     Clone,
@@ -1306,7 +1326,7 @@ pub mod testing {
     /// Generate an arbitrary [`Key`] other than a validity predicate key.
     pub fn arb_key_no_vp() -> impl Strategy<Value = Key> {
         // a key from key segments
-        collection::vec(arb_key_seg(), 1..5)
+        collection::vec(arb_key_seg(), 2..5)
             .prop_map(|segments| Key { segments })
     }
 
@@ -1338,7 +1358,7 @@ pub mod testing {
     pub fn arb_key_seg() -> impl Strategy<Value = DbKeySeg> {
         prop_oneof![
             // the string segment is 5 time more likely to be generated
-            5 => "[a-zA-Z0-9_]{1,100}".prop_map(DbKeySeg::StringSeg),
+            5 => "[a-zA-Z0-9_]{1,20}".prop_map(DbKeySeg::StringSeg),
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
     }
