@@ -19,16 +19,32 @@ If you find a bug, please submit an issue with the `bug` [issue template](https:
   5. [Becoming a validator post-genesis](./post-genesis-validator.md)
 ![testnet_flowchart](../images/testnet_flowchart.png)
 
-## Latest Testnet
 The Namada public testnet is permissionless, anyone can join without the authorisation of a centralised party. Expect frequent upgrades (every two weeks).
+
+## Latest Upgrade
+
+
+## Latest Testnet
+
+- Namada public testnet 4:
+  - From date: 22nd of February 2023  
+  - Namada protocol version: `v0.14.1` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-4.0.16a35d789f4`
+
+## Testnet History Timeline
+
+- Namada public testnet 3 hotfix (did not suffice):
+  - From date: 13th of February 2023  
+  - Namada protocol version: `v0.13.4` 
+  - Tendermint version: `v0.1.4-abciplus`
+  - CHAIN_ID: `public-testnet-3.0.81edd4d6eb6`
 
 - Namada public testnet 3:
   - From date: 9th of February 2023  
   - Namada protocol version: `v0.13.3` 
   - Tendermint version: `v0.1.4-abciplus`
-  - CHAIN_ID: `TBD`
-
-## Testnet History Timeline
+  - CHAIN_ID: `public-testnet-3.0.81edd4d6eb6`
 
 - Namada public testnet 2.1.2 hotfix:
   - From date: 25th of January 2023  

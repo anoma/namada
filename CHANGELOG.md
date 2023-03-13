@@ -15,13 +15,10 @@ validator set updates in proof of stake.
 Namada 0.14.0 is a scheduled minor release with various protocol
 stability improvements.
 
-### BUG
+### BUG FIXES
 
 - Add validation for balances with IBC sub prefix
   ([#354](https://github.com/anoma/namada/issues/354))
-
-### BUG FIXES
-
 - Fixed the prefix iterator method to respect modifications in the write log.
   ([#913](https://github.com/anoma/namada/pull/913))
 

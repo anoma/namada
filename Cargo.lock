@@ -3845,6 +3845,7 @@ version = "0.14.1"
 dependencies = [
  "borsh",
  "derivative",
+ "itertools",
  "namada_core",
  "once_cell",
  "proptest",
