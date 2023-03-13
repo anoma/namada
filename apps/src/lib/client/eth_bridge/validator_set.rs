@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
@@ -85,7 +86,6 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
             let success = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
             if success {
                 tracing::info!(?receipt, "Ethereum transfer succeded");
-                tracing::info!(?new_epoch, "Updated the validator set");
             } else {
                 tracing::error!(?receipt, "Ethereum transfer failed");
             }
@@ -162,13 +162,21 @@ async fn relay_validator_set_update_daemon(
             "Fetched the latest epochs"
         );
 
-        if nam_current_epoch == gov_current_epoch {
-            tracing::info!(
-                "Nothing to do, since the validator set in the Governance \
-                 contract is up to date",
-            );
-            last_call_succeeded = false;
-            continue;
+        match nam_current_epoch.cmp(&gov_current_epoch) {
+            Ordering::Equal => {
+                tracing::info!(
+                    "Nothing to do, since the validator set in the Governance \
+                     contract is up to date",
+                );
+                last_call_succeeded = false;
+                continue;
+            }
+            Ordering::Less => {
+                tracing::error!("The Governance contract is ahead of Namada!");
+                last_call_succeeded = false;
+                continue;
+            }
+            Ordering::Greater => {}
         }
 
         // update epoch in the contract
