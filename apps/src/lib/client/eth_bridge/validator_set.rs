@@ -78,7 +78,17 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         relay_validator_set_update_daemon(args, nam_client).await;
     } else {
         relay_validator_set_update_once(&args, &nam_client, |transf_result| {
-            println!("{transf_result:?}");
+            let Some(receipt) = transf_result else {
+                tracing::warn!("No transfer receipt received from the Ethereum node");
+                return;
+            };
+            let success = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
+            if success {
+                tracing::info!(?receipt, "Ethereum transfer succeded");
+                tracing::info!(?new_epoch, "Updated the validator set");
+            } else {
+                tracing::error!(?receipt, "Ethereum transfer failed");
+            }
         })
         .await;
     }
