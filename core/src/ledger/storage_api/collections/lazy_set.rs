@@ -28,7 +28,7 @@ pub struct LazySet<K> {
 }
 
 /// Possible sub-keys of a [`LazySet`]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SubKey<K> {
     /// Literal set key
     Data(K),
@@ -88,16 +88,20 @@ where
             Some(Some(suffix)) => suffix,
         };
 
+        // A helper to validate the 2nd key segment
+        let validate_sub_key = |raw_sub_key| {
+            if let Ok(key) = storage::KeySeg::parse(raw_sub_key) {
+                Ok(Some(SubKey::Data(key)))
+            } else {
+                Err(ValidationError::InvalidSubKey(key.clone()))
+                    .into_storage_result()
+            }
+        };
+
         // Match the suffix against expected sub-keys
         match &suffix.segments[..] {
-            [DbKeySeg::StringSeg(sub)] => {
-                if let Ok(key) = storage::KeySeg::parse(sub.clone()) {
-                    Ok(Some(SubKey::Data(key)))
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
-            }
+            [DbKeySeg::StringSeg(sub)] => validate_sub_key(sub.clone()),
+            [DbKeySeg::AddressSeg(sub)] => validate_sub_key(sub.raw()),
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
         }
@@ -265,6 +269,7 @@ where
 mod test {
     use super::*;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::{self, Address};
 
     #[test]
     fn test_lazy_set_basics() -> storage_api::Result<()> {
@@ -330,6 +335,60 @@ mod test {
 
         assert!(lazy_set.try_insert(&mut storage, key).is_ok());
         assert!(lazy_set.try_insert(&mut storage, key).is_err());
+
+        let storage_key = lazy_set.get_key(&key);
+        assert_eq!(
+            lazy_set.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(key))
+        );
+
+        let storage_key2 = lazy_set.get_key(&key2);
+        assert_eq!(
+            lazy_set.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(key2))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lazy_set_with_addr_key() -> storage_api::Result<()> {
+        let mut storage = TestWlStorage::default();
+
+        let key = storage::Key::parse("test").unwrap();
+        let lazy_set = LazySet::<Address>::open(key);
+
+        // Insert a new value and check that it's added
+        let key = address::testing::established_address_1();
+        lazy_set.insert(&mut storage, key.clone())?;
+
+        assert_eq!(lazy_set.len(&storage)?, 1);
+        let mut map_it = lazy_set.iter(&storage)?;
+        assert_eq!(map_it.next().unwrap()?, key);
+        drop(map_it);
+
+        let key2 = address::testing::established_address_2();
+        lazy_set.insert(&mut storage, key2.clone())?;
+
+        assert_eq!(lazy_set.len(&storage)?, 2);
+        let mut iter = lazy_set.iter(&storage)?;
+        assert!(key < key2, "sanity check - this influences the iter order");
+        assert_eq!(iter.next().unwrap()?, key);
+        assert_eq!(iter.next().unwrap()?, key2);
+        assert!(iter.next().is_none());
+        drop(iter);
+
+        let storage_key = lazy_set.get_key(&key);
+        assert_eq!(
+            lazy_set.is_valid_sub_key(&storage_key).unwrap(),
+            Some(SubKey::Data(key))
+        );
+
+        let storage_key2 = lazy_set.get_key(&key2);
+        assert_eq!(
+            lazy_set.is_valid_sub_key(&storage_key2).unwrap(),
+            Some(SubKey::Data(key2))
+        );
 
         Ok(())
     }
