@@ -85,22 +85,32 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
 }
 
 async fn relay_validator_set_update_daemon(
-    args: args::ValidatorSetUpdateRelay,
+    mut args: args::ValidatorSetUpdateRelay,
     nam_client: HttpClient,
 ) {
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
 
-    const RETRY_DURATION: Duration = Duration::from_secs(10);
+    const RETRY_DURATION: Duration = Duration::from_secs(1);
+    const SUCCESS_DURATION: Duration = Duration::from_secs(10);
+
+    let mut last_call_succeeded = true;
 
     loop {
-        tracing::info!(sleeping_for = ?RETRY_DURATION, "Sleeping");
-        tokio::time::sleep(RETRY_DURATION).await;
+        let sleep_for = if last_call_succeeded {
+            SUCCESS_DURATION
+        } else {
+            RETRY_DURATION
+        };
+
+        tracing::info!(?sleep_for, "Sleeping");
+        tokio::time::sleep(sleep_for).await;
 
         let is_synchronizing =
             eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
         if is_synchronizing {
             tracing::info!("The Ethereum node is still synchronizing");
+            last_call_succeeded = false;
             continue;
         }
 
@@ -119,7 +129,7 @@ async fn relay_validator_set_update_daemon(
                         );
                         safe_exit(1);
                     })
-                    .map(|e| Epoch(e.try_into().expect("Epoch overflow")))
+                    .map(|e| Epoch(e.as_u64()))
             });
 
         let shell = RPC.shell();
@@ -147,10 +157,28 @@ async fn relay_validator_set_update_daemon(
                 "Nothing to do, since the validator set in the Governance \
                  contract is up to date",
             );
+            last_call_succeeded = false;
             continue;
         }
 
-        // TODO
+        // update epoch in the contract
+        let new_epoch = gov_current_epoch + 1u64;
+        args.epoch = Some(new_epoch);
+
+        relay_validator_set_update_once(&args, &nam_client, |transf_result| {
+            let Some(receipt) = transf_result else {
+                tracing::warn!("No transfer receipt received from the Ethereum node");
+                last_call_succeeded = false;
+                return;
+            };
+            last_call_succeeded = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
+            if last_call_succeeded {
+                tracing::info!(?receipt, "Ethereum transfer succeded");
+                tracing::info!(?new_epoch, "Updated the validator set");
+            } else {
+                tracing::error!(?receipt, "Ethereum transfer failed");
+            }
+        }).await;
     }
 }
 
