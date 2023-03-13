@@ -109,7 +109,7 @@ async fn relay_validator_set_update_daemon(
         let is_synchronizing =
             eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
         if is_synchronizing {
-            tracing::info!("The Ethereum node is still synchronizing");
+            tracing::info!("The Ethereum node is synchronizing");
             last_call_succeeded = false;
             continue;
         }
