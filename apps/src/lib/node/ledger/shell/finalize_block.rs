@@ -402,6 +402,9 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
+            // send the latest oracle configs. These may have changed due to
+            // governance.
+            self.update_eth_oracle();
         }
 
         let _ = self
@@ -497,9 +500,6 @@ where
                 },
             )
             .expect("Must be able to update validator sets");
-        // send the latest oracle configs. These may have changed due to
-        // governance.
-        self.update_eth_oracle();
     }
 }
 
