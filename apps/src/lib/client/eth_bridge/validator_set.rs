@@ -57,6 +57,11 @@ pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
+    if args.daemon {
+        relay_validator_set_update_daemon(args).await;
+        return;
+    }
+
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
             url: &args.eth_rpc_endpoint,
@@ -68,8 +73,20 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     } else {
         eth_sync_or_exit(&args.eth_rpc_endpoint).await;
     }
+    relay_validator_set_update_once(&args).await;
+}
 
-    let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
+pub async fn relay_validator_set_update_daemon(
+    args: args::ValidatorSetUpdateRelay,
+) {
+    let _ = args;
+}
+
+pub async fn relay_validator_set_update_once(
+    args: &args::ValidatorSetUpdateRelay,
+) {
+    let nam_client =
+        HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
