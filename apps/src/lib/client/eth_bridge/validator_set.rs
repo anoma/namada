@@ -5,6 +5,7 @@ use ethbridge_governance_contract::Governance;
 use futures::future::FutureExt;
 use namada::core::types::storage::Epoch;
 use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
+use namada::eth_bridge::ethers::core::types::TransactionReceipt;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
@@ -76,7 +77,10 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     if args.daemon {
         relay_validator_set_update_daemon(args, nam_client).await;
     } else {
-        relay_validator_set_update_once(&args, &nam_client).await;
+        relay_validator_set_update_once(&args, &nam_client, |transf_result| {
+            println!("{transf_result:?}");
+        })
+        .await;
     }
 }
 
@@ -90,11 +94,13 @@ async fn relay_validator_set_update_daemon(
     const RETRY_DURATION: Duration = Duration::from_secs(10);
 
     loop {
+        tracing::info!(sleeping_for = ?RETRY_DURATION, "Sleeping");
         tokio::time::sleep(RETRY_DURATION).await;
 
         let is_synchronizing =
             eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
         if is_synchronizing {
+            tracing::info!("The Ethereum node is still synchronizing");
             continue;
         }
 
@@ -106,18 +112,22 @@ async fn relay_validator_set_update_daemon(
         let governance_epoch_prep_call = governance.validator_set_nonce();
         let governance_epoch_fut =
             governance_epoch_prep_call.call().map(|result| {
-                result.map_err(|err| {
-                    println!(
-                        "Failed to fetch latest validator set nonce: {err}"
-                    );
-                    safe_exit(1);
-                })
+                result
+                    .map_err(|err| {
+                        tracing::error!(
+                            "Failed to fetch latest validator set nonce: {err}"
+                        );
+                        safe_exit(1);
+                    })
+                    .map(|e| Epoch(e.try_into().expect("Epoch overflow")))
             });
 
         let shell = RPC.shell();
         let nam_current_epoch_fut = shell.epoch(&nam_client).map(|result| {
             result.map_err(|err| {
-                println!("Failed to fetch the latest epoch in Namada: {err}");
+                tracing::error!(
+                    "Failed to fetch the latest epoch in Namada: {err}"
+                );
                 safe_exit(1);
             })
         });
@@ -126,8 +136,21 @@ async fn relay_validator_set_update_daemon(
             futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
                 .unwrap();
 
-        println!("NAM: {nam_current_epoch}");
-        println!("ETH: {gov_current_epoch}");
+        tracing::info!(
+            ?nam_current_epoch,
+            ?gov_current_epoch,
+            "Fetched the latest epochs"
+        );
+
+        if nam_current_epoch == gov_current_epoch {
+            tracing::info!(
+                "Nothing to do, since the validator set in the Governance \
+                 contract is up to date",
+            );
+            continue;
+        }
+
+        // TODO
     }
 }
 
@@ -144,10 +167,13 @@ async fn get_governance_contract(
     Governance::new(governance_contract.address, eth_client)
 }
 
-async fn relay_validator_set_update_once(
+async fn relay_validator_set_update_once<F>(
     args: &args::ValidatorSetUpdateRelay,
     nam_client: &HttpClient,
-) {
+    mut action: F,
+) where
+    F: FnMut(Option<TransactionReceipt>),
+{
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
     } else {
@@ -208,7 +234,7 @@ async fn relay_validator_set_update_once(
         .await
         .unwrap();
 
-    println!("{transf_result:?}");
+    action(transf_result);
 }
 
 // NOTE: there's a bug (or feature?!) in ethers, where
