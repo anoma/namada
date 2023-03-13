@@ -7,8 +7,11 @@ use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
+use tokio::time::{Duration, Instant};
 
+use super::{block_on_eth_sync, eth_sync_or_exit};
 use crate::cli::args;
+use crate::client::eth_bridge::BlockOnEthSync;
 use crate::facade::tendermint_rpc::HttpClient;
 
 /// Query an ABI encoding of the validator set to be installed
@@ -54,6 +57,18 @@ pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
+    if args.sync {
+        block_on_eth_sync(BlockOnEthSync {
+            url: &args.eth_rpc_endpoint,
+            deadline: Instant::now() + Duration::from_secs(60),
+            rpc_timeout: std::time::Duration::from_secs(3),
+            delta_sleep: Duration::from_secs(1),
+        })
+        .await;
+    } else {
+        eth_sync_or_exit(&args.eth_rpc_endpoint).await;
+    }
+
     let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
 
     let epoch_to_relay = if let Some(epoch) = args.epoch {

@@ -17,10 +17,13 @@ use namada::types::eth_bridge_pool::{
 use namada::types::keccak::KeccakHash;
 use namada::types::token::Amount;
 use serde::{Deserialize, Serialize};
+use tokio::time::{Duration, Instant};
 
 use super::super::signing::TxSigningKey;
 use super::super::tx::process_tx;
+use super::{block_on_eth_sync, eth_sync_or_exit};
 use crate::cli::{args, safe_exit, Context};
+use crate::client::eth_bridge::BlockOnEthSync;
 use crate::facade::tendermint_rpc::HttpClient;
 
 const ADD_TRANSFER_WASM: &str = "tx_bridge_pool.wasm";
@@ -250,6 +253,18 @@ pub async fn construct_proof(args: args::BridgePoolProof) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_bridge_pool_proof(args: args::RelayBridgePoolProof) {
+    if args.sync {
+        block_on_eth_sync(BlockOnEthSync {
+            url: &args.eth_rpc_endpoint,
+            deadline: Instant::now() + Duration::from_secs(60),
+            rpc_timeout: std::time::Duration::from_secs(3),
+            delta_sleep: Duration::from_secs(1),
+        })
+        .await;
+    } else {
+        eth_sync_or_exit(&args.eth_rpc_endpoint).await;
+    }
+
     let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
     let bp_proof =
         construct_bridge_pool_proof(&nam_client, &args.transfers, args.relayer)

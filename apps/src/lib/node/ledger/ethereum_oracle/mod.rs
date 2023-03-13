@@ -17,7 +17,6 @@ use tokio::task::LocalSet;
 use tokio::time::Instant;
 #[cfg(not(test))]
 use web30::client::Web3;
-#[cfg(not(test))]
 use web30::jsonrpc::error::Web3Error;
 
 use self::events::{signatures, PendingEvent};
@@ -61,6 +60,13 @@ pub enum SyncStatus {
     AtHeight(Uint256),
 }
 
+impl SyncStatus {
+    /// Returns true if [`SyncStatus`] reflects a synchronized node.
+    pub fn is_synchronized(&self) -> bool {
+        matches!(self, SyncStatus::AtHeight(_))
+    }
+}
+
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
@@ -85,6 +91,18 @@ impl Deref for Oracle {
 
     fn deref(&self) -> &Self::Target {
         &self.client
+    }
+}
+
+/// Fetch the sync status of an Ethereum node.
+pub async fn eth_syncing_status(
+    client: &web30::client::Web3,
+) -> Result<SyncStatus, Error> {
+    match client.eth_block_number().await {
+        Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
+        Ok(height) => Ok(SyncStatus::AtHeight(height)),
+        Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
+        Err(error) => Err(Error::FetchHeight(error.to_string())),
     }
 }
 
@@ -118,17 +136,17 @@ impl Oracle {
     /// number is 0 or not.
     #[cfg(not(test))]
     async fn syncing(&self) -> Result<SyncStatus, Error> {
-        match self.client.eth_block_number().await {
-            Ok(height) if height == 0u64.into() => Ok(SyncStatus::Syncing),
-            Ok(height) => match &*self.last_processed_block.borrow() {
-                Some(last) if <&Uint256>::from(last) < &height => {
-                    Ok(SyncStatus::AtHeight(height))
+        match eth_syncing_status(&self.client).await? {
+            s @ SyncStatus::Syncing => Ok(s),
+            SyncStatus::AtHeight(height) => {
+                match &*self.last_processed_block.borrow() {
+                    Some(last) if <&Uint256>::from(last) < &height => {
+                        Ok(SyncStatus::AtHeight(height))
+                    }
+                    None => Ok(SyncStatus::AtHeight(height)),
+                    _ => Err(Error::FallenBehind),
                 }
-                None => Ok(SyncStatus::AtHeight(height)),
-                _ => Err(Error::FallenBehind),
-            },
-            Err(Web3Error::SyncingNode(_)) => Ok(SyncStatus::Syncing),
-            Err(error) => Err(Error::FetchHeight(error.to_string())),
+            }
         }
     }
 
