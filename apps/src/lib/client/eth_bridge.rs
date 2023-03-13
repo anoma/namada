@@ -33,7 +33,7 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) {
         delta_sleep,
         url,
     } = args;
-    println!("Attempting to synchronize with the Ethereum network");
+    tracing::info!("Attempting to synchronize with the Ethereum network");
     let client = Web3::new(url, rpc_timeout);
     TimeoutStrategy::LinearBackoff { delta: delta_sleep }
         .timeout(deadline, || async {
@@ -51,10 +51,12 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) {
         })
         .await
         .unwrap_or_else(|_| {
-            println!("Timed out while waiting for Ethereum to synchronize");
+            tracing::error!(
+                "Timed out while waiting for Ethereum to synchronize"
+            );
             cli::safe_exit(1);
         });
-    println!("The Ethereum node is up to date");
+    tracing::info!("The Ethereum node is up to date");
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
@@ -71,7 +73,7 @@ where
         .await
         .map(|status| status.is_synchronized())
         .unwrap_or_else(|err| {
-            println!(
+            tracing::error!(
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"
             );
@@ -88,7 +90,7 @@ where
 /// not, end execution.
 pub async fn eth_sync_or_exit(url: &str) {
     _ = eth_sync_or(url, || {
-        println!("The Ethereum node has not finished synchronizing");
+        tracing::error!("The Ethereum node has not finished synchronizing");
         cli::safe_exit(1);
     })
     .await;
