@@ -12,6 +12,7 @@ use namada::eth_bridge::oracle::config::Config;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use thiserror::Error;
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::task::LocalSet;
 use tokio::time::Instant;
@@ -23,6 +24,7 @@ use self::events::{signatures, PendingEvent};
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
+use crate::node::ledger::oracle::control::Command;
 use crate::timeouts::TimeoutStrategy;
 
 /// The default amount of time the oracle will wait between processing blocks
@@ -168,6 +170,17 @@ impl Oracle {
         }
         true
     }
+
+    /// Check if a new config has been sent from teh Shell.
+    fn update_config(&mut self) -> Option<Config> {
+        match self.control.try_recv() {
+            Ok(Command::UpdateConfig(config)) => Some(config),
+            Err(TryRecvError::Disconnected) => panic!(
+                "The Ethereum oracle command channel has unexpectedly hung up."
+            ),
+            _ => None,
+        }
+    }
 }
 
 /// Block until an initial configuration is received via the command channel.
@@ -177,10 +190,8 @@ async fn await_initial_configuration(
     receiver: &mut control::Receiver,
 ) -> Option<Config> {
     match receiver.recv().await {
-        Some(cmd) => match cmd {
-            control::Command::Start { initial: config } => Some(config),
-        },
-        None => None,
+        Some(Command::UpdateConfig(config)) => Some(config),
+        _ => None,
     }
 }
 
@@ -236,27 +247,27 @@ pub fn run_oracle(
 /// is reached, an event is forwarded to the ledger process
 async fn run_oracle_aux(mut oracle: Oracle) {
     tracing::info!("Oracle is awaiting initial configuration");
-    let config = match await_initial_configuration(&mut oracle.control).await {
-        Some(config) => {
-            tracing::info!(
-                "Oracle received initial configuration - {:?}",
+    let mut config =
+        match await_initial_configuration(&mut oracle.control).await {
+            Some(config) => {
+                tracing::info!(
+                    "Oracle received initial configuration - {:?}",
+                    config
+                );
                 config
-            );
-            config
-        }
-        None => {
-            tracing::debug!(
-                "Oracle control channel was closed before the oracle could be \
-                 configured"
-            );
-            return;
-        }
-    };
+            }
+            None => {
+                tracing::debug!(
+                    "Oracle control channel was closed before the oracle \
+                     could be configured"
+                );
+                return;
+            }
+        };
 
     let mut next_block_to_process = config.start_block.clone();
 
     loop {
-        let next_block = next_block_to_process.clone();
         tracing::info!(
             ?next_block_to_process,
             "Checking Ethereum block for bridge events"
@@ -264,7 +275,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
         let deadline = Instant::now() + oracle.ceiling;
         let res = TimeoutStrategy::Constant(oracle.backoff).timeout(deadline, || async {
             tokio::select! {
-                result = process(&oracle, &config, next_block.clone()) => {
+                result = process(&oracle, &config, next_block_to_process.clone()) => {
                     match result {
                         Ok(()) => {
                             ControlFlow::Break(Ok(()))
@@ -297,6 +308,10 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             oracle
                 .last_processed_block
                 .send_replace(Some(next_block_to_process.clone()));
+            // check if a new config has been sent.
+            if let Some(new_config) = oracle.update_config() {
+                config = new_config;
+            }
             next_block_to_process += 1.into();
         }
     }
@@ -499,7 +514,7 @@ mod test_oracle {
     /// for tests.
     async fn start_with_default_config(
         oracle: Oracle,
-        control_sender: control::Sender,
+        control_sender: &mut control::Sender,
         config: Config,
     ) -> tokio::task::JoinHandle<()> {
         let handle = tokio::task::spawn_blocking(move || {
@@ -513,7 +528,7 @@ mod test_oracle {
             });
         });
         control_sender
-            .send(control::Command::Start { initial: config })
+            .send(control::Command::UpdateConfig(config))
             .await
             .unwrap();
         handle
@@ -550,12 +565,12 @@ mod test_oracle {
             oracle,
             eth_recv,
             admin_channel,
-            control_sender,
+            mut control_sender,
             ..
         } = setup();
         let oracle = start_with_default_config(
             oracle,
-            control_sender,
+            &mut control_sender,
             Config::default(),
         )
         .await;
@@ -575,12 +590,11 @@ mod test_oracle {
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let oracle = start_with_default_config(
             oracle,
-            control_sender,
+            &mut control_sender,
             Config::default(),
         )
         .await;
@@ -607,8 +621,7 @@ mod test_oracle {
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let min_confirmations = 100;
         let config = Config {
@@ -617,7 +630,8 @@ mod test_oracle {
             ..Config::default()
         };
         let oracle =
-            start_with_default_config(oracle, control_sender, config).await;
+            start_with_default_config(oracle, &mut control_sender, config)
+                .await;
         // Increase height above the configured minimum confirmations
         admin_channel
             .send(TestCmd::NewHeight(min_confirmations.into()))
@@ -656,8 +670,7 @@ mod test_oracle {
             eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let min_confirmations = 100;
         let config = Config {
@@ -666,7 +679,8 @@ mod test_oracle {
             ..Config::default()
         };
         let oracle =
-            start_with_default_config(oracle, control_sender, config).await;
+            start_with_default_config(oracle, &mut control_sender, config)
+                .await;
         // Increase height above the configured minimum confirmations
         admin_channel
             .send(TestCmd::NewHeight(min_confirmations.into()))
@@ -719,8 +733,7 @@ mod test_oracle {
             mut eth_recv,
             admin_channel,
             blocks_processed_recv: _processed,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let min_confirmations = 100;
         let config = Config {
@@ -729,7 +742,8 @@ mod test_oracle {
             ..Config::default()
         };
         let oracle =
-            start_with_default_config(oracle, control_sender, config).await;
+            start_with_default_config(oracle, &mut control_sender, config)
+                .await;
         // Increase height above the configured minimum confirmations
         admin_channel
             .send(TestCmd::NewHeight(min_confirmations.into()))
@@ -843,13 +857,15 @@ mod test_oracle {
             eth_recv,
             admin_channel,
             mut blocks_processed_recv,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let config = Config::default();
-        let oracle =
-            start_with_default_config(oracle, control_sender, config.clone())
-                .await;
+        let oracle = start_with_default_config(
+            oracle,
+            &mut control_sender,
+            config.clone(),
+        )
+        .await;
 
         // set the height of the chain such that there are some blocks deep
         // enough to be considered confirmed by the oracle
@@ -908,13 +924,15 @@ mod test_oracle {
             eth_recv,
             admin_channel,
             mut blocks_processed_recv,
-            control_sender,
-            ..
+            mut control_sender,
         } = setup();
         let config = Config::default();
-        let oracle =
-            start_with_default_config(oracle, control_sender, config.clone())
-                .await;
+        let oracle = start_with_default_config(
+            oracle,
+            &mut control_sender,
+            config.clone(),
+        )
+        .await;
 
         let confirmed_block_height = 9; // all blocks up to and including this block have enough confirmations
         let synced_block_height =

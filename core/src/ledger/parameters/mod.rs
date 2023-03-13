@@ -14,7 +14,9 @@ use crate::types::storage::Key;
 use crate::types::time::DurationSecs;
 use crate::types::token;
 
-const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
+/// The internal address for storage keys representing parameters than
+/// can be changed via governance.
+pub const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
 
 /// Protocol parameters
 #[derive(

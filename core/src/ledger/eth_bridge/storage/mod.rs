@@ -3,6 +3,7 @@ pub mod bridge_pool;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;
+use crate::ledger::parameters::ADDRESS as PARAM_ADDRESS;
 use crate::types::address::nam;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token::balance_key;
@@ -39,7 +40,7 @@ pub fn is_eth_bridge_key(key: &Key) -> bool {
 pub fn active_key() -> Key {
     Key {
         segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
             DbKeySeg::StringSeg(ACTIVE_SUBKEY.into()),
         ],
     }
@@ -49,7 +50,7 @@ pub fn active_key() -> Key {
 pub fn min_confirmations_key() -> Key {
     Key {
         segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
             DbKeySeg::StringSeg(MIN_CONFIRMATIONS_SUBKEY.into()),
         ],
     }
@@ -59,7 +60,7 @@ pub fn min_confirmations_key() -> Key {
 pub fn native_erc20_key() -> Key {
     Key {
         segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
             DbKeySeg::StringSeg(NATIVE_ERC20_SUBKEY.into()),
         ],
     }
@@ -69,7 +70,7 @@ pub fn native_erc20_key() -> Key {
 pub fn bridge_contract_key() -> Key {
     Key {
         segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
             DbKeySeg::StringSeg(BRIDGE_CONTRACT_SUBKEY.into()),
         ],
     }
@@ -79,7 +80,7 @@ pub fn bridge_contract_key() -> Key {
 pub fn governance_contract_key() -> Key {
     Key {
         segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
+            DbKeySeg::AddressSeg(PARAM_ADDRESS),
             DbKeySeg::StringSeg(GOVERNANCE_CONTRACT_SUBKEY.into()),
         ],
     }

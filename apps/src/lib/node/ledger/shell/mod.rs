@@ -182,7 +182,6 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
-        eth_oracle_started: bool,
     },
     Full,
     Seed,
@@ -446,7 +445,6 @@ where
                             data,
                             broadcast_sender,
                             eth_oracle,
-                            eth_oracle_started: false,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -468,7 +466,6 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
-                        eth_oracle_started: false,
                     }
                 }
             }
@@ -501,7 +498,7 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
-        shell.start_ethereum_oracle_if_necessary();
+        shell.update_eth_oracle();
         shell
     }
 
@@ -769,24 +766,19 @@ where
     }
 
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
-    /// to signal it to start, using an initial configuration based on
-    /// Ethereum bridge parameters in blockchain storage.
+    /// to send it an updated configuration, using an initial configuration
+    /// based on Ethereum bridge parameters in blockchain storage.
     ///
     /// This method must be safe to call even before ABCI `InitChain` has been
     /// called (i.e. when storage is empty), as we may want to do this check
     /// every time the shell starts up (including the first time ever at which
     /// time storage will be empty).
-    fn start_ethereum_oracle_if_necessary(&mut self) {
+    fn update_eth_oracle(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
-            eth_oracle_started,
             ..
         } = &mut self.mode
         {
-            if *eth_oracle_started {
-                tracing::info!("Not starting oracle as it was already started");
-                return;
-            }
             // We *always* expect a value describing the status of the Ethereum
             // bridge to be present under [`eth_bridge::storage::active_key`],
             // once a chain has been initialized. We need to explicitly check if
@@ -841,13 +833,10 @@ where
                 "Starting the Ethereum oracle using values from block storage"
             );
             if let Err(error) = control_sender
-                .try_send(oracle::control::Command::Start { initial: config })
+                .try_send(oracle::control::Command::UpdateConfig(config))
             {
                 match error {
                     tokio::sync::mpsc::error::TrySendError::Full(_) => {
-                        // TODO: there is a possible race condition here where
-                        // the oracle may not have processed the previous
-                        // command yet, would it be better to hang here?
                         panic!(
                             "The Ethereum oracle communication channel is \
                              full!"
@@ -861,7 +850,6 @@ where
                     }
                 }
             }
-            *eth_oracle_started = true;
         }
     }
 

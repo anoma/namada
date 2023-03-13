@@ -402,6 +402,9 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
+            // send the latest oracle configs. These may have changed due to
+            // governance.
+            self.update_eth_oracle();
         }
 
         let _ = self
@@ -455,7 +458,7 @@ where
 
     /// If a new epoch begins, we update the response to include
     /// changes to the validator sets and consensus parameters
-    fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
+    fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
@@ -505,14 +508,21 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::BTreeMap;
+    use std::num::NonZeroU64;
     use std::str::FromStr;
 
     use namada::eth_bridge::storage::bridge_pool::{
         get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
-    use namada::ledger::eth_bridge::EthBridgeQueries;
+    use namada::eth_bridge::storage::min_confirmations_key;
+    use namada::ledger::eth_bridge::{EthBridgeQueries, MinimumConfirmations};
+    use namada::ledger::gas::VpGasMeter;
+    use namada::ledger::native_vp::parameters::ParametersVp;
+    use namada::ledger::native_vp::NativeVp;
     use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
+    use namada::ledger::storage_api::StorageWrite;
     use namada::types::ethereum_events::{EthAddress, Uint};
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
@@ -526,6 +536,7 @@ mod test_finalize_block {
     use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
+    use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -1116,7 +1127,7 @@ mod test_finalize_block {
     /// the DB.
     #[test]
     fn test_finalize_doesnt_commit_db() {
-        let (mut shell, _broadcaster, _, _) = setup();
+        let (mut shell, _broadcaster, _, _eth_control) = setup();
 
         // Update epoch duration to make sure we go through couple epochs
         let epoch_duration = EpochDuration {
@@ -1201,5 +1212,64 @@ mod test_finalize_block {
             // Store the state after commit for the next iteration
             last_storage_state = store_block_state(&shell);
         }
+    }
+
+    /// Test that updating the ethereum bridge params via governance works.
+    #[tokio::test]
+    async fn test_eth_bridge_param_updates() {
+        use namada::ledger::governance::storage as gov_storage;
+        let (mut shell, _broadcaster, _, mut control_receiver) =
+            setup_at_height(3u64);
+        let proposal_execution_key = gov_storage::get_proposal_execution_key(0);
+        shell
+            .wl_storage
+            .write(&proposal_execution_key, ())
+            .expect("Test failed.");
+        let tx = Tx::new(vec![], None);
+        let new_min_confirmations = MinimumConfirmations::from(unsafe {
+            NonZeroU64::new_unchecked(42)
+        });
+        shell
+            .wl_storage
+            .write(&min_confirmations_key(), new_min_confirmations)
+            .expect("Test failed");
+        let gas_meter = VpGasMeter::new(0);
+        let keys_changed = BTreeSet::from([min_confirmations_key()]);
+        let verifiers = BTreeSet::default();
+        let ctx = namada::ledger::native_vp::Ctx::new(
+            shell.mode.get_validator_address().expect("Test failed"),
+            &shell.wl_storage.storage,
+            &shell.wl_storage.write_log,
+            &tx,
+            &TxIndex(0),
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        );
+        let parameters = ParametersVp { ctx };
+        let result = parameters
+            .validate_tx(
+                0u64.try_to_vec().expect("Test failed").as_slice(),
+                &keys_changed,
+                &verifiers,
+            )
+            .expect("Test failed");
+        assert!(result);
+
+        // we advance forward to the next epoch
+        let mut req = FinalizeBlock::default();
+        req.header.time = namada::types::time::DateTimeUtc::now();
+        shell.wl_storage.storage.last_height =
+            shell.wl_storage.pos_queries().get_current_decision_height() + 11;
+        shell.finalize_block(req).expect("Test failed");
+        shell.commit();
+        let _ = control_receiver.recv().await.expect("Test failed");
+        let mut req = FinalizeBlock::default();
+        req.header.time = namada::types::time::DateTimeUtc::now();
+        shell.finalize_block(req).expect("Test failed");
+        let Command::UpdateConfig(cmd) =
+            control_receiver.recv().await.expect("Test failed");
+        assert_eq!(u64::from(cmd.min_confirmations), 42);
     }
 }
