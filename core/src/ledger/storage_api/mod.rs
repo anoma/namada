@@ -184,8 +184,15 @@ where
     Ok(iter)
 }
 
-/// Iterate Borsh encoded items matching the given prefix, additionally
-/// satisfying some boolean filter function
+/// Iterate Borsh encoded items matching the given prefix and passing the given
+/// `filter` predicate, ordered by the storage keys.
+///
+/// The `filter` predicate is a function from a storage key to bool and only
+/// the items that return `true` will be returned from the iterator.
+///
+/// Note that this is preferable over the regular `iter_prefix` combined with
+/// the iterator's `filter` function as it avoids trying to decode values that
+/// don't pass the filter. For `iter_prefix_bytes`, `filter` works fine.
 pub fn iter_prefix_with_filter<'a, T, F>(
     storage: &'a impl StorageRead,
     prefix: &crate::types::storage::Key,
@@ -197,6 +204,8 @@ where
 {
     let iter = storage.iter_prefix(prefix)?;
     let iter = itertools::unfold(iter, move |iter| {
+        // The loop is for applying filter - we `continue` when the current key
+        // doesn't pass the predicate.
         loop {
             match storage.iter_next(iter) {
                 Ok(Some((key, val))) => {
@@ -209,6 +218,7 @@ where
                                 return Some(Err(err));
                             }
                         };
+                    // Check the predicate
                     if !filter(&key) {
                         continue;
                     }
