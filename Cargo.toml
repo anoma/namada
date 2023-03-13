@@ -47,6 +47,8 @@ tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermi
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 ibc = {git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9"}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb"}
+ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "b475b1cc9c94eac91d44da22aee2038f0512d702"}
+ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "b475b1cc9c94eac91d44da22aee2038f0512d702"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "3fb3b5c9d187d7009bc25c25813ddaab38216e73"}

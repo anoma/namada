@@ -686,8 +686,6 @@ mod tests {
         assert!(result.expect("validation failed unexpectedly"));
     }
 
-    // TODO test_ibc_connection_init_and_open_fail()
-
     #[test]
     fn test_ibc_connection_try_and_open() {
         // The environment must be initialized first
@@ -822,8 +820,6 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
-
-    // TODO test_ibc_channel_init_and_open_fail
 
     #[test]
     fn test_ibc_channel_try_and_open() {

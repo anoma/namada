@@ -41,9 +41,11 @@ abciplus = [
 
 ibc-mocks = [
   "ibc/mocks",
+  "ibc/std",
 ]
 ibc-mocks-abcipp = [
   "ibc-abcipp/mocks",
+  "ibc-abcipp/std",
 ]
 
 # for integration tests and test utilies
