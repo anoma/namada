@@ -2035,6 +2035,7 @@ pub mod args {
         "eth-rpc-endpoint",
         DefaultFn(|| "http://localhost:8545".into()),
     );
+    const ETH_SYNC: ArgFlag = flag("sync");
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -2427,6 +2428,9 @@ pub mod args {
         /// The address of the Ethereum wallet to pay the gas fees.
         /// If unset, the default wallet is used.
         pub eth_addr: Option<EthAddress>,
+        /// Synchronize with the network, or exit immediately,
+        /// if the Ethereum node has fallen behind.
+        pub sync: bool,
     }
 
     impl Args for RelayBridgePoolProof {
@@ -2439,8 +2443,10 @@ pub mod args {
             let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
             let eth_addr = ETH_ADDRESS_OPT.parse(matches);
             let confirmations = ETH_CONFIRMATIONS.parse(matches);
+            let sync = ETH_SYNC.parse(matches);
             Self {
                 query,
+                sync,
                 transfers: hashes
                     .split(' ')
                     .map(|hash| {
@@ -2490,6 +2496,10 @@ pub mod args {
                         "The number of block confirmations on Ethereum.",
                     ),
                 )
+                .arg(ETH_SYNC.def().about(
+                    "Synchronize with the network, or exit immediately, if \
+                     the Ethereum node has fallen behind.",
+                ))
         }
     }
 
@@ -2560,6 +2570,9 @@ pub mod args {
         /// The address of the Ethereum wallet to pay the gas fees.
         /// If unset, the default wallet is used.
         pub eth_addr: Option<EthAddress>,
+        /// Synchronize with the network, or exit immediately,
+        /// if the Ethereum node has fallen behind.
+        pub sync: bool,
     }
 
     impl Args for ValidatorSetUpdateRelay {
@@ -2571,7 +2584,9 @@ pub mod args {
             let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
             let eth_addr = ETH_ADDRESS_OPT.parse(matches);
             let confirmations = ETH_CONFIRMATIONS.parse(matches);
+            let sync = ETH_SYNC.parse(matches);
             Self {
+                sync,
                 query,
                 epoch,
                 gas,
@@ -2607,6 +2622,10 @@ pub mod args {
                         "The number of block confirmations on Ethereum.",
                     ),
                 )
+                .arg(ETH_SYNC.def().about(
+                    "Synchronize with the network, or exit immediately, if \
+                     the Ethereum node has fallen behind.",
+                ))
         }
     }
 
