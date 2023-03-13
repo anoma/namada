@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## v0.14.2
+
+Namada 0.14.2 is a maintenance release addressing issues with
+proof-of-stake validator logic.
+
+### BUG FIXES
+
+- Fixed the PrefixIter order of iteration in the write-
+  log to always match the iteration order in the storage.
+  ([#1141](https://github.com/anoma/namada/pull/1141))
+- Fixed the init-chain handler to stop committing state to the DB
+  as it may be re-applied when the node is shut-down before the
+  first block is committed, leading to an invalid genesis state.
+  ([#1182](https://github.com/anoma/namada/pull/1182))
+- Fixed an issue in which a validator's stake and validator sets
+  data gets into an invalid state (duplicate records with incorrect
+  values) due to a logic error in clearing of historical epoch data.
+  ([#1191](https://github.com/anoma/namada/pull/1191))
+
+### FEATURES
+
+- Added a lazy set collection.
+  ([#1196](https://github.com/anoma/namada/pull/1196))
+
+### IMPROVEMENTS
+
+- Ensure that PoS validator consensus keys are unique.
+  ([#1197](https://github.com/anoma/namada/pull/1197))
+
 ## v0.14.1
 
 Namada 0.14.1 is a bugfix release addressing issues with inactive
