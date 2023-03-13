@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
+use futures::future::FutureExt;
 use namada::core::types::storage::Epoch;
 use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
@@ -9,8 +10,8 @@ use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
 use tokio::time::{Duration, Instant};
 
-use super::{block_on_eth_sync, eth_sync_or_exit};
-use crate::cli::args;
+use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
+use crate::cli::{args, safe_exit};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::facade::tendermint_rpc::HttpClient;
 
@@ -57,11 +58,6 @@ pub async fn query_validator_set_args(args: args::ActiveValidatorSet) {
 
 /// Relay a validator set update, signed off for a given epoch.
 pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
-    if args.daemon {
-        relay_validator_set_update_daemon(args).await;
-        return;
-    }
-
     if args.sync {
         block_on_eth_sync(BlockOnEthSync {
             url: &args.eth_rpc_endpoint,
@@ -73,37 +69,101 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     } else {
         eth_sync_or_exit(&args.eth_rpc_endpoint).await;
     }
-    relay_validator_set_update_once(&args).await;
-}
 
-pub async fn relay_validator_set_update_daemon(
-    args: args::ValidatorSetUpdateRelay,
-) {
-    let _ = args;
-}
-
-pub async fn relay_validator_set_update_once(
-    args: &args::ValidatorSetUpdateRelay,
-) {
     let nam_client =
         HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
+    if args.daemon {
+        relay_validator_set_update_daemon(args, nam_client).await;
+    } else {
+        relay_validator_set_update_once(&args, &nam_client).await;
+    }
+}
+
+async fn relay_validator_set_update_daemon(
+    args: args::ValidatorSetUpdateRelay,
+    nam_client: HttpClient,
+) {
+    let eth_client =
+        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
+
+    const RETRY_DURATION: Duration = Duration::from_secs(10);
+
+    loop {
+        tokio::time::sleep(RETRY_DURATION).await;
+
+        let is_synchronizing =
+            eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
+        if is_synchronizing {
+            continue;
+        }
+
+        // we could be racing against governance updates,
+        // so it is best to always fetch the latest governance
+        // contract address
+        let governance =
+            get_governance_contract(&nam_client, Arc::clone(&eth_client)).await;
+        let governance_epoch_prep_call = governance.validator_set_nonce();
+        let governance_epoch_fut =
+            governance_epoch_prep_call.call().map(|result| {
+                result.map_err(|err| {
+                    println!(
+                        "Failed to fetch latest validator set nonce: {err}"
+                    );
+                    safe_exit(1);
+                })
+            });
+
+        let shell = RPC.shell();
+        let nam_current_epoch_fut = shell.epoch(&nam_client).map(|result| {
+            result.map_err(|err| {
+                println!("Failed to fetch the latest epoch in Namada: {err}");
+                safe_exit(1);
+            })
+        });
+
+        let (nam_current_epoch, gov_current_epoch) =
+            futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
+                .unwrap();
+
+        println!("NAM: {nam_current_epoch}");
+        println!("ETH: {gov_current_epoch}");
+    }
+}
+
+async fn get_governance_contract(
+    nam_client: &HttpClient,
+    eth_client: Arc<Provider<Http>>,
+) -> Governance<Provider<Http>> {
+    let governance_contract = RPC
+        .shell()
+        .eth_bridge()
+        .read_governance_contract(nam_client)
+        .await
+        .unwrap();
+    Governance::new(governance_contract.address, eth_client)
+}
+
+async fn relay_validator_set_update_once(
+    args: &args::ValidatorSetUpdateRelay,
+    nam_client: &HttpClient,
+) {
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
     } else {
-        RPC.shell().epoch(&nam_client).await.unwrap().next()
+        RPC.shell().epoch(nam_client).await.unwrap().next()
     };
     let shell = RPC.shell().eth_bridge();
     let encoded_proof_fut =
-        shell.read_valset_upd_proof(&nam_client, &epoch_to_relay);
+        shell.read_valset_upd_proof(nam_client, &epoch_to_relay);
 
     let bridge_current_epoch = Epoch(epoch_to_relay.0.saturating_sub(2));
     let shell = RPC.shell().eth_bridge();
     let encoded_validator_set_args_fut =
-        shell.read_active_valset(&nam_client, &bridge_current_epoch);
+        shell.read_active_valset(nam_client, &bridge_current_epoch);
 
     let shell = RPC.shell().eth_bridge();
-    let governance_address_fut = shell.read_governance_contract(&nam_client);
+    let governance_address_fut = shell.read_governance_contract(nam_client);
 
     let (encoded_proof, encoded_validator_set_args, governance_contract) =
         futures::try_join!(

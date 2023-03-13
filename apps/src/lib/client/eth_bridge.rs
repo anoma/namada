@@ -4,6 +4,7 @@ pub mod validator_set;
 use std::ops::ControlFlow;
 use std::time::Duration as StdDuration;
 
+use tokio::task::LocalSet;
 use tokio::time::{Duration, Instant};
 use web30::client::Web3;
 
@@ -36,9 +37,12 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) {
     let client = Web3::new(url, rpc_timeout);
     TimeoutStrategy::LinearBackoff { delta: delta_sleep }
         .timeout(deadline, || async {
-            let Ok(status) = eth_syncing_status(&client).await else {
-            return ControlFlow::Continue(());
-        };
+            let local_set = LocalSet::new();
+            let status_fut = local_set
+                .run_until(async { eth_syncing_status(&client).await });
+            let Ok(status) = status_fut.await else {
+                return ControlFlow::Continue(());
+            };
             if status.is_synchronized() {
                 ControlFlow::Break(())
             } else {
@@ -53,10 +57,17 @@ pub async fn block_on_eth_sync(args: BlockOnEthSync<'_>) {
     println!("The Ethereum node is up to date");
 }
 
-/// Block until Ethereum finishes synchronizing.
-pub async fn eth_sync_or_exit(url: &str) {
+/// Check if Ethereum has finished synchronizing. In case it has
+/// not, perform `action`.
+pub async fn eth_sync_or<F, T>(url: &str, mut action: F) -> Result<(), T>
+where
+    F: FnMut() -> T,
+{
     let client = Web3::new(url, std::time::Duration::from_secs(3));
-    let is_synchronized = eth_syncing_status(&client)
+    let local_set = LocalSet::new();
+    let status_fut =
+        local_set.run_until(async { eth_syncing_status(&client).await });
+    let is_synchronized = status_fut
         .await
         .map(|status| status.is_synchronized())
         .unwrap_or_else(|err| {
@@ -66,8 +77,19 @@ pub async fn eth_sync_or_exit(url: &str) {
             );
             cli::safe_exit(1);
         });
-    if !is_synchronized {
+    if is_synchronized {
+        Ok(())
+    } else {
+        Err(action())
+    }
+}
+
+/// Check if Ethereum has finished synchronizing. In case it has
+/// not, end execution.
+pub async fn eth_sync_or_exit(url: &str) {
+    _ = eth_sync_or(url, || {
         println!("The Ethereum node has not finished synchronizing");
         cli::safe_exit(1);
-    }
+    })
+    .await;
 }
