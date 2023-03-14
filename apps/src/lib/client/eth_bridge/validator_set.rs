@@ -101,16 +101,19 @@ async fn relay_validator_set_update_daemon(
     let eth_client =
         Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
 
-    const RETRY_DURATION: Duration = Duration::from_secs(1);
-    const SUCCESS_DURATION: Duration = Duration::from_secs(10);
+    const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(1);
+    const DEFAULT_SUCCESS_DURATION: Duration = Duration::from_secs(10);
+
+    let retry_duration = args.retry_dur.unwrap_or(DEFAULT_RETRY_DURATION);
+    let success_duration = args.success_dur.unwrap_or(DEFAULT_SUCCESS_DURATION);
 
     let mut last_call_succeeded = true;
 
     loop {
         let sleep_for = if last_call_succeeded {
-            SUCCESS_DURATION
+            success_duration
         } else {
-            RETRY_DURATION
+            retry_duration
         };
 
         tracing::info!(?sleep_for, "Sleeping");
