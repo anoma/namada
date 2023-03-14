@@ -9,10 +9,10 @@ TBD
 
 ## Latest Testnet
 
-***22/02/2023*** `public-testnet-4`
+***22/02/2023*** `public-testnet-5`
 
-The testnet launches on 22/02/2023 at 17:00 UTC with the genesis validators from `public-testnet-4`. It launches with [version v0.14.1](https://github.com/anoma/namada/releases/tag/v0.14.1) and chain-id `public-testnet-4.0.16a35d789f4`. 
-If your genesis transaction is contained in [this folder](https://github.com/anoma/namada-testnets/tree/main/namada-public-testnet-4), you are one of the genesis validators. In order for the testnet to come online at least 2/3 of those validators need to be online.
+The testnet launches on 15/03/2023 at 17:00 UTC with the genesis validators from `public-testnet-5`. It launches with [version v0.14.2](https://github.com/anoma/namada/releases/tag/v0.14.2) and chain-id `TBD`. 
+If your genesis transaction is contained in [this folder](https://github.com/anoma/namada-testnets/tree/main/namada-public-testnet-5), you are one of the genesis validators. In order for the testnet to come online at least 2/3 of those validators need to be online.
 
 The installation docs are updated and can be found [here](./environment-setup.md). The running docs for validators/fullnodes can be found [here](./running-a-full-node.md).
 
