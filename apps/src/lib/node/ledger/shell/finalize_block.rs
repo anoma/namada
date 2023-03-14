@@ -415,12 +415,29 @@ where
                     )
                     .unwrap();
                 }
-                let tm_raw_hash_string =
-                    tm_raw_hash_to_string(req.proposer_address);
+            }
+            None => {
+                tracing::debug!("Can't find last block proposer");
+            }
+        }
+
+        // Look-up the native address of the proposer and persist it
+        match String::from_utf8(req.proposer_address.clone()) {
+            Err(err) => {
+                tracing::error!(
+                    "Failed to decode proposer address from bytes. Expected \
+                     utf-8 string. Failed with {err}. Proposer raw bytes {:?}",
+                    req.proposer_address
+                )
+            }
+            Ok(tm_raw_hash_string) => {
+                // Get proposer address from storage based on the consensus
+                // key hash
                 let native_proposer_address = find_validator_by_raw_hash(
                     &self.wl_storage,
                     tm_raw_hash_string,
-                )?
+                )
+                .unwrap()
                 .expect(
                     "Unable to find native validator address of block \
                      proposer from tendermint raw hash",
@@ -429,29 +446,6 @@ where
                     &mut self.wl_storage,
                     native_proposer_address,
                 )?;
-            }
-            None => {
-                println!("CANT FIND LAST BLOCK PROPOSER");
-
-                if req.votes.is_empty() && !req.proposer_address.is_empty() {
-                    // Get proposer address from storage based on the consensus
-                    // key hash
-                    let tm_raw_hash_string =
-                        tm_raw_hash_to_string(req.proposer_address);
-                    let native_proposer_address = find_validator_by_raw_hash(
-                        &self.wl_storage,
-                        tm_raw_hash_string,
-                    )
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
-                    write_last_block_proposer_address(
-                        &mut self.wl_storage,
-                        native_proposer_address,
-                    )?;
-                }
             }
         }
 
