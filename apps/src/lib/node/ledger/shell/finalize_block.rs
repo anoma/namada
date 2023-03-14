@@ -61,12 +61,6 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        println!(
-            "\nFINALIZE BLOCK {} - NUM TXS = {}",
-            self.wl_storage.storage.block.height + 1,
-            req.txs.len()
-        );
-
         // Reset the gas meter before we start
         self.gas_meter.reset();
 
@@ -81,9 +75,9 @@ where
             self.wl_storage.storage.epoch_update_tracker.0
                 && self.wl_storage.storage.epoch_update_tracker.1 == 2;
 
-        println!(
-            "BLOCK HEIGHT {} AND EPOCH {}, NEW EPOCH = {}",
-            height, current_epoch, new_epoch
+        tracing::debug!(
+            "Block height: {height}, epoch: {current_epoch}, new epoch: \
+             {new_epoch}."
         );
 
         if new_epoch {
@@ -399,7 +393,9 @@ where
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
             Some(proposer_address) => {
-                println!("FOUND LAST BLOCK PROPOSER");
+                tracing::debug!(
+                    "Found last block proposer: {proposer_address}"
+                );
                 if new_epoch {
                     self.apply_inflation(
                         current_epoch,
