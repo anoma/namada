@@ -174,6 +174,12 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        let sub_key = self.is_valid_sub_key(key);
+        // The `SubKey::Len` is not data sub-key
+        matches!(sub_key, Ok(Some(SubKey::Data(_))))
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,
