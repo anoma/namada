@@ -178,6 +178,21 @@ where
         }
     }
 
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        let sub_key = self.is_valid_sub_key(key);
+        match sub_key {
+            Ok(Some(NestedSubKey::Data {
+                key: parsed_key,
+                nested_sub_key: _,
+            })) => {
+                let sub = self.at(&parsed_key);
+                // Check in the nested collection
+                sub.is_data_sub_key(key)
+            }
+            _ => false,
+        }
+    }
+
     fn read_sub_key_data<ENV>(
         env: &ENV,
         storage_key: &storage::Key,
@@ -301,6 +316,10 @@ where
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
         }
+    }
+
+    fn is_data_sub_key(&self, key: &storage::Key) -> bool {
+        matches!(self.is_valid_sub_key(key), Ok(Some(_)))
     }
 
     fn read_sub_key_data<ENV>(
