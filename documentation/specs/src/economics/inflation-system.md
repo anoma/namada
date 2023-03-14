@@ -38,7 +38,7 @@ Second, we take as input the following state values:
 - $I_{PoS-last}$ is the proof-of-stake inflation amount from the previous epoch, in units of tokens per epoch
 - $R_{PoS-last}$ is the proof-of-stake locked token ratio from the previous epoch
 - $L_{SP_A}$ is the current amount of asset $A$ locked in the shielded pool (separate value for each asset $A$)
-- $I_{SP_A-last}$ is the shielded pool inflation amount for asset $A$ from the preivous epoch, in units of tokens per epoch
+- $I_{SP_A-last}$ is the shielded pool inflation amount for asset $A$ from the previous epoch, in units of tokens per epoch
 - $R_{SP_A-last}$ is the shielded pool locked token ratio for asset $A$ from the previous epoch (separate value for each asset $A$)
 
 Public goods funding inflation can be calculated and paid immediately (in terms of total tokens per epoch):
