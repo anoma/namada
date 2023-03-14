@@ -33,7 +33,7 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        num_validators: u64,
+        #[cfg(feature = "dev")] num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();

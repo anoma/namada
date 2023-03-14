@@ -90,7 +90,12 @@ impl Shell {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
-                self.init_chain(init, 1).map(Response::InitChain)
+                self.init_chain(
+                    init,
+                    #[cfg(feature = "dev")]
+                    1,
+                )
+                .map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
             Request::Query(query) => Ok(Response::Query(self.query(query))),
