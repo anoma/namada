@@ -2973,6 +2973,35 @@ version = "0.31.0"
 source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40#dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40"
 dependencies = [
  "bytes 1.4.0",
+ "derive_more",
+ "displaydoc",
+ "dyn-clone",
+ "erased-serde",
+ "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
+ "ics23",
+ "num-traits 0.2.15",
+ "primitive-types",
+ "prost 0.11.6",
+ "safe-regex",
+ "serde 1.0.145",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.6",
+ "subtle-encoding",
+ "tendermint 0.23.5",
+ "tendermint-light-client-verifier 0.23.5",
+ "tendermint-proto 0.23.5",
+ "time 0.3.15",
+ "tracing 0.1.37",
+ "uint",
+]
+
+[[package]]
+name = "ibc"
+version = "0.32.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=c0203cd038ebeeacfe49c0a652177c54b96af661#c0203cd038ebeeacfe49c0a652177c54b96af661"
+dependencies = [
+ "bytes 1.4.0",
  "cfg-if 1.0.0",
  "derive_more",
  "displaydoc",
@@ -2992,7 +3021,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint 0.23.5",
  "tendermint-light-client-verifier 0.23.5",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "tendermint-testgen 0.23.5",
  "time 0.3.15",
  "tracing 0.1.37",
@@ -3028,7 +3057,7 @@ dependencies = [
  "scale-info",
  "serde 1.0.145",
  "subtle-encoding",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
 ]
 
 [[package]]
@@ -3928,7 +3957,7 @@ dependencies = [
  "tempfile",
  "tendermint 0.23.5",
  "tendermint 0.23.6",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
  "tendermint-rpc 0.23.5",
  "tendermint-rpc 0.23.6",
@@ -4013,7 +4042,7 @@ dependencies = [
  "tendermint 0.23.6",
  "tendermint-config 0.23.5",
  "tendermint-config 0.23.6",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
  "tendermint-rpc 0.23.5",
  "tendermint-rpc 0.23.6",
@@ -4025,7 +4054,7 @@ dependencies = [
  "tonic 0.6.2",
  "tower",
  "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci.git?rev=3fb3b5c9d187d7009bc25c25813ddaab38216e73)",
- "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200)",
+ "tower-abci 0.1.0 (git+https://github.com/heliaxdev/tower-abci?rev=a31ce06533f5fbd943508676059d44de27395792)",
  "tracing 0.1.37",
  "tracing-log",
  "tracing-subscriber 0.3.16",
@@ -4052,7 +4081,7 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=3d0f05ec2f0590cc3df5c6e094cf9aad8da757e9)",
- "ibc 0.31.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=dae6f6f3b0502aad65e6d1a511e62ba34ca9bf40)",
+ "ibc 0.32.0",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "ics23",
@@ -4077,7 +4106,7 @@ dependencies = [
  "sparse-merkle-tree",
  "tendermint 0.23.5",
  "tendermint 0.23.6",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "tendermint-proto 0.23.6",
  "test-log",
  "thiserror",
@@ -6562,7 +6591,7 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "time 0.3.15",
  "zeroize",
 ]
@@ -6672,23 +6701,6 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.23.5"
-source = "git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9#95c52476bc37927218374f94ac8e2a19bd35bec9"
-dependencies = [
- "bytes 1.4.0",
- "flex-error",
- "num-derive",
- "num-traits 0.2.15",
- "prost 0.9.0",
- "prost-types 0.9.0",
- "serde 1.0.145",
- "serde_bytes",
- "subtle-encoding",
- "time 0.3.15",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.23.5"
 source = "git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916#a3a0ad5f07d380976bbd5321239aec9cc3a8f916"
 dependencies = [
  "bytes 1.4.0",
@@ -6743,7 +6755,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint 0.23.5",
  "tendermint-config 0.23.5",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=a3a0ad5f07d380976bbd5321239aec9cc3a8f916)",
+ "tendermint-proto 0.23.5",
  "thiserror",
  "time 0.3.15",
  "tokio",
@@ -7333,13 +7345,13 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci?rev=f6463388fc319b6e210503b43b3aecf6faf6b200#f6463388fc319b6e210503b43b3aecf6faf6b200"
+source = "git+https://github.com/heliaxdev/tower-abci?rev=a31ce06533f5fbd943508676059d44de27395792#a31ce06533f5fbd943508676059d44de27395792"
 dependencies = [
  "bytes 1.4.0",
  "futures 0.3.26",
  "pin-project",
- "prost 0.9.0",
- "tendermint-proto 0.23.5 (git+https://github.com/heliaxdev/tendermint-rs?rev=95c52476bc37927218374f94ac8e2a19bd35bec9)",
+ "prost 0.11.6",
+ "tendermint-proto 0.23.5",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",

@@ -205,12 +205,12 @@ pub trait IbcCommonContext: IbcStorageContext {
         &self,
         client_state: Any,
     ) -> Result<Box<dyn ClientState>, ContextError> {
-        if let Ok(cs) = TmClientState::try_from(client_state.clone()) {
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
             return Ok(cs.into_box());
         }
 
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockClientState::try_from(client_state) {
+        if let Ok(cs) = TmClientState::try_from(client_state) {
             return Ok(cs.into_box());
         }
 
@@ -224,12 +224,12 @@ pub trait IbcCommonContext: IbcStorageContext {
         &self,
         consensus_state: Any,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        if let Ok(cs) = TmConsensusState::try_from(consensus_state.clone()) {
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
             return Ok(cs.into_box());
         }
 
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockConsensusState::try_from(consensus_state) {
+        if let Ok(cs) = TmConsensusState::try_from(consensus_state) {
             return Ok(cs.into_box());
         }
 
