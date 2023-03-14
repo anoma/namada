@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.14.2
+
+Namada 0.14.2 is a bugfix release addressing additional issues of duplication regarding validators in validators sets.
+
 ## v0.14.1
 
 Namada 0.14.1 is a bugfix release addressing issues with inactive
