@@ -411,7 +411,11 @@ where
             )>,
         > + 'iter,
     > {
-        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        let iter = storage_api::iter_prefix_with_filter(
+            storage,
+            &self.get_data_prefix(),
+            |key| self.is_data_sub_key(key),
+        )?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
             let sub_key = LazyCollection::is_valid_sub_key(self, &key)?
