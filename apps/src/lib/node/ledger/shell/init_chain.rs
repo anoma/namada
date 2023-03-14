@@ -236,8 +236,6 @@ where
         }
 
         // Initialize genesis implicit
-        // TODO: verify if we can get the total initial token supply from simply
-        // looping over the set of implicit accounts
         for genesis::ImplicitAccount { public_key } in genesis.implicit_accounts
         {
             let address: address::Address = (&public_key).into();
