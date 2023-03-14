@@ -1965,6 +1965,7 @@ pub mod args {
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
+    use std::time::Duration as StdDuration;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
@@ -2018,6 +2019,8 @@ pub mod args {
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
     const DAEMON_MODE: ArgFlag = flag("daemon");
+    const DAEMON_MODE_RETRY_DUR: ArgOpt<Duration> = arg_opt("retry-sleep");
+    const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> = arg_opt("success-sleep");
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
@@ -2122,6 +2125,19 @@ pub mod args {
     const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+    #[repr(transparent)]
+    pub struct Duration(pub StdDuration);
+
+    impl ::std::str::FromStr for Duration {
+        type Err = ::parse_duration::parse::Error;
+
+        #[inline]
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            ::parse_duration::parse(s).map(Duration)
+        }
+    }
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -2577,6 +2593,12 @@ pub mod args {
         /// Synchronize with the network, or exit immediately,
         /// if the Ethereum node has fallen behind.
         pub sync: bool,
+        /// The amount of time to sleep between failed
+        /// daemon mode relays.
+        pub retry_dur: Option<StdDuration>,
+        /// The amount of time to sleep between successful
+        /// daemon mode relays.
+        pub success_dur: Option<StdDuration>,
     }
 
     impl Args for ValidatorSetUpdateRelay {
@@ -2590,6 +2612,10 @@ pub mod args {
             let eth_addr = ETH_ADDRESS_OPT.parse(matches);
             let confirmations = ETH_CONFIRMATIONS.parse(matches);
             let sync = ETH_SYNC.parse(matches);
+            let retry_dur =
+                DAEMON_MODE_RETRY_DUR.parse(matches).map(|dur| dur.0);
+            let success_dur =
+                DAEMON_MODE_SUCCESS_DUR.parse(matches).map(|dur| dur.0);
             Self {
                 sync,
                 daemon,
@@ -2600,6 +2626,8 @@ pub mod args {
                 confirmations,
                 eth_rpc_endpoint,
                 eth_addr,
+                retry_dur,
+                success_dur,
             }
         }
 
@@ -2608,6 +2636,14 @@ pub mod args {
                 .arg(DAEMON_MODE.def().about(
                     "Run in daemon mode, which will continuously perform \
                      validator set updates.",
+                ))
+                .arg(DAEMON_MODE_RETRY_DUR.def().about(
+                    "The amount of time to sleep between failed daemon mode \
+                     relays.",
+                ))
+                .arg(DAEMON_MODE_SUCCESS_DUR.def().about(
+                    "The amount of time to sleep between successful daemon \
+                     mode relays.",
                 ))
                 .arg(ETH_ADDRESS_OPT.def().about(
                     "The address of the Ethereum wallet to pay the gas fees. \
