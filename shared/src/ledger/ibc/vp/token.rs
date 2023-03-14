@@ -211,8 +211,8 @@ where
 
         // check the denomination field
         let change = if is_sender_chain_source(
-            msg.port_on_a.clone(),
-            msg.chan_on_a.clone(),
+            msg.port_id_on_a.clone(),
+            msg.chan_id_on_a.clone(),
             &coin.denom,
         ) {
             // source zone
@@ -263,8 +263,8 @@ where
             Amount::try_from(data.token.amount).map_err(Error::Amount)?;
 
         let change = if is_receiver_chain_source(
-            packet.port_on_a.clone(),
-            packet.chan_on_a.clone(),
+            packet.port_id_on_a.clone(),
+            packet.chan_id_on_a.clone(),
             &data.token.denom,
         ) {
             // this chain is the source
@@ -316,8 +316,8 @@ where
 
         // check the denom field
         let change = if is_sender_chain_source(
-            packet.port_on_a.clone(),
-            packet.chan_on_a.clone(),
+            packet.port_id_on_a.clone(),
+            packet.chan_id_on_a.clone(),
             &data.token.denom,
         ) {
             // source zone: unescrow the token for the refund

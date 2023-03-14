@@ -41,7 +41,7 @@ use crate::types::time::DurationSecs;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> ValidationContext for IbcActions<C>
+impl<C> ValidationContext for IbcActions<'_, C>
 where
     C: IbcCommonContext,
 {
@@ -474,10 +474,6 @@ where
                 },
             ))),
         }
-    }
-
-    fn hash(&self, value: &[u8]) -> Vec<u8> {
-        self.ctx.borrow().hash(value)
     }
 
     fn client_update_time(

@@ -58,7 +58,9 @@ where
             .map_err(Error::DecodingPacketData)?;
         let denom = format!(
             "{}/{}/{}",
-            &msg.packet.port_on_b, &msg.packet.chan_on_b, &data.token.denom,
+            &msg.packet.port_id_on_b,
+            &msg.packet.chan_id_on_b,
+            &data.token.denom,
         );
         let token_hash = storage::calc_hash(&denom);
         let denom_key = storage::ibc_denom_key(token_hash.raw());

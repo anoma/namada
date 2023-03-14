@@ -27,7 +27,7 @@ use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
 use crate::tendermint_proto::Protobuf as TmProtobuf;
 
-impl<C> ExecutionContext for IbcActions<C>
+impl<C> ExecutionContext for IbcActions<'_, C>
 where
     C: IbcCommonContext,
 {

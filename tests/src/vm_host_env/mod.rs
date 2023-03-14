@@ -601,21 +601,9 @@ mod tests {
             .expect("updating a client failed");
 
         // Check
-        let mut env = tx_host_env::take();
+        let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
-
-        // Commit
-        env.commit_tx_and_block();
-        // update the block height for the following client update
-        env.wl_storage
-            .storage
-            .begin_block(BlockHash::default(), BlockHeight(3))
-            .unwrap();
-        env.wl_storage
-            .storage
-            .set_header(tm_dummy_header())
-            .unwrap();
     }
 
     #[test]
@@ -657,14 +645,18 @@ mod tests {
 
         // Commit
         env.commit_tx_and_block();
-        // set a block header again
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
         env.wl_storage
             .storage
             .set_header(tm_dummy_header())
             .unwrap();
+        tx_host_env::set(env);
 
         // Start the next transaction for ConnectionOpenAck
-        tx_host_env::set(env);
         let conn_id = ibc::ConnectionId::new(0);
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
@@ -694,17 +686,17 @@ mod tests {
         // Set the initial state before starting transactions
         ibc::init_storage();
 
-        let mut env = tx_host_env::take();
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
-            env.wl_storage
-                .storage
-                .write(&key, &val)
-                .expect("write error");
+            tx_host_env::with(|env| {
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
+            })
         });
 
         // Start a transaction for ConnectionOpenTry
-        tx_host_env::set(env);
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
@@ -726,14 +718,18 @@ mod tests {
 
         // Commit
         env.commit_tx_and_block();
-        // set a block header again
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
         env.wl_storage
             .storage
             .set_header(tm_dummy_header())
             .unwrap();
+        tx_host_env::set(env);
 
         // Start the next transaction for ConnectionOpenConfirm
-        tx_host_env::set(env);
         let conn_id = ibc::ConnectionId::new(0);
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
@@ -797,6 +793,15 @@ mod tests {
 
         // Commit
         env.commit_tx_and_block();
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
         tx_host_env::set(env);
 
         // Start the next transaction for ChannelOpenAck
@@ -863,9 +868,18 @@ mod tests {
 
         // Commit
         env.commit_tx_and_block();
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        tx_host_env::set(env);
 
         // Start the next transaction for ChannelOpenConfirm
-        tx_host_env::set(env);
         let channel_id = ibc::ChannelId::new(0);
         let msg = ibc::msg_channel_open_confirm(port_id, channel_id);
         let mut tx_data = vec![];
@@ -888,7 +902,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ibc_channel_close_init() {
+    fn test_ibc_channel_close_init_fail() {
         // The environment must be initialized first
         tx_host_env::init();
 
@@ -921,6 +935,7 @@ mod tests {
         .sign(&key::testing::keypair_1());
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
+        // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
         actions.add_transfer_route(dummy_module.module_id(), dummy_module);
         actions
@@ -1037,9 +1052,18 @@ mod tests {
 
         // Commit
         env.commit_tx_and_block();
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        tx_host_env::set(env);
 
         // Start the next transaction for receiving an ack
-        tx_host_env::set(env);
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
             &msg,
@@ -1310,7 +1334,18 @@ mod tests {
             .expect("sending a token failed");
 
         // Commit
-        tx_host_env::commit_tx_and_block();
+        let mut env = tx_host_env::take();
+        env.commit_tx_and_block();
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        tx_host_env::set(env);
 
         // Start a transaction to notify the timeout
         let counterparty = ibc::dummy_channel_counterparty();
@@ -1383,7 +1418,18 @@ mod tests {
             .expect("sending a token failed");
 
         // Commit
-        tx_host_env::commit_tx_and_block();
+        let mut env = tx_host_env::take();
+        env.commit_tx_and_block();
+        // for the next block
+        env.wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+        env.wl_storage
+            .storage
+            .set_header(tm_dummy_header())
+            .unwrap();
+        tx_host_env::set(env);
 
         // Start a transaction to notify the timing-out on closed
         let counterparty = ibc::dummy_channel_counterparty();

@@ -55,16 +55,16 @@ pub enum Error {
 
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcActions<C>
+pub struct IbcActions<'a, C>
 where
     C: IbcCommonContext,
 {
     ctx: Rc<RefCell<C>>,
-    modules: HashMap<ModuleId, Rc<dyn ModuleWrapper>>,
+    modules: HashMap<ModuleId, Rc<dyn ModuleWrapper + 'a>>,
     ports: HashMap<PortId, ModuleId>,
 }
 
-impl<C> IbcActions<C>
+impl<'a, C> IbcActions<'a, C>
 where
     C: IbcCommonContext + Debug,
 {
@@ -81,7 +81,7 @@ where
     pub fn add_transfer_route(
         &mut self,
         module_id: ModuleId,
-        module: impl ModuleWrapper,
+        module: impl ModuleWrapper + 'a,
     ) {
         self.modules.insert(module_id.clone(), Rc::new(module));
         self.ports.insert(PortId::transfer(), module_id);
@@ -107,7 +107,7 @@ where
             MSG_TRANSFER_TYPE_URL => {
                 let msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
-                let port_id = msg.port_on_a.clone();
+                let port_id = msg.port_id_on_a.clone();
                 match self.get_route_mut_by_port(&port_id) {
                     Some(_module) => {
                         let mut module = TransferModule::new(self.ctx.clone());
@@ -172,8 +172,8 @@ where
                     Err(_) => return Ok(()),
                 };
                 let prefix = TracePrefix::new(
-                    msg.packet.port_on_b.clone(),
-                    msg.packet.chan_on_b,
+                    msg.packet.port_id_on_b.clone(),
+                    msg.packet.chan_id_on_b,
                 );
                 let mut coin = data.token;
                 coin.denom.add_trace_prefix(prefix);
@@ -197,7 +197,7 @@ where
             MSG_TRANSFER_TYPE_URL => {
                 let msg =
                     MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
-                let port_id = msg.port_on_a.clone();
+                let port_id = msg.port_id_on_a.clone();
                 match self.get_route_by_port(&port_id) {
                     Some(_module) => {
                         let module = TransferModule::new(self.ctx.clone());

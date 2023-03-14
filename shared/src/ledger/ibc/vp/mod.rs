@@ -104,16 +104,7 @@ where
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
-        // TODO 'static issue
-        let pre = unsafe {
-            use crate::ledger::native_vp::CtxPreStorageRead;
-            std::mem::transmute::<
-                CtxPreStorageRead<'_, '_, DB, H, CA>,
-                CtxPreStorageRead<'static, 'static, DB, H, CA>,
-            >(self.ctx.pre())
-        };
-
-        let exec_ctx = PseudoExecutionContext::new(pre);
+        let exec_ctx = PseudoExecutionContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
         let mut actions = IbcActions::new(ctx.clone());
@@ -184,16 +175,7 @@ where
     }
 
     fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
-        // TODO 'static issue
-        let pre = unsafe {
-            use crate::ledger::native_vp::CtxPreStorageRead;
-            std::mem::transmute::<
-                CtxPreStorageRead<'_, '_, DB, H, CA>,
-                CtxPreStorageRead<'static, 'static, DB, H, CA>,
-            >(self.ctx.pre())
-        };
-
-        let validation_ctx = VpValidationContext::new(pre);
+        let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
 
         let mut actions = IbcActions::new(ctx.clone());
@@ -314,11 +296,13 @@ mod tests {
     use crate::ibc_proto::protobuf::Protobuf;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::init_genesis_storage;
+    use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
     use crate::proto::Tx;
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
+    use crate::types::time::DurationSecs;
     use crate::types::token::{balance_key, Amount};
     use crate::vm::wasm;
 
@@ -335,6 +319,13 @@ mod tests {
 
         // initialize the storage
         init_genesis_storage(&mut wl_storage);
+        // max_expected_time_per_block
+        let time = DurationSecs::from(Duration::new(60, 0));
+        let time_key = get_max_expected_time_per_block_key();
+        wl_storage
+            .write_log
+            .write(&time_key, crate::ledger::storage::types::encode(&time))
+            .expect("write failed");
         // set a dummy header
         wl_storage
             .storage
@@ -516,11 +507,11 @@ mod tests {
             .expect("Encoding PacketData failed");
 
         Packet {
-            sequence,
-            port_on_a: msg.port_on_a.clone(),
-            chan_on_a: msg.chan_on_a.clone(),
-            port_on_b: counterparty.port_id.clone(),
-            chan_on_b: counterparty
+            seq_on_a: sequence,
+            port_id_on_a: msg.port_id_on_a.clone(),
+            chan_id_on_a: msg.chan_id_on_a.clone(),
+            port_id_on_b: counterparty.port_id.clone(),
+            chan_id_on_b: counterparty
                 .channel_id()
                 .expect("the counterparty channel should exist")
                 .clone(),
@@ -1837,8 +1828,8 @@ mod tests {
 
         // prepare data
         let msg = MsgTransfer {
-            port_on_a: get_port_id(),
-            chan_on_a: get_channel_id(),
+            port_id_on_a: get_port_id(),
+            chan_id_on_a: get_channel_id(),
             token: Coin {
                 denom: nam().to_string(),
                 amount: 100u64.to_string(),
@@ -1862,7 +1853,7 @@ mod tests {
         let packet =
             packet_from_message(&msg, sequence, &get_channel_counterparty());
         let commitment_key =
-            commitment_key(&msg.port_on_a, &msg.chan_on_a, sequence);
+            commitment_key(&msg.port_id_on_a, &msg.chan_id_on_a, sequence);
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
         wl_storage
@@ -1956,8 +1947,8 @@ mod tests {
         // prepare data
         let receiver = established_address_1();
         let transfer_msg = MsgTransfer {
-            port_on_a: get_port_id(),
-            chan_on_a: get_channel_id(),
+            port_id_on_a: get_port_id(),
+            chan_id_on_a: get_channel_id(),
             token: Coin {
                 denom: nam().to_string(),
                 amount: 100u64.to_string(),
@@ -1971,10 +1962,10 @@ mod tests {
         let counterparty = get_channel_counterparty();
         let mut packet =
             packet_from_message(&transfer_msg, 1.into(), &counterparty);
-        packet.port_on_a = counterparty.port_id().clone();
-        packet.chan_on_a = counterparty.channel_id().cloned().unwrap();
-        packet.port_on_b = get_port_id();
-        packet.chan_on_b = get_channel_id();
+        packet.port_id_on_a = counterparty.port_id().clone();
+        packet.chan_id_on_a = counterparty.channel_id().cloned().unwrap();
+        packet.port_id_on_b = get_port_id();
+        packet.chan_id_on_b = get_channel_id();
         let msg = MsgRecvPacket {
             packet: packet.clone(),
             proof_commitment_on_a: dummy_proof(),
@@ -1984,9 +1975,9 @@ mod tests {
 
         // the sequence send
         let receipt_key = receipt_key(
-            &msg.packet.port_on_b,
-            &msg.packet.chan_on_b,
-            msg.packet.sequence,
+            &msg.packet.port_id_on_b,
+            &msg.packet.chan_id_on_b,
+            msg.packet.seq_on_a,
         );
         let bytes = [1_u8].to_vec();
         wl_storage
@@ -1995,8 +1986,11 @@ mod tests {
             .expect("write failed");
         keys_changed.insert(receipt_key);
         // packet commitment
-        let ack_key =
-            ack_key(&packet.port_on_b, &packet.chan_on_b, msg.packet.sequence);
+        let ack_key = ack_key(
+            &packet.port_id_on_b,
+            &packet.chan_id_on_b,
+            msg.packet.seq_on_a,
+        );
         let transfer_ack = TokenTransferAcknowledgement::success();
         let acknowledgement = Acknowledgement::from(transfer_ack);
         let bytes = sha2::Sha256::digest(acknowledgement.as_ref()).to_vec();
@@ -2009,8 +2003,8 @@ mod tests {
         let mut coin: PrefixedCoin =
             transfer_msg.token.try_into().expect("invalid token");
         coin.denom.add_trace_prefix(TracePrefix::new(
-            packet.port_on_b.clone(),
-            packet.chan_on_b.clone(),
+            packet.port_id_on_b.clone(),
+            packet.chan_id_on_b.clone(),
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
         let denom_key = ibc_denom_key(&trace_hash);
@@ -2104,8 +2098,8 @@ mod tests {
         // commitment
         let sender = established_address_1();
         let transfer_msg = MsgTransfer {
-            port_on_a: get_port_id(),
-            chan_on_a: get_channel_id(),
+            port_id_on_a: get_port_id(),
+            chan_id_on_a: get_channel_id(),
             token: Coin {
                 denom: nam().to_string(),
                 amount: 100u64.to_string(),
@@ -2123,8 +2117,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a,
-            &transfer_msg.chan_on_a,
+            &transfer_msg.port_id_on_a,
+            &transfer_msg.chan_id_on_a,
             sequence,
         );
         let commitment = commitment(&packet);
@@ -2248,8 +2242,8 @@ mod tests {
         // commitment
         let sender = established_address_1();
         let transfer_msg = MsgTransfer {
-            port_on_a: get_port_id(),
-            chan_on_a: get_channel_id(),
+            port_id_on_a: get_port_id(),
+            chan_id_on_a: get_channel_id(),
             token: Coin {
                 denom: nam().to_string(),
                 amount: 100u64.to_string(),
@@ -2267,8 +2261,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a,
-            &transfer_msg.chan_on_a,
+            &transfer_msg.port_id_on_a,
+            &transfer_msg.chan_id_on_a,
             sequence,
         );
         let commitment = commitment(&packet);
@@ -2388,8 +2382,8 @@ mod tests {
         // commitment
         let sender = established_address_1();
         let transfer_msg = MsgTransfer {
-            port_on_a: get_port_id(),
-            chan_on_a: get_channel_id(),
+            port_id_on_a: get_port_id(),
+            chan_id_on_a: get_channel_id(),
             token: Coin {
                 denom: nam().to_string(),
                 amount: 100u64.to_string(),
@@ -2407,8 +2401,8 @@ mod tests {
             &get_channel_counterparty(),
         );
         let commitment_key = commitment_key(
-            &transfer_msg.port_on_a,
-            &transfer_msg.chan_on_a,
+            &transfer_msg.port_id_on_a,
+            &transfer_msg.chan_id_on_a,
             sequence,
         );
         let commitment = commitment(&packet);

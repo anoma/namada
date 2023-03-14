@@ -1787,8 +1787,8 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     };
 
     let msg = MsgTransfer {
-        port_on_a: args.port_id,
-        chan_on_a: args.channel_id,
+        port_id_on_a: args.port_id,
+        chan_id_on_a: args.channel_id,
         token,
         sender: Signer::from_str(&source.to_string()).expect("invalid signer"),
         receiver: Signer::from_str(&args.receiver).expect("invalid signer"),

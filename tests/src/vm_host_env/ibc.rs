@@ -59,7 +59,8 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::ibc::init_genesis_storage;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
-    client_state_key, client_type_key, commitment_key, connection_counter_key,
+    client_state_key, client_type_key, client_update_height_key,
+    client_update_timestamp_key, commitment_key, connection_counter_key,
     connection_key, consensus_state_key, next_sequence_ack_key,
     next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
@@ -67,12 +68,16 @@ use namada::ledger::ibc::vp::{
     get_dummy_header as tm_dummy_header, Ibc, IbcToken,
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
+use namada::ledger::parameters::storage::get_max_expected_time_per_block_key;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
 use namada::proto::Tx;
+use namada::tendermint::time::Time as TmTime;
+use namada::tendermint_proto::Protobuf as TmProtobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
+use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::BorshSerialize;
@@ -216,6 +221,15 @@ pub fn init_storage() -> (Address, Address) {
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
     });
+
+    // max_expected_time_per_block
+    let time = DurationSecs::from(Duration::new(60, 0));
+    let key = get_max_expected_time_per_block_key();
+    let bytes = namada::ledger::storage::types::encode(&time);
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
     (token, account)
 }
 
@@ -248,6 +262,31 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
         .into_box()
         .encode_vec()
         .expect("encoding failed");
+    writes.insert(key, bytes);
+    // client update time
+    let key = client_update_timestamp_key(&client_id);
+    let time = tx_host_env::with(|env| {
+        let header = env
+            .wl_storage
+            .storage
+            .get_block_header(None)
+            .unwrap()
+            .0
+            .unwrap();
+        header.time
+    });
+    let bytes = TmTime::try_from(time)
+        .unwrap()
+        .encode_vec()
+        .expect("encoding failed");
+    writes.insert(key, bytes);
+    // client update height
+    let key = client_update_height_key(&client_id);
+    let height = tx_host_env::with(|env| {
+        let height = env.wl_storage.storage.get_block_height().0;
+        Height::new(0, height.0).expect("invalid height")
+    });
+    let bytes = height.encode_vec().expect("encoding failed");
     writes.insert(key, bytes);
     // client counter
     let key = client_counter_key();
@@ -377,7 +416,7 @@ pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
         client_id_on_a: client_id,
         counterparty: dummy_connection_counterparty(),
         version: None,
-        delay_period: Duration::new(100, 0),
+        delay_period: Duration::new(0, 0),
         signer: Signer::from_str("test").expect("invalid signer"),
     }
 }
@@ -563,8 +602,8 @@ pub fn msg_transfer(
 ) -> MsgTransfer {
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     MsgTransfer {
-        port_on_a: port_id,
-        chan_on_a: channel_id,
+        port_id_on_a: port_id,
+        chan_id_on_a: channel_id,
         token: Coin {
             denom: token,
             amount: 100u64.to_string(),
@@ -625,11 +664,11 @@ pub fn received_packet(
             .expect("invalid signer"),
     };
     Packet {
-        sequence,
-        port_on_a: counterparty.port_id().clone(),
-        chan_on_a: counterparty.channel_id().unwrap().clone(),
-        port_on_b: port_id,
-        chan_on_b: channel_id,
+        seq_on_a: sequence,
+        port_id_on_a: counterparty.port_id().clone(),
+        chan_id_on_a: counterparty.channel_id().unwrap().clone(),
+        port_id_on_b: port_id,
+        chan_id_on_b: channel_id,
         data: serde_json::to_vec(&data).unwrap(),
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timestamp,
@@ -675,11 +714,11 @@ pub fn packet_from_message(
         serde_json::to_vec(&packet_data).expect("Encoding PacketData failed");
 
     Packet {
-        sequence,
-        port_on_a: msg.port_on_a.clone(),
-        chan_on_a: msg.chan_on_a.clone(),
-        port_on_b: counterparty.port_id.clone(),
-        chan_on_b: counterparty
+        seq_on_a: sequence,
+        port_id_on_a: msg.port_id_on_a.clone(),
+        chan_id_on_a: msg.chan_id_on_a.clone(),
+        port_id_on_b: counterparty.port_id.clone(),
+        chan_id_on_b: counterparty
             .channel_id()
             .cloned()
             .expect("the counterparty channel should exist"),

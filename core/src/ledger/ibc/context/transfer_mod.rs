@@ -36,7 +36,6 @@ use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::handler::ModuleExtras;
 use crate::ibc::core::ics04_channel::msgs::acknowledgement::Acknowledgement;
 use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
-use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
@@ -48,7 +47,6 @@ use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ContextError;
 use crate::ibc::events::IbcEvent;
 use crate::ibc::signer::Signer;
-use crate::ibc::timestamp::Timestamp;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
@@ -89,7 +87,7 @@ where
 
 impl<C> ModuleWrapper for TransferModule<C>
 where
-    C: IbcCommonContext + Debug + 'static,
+    C: IbcCommonContext + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self
@@ -102,7 +100,7 @@ where
 
 impl<C> Module for TransferModule<C>
 where
-    C: IbcCommonContext + Debug + 'static,
+    C: IbcCommonContext + Debug,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(
@@ -373,23 +371,6 @@ where
     ) -> Result<Sequence, ContextError> {
         self.ctx.borrow().get_next_sequence_send(seq_send_path)
     }
-
-    fn hash(&self, value: &[u8]) -> Vec<u8> {
-        self.ctx.borrow().hash(value)
-    }
-
-    fn compute_packet_commitment(
-        &self,
-        packet_data: &[u8],
-        timeout_height: &TimeoutHeight,
-        timeout_timestamp: &Timestamp,
-    ) -> PacketCommitment {
-        self.ctx.borrow().compute_packet_commitment(
-            packet_data,
-            timeout_height,
-            timeout_timestamp,
-        )
-    }
 }
 
 impl<C> TokenTransferValidationContext for TransferModule<C>
@@ -402,7 +383,7 @@ where
         Ok(PortId::transfer())
     }
 
-    fn get_channel_escrow_address(
+    fn get_escrow_account(
         &self,
         _port_id: &PortId,
         _channel_id: &ChannelId,
@@ -410,12 +391,40 @@ where
         Ok(Address::Internal(InternalAddress::IbcEscrow))
     }
 
-    fn is_send_enabled(&self) -> bool {
-        true
+    fn can_send_coins(&self) -> Result<(), TokenTransferError> {
+        Ok(())
     }
 
-    fn is_receive_enabled(&self) -> bool {
-        true
+    fn can_receive_coins(&self) -> Result<(), TokenTransferError> {
+        Ok(())
+    }
+
+    fn send_coins_validate(
+        &self,
+        _from: &Self::AccountId,
+        _to: &Self::AccountId,
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        // validated by IBC token VP
+        Ok(())
+    }
+
+    fn mint_coins_validate(
+        &self,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        // validated by IBC token VP
+        Ok(())
+    }
+
+    fn burn_coins_validate(
+        &self,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        // validated by IBC token VP
+        Ok(())
     }
 
     fn denom_hash_string(&self, denom: &PrefixedDenom) -> Option<String> {
@@ -427,7 +436,7 @@ impl<C> TokenTransferExecutionContext for TransferModule<C>
 where
     C: IbcCommonContext,
 {
-    fn send_coins(
+    fn send_coins_execute(
         &mut self,
         from: &Self::AccountId,
         to: &Self::AccountId,
@@ -435,19 +444,7 @@ where
     ) -> Result<(), TokenTransferError> {
         // Assumes that the coin denom is prefixed with "port-id/channel-id" or
         // has no prefix
-
-        let token =
-            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
-                TokenTransferError::InvalidCoin {
-                    coin: coin.denom.base_denom.to_string(),
-                }
-            })?;
-
-        let amount = coin.amount.try_into().map_err(|_| {
-            TokenTransferError::InvalidCoin {
-                coin: coin.to_string(),
-            }
-        })?;
+        let (token, amount) = get_token_amount(coin)?;
 
         let src = if coin.denom.trace_path.is_empty()
             || *from == Address::Internal(InternalAddress::IbcMint)
@@ -478,23 +475,12 @@ where
             })
     }
 
-    fn mint_coins(
+    fn mint_coins_execute(
         &mut self,
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let token =
-            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
-                TokenTransferError::InvalidCoin {
-                    coin: coin.denom.base_denom.to_string(),
-                }
-            })?;
-
-        let amount = coin.amount.try_into().map_err(|_| {
-            TokenTransferError::InvalidCoin {
-                coin: coin.to_string(),
-            }
-        })?;
+        let (token, amount) = get_token_amount(coin)?;
 
         let src = token::balance_key(
             &token,
@@ -526,23 +512,12 @@ where
             })
     }
 
-    fn burn_coins(
+    fn burn_coins_execute(
         &mut self,
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let token =
-            Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
-                TokenTransferError::InvalidCoin {
-                    coin: coin.denom.base_denom.to_string(),
-                }
-            })?;
-
-        let amount = coin.amount.try_into().map_err(|_| {
-            TokenTransferError::InvalidCoin {
-                coin: coin.to_string(),
-            }
-        })?;
+        let (token, amount) = get_token_amount(coin)?;
 
         let src = if coin.denom.trace_path.is_empty() {
             token::balance_key(&token, account)
@@ -610,6 +585,26 @@ where
     fn log_message(&mut self, message: String) {
         self.ctx.borrow_mut().log_string(message)
     }
+}
+
+/// Get the token address and the amount from PrefixedCoin
+fn get_token_amount(
+    coin: &PrefixedCoin,
+) -> Result<(Address, token::Amount), TokenTransferError> {
+    let token =
+        Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
+            TokenTransferError::InvalidCoin {
+                coin: coin.denom.base_denom.to_string(),
+            }
+        })?;
+
+    let amount = coin.amount.try_into().map_err(|_| {
+        TokenTransferError::InvalidCoin {
+            coin: coin.to_string(),
+        }
+    })?;
+
+    Ok((token, amount))
 }
 
 fn into_channel_error(error: TokenTransferError) -> ChannelError {
