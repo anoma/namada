@@ -528,8 +528,7 @@ mod test_oracle {
             });
         });
         control_sender
-            .send(control::Command::UpdateConfig(config))
-            .await
+            .try_send(control::Command::UpdateConfig(config))
             .unwrap();
         handle
     }
