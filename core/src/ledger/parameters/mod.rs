@@ -322,7 +322,7 @@ where
 /// gas cost.
 pub fn update_epochs_per_year_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
-    value: &EpochDuration,
+    value: &u64,
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -336,7 +336,7 @@ where
 /// cost.
 pub fn update_pos_gain_p_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -350,7 +350,7 @@ where
 /// cost.
 pub fn update_pos_gain_d_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -364,7 +364,7 @@ where
 /// gas cost.
 pub fn update_staked_ratio_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
-    value: &EpochDuration,
+    value: &Decimal,
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -378,7 +378,7 @@ where
 /// and gas cost.
 pub fn update_pos_inflation_amount_parameter<DB, H>(
     storage: &mut Storage<DB, H>,
-    value: &EpochDuration,
+    value: &u64,
 ) -> std::result::Result<u64, WriteError>
 where
     DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
