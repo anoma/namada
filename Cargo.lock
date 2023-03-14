@@ -4742,6 +4742,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "orion",
+ "parse_duration",
  "proptest",
  "prost",
  "prost-types",
@@ -5605,6 +5606,17 @@ dependencies = [
  "redox_syscall 0.2.16",
  "smallvec 1.10.0",
  "windows-sys 0.42.0",
+]
+
+[[package]]
+name = "parse_duration"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7037e5e93e0172a5a96874380bf73bc6ecef022e26fa25f2be26864d6b3ba95d"
+dependencies = [
+ "lazy_static",
+ "num 0.2.1",
+ "regex",
 ]
 
 [[package]]
