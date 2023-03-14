@@ -11,7 +11,7 @@ use namada::ledger::pos::{
     namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
 };
 use namada::ledger::protocol;
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -628,16 +628,18 @@ where
         );
 
         // Run the rewards controllers
-        let new_pos_vals = RewardsController::run(&pos_controller);
+        let inflation::ValsToUpdate {
+            locked_ratio,
+            inflation,
+        } = RewardsController::run(&pos_controller);
         // let new_masp_vals = RewardsController::run(&_masp_controller);
 
         // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_minted_tokens = new_pos_vals.inflation;
         inflation::mint_tokens(
             &mut self.wl_storage,
             &POS_ADDRESS,
             &staking_token_address(),
-            Amount::from(pos_minted_tokens),
+            Amount::from(inflation),
         )?;
 
         // For each consensus validator, update the rewards products
@@ -667,7 +669,7 @@ where
         // to the accumulator storage earlier in apply_inflation
 
         // TODO: think about changing the reward to Decimal
-        let mut reward_tokens_remaining = pos_minted_tokens;
+        let mut reward_tokens_remaining = inflation;
         let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
             HashMap::new();
 
@@ -677,7 +679,7 @@ where
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
+            let reward = decimal_mult_u64(fractional_claim, inflation);
 
             // Get validator data at the last epoch
             let stake = read_validator_stake(
@@ -740,25 +742,11 @@ where
         // Write new rewards parameters that will be used for the inflation of
         // the current new epoch
         self.wl_storage
-            .storage
-            .write(
-                &params_storage::get_pos_inflation_amount_key(),
-                new_pos_vals
-                    .inflation
-                    .try_to_vec()
-                    .expect("encode new reward rate"),
-            )
-            .expect("unable to encode new reward rate (Decimal)");
+            .write(&params_storage::get_pos_inflation_amount_key(), inflation)
+            .expect("unable to write new reward rate");
         self.wl_storage
-            .storage
-            .write(
-                &params_storage::get_staked_ratio_key(),
-                new_pos_vals
-                    .locked_ratio
-                    .try_to_vec()
-                    .expect("encode new locked ratio"),
-            )
-            .expect("unable to encode new locked ratio (Decimal)");
+            .write(&params_storage::get_staked_ratio_key(), locked_ratio)
+            .expect("unable to write new locked ratio");
 
         // Delete the accumulators from storage
         // TODO: may want better way to implement this (for lazy PoS in general)
