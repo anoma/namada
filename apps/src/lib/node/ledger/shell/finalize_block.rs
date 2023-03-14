@@ -417,32 +417,22 @@ where
             }
         }
 
-        // Look-up the native address of the proposer and persist it
-        match String::from_utf8(req.proposer_address.clone()) {
-            Err(err) => {
-                tracing::error!(
-                    "Failed to decode proposer address from bytes. Expected \
-                     utf-8 string. Failed with {err}. Proposer raw bytes {:?}",
-                    req.proposer_address
-                )
-            }
-            Ok(tm_raw_hash_string) => {
-                // Get proposer address from storage based on the consensus
-                // key hash
-                let native_proposer_address = find_validator_by_raw_hash(
-                    &self.wl_storage,
-                    tm_raw_hash_string,
-                )
-                .unwrap()
-                .expect(
-                    "Unable to find native validator address of block \
-                     proposer from tendermint raw hash",
-                );
-                write_last_block_proposer_address(
-                    &mut self.wl_storage,
-                    native_proposer_address,
-                )?;
-            }
+        if !req.proposer_address.is_empty() {
+            let tm_raw_hash_string =
+                tm_raw_hash_to_string(req.proposer_address);
+            let native_proposer_address = find_validator_by_raw_hash(
+                &self.wl_storage,
+                tm_raw_hash_string,
+            )
+            .unwrap()
+            .expect(
+                "Unable to find native validator address of block proposer \
+                 from tendermint raw hash",
+            );
+            write_last_block_proposer_address(
+                &mut self.wl_storage,
+                native_proposer_address,
+            )?;
         }
 
         let _ = self
@@ -1234,10 +1224,29 @@ mod test_finalize_block {
                 .get(&shell.wl_storage, Epoch::default(), &pos_params)
                 .unwrap()
                 .unwrap();
-        let proposer_address = dbg!(consensus_key.tm_raw_hash()).into_bytes();
+        let proposer_address = HEXUPPER
+            .decode(consensus_key.tm_raw_hash().as_bytes())
+            .unwrap();
+        let val_stake = read_validator_stake(
+            &shell.wl_storage,
+            &pos_params,
+            validator,
+            Epoch::default(),
+        )
+        .unwrap()
+        .unwrap();
+        let votes = vec![VoteInfo {
+            validator_address: proposer_address.clone(),
+            validator_vp: u64::from(val_stake),
+            signed_last_block: true,
+        }];
+
+        // Need to supply a proposer address and votes to flow through the
+        // inflation code
         for _ in 0..20 {
             let req = FinalizeBlock {
                 proposer_address: proposer_address.clone(),
+                votes: votes.clone(),
                 ..Default::default()
             };
             let _events = shell.finalize_block(req).unwrap();
