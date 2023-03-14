@@ -555,7 +555,6 @@ where
             votes,
         )?;
 
-        // TODO: review if the appropriate epoch is being used (last vs now)
         let params = read_pos_params(&self.wl_storage)?;
 
         // Read from Parameters storage
@@ -632,11 +631,6 @@ where
             Amount::from(inflation),
         )?;
 
-        // For each consensus validator, update the rewards products
-        //
-        // TODO: update implementation using lazy DS and be more
-        // memory-efficient
-
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
             .wl_storage
@@ -646,23 +640,18 @@ where
             .first_block_heights[last_epoch.0 as usize]
             .0;
         let num_blocks_in_last_epoch = if first_block_of_last_epoch == 0 {
-            self.wl_storage.storage.block.height.0
-                - first_block_of_last_epoch
-                - 1
+            self.wl_storage.storage.block.height.0 - 1
         } else {
             self.wl_storage.storage.block.height.0 - first_block_of_last_epoch
         };
 
-        // Read the rewards accumulator, which was last updated when finalizing
-        // the previous block
-        // TODO: can/should this be optimized? Since we are reading and writing
-        // to the accumulator storage earlier in apply_inflation
-
+        // Read the rewards accumulator and calculate the new rewards products
+        // for the previous epoch
+        //
         // TODO: think about changing the reward to Decimal
         let mut reward_tokens_remaining = inflation;
         let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
             HashMap::new();
-
         for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
             let (address, value) = acc?;
 
