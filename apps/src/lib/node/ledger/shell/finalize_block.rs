@@ -406,7 +406,15 @@ where
                 )?;
             }
             None => {
-                tracing::debug!("Can't find last block proposer");
+                if height > BlockHeight::default().next_height() {
+                    tracing::error!(
+                        "Can't find the last block proposer at height {height}"
+                    );
+                } else {
+                    tracing::debug!(
+                        "No last block proposer at height {height}"
+                    );
+                }
             }
         }
 
