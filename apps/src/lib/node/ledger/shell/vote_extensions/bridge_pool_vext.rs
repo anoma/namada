@@ -51,31 +51,6 @@ where
         (token::Amount, Signed<bridge_pool_roots::Vext>),
         VoteExtensionError,
     > {
-        #[cfg(feature = "abcipp")]
-        if ext.data.block_height != last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Bridge pool root's vote extension issued for a block height \
-                 different from the expected last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        #[cfg(not(feature = "abcipp"))]
-        if ext.data.block_height > last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Bridge pool root's vote extension issued for a block height \
-                 higher than the chain's last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        if ext.data.block_height.0 == 0 {
-            tracing::debug!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
@@ -104,6 +79,31 @@ where
                  root's vote extension was cast",
             );
             return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
+
+        #[cfg(feature = "abcipp")]
+        if ext.data.block_height != last_height {
+            tracing::debug!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Bridge pool root's vote extension issued for a block height \
+                 different from the expected last height."
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        if ext.data.block_height > last_height {
+            tracing::debug!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Bridge pool root's vote extension issued for a block height \
+                 higher than the chain's last height."
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        if ext.data.block_height.0 == 0 {
+            tracing::debug!("Dropping vote extension issued at genesis");
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
 
         // get the public key associated with this validator

@@ -54,30 +54,6 @@ where
         (token::Amount, Signed<ethereum_events::Vext>),
         VoteExtensionError,
     > {
-        #[cfg(feature = "abcipp")]
-        if ext.data.block_height != last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Ethereum events vote extension issued for a block height \
-                 different from the expected last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        #[cfg(not(feature = "abcipp"))]
-        if ext.data.block_height > last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Ethereum events vote extension issued for a block height \
-                 higher than the chain's last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        if ext.data.block_height.0 == 0 {
-            tracing::debug!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
         // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
@@ -106,6 +82,30 @@ where
                  events' vote extension was cast",
             );
             return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
+        #[cfg(feature = "abcipp")]
+        if ext.data.block_height != last_height {
+            tracing::debug!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Ethereum events vote extension issued for a block height \
+                 different from the expected last height."
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        if ext.data.block_height > last_height {
+            tracing::debug!(
+                ext_height = ?ext.data.block_height,
+                ?last_height,
+                "Ethereum events vote extension issued for a block height \
+                 higher than the chain's last height."
+            );
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
+        }
+        if ext.data.block_height.0 == 0 {
+            tracing::debug!("Dropping vote extension issued at genesis");
+            return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         // verify if we have any duplicate Ethereum events,
         // and if these are sorted in ascending order
