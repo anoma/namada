@@ -90,7 +90,8 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
                 tracing::error!(?receipt, "Ethereum transfer failed");
             }
         })
-        .await;
+        .await
+        .unwrap();
     }
 }
 
@@ -186,7 +187,7 @@ async fn relay_validator_set_update_daemon(
         let new_epoch = gov_current_epoch + 1u64;
         args.epoch = Some(new_epoch);
 
-        relay_validator_set_update_once(&args, &nam_client, |transf_result| {
+        let result = relay_validator_set_update_once(&args, &nam_client, |transf_result| {
             let Some(receipt) = transf_result else {
                 tracing::warn!("No transfer receipt received from the Ethereum node");
                 last_call_succeeded = false;
@@ -200,6 +201,11 @@ async fn relay_validator_set_update_daemon(
                 tracing::error!(?receipt, "Ethereum transfer failed");
             }
         }).await;
+
+        if let Err(err) = result {
+            tracing::error!(err, "An error occurred during the relay");
+            last_call_succeeded = false;
+        }
     }
 }
 
@@ -220,7 +226,8 @@ async fn relay_validator_set_update_once<F>(
     args: &args::ValidatorSetUpdateRelay,
     nam_client: &HttpClient,
     mut action: F,
-) where
+) -> Result<(), String>
+where
     F: FnMut(Option<TransactionReceipt>),
 {
     let epoch_to_relay = if let Some(epoch) = args.epoch {
@@ -246,7 +253,7 @@ async fn relay_validator_set_update_once<F>(
             encoded_validator_set_args_fut,
             governance_address_fut
         )
-        .unwrap();
+        .map_err(|err| err.to_string())?;
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
@@ -281,9 +288,10 @@ async fn relay_validator_set_update_once<F>(
     let transf_result = pending_tx
         .confirmations(args.confirmations as usize)
         .await
-        .unwrap();
+        .map_err(|err| err.to_string())?;
 
     action(transf_result);
+    Ok(())
 }
 
 // NOTE: there's a bug (or feature?!) in ethers, where
