@@ -90,21 +90,18 @@ impl AbcippShim {
     pub fn run(mut self) {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
-                Req::ProcessProposal(proposal) => {
-                    println!("\nRECEIVED REQUEST PROCESSPROPOSAL");
-                    self.service
-                        .call(Request::ProcessProposal(proposal))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::ProcessProposal(resp) => {
-                                Ok(Resp::ProcessProposal((&resp).into()))
-                            }
-                            _ => unreachable!(),
-                        })
-                }
+                Req::ProcessProposal(proposal) => self
+                    .service
+                    .call(Request::ProcessProposal(proposal))
+                    .map_err(Error::from)
+                    .and_then(|res| match res {
+                        Response::ProcessProposal(resp) => {
+                            Ok(Resp::ProcessProposal((&resp).into()))
+                        }
+                        _ => unreachable!(),
+                    }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
-                    println!("RECEIVED REQUEST FINALIZEBLOCK");
                     let unprocessed_txs = block.txs.clone();
                     let processing_results =
                         self.service.process_txs(&block.txs);
@@ -129,20 +126,17 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
-                    println!("RECEIVED REQUEST BEGINBLOCK");
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::DeliverTx(tx) => {
-                    println!("RECEIVED REQUEST DELIVERTX");
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(Default::default()))
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    println!("RECEIVED REQUEST ENDBLOCK");
                     let processing_results =
                         self.service.process_txs(&self.delivered_txs);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());

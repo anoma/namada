@@ -720,7 +720,7 @@ where
             .expect("unable to write new locked ratio");
 
         // Delete the accumulators from storage
-        // TODO: may want better way to implement this (for lazy PoS in general)
+        // TODO: refactor with https://github.com/anoma/namada/issues/1225
         let addresses_to_drop: HashSet<Address> = rewards_accumulator_handle()
             .iter(&self.wl_storage)?
             .map(|a| a.unwrap().0)
@@ -729,11 +729,6 @@ where
             rewards_accumulator_handle()
                 .remove(&mut self.wl_storage, &address)?;
         }
-
-        // self.wl_storage
-        //     .storage
-        //     .delete(&consensus_validator_rewards_accumulator_key())
-        //     .unwrap();
 
         Ok(())
     }
@@ -750,7 +745,6 @@ mod test_finalize_block {
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::types::VoteInfo;
     use namada::ledger::storage_api;
-    //    use data_encoding::HEXUPPER;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
