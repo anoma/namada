@@ -71,6 +71,8 @@ mod internal {
         "ano::ETH Bridge Address                      ";
     pub const PGF: &str = 
         "ano::Public Goods Funding                    ";
+    pub const PGF_COUNCIL_TREASURY: &str =
+        "ano::PGF Council Treasusy                    ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -201,6 +203,9 @@ impl Address {
                         internal::ETH_BRIDGE.to_string()
                     }
                     InternalAddress::Pgf => internal::PGF.to_string(),
+                    InternalAddress::PgfCouncilTreasury => {
+                        internal::PGF_COUNCIL_TREASURY.to_string()
+                    }
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -472,6 +477,8 @@ pub enum InternalAddress {
     EthBridge,
     /// Public Goods Funding
     Pgf,
+    /// Treasury reserved to the PGF Council
+    PgfCouncilTreasury,
 }
 
 impl InternalAddress {
@@ -507,6 +514,7 @@ impl Display for InternalAddress {
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::Pgf => "PublicGoodsFunding".to_string(),
+                Self::PgfCouncilTreasury => "PGFCouncilTreasury".to_string(),
             }
         )
     }
@@ -791,8 +799,9 @@ pub mod testing {
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
-            InternalAddress::Pgf => {} /* Add new addresses in the
-                                        * `prop_oneof` below. */
+            InternalAddress::Pgf => {}
+            InternalAddress::PgfCouncilTreasury => {} /* Add new addresses in the
+                                                       * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -808,6 +817,7 @@ pub mod testing {
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::Pgf),
+            Just(InternalAddress::PgfCouncilTreasury)
         ]
     }
 

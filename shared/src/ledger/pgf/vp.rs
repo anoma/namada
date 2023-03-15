@@ -1,4 +1,4 @@
-//! Governance VP
+//! PGF VP
 use std::collections::BTreeSet;
 
 use namada_core::ledger::pgf::{storage as pgf_storage, CounsilData};
@@ -25,7 +25,7 @@ pub enum Error {
     NativeVpError(#[from] native_vp::Error),
 }
 
-/// Governance VP
+/// PGF VP
 pub struct PgfVp<'a, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,

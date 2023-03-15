@@ -6,6 +6,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use super::pgf::vp::PgfVp;
+use super::pgf_treasury::vp::PgfCouncilTreasuryVp;
 use crate::ledger::eth_bridge::vp::EthBridge;
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
 use crate::ledger::ibc::vp::{Ibc, IbcToken};
@@ -57,8 +58,10 @@ pub enum Error {
     SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
-    #[error("Access to an internal address {0} is forbidden")]
+    #[error("Pgf native VP error: {0}")]
     PgfNativeVpError(crate::ledger::pgf::vp::Error),
+    #[error("Pgf Council Treasury native VP error: {0}")]
+    PgfCouncilTreasuryNativeVpError(crate::ledger::pgf_treasury::vp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -398,6 +401,18 @@ where
                                 .validate_tx(tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::PgfNativeVpError);
                             gas_meter = pgf.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::PgfCouncilTreasury => {
+                            let pgf_council_treasury =
+                                PgfCouncilTreasuryVp { ctx };
+                            let result = pgf_council_treasury
+                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .map_err(
+                                    Error::PgfCouncilTreasuryNativeVpError,
+                                );
+                            gas_meter =
+                                pgf_council_treasury.ctx.gas_meter.into_inner();
                             result
                         }
                     };

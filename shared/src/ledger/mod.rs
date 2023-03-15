@@ -6,6 +6,7 @@ pub mod ibc;
 pub mod masp;
 pub mod native_vp;
 pub mod pgf;
+pub mod pgf_treasury;
 pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
