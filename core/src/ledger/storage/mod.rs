@@ -50,6 +50,10 @@ use crate::types::token;
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// We delay epoch change 2 blocks to keep it in sync with Tendermint, because
+/// it has 2 blocks delay on validator set update.
+pub const EPOCH_SWITCH_BLOCKS_DELAY: u32 = 2;
+
 /// The storage data
 #[derive(Debug)]
 pub struct Storage<D, H>
@@ -82,8 +86,12 @@ where
     pub next_epoch_min_start_time: DateTimeUtc,
     /// The current established address generator
     pub address_gen: EstablishedAddressGen,
-    /// Epoch update info
-    pub epoch_update_tracker: (bool, u32),
+    /// We delay the switch to a new epoch by the number of blocks set in here.
+    /// This is `Some` when minimum number of blocks has been created and
+    /// minimum time has passed since the beginning of the last epoch.
+    /// Once the value is `Some(0)`, we're ready to switch to a new epoch and
+    /// this is reset back to `None`.
+    pub update_epoch_blocks_delay: Option<u32>,
     /// The shielded transaction index
     pub tx_index: TxIndex,
     /// The currently saved conversion state
@@ -345,7 +353,7 @@ where
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
             ),
-            epoch_update_tracker: (false, 0),
+            update_epoch_blocks_delay: None,
             tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
@@ -723,29 +731,32 @@ where
         let (parameters, _gas) =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
-        // Check if the new epoch minimum start height and start time have been
-        // fulfilled. If so, queue the next epoch to start two blocks
-        // into the future so as to align validator set updates + etc with
-        // tendermint. This is because tendermint has a two block delay
-        // to validator changes.
-        let current_epoch_duration_satisfied = height
-            >= self.next_epoch_min_start_height
-            && time >= self.next_epoch_min_start_time;
-
-        if current_epoch_duration_satisfied {
-            if !self.epoch_update_tracker.0 {
-                self.epoch_update_tracker = (true, 2);
-            } else {
-                self.epoch_update_tracker =
-                    (true, self.epoch_update_tracker.1 - 1);
+        match self.update_epoch_blocks_delay.as_mut() {
+            None => {
+                // Check if the new epoch minimum start height and start time
+                // have been fulfilled. If so, queue the next
+                // epoch to start two blocks into the future so
+                // as to align validator set updates + etc with
+                // tendermint. This is because tendermint has a two block delay
+                // to validator changes.
+                let current_epoch_duration_satisfied = height
+                    >= self.next_epoch_min_start_height
+                    && time >= self.next_epoch_min_start_time;
+                if current_epoch_duration_satisfied {
+                    self.update_epoch_blocks_delay =
+                        Some(EPOCH_SWITCH_BLOCKS_DELAY);
+                }
             }
-        } else if self.epoch_update_tracker.0 {
-            self.epoch_update_tracker.0 = false
-        }
-        let new_epoch =
-            self.epoch_update_tracker.0 && self.epoch_update_tracker.1 == 0;
+            Some(blocks_until_switch) => {
+                *blocks_until_switch -= 1;
+            }
+        };
+        let new_epoch = matches!(self.update_epoch_blocks_delay, Some(0));
 
         if new_epoch {
+            // Reset the delay tracker
+            self.update_epoch_blocks_delay = None;
+
             // Begin a new epoch
             self.block.epoch = self.block.epoch.next();
             let EpochDuration {
@@ -887,7 +898,7 @@ pub mod testing {
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
                 ),
-                epoch_update_tracker: (false, 0),
+                update_epoch_blocks_delay: None,
                 tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
@@ -1020,22 +1031,19 @@ mod tests {
             {
                 // Update will now be enqueued for 2 blocks in the future
                 assert_eq!(storage.block.epoch, epoch_before);
-                assert!(storage.epoch_update_tracker.0);
-                assert_eq!(storage.epoch_update_tracker.1,2);
+                assert_eq!(storage.update_epoch_blocks_delay, Some(2));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
                 storage.update_epoch(block_height, block_time).unwrap();
                 assert_eq!(storage.block.epoch, epoch_before);
-                assert!(storage.epoch_update_tracker.0);
-                assert_eq!(storage.epoch_update_tracker.1,1);
+                assert_eq!(storage.update_epoch_blocks_delay, Some(1));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
                 storage.update_epoch(block_height, block_time).unwrap();
                 assert_eq!(storage.block.epoch, epoch_before.next());
-                assert!(storage.epoch_update_tracker.0);
-                assert_eq!(storage.epoch_update_tracker.1,0);
+                assert!(storage.update_epoch_blocks_delay.is_none());
 
                 assert_eq!(storage.next_epoch_min_start_height,
                     block_height + epoch_duration.min_num_of_blocks);
@@ -1048,8 +1056,7 @@ mod tests {
                     storage.block.pred_epochs.get_epoch(block_height),
                     Some(epoch_before.next()));
             } else {
-                assert!(!storage.epoch_update_tracker.0);
-                assert_eq!(storage.epoch_update_tracker.1,0);
+                assert!(storage.update_epoch_blocks_delay.is_none());
                 assert_eq!(storage.block.epoch, epoch_before);
                 assert_eq!(
                     storage.block.pred_epochs.get_epoch(BlockHeight(block_height.0 - 1)),
@@ -1084,37 +1091,31 @@ mod tests {
             // satisfied
             storage.update_epoch(height_before_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert!(!storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,0);
+            assert!(storage.update_epoch_blocks_delay.is_none());
             storage.update_epoch(height_of_update, time_before_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert!(!storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,0);
+            assert!(storage.update_epoch_blocks_delay.is_none());
             storage.update_epoch(height_before_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert!(!storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,0);
+            assert!(storage.update_epoch_blocks_delay.is_none());
 
             // Update should be enqueued for 2 blocks in the future starting at or after this height and time
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert!(storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,2);
+            assert_eq!(storage.update_epoch_blocks_delay, Some(2));
 
             // Increment the block height and time to simulate new blocks now
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before);
-            assert!(storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,1);
+            assert_eq!(storage.update_epoch_blocks_delay, Some(1));
 
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before.next());
-            assert!(storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,0);
+            assert!(storage.update_epoch_blocks_delay.is_none());
             // The next epoch's minimum duration should change
             assert_eq!(storage.next_epoch_min_start_height,
                 height_of_update + parameters.epoch_duration.min_num_of_blocks);
@@ -1126,8 +1127,7 @@ mod tests {
             let time_of_update = time_of_update + Duration::seconds(1);
             storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(storage.block.epoch, epoch_before.next());
-            assert!(!storage.epoch_update_tracker.0);
-            assert_eq!(storage.epoch_update_tracker.1,0);
+            assert!(storage.update_epoch_blocks_delay.is_none());
         }
     }
 }

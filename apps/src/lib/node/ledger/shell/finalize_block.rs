@@ -9,6 +9,7 @@ use namada::ledger::pos::{
     namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
 };
 use namada::ledger::protocol;
+use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
@@ -69,9 +70,10 @@ where
             self.update_state(req.header, req.hash, req.byzantine_validators);
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
-        let update_for_tendermint =
-            self.wl_storage.storage.epoch_update_tracker.0
-                && self.wl_storage.storage.epoch_update_tracker.1 == 2;
+        let update_for_tendermint = matches!(
+            self.wl_storage.storage.update_epoch_blocks_delay,
+            Some(EPOCH_SWITCH_BLOCKS_DELAY)
+        );
 
         tracing::debug!(
             "Block height: {height}, epoch: {current_epoch}, new epoch: \
