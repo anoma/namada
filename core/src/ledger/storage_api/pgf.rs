@@ -33,7 +33,7 @@ where
 /// A pgf projects update transaction.
 pub fn update_projects<S>(
     storage: &mut S,
-    data: PgfProjectsUpdate,
+    data: PgfReceipients,
 ) -> storage_api::Result<Address>
 where
     S: StorageRead + StorageWrite,
@@ -142,7 +142,6 @@ where
                                 address: address.to_owned(),
                                 spending_cap,
                                 data: counsil_data.data,
-                                epoch: counsil_data.epoch,
                             };
                             Some(candidate)
                         }
