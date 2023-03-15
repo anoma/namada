@@ -4,9 +4,7 @@ use std::collections::HashMap;
 
 use namada::ledger::inflation::{self, RewardsController};
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{
-    decimal_mult_u64, into_tm_voting_power, VoteInfo,
-};
+use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
 use namada::ledger::pos::{
     namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
 };
@@ -396,25 +394,24 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
-                if new_epoch {
-                    self.apply_inflation(
-                        current_epoch,
-                        &proposer_address,
-                        &req.votes,
-                    )?;
-                } else {
-                    namada_proof_of_stake::log_block_rewards(
-                        &mut self.wl_storage,
-                        current_epoch,
-                        &proposer_address,
-                        &req.votes,
-                    )
-                    .unwrap();
-                }
+                namada_proof_of_stake::log_block_rewards(
+                    &mut self.wl_storage,
+                    if new_epoch {
+                        current_epoch - 1
+                    } else {
+                        current_epoch
+                    },
+                    &proposer_address,
+                    &req.votes,
+                )?;
             }
             None => {
                 tracing::debug!("Can't find last block proposer");
             }
+        }
+
+        if new_epoch {
+            self.apply_inflation(current_epoch)?;
         }
 
         if !req.proposer_address.is_empty() {
@@ -533,27 +530,12 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(
-        &mut self,
-        current_epoch: Epoch,
-        proposer_address: &Address,
-        votes: &[VoteInfo],
-    ) -> Result<()> {
+    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //
         // MASP is included below just for some completeness.
-
-        // Calculate the fractional block rewards for the previous block (final
-        // block of the previous epoch), which also gives the final
-        // accumulator value updates
-        namada_proof_of_stake::log_block_rewards(
-            &mut self.wl_storage,
-            last_epoch,
-            proposer_address,
-            votes,
-        )?;
 
         let params = read_pos_params(&self.wl_storage)?;
 
@@ -756,6 +738,7 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::pos::types::VoteInfo;
     use namada::ledger::storage_api;
     //    use data_encoding::HEXUPPER;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
