@@ -569,7 +569,9 @@ where
             .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&total_supply_key(&staking_token_address()))
+            .read_storage_key(&total_supply_key(&staking_token_address(
+                &self.wl_storage,
+            )))
             .expect("Total NAM balance should exist in storage");
         let pos_locked_supply =
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
@@ -621,10 +623,11 @@ where
         // let new_masp_vals = _masp_controller.run();
 
         // Mint tokens to the PoS account for the last epoch's inflation
+        let staking_token = staking_token_address(&self.wl_storage);
         inflation::mint_tokens(
             &mut self.wl_storage,
             &POS_ADDRESS,
-            &staking_token_address(),
+            &staking_token,
             Amount::from(inflation),
         )?;
 

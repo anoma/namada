@@ -284,6 +284,7 @@ where
         }
 
         // Initialize genesis validator accounts
+        let staking_token = staking_token_address(&self.wl_storage);
         for validator in &genesis.validators {
             let vp_code = vp_code_cache.get_or_insert_with(
                 validator.validator_vp_code_path.clone(),
@@ -323,7 +324,7 @@ where
             // Account balance (tokens not staked in PoS)
             credit_tokens(
                 &mut self.wl_storage,
-                &staking_token_address(),
+                &staking_token,
                 addr,
                 validator.non_staked_balance,
             )
@@ -357,16 +358,12 @@ where
         );
 
         let total_nam =
-            read_total_supply(&self.wl_storage, &staking_token_address())
-                .unwrap();
+            read_total_supply(&self.wl_storage, &staking_token).unwrap();
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
-        let total_staked_nam = read_balance(
-            &self.wl_storage,
-            &staking_token_address(),
-            &address::POS,
-        )
-        .unwrap();
+        let total_staked_nam =
+            read_balance(&self.wl_storage, &staking_token, &address::POS)
+                .unwrap();
 
         tracing::info!("Genesis total native tokens: {total_nam}.");
         tracing::info!("Total staked tokens: {total_staked_nam}.");
