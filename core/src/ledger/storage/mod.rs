@@ -11,6 +11,7 @@ mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;
+use std::cmp::Ordering;
 
 use merkle_tree::StorageBytes;
 pub use merkle_tree::{
@@ -208,8 +209,13 @@ pub trait DB: std::fmt::Debug {
     /// Read the last committed block's metadata
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>>;
 
-    /// Write block's metadata
-    fn write_block(&mut self, state: BlockStateWrite) -> Result<()>;
+    /// Write block's metadata. Merkle tree sub-stores are committed only when
+    /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
+    fn write_block(
+        &mut self,
+        state: BlockStateWrite,
+        is_full_commit: bool,
+    ) -> Result<()>;
 
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
@@ -218,7 +224,7 @@ pub trait DB: std::fmt::Debug {
     fn read_merkle_tree_stores(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<MerkleTreeStoresRead>>;
+    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>>;
 
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
@@ -296,6 +302,12 @@ pub trait DBIter<'iter> {
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
+
+    /// Read subspace old diffs at a given height
+    fn iter_old_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
+
+    /// Read subspace new diffs at a given height
+    fn iter_new_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
@@ -368,7 +380,6 @@ where
             tx_queue,
         }) = self.db.read_last_block()?
         {
-            self.block.tree = MerkleTree::new(merkle_tree_stores);
             self.block.hash = hash;
             self.block.height = height;
             self.block.epoch = epoch;
@@ -379,6 +390,9 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
+            // Rebuild Merkle tree
+            self.block.tree = MerkleTree::new(merkle_tree_stores)
+                .or_else(|_| self.get_merkle_tree(height))?;
             if self.last_epoch.0 > 1 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
@@ -419,6 +433,9 @@ where
 
     /// Persist the current block's state to the database
     pub fn commit_block(&mut self) -> Result<()> {
+        // All states are written only when the first height or a new epoch
+        let is_full_commit =
+            self.block.height.0 == 1 || self.last_epoch != self.block.epoch;
         let state = BlockStateWrite {
             merkle_tree_stores: self.block.tree.stores(),
             header: self.header.as_ref(),
@@ -433,7 +450,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
         };
-        self.db.write_block(state)?;
+        self.db.write_block(state, is_full_commit)?;
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
@@ -600,6 +617,74 @@ where
         (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
     }
 
+    /// Get the Merkle tree with stores and diffs in the DB
+    /// Use `self.block.tree` if you want that of the current block height
+    pub fn get_merkle_tree(
+        &self,
+        height: BlockHeight,
+    ) -> Result<MerkleTree<H>> {
+        let (stored_height, stores) = self
+            .db
+            .read_merkle_tree_stores(height)?
+            .ok_or(Error::NoMerkleTree { height })?;
+        // Restore the tree state with diffs
+        let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
+        let mut target_height = stored_height;
+        while target_height < height {
+            target_height = target_height.next_height();
+            let mut old_diff_iter = self.db.iter_old_diffs(target_height);
+            let mut new_diff_iter = self.db.iter_new_diffs(target_height);
+
+            let mut old_diff = old_diff_iter.next();
+            let mut new_diff = new_diff_iter.next();
+            loop {
+                match (&old_diff, &new_diff) {
+                    (Some(old), Some(new)) => {
+                        let old_key = Key::parse(old.0.clone())
+                            .expect("the key should be parsable");
+                        let new_key = Key::parse(new.0.clone())
+                            .expect("the key should be parsable");
+                        // compare keys as String
+                        match old.0.cmp(&new.0) {
+                            Ordering::Equal => {
+                                // the value was updated
+                                tree.update(&new_key, new.1.clone())?;
+                                old_diff = old_diff_iter.next();
+                                new_diff = new_diff_iter.next();
+                            }
+                            Ordering::Less => {
+                                // the value was deleted
+                                tree.delete(&old_key)?;
+                                old_diff = old_diff_iter.next();
+                            }
+                            Ordering::Greater => {
+                                // the value was inserted
+                                tree.update(&new_key, new.1.clone())?;
+                                new_diff = new_diff_iter.next();
+                            }
+                        }
+                    }
+                    (Some(old), None) => {
+                        // the value was deleted
+                        let key = Key::parse(old.0.clone())
+                            .expect("the key should be parsable");
+                        tree.delete(&key)?;
+                        old_diff = old_diff_iter.next();
+                    }
+                    (None, Some(new)) => {
+                        // the value was inserted
+                        let key = Key::parse(new.0.clone())
+                            .expect("the key should be parsable");
+                        tree.update(&key, new.1.clone())?;
+                        new_diff = new_diff_iter.next();
+                    }
+                    (None, None) => break,
+                }
+            }
+        }
+        Ok(tree)
+    }
+
     /// Get the existence proof
     #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_existence_proof(
@@ -618,21 +703,13 @@ where
                 ),
             })
         } else {
-            match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => {
-                    let tree = MerkleTree::<H>::new(stores);
-                    let MembershipProof::ICS23(proof) = tree
-                        .get_sub_tree_existence_proof(
-                            array::from_ref(key),
-                            vec![value],
-                        )
-                        .map_err(Error::MerkleTreeError)?;
-                    tree.get_sub_tree_proof(key, proof)
-                        .map(Into::into)
-                        .map_err(Error::MerkleTreeError)
-                }
-                None => Err(Error::NoMerkleTree { height }),
-            }
+            let tree = self.get_merkle_tree(height)?;
+            let MembershipProof::ICS23(proof) = tree
+                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
+                .map_err(Error::MerkleTreeError)?;
+            tree.get_sub_tree_proof(key, proof)
+                .map(Into::into)
+                .map_err(Error::MerkleTreeError)
         }
     }
 
@@ -651,13 +728,10 @@ where
                 ),
             })
         } else {
-            match self.db.read_merkle_tree_stores(height)? {
-                Some(stores) => MerkleTree::<H>::new(stores)
-                    .get_non_existence_proof(key)
-                    .map(Into::into)
-                    .map_err(Error::MerkleTreeError),
-                None => Err(Error::NoMerkleTree { height }),
-            }
+            self.get_merkle_tree(height)?
+                .get_non_existence_proof(key)
+                .map(Into::into)
+                .map_err(Error::MerkleTreeError)
         }
     }
 
