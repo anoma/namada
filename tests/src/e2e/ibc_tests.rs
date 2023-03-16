@@ -274,7 +274,7 @@ fn update_client_with_height(
 ) -> Result<()> {
     // check the current(stale) state on the target chain
     let key = client_state_key(target_client_id);
-    let (value, _) = query_value_with_proof(target_test, &key, target_height)?;
+    let (value, _) = query_value_with_proof(target_test, &key, None)?;
     let client_state = match value {
         Some(v) => AnyClientState::decode_vec(&v)
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
@@ -467,7 +467,7 @@ fn get_connection_proofs(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = connection_key(conn_id);
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let connection_proof = convert_proof(tm_proof)?;
 
     let (client_state, client_state_proof, consensus_proof) =
@@ -638,7 +638,7 @@ fn get_channel_proofs(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = channel_key(port_channel_id);
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let proof = convert_proof(tm_proof)?;
 
     let (_, client_state_proof, consensus_proof) =
@@ -662,7 +662,8 @@ fn get_client_states(
     target_height: Height, // should have been already decremented
 ) -> Result<(AnyClientState, CommitmentProofBytes, ConsensusProof)> {
     let key = client_state_key(client_id);
-    let (value, tm_proof) = query_value_with_proof(test, &key, target_height)?;
+    let (value, tm_proof) =
+        query_value_with_proof(test, &key, Some(target_height))?;
     let client_state = match value {
         Some(v) => AnyClientState::decode_vec(&v)
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
@@ -677,7 +678,8 @@ fn get_client_states(
 
     let height = client_state.latest_height();
     let key = consensus_state_key(client_id, height);
-    let (_, tm_proof) = query_value_with_proof(test, &key, target_height)?;
+    let (_, tm_proof) =
+        query_value_with_proof(test, &key, Some(target_height))?;
     let proof = convert_proof(tm_proof)?;
     let consensus_proof = ConsensusProof::new(proof, height)
         .map_err(|e| eyre!("Creating ConsensusProof failed: error {}", e))?;
@@ -995,7 +997,7 @@ fn get_commitment_proof(
         &packet.source_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let commitment_proof = convert_proof(tm_proof)?;
 
     Proofs::new(commitment_proof, None, None, None, target_height)
@@ -1014,7 +1016,7 @@ fn get_ack_proof(
         &packet.destination_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let ack_proof = convert_proof(tm_proof)?;
 
     Proofs::new(ack_proof, None, None, None, target_height)
@@ -1033,7 +1035,7 @@ fn get_receipt_absence_proof(
         &packet.destination_channel,
         packet.sequence,
     );
-    let (_, tm_proof) = query_value_with_proof(test, &key, query_height)?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let absence_proof = convert_proof(tm_proof)?;
 
     Proofs::new(absence_proof, None, None, None, target_height)
@@ -1240,7 +1242,7 @@ fn get_event(test: &Test, height: u32) -> Result<Option<IbcEvent>> {
 fn query_value_with_proof(
     test: &Test,
     key: &Key,
-    height: Height,
+    height: Option<Height>,
 ) -> Result<(Option<Vec<u8>>, TmProof)> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
@@ -1248,7 +1250,7 @@ fn query_value_with_proof(
     let result = Runtime::new().unwrap().block_on(query_storage_value_bytes(
         &client,
         key,
-        Some(BlockHeight(height.revision_height)),
+        height.map(|h| BlockHeight(h.revision_height)),
         true,
     ));
     match result {

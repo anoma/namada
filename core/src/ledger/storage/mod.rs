@@ -610,17 +610,13 @@ where
     ) -> Result<Proof> {
         use std::array;
 
-        if height >= self.get_block_height().0 {
-            let MembershipProof::ICS23(proof) = self
-                .block
-                .tree
-                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)?;
-            self.block
-                .tree
-                .get_sub_tree_proof(key, proof)
-                .map(Into::into)
-                .map_err(Error::MerkleTreeError)
+        if height > self.last_height {
+            Err(Error::Temporary {
+                error: format!(
+                    "The block at the height {} hasn't committed yet",
+                    height,
+                ),
+            })
         } else {
             match self.db.read_merkle_tree_stores(height)? {
                 Some(stores) => {
@@ -647,12 +643,13 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<Proof> {
-        if height >= self.last_height {
-            self.block
-                .tree
-                .get_non_existence_proof(key)
-                .map(Into::into)
-                .map_err(Error::MerkleTreeError)
+        if height > self.last_height {
+            Err(Error::Temporary {
+                error: format!(
+                    "The block at the height {} hasn't committed yet",
+                    height,
+                ),
+            })
         } else {
             match self.db.read_merkle_tree_stores(height)? {
                 Some(stores) => MerkleTree::<H>::new(stores)
