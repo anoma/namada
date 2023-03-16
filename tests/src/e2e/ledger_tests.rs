@@ -954,10 +954,10 @@ fn masp_incentives() -> Result<()> {
                             account_config.parameters.map(|parameters| {
                                 if token == String::from(NAM) {
                                     Parameters {
-                                        max_reward_rate: dec!(100000.5),
+                                        max_reward_rate: dec!(1000.5),
                                         // these need to be set to 0
-                                        kd_gain_nom: dec!(0.0),
-                                        kp_gain_nom: dec!(0.0),
+                                        kd_gain_nom: dec!(0.005),
+                                        kp_gain_nom: dec!(0.005),
                                         ..parameters
                                     }
                                 } else {
@@ -1183,7 +1183,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
-    client.exp_string("NAM: 253690200000")?;
+    client.exp_string("NAM: 26296240")?;
     client.assert_success();
 
     // // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
