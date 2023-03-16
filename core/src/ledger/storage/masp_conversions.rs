@@ -18,8 +18,8 @@ use crate::types::{address, token};
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct ConversionState {
-    /// The merkle root from the previous epoch
-    pub prev_root: Node,
+    /// The last amount of the native token distributed
+    pub normed_inflation: Option<u64>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -169,6 +169,8 @@ where
     D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
     H: 'static + super::StorageHasher,
 {
+    use std::cmp::Ordering;
+
     use masp_primitives::ff::PrimeField;
     use masp_primitives::transaction::components::Amount as MaspAmount;
     use rayon::iter::{
@@ -183,6 +185,18 @@ where
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let masp_rewards = address::masp_rewards();
+    let mut masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
+    // Put the native rewards first because other inflation computations depend
+    // on it
+    masp_reward_keys.sort_unstable_by(|x, y| {
+        if (**x == address::nam()) == (**y == address::nam()) {
+            Ordering::Equal
+        } else if **x == address::nam() {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    });
     // The total transparent value of the rewards being distributed
     let mut total_reward = token::Amount::from(0);
 
@@ -198,7 +212,8 @@ where
     // Conversions from the previous to current asset for each address
     let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
     // Reward all tokens according to above reward rates
-    for addr in masp_rewards.keys() {
+
+    for addr in masp_reward_keys {
         let reward = calculate_masp_rewards(wl_storage, addr)
             .expect("Calculating the masp rewards should not fail");
         // Dispence a transparent reward in parallel to the shielded rewards
@@ -217,13 +232,47 @@ where
             encode_asset_type(addr.clone(), wl_storage.storage.last_epoch);
         let new_asset =
             encode_asset_type(addr.clone(), wl_storage.storage.block.epoch);
-        current_convs.insert(
-            addr.clone(),
-            (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                + MaspAmount::from_pair(new_asset, reward.1).unwrap()
-                + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
-            .into(),
-        );
+        // Native token inflation values are always with respect to this
+        let ref_inflation = masp_rewards[&address::nam()].1;
+        // Get the last rewarded amount of the native token
+        let normed_inflation = wl_storage
+            .storage
+            .conversion_state
+            .normed_inflation
+            .get_or_insert(ref_inflation);
+        if *addr == address::nam() {
+            // The amount that will be given of the new native token for every
+            // amount of the native token given in the previous epoch
+            let new_normed_inflation =
+                *normed_inflation + (*normed_inflation * reward.0) / reward.1;
+            // The conversion is computed such that if consecutive conversions
+            // are added together, the intermediate native tokens cancel/
+            // telescope out
+            current_convs.insert(
+                addr.clone(),
+                (MaspAmount::from_pair(old_asset, -(*normed_inflation as i64))
+                    .unwrap()
+                    + MaspAmount::from_pair(new_asset, new_normed_inflation)
+                        .unwrap())
+                .into(),
+            );
+            // Save the new normed inflation
+            *normed_inflation = new_normed_inflation;
+        } else {
+            // Express the inflation reward in real terms, that is, with respect
+            // to the native asset in the zeroth epoch
+            let real_reward = (reward.0 * ref_inflation) / *normed_inflation;
+            // The conversion is computed such that if consecutive conversions
+            // are added together, the intermediate tokens cancel/ telescope out
+            current_convs.insert(
+                addr.clone(),
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
+                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
+                    + MaspAmount::from_pair(reward_asset, real_reward)
+                        .unwrap())
+                .into(),
+            );
+        }
         // Add a conversion from the previous asset type
         wl_storage.storage.conversion_state.assets.insert(
             old_asset,
@@ -283,11 +332,6 @@ where
         .par_chunks(notes_per_thread_rounded)
         .map(FrozenCommitmentTree::new)
         .collect();
-
-    // Keep the merkle root from the old tree for transactions constructed
-    // close to the epoch boundary
-    wl_storage.storage.conversion_state.prev_root =
-        wl_storage.storage.conversion_state.tree.root();
 
     // Convert conversion vector into tree so that Merkle paths can be
     // obtained
