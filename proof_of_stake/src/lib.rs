@@ -37,7 +37,7 @@ use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
     self, OptionExt, StorageRead, StorageWrite,
 };
-use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::key::{
     common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
@@ -75,9 +75,11 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-/// Address of the staking token (NAM)
-pub fn staking_token_address() -> Address {
-    address::nam()
+/// Address of the staking token (i.e. the native token)
+pub fn staking_token_address(storage: &impl StorageRead) -> Address {
+    storage
+        .get_native_token()
+        .expect("Must be able to read native token address")
 }
 
 #[allow(missing_docs)]
@@ -401,7 +403,8 @@ where
         current_epoch,
     )?;
     // Credit bonded token amount to the PoS account
-    credit_tokens(storage, &staking_token_address(), &ADDRESS, total_bonded)?;
+    let staking_token = staking_token_address(storage);
+    credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
         copy_validator_sets_and_positions(
@@ -852,9 +855,10 @@ where
     update_total_deltas(storage, &params, amount, current_epoch)?;
 
     // Transfer the bonded tokens from the source to PoS
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         token::Amount::from_change(amount),
         source,
         &ADDRESS,
@@ -1699,9 +1703,10 @@ where
     }
 
     // Transfer the tokens from the PoS address back to the source
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         withdrawable_amount,
         &ADDRESS,
         source,
@@ -1809,9 +1814,10 @@ where
     validator_slashes_handle(validator).push(storage, slash)?;
 
     // Transfer the slashed tokens from PoS account to Slash Fund address
+    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token_address(),
+        &staking_token,
         token::Amount::from(slashed_amount),
         &ADDRESS,
         &SLASH_POOL_ADDRESS,

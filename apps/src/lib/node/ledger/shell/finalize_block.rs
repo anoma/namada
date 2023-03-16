@@ -566,7 +566,9 @@ where
             .expect("PoS inflation rate should exist in storage");
         // Read from PoS storage
         let total_tokens = self
-            .read_storage_key(&total_supply_key(&staking_token_address()))
+            .read_storage_key(&total_supply_key(&staking_token_address(
+                &self.wl_storage,
+            )))
             .expect("Total NAM balance should exist in storage");
         let pos_locked_supply =
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
@@ -611,17 +613,11 @@ where
         };
 
         // Run the rewards controllers
-        let new_pos_vals = RewardsController::run(&pos_controller);
-        // let new_masp_vals = RewardsController::run(&_masp_controller);
-
-        // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_minted_tokens = new_pos_vals.inflation;
-        inflation::mint_tokens(
-            &mut self.wl_storage,
-            &POS_ADDRESS,
-            &staking_token_address(),
-            Amount::from(pos_minted_tokens),
-        )?;
+        let inflation::ValsToUpdate {
+            locked_ratio,
+            inflation,
+        } = pos_controller.run();
+        // let new_masp_vals = _masp_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
