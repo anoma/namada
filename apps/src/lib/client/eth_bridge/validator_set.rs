@@ -110,6 +110,8 @@ async fn relay_validator_set_update_daemon(
 
     let mut last_call_succeeded = true;
 
+    tracing::info!("The validator set update relayer daemon has started");
+
     loop {
         let sleep_for = if last_call_succeeded {
             success_duration
@@ -117,13 +119,13 @@ async fn relay_validator_set_update_daemon(
             retry_duration
         };
 
-        tracing::info!(?sleep_for, "Sleeping");
+        tracing::debug!(?sleep_for, "Sleeping");
         tokio::time::sleep(sleep_for).await;
 
         let is_synchronizing =
             eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
         if is_synchronizing {
-            tracing::info!("The Ethereum node is synchronizing");
+            tracing::debug!("The Ethereum node is synchronizing");
             last_call_succeeded = false;
             continue;
         }
@@ -160,7 +162,7 @@ async fn relay_validator_set_update_daemon(
             futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
                 .unwrap();
 
-        tracing::info!(
+        tracing::debug!(
             ?nam_current_epoch,
             ?gov_current_epoch,
             "Fetched the latest epochs"
@@ -168,7 +170,7 @@ async fn relay_validator_set_update_daemon(
 
         match nam_current_epoch.cmp(&gov_current_epoch) {
             Ordering::Equal => {
-                tracing::info!(
+                tracing::debug!(
                     "Nothing to do, since the validator set in the Governance \
                      contract is up to date",
                 );
