@@ -1,16 +1,19 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use data_encoding::HEXLOWER;
 use ethbridge_governance_contract::Governance;
+use futures::future::FutureExt;
 use namada::core::types::storage::Epoch;
 use namada::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
+use namada::eth_bridge::ethers::core::types::TransactionReceipt;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::eth_bridge::structs::{Signature, ValidatorSetArgs};
 use namada::ledger::queries::RPC;
 use tokio::time::{Duration, Instant};
 
-use super::{block_on_eth_sync, eth_sync_or_exit};
-use crate::cli::args;
+use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
+use crate::cli::{args, safe_exit};
 use crate::client::eth_bridge::BlockOnEthSync;
 use crate::facade::tendermint_rpc::HttpClient;
 
@@ -69,24 +72,182 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
         eth_sync_or_exit(&args.eth_rpc_endpoint).await;
     }
 
-    let nam_client = HttpClient::new(args.query.ledger_address).unwrap();
+    let nam_client =
+        HttpClient::new(args.query.ledger_address.clone()).unwrap();
 
+    if args.daemon {
+        relay_validator_set_update_daemon(args, nam_client).await;
+    } else {
+        relay_validator_set_update_once(&args, &nam_client, |transf_result| {
+            let Some(receipt) = transf_result else {
+                tracing::warn!("No transfer receipt received from the Ethereum node");
+                return;
+            };
+            let success = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
+            if success {
+                tracing::info!(?receipt, "Ethereum transfer succeded");
+            } else {
+                tracing::error!(?receipt, "Ethereum transfer failed");
+            }
+        })
+        .await
+        .unwrap();
+    }
+}
+
+async fn relay_validator_set_update_daemon(
+    mut args: args::ValidatorSetUpdateRelay,
+    nam_client: HttpClient,
+) {
+    let eth_client =
+        Arc::new(Provider::<Http>::try_from(&args.eth_rpc_endpoint).unwrap());
+
+    const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(1);
+    const DEFAULT_SUCCESS_DURATION: Duration = Duration::from_secs(10);
+
+    let retry_duration = args.retry_dur.unwrap_or(DEFAULT_RETRY_DURATION);
+    let success_duration = args.success_dur.unwrap_or(DEFAULT_SUCCESS_DURATION);
+
+    let mut last_call_succeeded = true;
+
+    tracing::info!("The validator set update relayer daemon has started");
+
+    loop {
+        let sleep_for = if last_call_succeeded {
+            success_duration
+        } else {
+            retry_duration
+        };
+
+        tracing::debug!(?sleep_for, "Sleeping");
+        tokio::time::sleep(sleep_for).await;
+
+        let is_synchronizing =
+            eth_sync_or(&args.eth_rpc_endpoint, || ()).await.is_err();
+        if is_synchronizing {
+            tracing::debug!("The Ethereum node is synchronizing");
+            last_call_succeeded = false;
+            continue;
+        }
+
+        // we could be racing against governance updates,
+        // so it is best to always fetch the latest governance
+        // contract address
+        let governance =
+            get_governance_contract(&nam_client, Arc::clone(&eth_client)).await;
+        let governance_epoch_prep_call = governance.validator_set_nonce();
+        let governance_epoch_fut =
+            governance_epoch_prep_call.call().map(|result| {
+                result
+                    .map_err(|err| {
+                        tracing::error!(
+                            "Failed to fetch latest validator set nonce: {err}"
+                        );
+                        safe_exit(1);
+                    })
+                    .map(|e| Epoch(e.as_u64()))
+            });
+
+        let shell = RPC.shell();
+        let nam_current_epoch_fut = shell.epoch(&nam_client).map(|result| {
+            result.map_err(|err| {
+                tracing::error!(
+                    "Failed to fetch the latest epoch in Namada: {err}"
+                );
+                safe_exit(1);
+            })
+        });
+
+        let (nam_current_epoch, gov_current_epoch) =
+            futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
+                .unwrap();
+
+        tracing::debug!(
+            ?nam_current_epoch,
+            ?gov_current_epoch,
+            "Fetched the latest epochs"
+        );
+
+        match nam_current_epoch.cmp(&gov_current_epoch) {
+            Ordering::Equal => {
+                tracing::debug!(
+                    "Nothing to do, since the validator set in the Governance \
+                     contract is up to date",
+                );
+                last_call_succeeded = false;
+                continue;
+            }
+            Ordering::Less => {
+                tracing::error!("The Governance contract is ahead of Namada!");
+                last_call_succeeded = false;
+                continue;
+            }
+            Ordering::Greater => {}
+        }
+
+        // update epoch in the contract
+        let new_epoch = gov_current_epoch + 1u64;
+        args.epoch = Some(new_epoch);
+
+        let result = relay_validator_set_update_once(&args, &nam_client, |transf_result| {
+            let Some(receipt) = transf_result else {
+                tracing::warn!("No transfer receipt received from the Ethereum node");
+                last_call_succeeded = false;
+                return;
+            };
+            last_call_succeeded = receipt.status.map(|s| s.as_u64() == 1).unwrap_or(false);
+            if last_call_succeeded {
+                tracing::info!(?receipt, "Ethereum transfer succeded");
+                tracing::info!(?new_epoch, "Updated the validator set");
+            } else {
+                tracing::error!(?receipt, "Ethereum transfer failed");
+            }
+        }).await;
+
+        if let Err(err) = result {
+            tracing::error!(err, "An error occurred during the relay");
+            last_call_succeeded = false;
+        }
+    }
+}
+
+async fn get_governance_contract(
+    nam_client: &HttpClient,
+    eth_client: Arc<Provider<Http>>,
+) -> Governance<Provider<Http>> {
+    let governance_contract = RPC
+        .shell()
+        .eth_bridge()
+        .read_governance_contract(nam_client)
+        .await
+        .unwrap();
+    Governance::new(governance_contract.address, eth_client)
+}
+
+async fn relay_validator_set_update_once<F>(
+    args: &args::ValidatorSetUpdateRelay,
+    nam_client: &HttpClient,
+    mut action: F,
+) -> Result<(), String>
+where
+    F: FnMut(Option<TransactionReceipt>),
+{
     let epoch_to_relay = if let Some(epoch) = args.epoch {
         epoch
     } else {
-        RPC.shell().epoch(&nam_client).await.unwrap().next()
+        RPC.shell().epoch(nam_client).await.unwrap().next()
     };
     let shell = RPC.shell().eth_bridge();
     let encoded_proof_fut =
-        shell.read_valset_upd_proof(&nam_client, &epoch_to_relay);
+        shell.read_valset_upd_proof(nam_client, &epoch_to_relay);
 
     let bridge_current_epoch = Epoch(epoch_to_relay.0.saturating_sub(2));
     let shell = RPC.shell().eth_bridge();
     let encoded_validator_set_args_fut =
-        shell.read_active_valset(&nam_client, &bridge_current_epoch);
+        shell.read_active_valset(nam_client, &bridge_current_epoch);
 
     let shell = RPC.shell().eth_bridge();
-    let governance_address_fut = shell.read_governance_contract(&nam_client);
+    let governance_address_fut = shell.read_governance_contract(nam_client);
 
     let (encoded_proof, encoded_validator_set_args, governance_contract) =
         futures::try_join!(
@@ -94,7 +255,7 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
             encoded_validator_set_args_fut,
             governance_address_fut
         )
-        .unwrap();
+        .map_err(|err| err.to_string())?;
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
@@ -129,9 +290,10 @@ pub async fn relay_validator_set_update(args: args::ValidatorSetUpdateRelay) {
     let transf_result = pending_tx
         .confirmations(args.confirmations as usize)
         .await
-        .unwrap();
+        .map_err(|err| err.to_string())?;
 
-    println!("{transf_result:?}");
+    action(transf_result);
+    Ok(())
 }
 
 // NOTE: there's a bug (or feature?!) in ethers, where
