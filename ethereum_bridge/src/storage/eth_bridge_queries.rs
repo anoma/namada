@@ -123,19 +123,22 @@ where
         .expect("Deserializing the Ethereum bridge active key shouldn't fail.")
     }
 
-    /// Returns a boolean indicating whether the bridge
-    /// is currently active.
+    /// Returns a boolean indicating whether the bridge is
+    /// currently active.
+    #[inline]
     pub fn is_bridge_active(self) -> bool {
+        self.is_bridge_active_at(self.wl_storage.storage.get_current_epoch().0)
+    }
+
+    /// Behaves exactly like [`Self::is_bridge_active`], but performs
+    /// the check at the given [`Epoch`].
+    pub fn is_bridge_active_at(self, queried_epoch: Epoch) -> bool {
         match self.check_bridge_status() {
             EthBridgeStatus::Disabled => false,
             EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis) => true,
             EthBridgeStatus::Enabled(EthBridgeEnabled::AtEpoch(
                 enabled_epoch,
-            )) => {
-                let current_epoch =
-                    self.wl_storage.storage.get_current_epoch().0;
-                current_epoch >= enabled_epoch
-            }
+            )) => queried_epoch >= enabled_epoch,
         }
     }
 

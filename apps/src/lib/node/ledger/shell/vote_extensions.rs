@@ -4,8 +4,6 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-#[cfg(not(feature = "abcipp"))]
-use index_set::vec::VecIndexSet;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
@@ -30,28 +28,28 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 /// The error yielded from validating faulty vote extensions in the shell
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
-    #[error("The vote extension was issued for an unexpected block height.")]
+    #[error("The vote extension was issued for an unexpected block height")]
     UnexpectedBlockHeight,
-    #[error("The vote extension was issued for an unexpected epoch.")]
+    #[error("The vote extension was issued for an unexpected epoch")]
     UnexpectedEpoch,
     #[error(
-        "The vote extension contains duplicate or non-sorted Ethereum events."
+        "The vote extension contains duplicate or non-sorted Ethereum events"
     )]
     HaveDupesOrNonSorted,
     #[error(
         "The public key of the vote extension's associated validator could \
-         not be found in storage."
+         not be found in storage"
     )]
     PubKeyNotInStorage,
-    #[error("The vote extension's signature is invalid.")]
+    #[error("The vote extension's signature is invalid")]
     VerifySigFailed,
     #[error(
-        "Validator is missing from an expected field in the vote extension."
+        "Validator is missing from an expected field in the vote extension"
     )]
     ValidatorMissingFromExtension,
     #[error(
         "Found value for a field in the vote extension diverging from the \
-         equivalent field in storage."
+         equivalent field in storage"
     )]
     DivergesFromStorage,
     #[error("The signature of the Bridge pool root is invalid")]
@@ -61,7 +59,7 @@ pub enum VoteExtensionError {
          not active"
     )]
     EthereumBridgeInactive,
-    #[error("A vote extension for the Ethereum bridge is missing.")]
+    #[error("A vote extension for the Ethereum bridge is missing")]
     MissingBridgeVext,
 }
 
@@ -178,6 +176,16 @@ where
     pub fn extend_vote_with_valset_update(
         &mut self,
     ) -> Option<validator_set_update::SignedVext> {
+        let next_epoch = self.wl_storage.storage.get_current_epoch().0.next();
+
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active_at(next_epoch)
+        {
+            return None;
+        }
+
         let validator_addr = self
             .mode
             .get_validator_address()
@@ -188,8 +196,6 @@ where
             .ethbridge_queries()
             .must_send_valset_upd(SendValsetUpd::Now)
             .then(|| {
-                let next_epoch =
-                    self.wl_storage.storage.get_current_epoch().0.next();
                 let voting_powers = self
                     .wl_storage
                     .ethbridge_queries()
@@ -395,12 +401,11 @@ where
     pub fn deserialize_vote_extensions<'shell>(
         &'shell self,
         txs: &'shell [TxBytes],
-        protocol_tx_indices: &'shell mut VecIndexSet<u128>,
     ) -> impl Iterator<Item = TxBytes> + 'shell {
         use namada::types::transaction::protocol::ProtocolTx;
         let current_epoch = self.wl_storage.storage.get_current_epoch().0;
 
-        txs.iter().enumerate().filter_map(move |(index, tx_bytes)| {
+        txs.iter().filter_map(move |tx_bytes| {
             let tx = match Tx::try_from(tx_bytes.as_slice()) {
                 Ok(tx) => tx,
                 Err(err) => {
@@ -418,23 +423,11 @@ where
                         ProtocolTxType::EthEventsVext(_)
                         | ProtocolTxType::BridgePoolVext(_),
                     ..
-                }) => {
-                    // mark tx for inclusion or it is skipped
-                    // if the bridge is inactive
-                    protocol_tx_indices.insert(index);
-                    self.wl_storage
-                        .ethbridge_queries()
-                        .is_bridge_active()
-                        .then_some(tx_bytes.clone())
-                }
+                }) => Some(tx_bytes.clone()),
                 TxType::Protocol(ProtocolTx {
                     tx: ProtocolTxType::ValSetUpdateVext(ext),
                     ..
                 }) => {
-                    // mark tx, so it's skipped when
-                    // building the batch of remaining txs
-                    protocol_tx_indices.insert(index);
-
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long
                     // enough in the mempool for it to no longer be

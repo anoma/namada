@@ -174,6 +174,14 @@ impl Add<u64> for BlockHeight {
     }
 }
 
+impl Sub<u64> for BlockHeight {
+    type Output = Self;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
 impl AddAssign for BlockHeight {
     fn add_assign(&mut self, other: Self) {
         self.0 += other.0;

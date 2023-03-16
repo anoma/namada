@@ -1,7 +1,5 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-#[cfg(not(feature = "abcipp"))]
-use index_set::vec::VecIndexSet;
 use namada::core::hints;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
@@ -53,8 +51,6 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = self.get_encrypted_txs_allocator();
-            #[cfg(not(feature = "abcipp"))]
-            let mut protocol_tx_indices = VecIndexSet::default();
 
             // add encrypted txs
             let (encrypted_txs, alloc) =
@@ -68,8 +64,6 @@ where
             // add vote extension protocol txs
             let mut protocol_txs = self.build_protocol_txs(
                 alloc,
-                #[cfg(not(feature = "abcipp"))]
-                &mut protocol_tx_indices,
                 #[cfg(feature = "abcipp")]
                 req.local_last_commit,
                 #[cfg(not(feature = "abcipp"))]
@@ -330,7 +324,6 @@ where
     fn build_protocol_txs(
         &self,
         mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
-        protocol_tx_indices: &mut VecIndexSet<u128>,
         txs: &[TxBytes],
     ) -> Vec<TxBytes> {
         if self.wl_storage.storage.last_height == BlockHeight(0) {
@@ -342,8 +335,7 @@ where
             return vec![];
         }
 
-        let deserialized_iter =
-            self.deserialize_vote_extensions(txs, protocol_tx_indices);
+        let deserialized_iter = self.deserialize_vote_extensions(txs);
         let pos_queries = self.wl_storage.pos_queries();
 
         deserialized_iter.take_while(|tx_bytes|
@@ -404,13 +396,17 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    #[cfg(feature = "abcipp")]
+    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
-    use namada::proto::{SignableEthMessage, Signed, SignedTxData};
+    #[cfg(feature = "abcipp")]
+    use namada::proto::SignableEthMessage;
+    use namada::proto::{Signed, SignedTxData};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
@@ -419,41 +415,27 @@ mod test_prepare_proposal {
     use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     #[cfg(feature = "abcipp")]
+    use namada::types::vote_extensions::bridge_pool_roots;
+    use namada::types::vote_extensions::ethereum_events;
+    #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
-    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
     };
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::deactivate_bridge;
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::get_bp_bytes_to_sign;
+    #[cfg(feature = "abcipp")]
+    use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        setup_at_height, TestShell,
+        self, gen_keypair, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
-
-    /// Extract an [`ethereum_events::SignedVext`], from a set of
-    /// serialized [`TxBytes`].
-    #[cfg(not(feature = "abcipp"))]
-    fn extract_eth_events_vext(
-        tx_bytes: TxBytes,
-    ) -> ethereum_events::SignedVext {
-        let got = Tx::try_from(&tx_bytes[..]).unwrap();
-        let got_signed_tx =
-            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
-        let protocol_tx =
-            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
-        let protocol_tx = match protocol_tx {
-            TxType::Protocol(protocol_tx) => protocol_tx.tx,
-            _ => panic!("Test failed"),
-        };
-        match protocol_tx {
-            ProtocolTxType::EthEventsVext(ext) => ext,
-            _ => panic!("Test failed"),
-        }
-    }
 
     #[cfg(feature = "abcipp")]
     fn get_local_last_commit(shell: &TestShell) -> Option<ExtendedCommitInfo> {
@@ -511,46 +493,25 @@ mod test_prepare_proposal {
         })
     }
 
-    /// Test that if a tx from the mempool is not a
-    /// WrapperTx type, it is not included in the
-    /// proposed block.
-    // TODO: remove this test after CheckTx implements
-    // filtering of invalid txs; otherwise, we would have
-    // needed to return invalid txs from PrepareProposal,
-    // for these to get removed from a node's mempool.
-    // not returning invalid txs from PrepareProposal is
-    // a DoS vector, because the mempool will slowly fill
-    // up with garbage. luckily, Tendermint implements a
-    // mempool eviction policy, but honest client's txs
-    // may get lost in the process
-    #[test]
-    fn test_prepare_proposal_rejects_non_wrapper_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let non_wrapper_tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-        );
-        let req = RequestPrepareProposal {
-            #[cfg(feature = "abcipp")]
-            local_last_commit: get_local_last_commit(&shell),
-            txs: vec![non_wrapper_tx.to_bytes()],
-            ..Default::default()
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
-        #[cfg(not(feature = "abcipp"))]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
-    }
-
     /// Check if we are filtering out an invalid vote extension `vext`
     fn check_eth_events_filtering(
-        shell: &mut TestShell,
+        shell: &TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let filtered_votes: Vec<_> =
-            shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
-
-        assert_eq!(filtered_votes, vec![]);
+        #[cfg(feature = "abcipp")]
+        {
+            let filtered_votes: Vec<_> =
+                shell.filter_invalid_eth_events_vexts(vec![vext]).collect();
+            assert_eq!(filtered_votes, vec![]);
+        }
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let tx = ProtocolTxType::EthEventsVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+                .to_bytes();
+            let rsp = shell.mempool_validate(&tx, Default::default());
+            assert!(rsp.code != 0, "{}", rsp.log);
+        }
     }
 
     /// Test if we are filtering out Ethereum events with bad
@@ -582,53 +543,48 @@ mod test_prepare_proposal {
             ext
         };
 
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
+        check_eth_events_filtering(&shell, signed_vote_extension);
     }
 
     /// Test if we are filtering out Ethereum events seen at
-    /// block heights different than the last height.
+    /// unexpected block heights.
+    ///
+    /// In case of ABCI++, we should only accept vote extensions
+    /// from `last_height`, whereas with ABCI+, vote extensions
+    /// before `last_height` are accepted. In either case, vote
+    /// extensions after `last_height` aren't accepted.
     #[test]
     fn test_prepare_proposal_filter_out_bad_vext_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        const PRED_LAST_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
 
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        fn check_invalid(shell: &TestShell, height: BlockHeight) {
+            let (protocol_key, _, _) = wallet::defaults::validator_keys();
+            let validator_addr = wallet::defaults::validator_address();
 
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
+            let signed_vote_extension = {
+                let ext = ethereum_events::Vext {
+                    validator_addr,
+                    block_height: height,
+                    ethereum_events: vec![],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let validator_addr = wallet::defaults::validator_address();
-
-        let signed_vote_extension = {
-            let ext = ethereum_events::Vext {
-                validator_addr,
-                block_height: PRED_LAST_HEIGHT,
-                ethereum_events: vec![],
-            }
-            .sign(&protocol_key);
-            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-            ext
-        };
-
-        #[cfg(feature = "abcipp")]
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
-
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let filtered_votes: Vec<_> = shell
-                .filter_invalid_eth_events_vexts(vec![
-                    signed_vote_extension.clone(),
-                ])
-                .collect();
-            assert_eq!(
-                filtered_votes,
-                vec![(
-                    test_utils::get_validator_bonded_stake(),
-                    signed_vote_extension
-                )]
-            )
+            check_eth_events_filtering(shell, signed_vote_extension);
         }
+
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+        assert_eq!(shell.wl_storage.storage.last_height, LAST_HEIGHT);
+
+        check_invalid(&shell, LAST_HEIGHT + 2);
+        check_invalid(&shell, LAST_HEIGHT + 1);
+        check_invalid(&shell, 0.into());
+        #[cfg(feature = "abcipp")]
+        check_invalid(&shell, LAST_HEIGHT - 1);
+        #[cfg(feature = "abcipp")]
+        check_invalid(&shell, LAST_HEIGHT - 2);
     }
 
     /// Test if we are filtering out Ethereum events seen by
@@ -659,12 +615,13 @@ mod test_prepare_proposal {
             ext
         };
 
-        check_eth_events_filtering(&mut shell, signed_vote_extension);
+        check_eth_events_filtering(&shell, signed_vote_extension);
     }
 
     /// Test if we are filtering out duped Ethereum events in
     /// prepare proposals.
     #[test]
+    #[cfg(feature = "abcipp")]
     fn test_prepare_proposal_filter_duped_ethereum_events() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
@@ -695,21 +652,11 @@ mod test_prepare_proposal {
         let maybe_digest =
             shell.compress_ethereum_events(vec![signed_vote_extension]);
 
-        #[cfg(feature = "abcipp")]
-        {
-            // we should be filtering out the vote extension with
-            // duped ethereum events; therefore, no valid vote
-            // extensions will remain, and we will get no
-            // digest from compressing nil vote extensions
-            assert!(maybe_digest.is_none());
-        }
-
-        #[cfg(not(feature = "abcipp"))]
-        {
-            use assert_matches::assert_matches;
-
-            assert_matches!(maybe_digest, Some(d) if d.signatures.is_empty());
-        }
+        // we should be filtering out the vote extension with
+        // duped ethereum events; therefore, no valid vote
+        // extensions will remain, and we will get no
+        // digest from compressing nil vote extensions
+        assert!(maybe_digest.is_none());
     }
 
     /// Test that we do not include vote extensions voting on ethereum
@@ -723,55 +670,6 @@ mod test_prepare_proposal {
         let vext = get_local_last_commit(&shell);
         let rsp = shell.prepare_proposal(RequestPrepareProposal {
             local_last_commit: vext,
-            ..Default::default()
-        });
-        assert!(rsp.txs.is_empty());
-    }
-
-    /// Test that we do not include protocol txs voting on ethereum
-    /// events or signing bridge pool roots + nonces if the bridge
-    /// is inactive.
-    #[test]
-    #[cfg(not(feature = "abcipp"))]
-    fn test_filter_protocol_txs_bridge_inactive() {
-        let (mut shell, _, _, _) = setup_at_height(3);
-        deactivate_bridge(&mut shell);
-        let address = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-        let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
-            transfers: vec![],
-        };
-        let eth_vext = ProtocolTxType::EthEventsVext(
-            ethereum_events::Vext {
-                validator_addr: address.clone(),
-                block_height: shell.wl_storage.storage.last_height,
-                ethereum_events: vec![ethereum_event],
-            }
-            .sign(protocol_key),
-        )
-        .sign(protocol_key)
-        .to_bytes();
-
-        let to_sign = get_bp_bytes_to_sign();
-        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
-        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
-        let bp_vext = ProtocolTxType::BridgePoolVext(
-            bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.last_height,
-                validator_addr: address,
-                sig,
-            }
-            .sign(protocol_key),
-        )
-        .sign(protocol_key)
-        .to_bytes();
-        let rsp = shell.prepare_proposal(RequestPrepareProposal {
-            txs: vec![eth_vext, bp_vext],
             ..Default::default()
         });
         assert!(rsp.txs.is_empty());
@@ -902,53 +800,6 @@ mod test_prepare_proposal {
         );
 
         assert_eq!(rsp_digest, digest);
-    }
-
-    /// Test if Ethereum events validation and inclusion in a block
-    /// behaves as expected, considering honest validators.
-    #[cfg(not(feature = "abcipp"))]
-    #[test]
-    fn test_prepare_proposal_vext_normal_op() {
-        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-
-        let (mut shell, _recv, _, _) = test_utils::setup();
-
-        // artificially change the block height
-        shell.wl_storage.storage.last_height = LAST_HEIGHT;
-
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let validator_addr = wallet::defaults::validator_address();
-
-        let ethereum_event = EthereumEvent::TransfersToNamada {
-            nonce: 1u64.into(),
-            transfers: vec![],
-        };
-        let ext = {
-            let ext = ethereum_events::Vext {
-                validator_addr,
-                block_height: LAST_HEIGHT,
-                ethereum_events: vec![ethereum_event],
-            }
-            .sign(&protocol_key);
-            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-            ext
-        };
-
-        let rsp_ext = {
-            let tx = ProtocolTxType::EthEventsVext(ext.clone())
-                .sign(&protocol_key)
-                .to_bytes();
-            let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                txs: vec![tx],
-                ..Default::default()
-            });
-            assert_eq!(rsp.txs.len(), 1);
-
-            let tx_bytes = rsp.txs.remove(0);
-            extract_eth_events_vext(tx_bytes)
-        };
-
-        assert_eq!(rsp_ext, ext);
     }
 
     /// Test if Ethereum events validation and inclusion in a block
@@ -1102,53 +953,6 @@ mod test_prepare_proposal {
 
             assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
         }
-    }
-
-    /// Test that if an error is encountered while
-    /// trying to process a tx from the mempool,
-    /// we simply exclude it from the proposal
-    // TODO: see note on `test_prepare_proposal_rejects_non_wrapper_tx`
-    #[test]
-    fn test_error_in_processing_tx() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-        let tx = Tx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
-        );
-        // an unsigned wrapper will cause an error in processing
-        let wrapper = Tx::new(
-            "".as_bytes().to_owned(),
-            Some(
-                WrapperTx::new(
-                    Fee {
-                        amount: 0.into(),
-                        token: shell.wl_storage.storage.native_token.clone(),
-                    },
-                    &keypair,
-                    Epoch(0),
-                    0.into(),
-                    tx,
-                    Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
-                )
-                .try_to_vec()
-                .expect("Test failed"),
-            ),
-        )
-        .to_bytes();
-        #[allow(clippy::redundant_clone)]
-        let req = RequestPrepareProposal {
-            #[cfg(feature = "abcipp")]
-            local_last_commit: get_local_last_commit(&shell),
-            txs: vec![wrapper.clone()],
-            ..Default::default()
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 2);
-        #[cfg(not(feature = "abcipp"))]
-        assert_eq!(shell.prepare_proposal(req).txs.len(), 0);
     }
 
     /// Test that the decrypted txs are included

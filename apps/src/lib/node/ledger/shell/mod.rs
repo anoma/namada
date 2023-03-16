@@ -309,9 +309,10 @@ impl ShellMode {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum MempoolTxType {
     /// A transaction that has not been validated by this node before
+    #[default]
     NewTransaction,
     /// A transaction that has been validated at some previous level that may
     /// need to be validated again
@@ -856,8 +857,8 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
-    // TODO: move this to another file after 0.11 merges,
-    // since this method has become fairly large at this point
+    // TODO: move this to another file, since this method has become fairly
+    // large at this point
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
@@ -1135,6 +1136,7 @@ mod test_utils {
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proto::{SignedTxData, Tx};
     use namada::types::address::{self, EstablishedAddressGen};
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1143,7 +1145,9 @@ mod test_utils {
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
     use namada::types::time::DateTimeUtc;
-    use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{Fee, TxType, WrapperTx};
+    use namada::types::vote_extensions::ethereum_events;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1156,6 +1160,7 @@ mod test_utils {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     #[derive(Error, Debug)]
@@ -1245,6 +1250,27 @@ mod test_utils {
         hasher.finalize(&mut output);
 
         KeccakHash(output)
+    }
+
+    /// Extract an [`ethereum_events::SignedVext`], from a set of
+    /// serialized [`TxBytes`].
+    #[allow(dead_code)]
+    pub fn extract_eth_events_vext(
+        tx_bytes: TxBytes,
+    ) -> ethereum_events::SignedVext {
+        let got = Tx::try_from(&tx_bytes[..]).unwrap();
+        let got_signed_tx =
+            SignedTxData::try_from_slice(&got.data.unwrap()[..]).unwrap();
+        let protocol_tx =
+            TxType::try_from_slice(&got_signed_tx.data.unwrap()[..]).unwrap();
+        let protocol_tx = match protocol_tx {
+            TxType::Protocol(protocol_tx) => protocol_tx.tx,
+            _ => panic!("Test failed"),
+        };
+        match protocol_tx {
+            ProtocolTxType::EthEventsVext(ext) => ext,
+            _ => panic!("Test failed"),
+        }
     }
 
     /// A wrapper around the shell that implements
@@ -1401,6 +1427,7 @@ mod test_utils {
     /// Get the only validator's voting power.
     #[inline]
     #[cfg(not(feature = "abcipp"))]
+    #[allow(dead_code)]
     pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
         200_000_000_000.into()
     }
@@ -1588,5 +1615,152 @@ mod test_utils {
             address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
+    }
+}
+
+#[cfg(all(test, not(feature = "abcipp")))]
+mod mempool_tests {
+    use borsh::BorshSerialize;
+    use namada::proto::{SignableEthMessage, Signed, Tx};
+    use namada::types::ethereum_events::EthereumEvent;
+    use namada::types::key::RefTo;
+    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::transaction::protocol::ProtocolTxType;
+    use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
+
+    use crate::node::ledger::shell::test_utils;
+    use crate::wallet;
+
+    /// Test that we do not include protocol txs in the mempool,
+    /// voting on ethereum events or signing bridge pool roots
+    /// and nonces if the bridge is inactive.
+    #[test]
+    fn test_mempool_filter_protocol_txs_bridge_inactive() {
+        let (mut shell, _, _, _) = test_utils::setup_at_height(3);
+        test_utils::deactivate_bridge(&mut shell);
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let eth_vext = ProtocolTxType::EthEventsVext(
+            ethereum_events::Vext {
+                validator_addr: address.clone(),
+                block_height: shell.wl_storage.storage.last_height,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+
+        let to_sign = test_utils::get_bp_bytes_to_sign();
+        let hot_key = shell.mode.get_eth_bridge_keypair().expect("Test failed");
+        let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
+        let bp_vext = ProtocolTxType::BridgePoolVext(
+            bridge_pool_roots::Vext {
+                block_height: shell.wl_storage.storage.last_height,
+                validator_addr: address,
+                sig,
+            }
+            .sign(protocol_key),
+        )
+        .sign(protocol_key)
+        .to_bytes();
+        let txs_to_validate = [
+            (eth_vext, "Incorrectly validated eth events vext"),
+            (bp_vext, "Incorrectly validated bp roots vext"),
+        ];
+        for (tx_bytes, err_msg) in txs_to_validate {
+            let rsp = shell.mempool_validate(&tx_bytes, Default::default());
+            assert!(rsp.code == 1, "{err_msg}");
+        }
+    }
+
+    /// Test that the mempool rejects invalid txs.
+    #[test]
+    fn test_mempool_rejects_invalid_tx() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let non_wrapper_tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+        )
+        .to_bytes();
+        let rsp = shell.mempool_validate(&non_wrapper_tx, Default::default());
+        assert_eq!(rsp.code, 1);
+    }
+
+    /// Test that if an error is encountered while trying to process a tx,
+    /// it is prohibited from making its way onto the mempool.
+    #[test]
+    fn test_mempool_error_in_processing_tx() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let keypair = test_utils::gen_keypair();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction_data".as_bytes().to_owned()),
+        );
+        // an unsigned wrapper will cause an error in processing
+        let wrapper = Tx::new(
+            "".as_bytes().to_owned(),
+            Some(
+                WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    tx,
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                )
+                .try_to_vec()
+                .expect("Test failed"),
+            ),
+        )
+        .to_bytes();
+        let rsp = shell.mempool_validate(&wrapper, Default::default());
+        assert_eq!(rsp.code, 1);
+    }
+
+    /// Test if Ethereum events validation behaves as expected,
+    /// considering honest validators.
+    #[test]
+    fn test_mempool_eth_events_vext_normal_op() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        let ethereum_event = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+        };
+        let ext = {
+            let ext = ethereum_events::Vext {
+                validator_addr,
+                block_height: LAST_HEIGHT,
+                ethereum_events: vec![ethereum_event],
+            }
+            .sign(&protocol_key);
+            assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+            ext
+        };
+        let tx = ProtocolTxType::EthEventsVext(ext)
+            .sign(&protocol_key)
+            .to_bytes();
+        let rsp = shell.mempool_validate(&tx, Default::default());
+        assert_eq!(rsp.code, 0);
     }
 }

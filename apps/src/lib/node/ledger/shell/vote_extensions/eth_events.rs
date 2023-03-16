@@ -54,9 +54,38 @@ where
         (token::Amount, Signed<ethereum_events::Vext>),
         VoteExtensionError,
     > {
+        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // `last_height` here, instead of `ext.data.block_height`
+        let ext_height_epoch = match self
+            .wl_storage
+            .pos_queries()
+            .get_epoch(ext.data.block_height)
+        {
+            Some(epoch) => epoch,
+            _ => {
+                tracing::debug!(
+                    block_height = ?ext.data.block_height,
+                    "The epoch of the Ethereum events vote extension's \
+                     block height should always be known",
+                );
+                return Err(VoteExtensionError::UnexpectedEpoch);
+            }
+        };
+        if !self
+            .wl_storage
+            .ethbridge_queries()
+            .is_bridge_active_at(ext_height_epoch)
+        {
+            tracing::debug!(
+                vext_epoch = ?ext_height_epoch,
+                "The Ethereum bridge was not enabled when the Ethereum
+                 events' vote extension was cast",
+            );
+            return Err(VoteExtensionError::EthereumBridgeInactive);
+        }
         #[cfg(feature = "abcipp")]
         if ext.data.block_height != last_height {
-            tracing::error!(
+            tracing::debug!(
                 ext_height = ?ext.data.block_height,
                 ?last_height,
                 "Ethereum events vote extension issued for a block height \
@@ -66,7 +95,7 @@ where
         }
         #[cfg(not(feature = "abcipp"))]
         if ext.data.block_height > last_height {
-            tracing::error!(
+            tracing::debug!(
                 ext_height = ?ext.data.block_height,
                 ?last_height,
                 "Ethereum events vote extension issued for a block height \
@@ -74,8 +103,8 @@ where
             );
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
-        if last_height.0 == 0 {
-            tracing::error!("Dropping vote extension issued at genesis");
+        if ext.data.block_height.0 == 0 {
+            tracing::debug!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
         // verify if we have any duplicate Ethereum events,
@@ -89,7 +118,7 @@ where
         };
         let validator = &ext.data.validator_addr;
         if have_dupes_or_non_sorted {
-            tracing::error!(
+            tracing::debug!(
                 %validator,
                 "Found duplicate or non-sorted Ethereum events in a vote extension from \
                  some validator"
@@ -97,30 +126,12 @@ where
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
         // get the public key associated with this validator
-        //
-        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
-        // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch = match self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(ext.data.block_height)
-        {
-            Some(epoch) => epoch,
-            _ => {
-                tracing::error!(
-                    block_height = ?ext.data.block_height,
-                    "The epoch of the Ethereum events vote extension's \
-                     block height should always be known",
-                );
-                return Err(VoteExtensionError::UnexpectedEpoch);
-            }
-        };
         let (voting_power, pk) = self
             .wl_storage
             .pos_queries()
             .get_validator_from_address(validator, Some(ext_height_epoch))
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     %validator,
                     "Could not get public key from Storage for some validator, \
@@ -131,7 +142,7 @@ where
         // verify the signature of the vote extension
         ext.verify(&pk)
             .map_err(|err| {
-                tracing::error!(
+                tracing::debug!(
                     ?err,
                     ?ext.sig,
                     ?pk,
