@@ -2548,7 +2548,7 @@ pub fn log_block_rewards<S>(
     storage: &mut S,
     epoch: impl Into<Epoch>,
     proposer_address: &Address,
-    votes: &[VoteInfo],
+    votes: Vec<VoteInfo>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -2577,29 +2577,32 @@ where
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
     let mut total_signing_stake: u64 = 0;
-    for vote in votes.iter() {
-        if !vote.signed_last_block || vote.validator_vp == 0 {
+    for VoteInfo {
+        validator_address,
+        validator_vp,
+    } in votes
+    {
+        if validator_vp == 0 {
             continue;
         }
-        let tm_raw_hash_string =
-            hex::encode_upper(vote.validator_address.clone());
-        let native_address =
-            find_validator_by_raw_hash(storage, tm_raw_hash_string)?.expect(
-                "Unable to read native address of validator from tendermint \
-                 raw hash",
-            );
-
-        signer_set.insert(native_address.clone());
-        total_signing_stake += vote.validator_vp;
 
         // Ensure TM stake updates properly with a debug_assert
-        let stake_from_deltas =
-            read_validator_stake(storage, &params, &native_address, epoch)?
-                .unwrap_or_default();
-        debug_assert_eq!(
-            stake_from_deltas,
-            token::Amount::from(vote.validator_vp)
-        );
+        if cfg!(debug_assertions) {
+            let stake_from_deltas = read_validator_stake(
+                storage,
+                &params,
+                &validator_address,
+                epoch,
+            )?
+            .unwrap_or_default();
+            debug_assert_eq!(
+                stake_from_deltas,
+                token::Amount::from(validator_vp)
+            );
+        }
+
+        signer_set.insert(validator_address);
+        total_signing_stake += validator_vp;
     }
 
     // Get the block rewards coefficients (proposing, signing/voting,

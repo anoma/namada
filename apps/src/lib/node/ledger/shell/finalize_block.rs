@@ -19,15 +19,16 @@ use namada::proof_of_stake::{
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
-#[cfg(feature = "abcipp")]
-use namada::types::key::{tm_consensus_key_raw_hash, tm_raw_hash_to_string};
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, VoteInfo,
+};
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::shell::stats::InternalStats;
 
@@ -396,6 +397,7 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
+                let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
                 namada_proof_of_stake::log_block_rewards(
                     &mut self.wl_storage,
                     if new_epoch {
@@ -404,7 +406,7 @@ where
                         current_epoch
                     },
                     &proposer_address,
-                    &req.votes,
+                    votes,
                 )?;
             }
             None => {
@@ -737,6 +739,75 @@ where
     }
 }
 
+/// Convert ABCI vote info to PoS vote info. Any info which fails the conversion
+/// will be skipped and errors logged.
+///
+/// # Panics
+/// Panics if a validator's address cannot be converted to native address
+/// (either due to storage read error or the address not being found) or
+/// if the voting power cannot be converted to u64.
+fn pos_votes_from_abci(
+    storage: &impl StorageRead,
+    votes: &[VoteInfo],
+) -> Vec<namada_proof_of_stake::types::VoteInfo> {
+    votes
+        .iter()
+        .filter_map(
+            |VoteInfo {
+                 validator,
+                 signed_last_block,
+             }| {
+                if let Some(
+                    crate::facade::tendermint_proto::abci::Validator {
+                        address,
+                        power,
+                    },
+                ) = validator
+                {
+                    let tm_raw_hash_string = HEXUPPER.encode(address);
+                    if *signed_last_block {
+                        tracing::debug!(
+                            "Looking up validator from Tendermint VoteInfo's \
+                             raw hash {tm_raw_hash_string}"
+                        );
+
+                        // Look-up the native address
+                        let validator_address = find_validator_by_raw_hash(
+                            storage,
+                            &tm_raw_hash_string,
+                        )
+                        .expect(
+                            "Must be able to read from storage to find native \
+                             address of validator from tendermint raw hash",
+                        )
+                        .expect(
+                            "Must be able to find the native address of \
+                             validator from tendermint raw hash",
+                        );
+
+                        // Try to convert voting power to u64
+                        let validator_vp = u64::try_from(*power).expect(
+                            "Must be able to convert voting power from i64 to \
+                             u64",
+                        );
+
+                        return Some(namada_proof_of_stake::types::VoteInfo {
+                            validator_address,
+                            validator_vp,
+                        });
+                    } else {
+                        tracing::debug!(
+                            "Validator {tm_raw_hash_string} didn't sign last \
+                             block"
+                        )
+                    }
+                }
+                None
+            },
+        )
+        .collect()
+}
+
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
 #[cfg(test)]
@@ -746,7 +817,6 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::types::VoteInfo;
     use namada::ledger::storage_api;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
@@ -756,6 +826,7 @@ mod test_finalize_block {
         validator_rewards_products_handle,
     };
     use namada::types::governance::ProposalVote;
+    use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::DurationSecs;
     use namada::types::transaction::governance::{
@@ -766,6 +837,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -1214,9 +1286,12 @@ mod test_finalize_block {
         )
         .unwrap()
         .unwrap();
+
         let votes = vec![VoteInfo {
-            validator_address: proposer_address.clone(),
-            validator_vp: u64::from(val_stake),
+            validator: Some(Validator {
+                address: proposer_address.clone(),
+                power: u64::from(val_stake) as i64,
+            }),
             signed_last_block: true,
         }];
 
@@ -1291,23 +1366,31 @@ mod test_finalize_block {
         // All validators sign blocks initially
         let votes = vec![
             VoteInfo {
-                validator_address: pkh1.clone(),
-                validator_vp: u64::from(val1.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u64::from(val1.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh2.clone(),
-                validator_vp: u64::from(val2.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh2.clone(),
+                    power: u64::from(val2.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh3.clone(),
-                validator_vp: u64::from(val3.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh3.clone(),
+                    power: u64::from(val3.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh4.clone(),
-                validator_vp: u64::from(val4.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh4.clone(),
+                    power: u64::from(val4.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
         ];
@@ -1392,23 +1475,31 @@ mod test_finalize_block {
         // Now we don't receive a vote from val4.
         let votes = vec![
             VoteInfo {
-                validator_address: pkh1.clone(),
-                validator_vp: u64::from(val1.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u64::from(val1.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh2,
-                validator_vp: u64::from(val2.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh2,
+                    power: u64::from(val2.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh3,
-                validator_vp: u64::from(val3.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh3,
+                    power: u64::from(val3.bonded_stake) as i64,
+                }),
                 signed_last_block: true,
             },
             VoteInfo {
-                validator_address: pkh4,
-                validator_vp: u64::from(val4.bonded_stake),
+                validator: Some(Validator {
+                    address: pkh4,
+                    power: u64::from(val4.bonded_stake) as i64,
+                }),
                 signed_last_block: false,
             },
         ];

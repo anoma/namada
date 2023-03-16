@@ -374,16 +374,14 @@ pub enum SlashType {
     LightClientAttack,
 }
 
-/// VoteInfo inspired from tendermint
+/// VoteInfo inspired from tendermint for validators whose signature was
+/// included in the last block
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct VoteInfo {
-    /// the first 20 bytes of the validator public key hash (SHA-256) taken
-    /// from tendermint
-    pub validator_address: Vec<u8>,
+    /// Validator address
+    pub validator_address: Address,
     /// validator voting power
     pub validator_vp: u64,
-    /// was the validator signature was included in the last block?
-    pub signed_last_block: bool,
 }
 
 /// Bonds and unbonds with all details (slashes and rewards, if any)
