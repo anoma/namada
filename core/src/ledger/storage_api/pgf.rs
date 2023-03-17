@@ -3,10 +3,12 @@
 use super::token::Amount;
 use super::Error;
 use crate::ledger::pgf::{storage as pgf_storage, CounsilData};
+use crate::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
 use crate::ledger::storage_api::token::transfer as token_transfer;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::token::{self, Transfer};
+use crate::types::transaction::counsil_treasury::PgfCounsilMembers;
 use crate::types::transaction::pgf::{
     Candidate, Counsil, InitCounsil, PgfReceipients,
 };
@@ -33,26 +35,12 @@ where
 pub fn update_pgf_receipients<S>(
     storage: &mut S,
     data: PgfReceipients,
-) -> storage_api::Result<Address>
+) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let pgf_active_counsil = get_current_counsil_address(storage)?;
-    let spent_amount = get_current_spent_amount(storage)?;
-    let (counsil_address, _spent_amount) =
-        match (pgf_active_counsil, spent_amount) {
-            (Some(address), Some(amount)) => (address, amount),
-            _ => {
-                return Err(storage_api::Error::new_const(
-                    "There is no active counsil",
-                ));
-            }
-        };
-
     let project_key = pgf_storage::get_cpgf_recipient_key();
-    storage.write(&project_key, data)?;
-
-    Ok(counsil_address)
+    storage.write(&project_key, data)
 }
 
 /// Check if the provided address is a validator address
@@ -203,4 +191,16 @@ where
     storage.write(&spent_amount_key, spent_amount + amount)?;
 
     Ok(Some(counsil_address))
+}
+
+/// A pgf transaction to update the pgf counsil treasury members.
+pub fn update_pgf_counsil_treasury_members<S>(
+    storage: &mut S,
+    data: PgfCounsilMembers,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{ 
+    let pgf_counsil_treasury_members_key = pgf_counsil_treasury_storage::get_counsil_members_key();
+    storage.write(&pgf_counsil_treasury_members_key, data)
 }

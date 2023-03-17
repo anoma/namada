@@ -1,5 +1,4 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
-
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
@@ -12,6 +11,7 @@ use super::pgf::execute_active_pgf_funding;
 use super::*;
 use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+use crate::node::ledger::shell::pgf::execute_counsil_rewards;
 use crate::node::ledger::shell::stats::InternalStats;
 
 impl<D, H> Shell<D, H>
@@ -62,6 +62,7 @@ where
                 execute_governance_proposals(self, &mut response)?;
 
             execute_active_pgf_funding(self, &mut response)?;
+            execute_counsil_rewards(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len

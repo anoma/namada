@@ -16,6 +16,8 @@ use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
 
+use super::pgf_treasury::utils::PgfCounsilTrasuryEvent;
+
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
 #[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
@@ -24,6 +26,8 @@ pub enum EventLevel {
     Block,
     /// Indicates an event is to do with an individual transaction.
     Tx,
+    ///Indicates an event is to do with a finalized block on epoch change
+    Epoch
 }
 
 /// Custom events that can be queried from Tendermint
@@ -52,6 +56,8 @@ pub enum EventType {
     Proposal,
     /// The Pgf transfer that has been executed
     Pgf,
+    /// A transfer from PgfCounsilTreasury to a counsil member
+    PgfCounsilTreasury
 }
 
 impl Display for EventType {
@@ -62,6 +68,7 @@ impl Display for EventType {
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
             EventType::Pgf => write!(f, "pgf"),
+            EventType::PgfCounsilTreasury => write!(f, "pgf_counsil_treasury"),
         }?;
         Ok(())
     }
@@ -166,11 +173,21 @@ impl From<ProposalEvent> for Event {
 }
 
 impl From<PgfEvent> for Event {
-    fn from(pgf_event: PgfEvent) -> Self {
+    fn from(event: PgfEvent) -> Self {
         Self {
             event_type: EventType::Pgf,
-            level: EventLevel::Block,
-            attributes: pgf_event.attributes,
+            level: EventLevel::Epoch,
+            attributes: event.attributes,
+        }
+    }
+}
+
+impl From<PgfCounsilTrasuryEvent> for Event {
+    fn from(event: PgfCounsilTrasuryEvent) -> Self {
+        Self {
+            event_type: EventType::Pgf,
+            level: EventLevel::Epoch,
+            attributes: event.attributes,
         }
     }
 }

@@ -1,3 +1,4 @@
+use namada::core::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
 use namada::core::ledger::pgf::storage as pgf_storage;
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::address::InternalAddress;
@@ -234,11 +235,18 @@ where
     H: StorageHasher + Sync + 'static,
 {
     // Write storage address and spending cap in storage
-    let council_address_storage_key = pgf_storage::get_active_counsil_key();
-    shell
-        .wl_storage
-        .write(&council_address_storage_key, council.address.clone())
-        .expect("Should be able to write storage");
+    let counsil_keys = vec![
+        pgf_storage::get_active_counsil_key(),
+        pgf_counsil_treasury_storage::get_counsil_address_key(),
+    ];
+
+    for key in counsil_keys {
+        shell
+            .wl_storage
+            .write(&key, council.address.clone())
+            .expect("Should be able to write storage");
+    }
+
     let council_cap_storage_key = pgf_storage::get_spending_cap_key();
     shell
         .wl_storage

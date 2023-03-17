@@ -1,10 +1,13 @@
+use namada::core::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
 use namada::core::ledger::pgf::storage as pgf_storage;
-use namada::core::ledger::storage_api::token;
+use namada::core::ledger::storage_api;
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::pgf::PgfReceipients;
 use namada::ledger::pgf::utils::PgfEvent;
+use namada::ledger::pgf_treasury::utils::PgfCounsilTrasuryEvent;
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::address::InternalAddress;
+use namada::types::transaction::counsil_treasury::PgfCounsilMembers;
 
 use super::*;
 
@@ -22,7 +25,7 @@ where
 
     let recipients: PgfReceipients =
         match shell.read_storage_key(&recipients_key) {
-            Some(r) => r,
+            Some(recipients) => recipients,
             None => {
                 tracing::info!("No PGF active payment needs to be performed");
                 return Ok(());
@@ -62,7 +65,7 @@ where
             continue;
         }
 
-        match token::transfer(
+        match storage_api::token::transfer(
             &mut shell.wl_storage,
             native_token,
             &Address::Internal(InternalAddress::Pgf),
@@ -78,8 +81,8 @@ where
                 response.events.push(pgf_event);
                 tracing::info!(
                     "PGF active transfer with amount {} has been sent to {}.",
-                    project.address,
-                    project.amount
+                    project.amount,
+                    project.address
                 );
             }
             Err(msg) => {
@@ -102,5 +105,83 @@ where
         .write(&spent_amount_key, spent_amount)
         .expect("Should be able to write to storage");
 
+    Ok(())
+}
+
+/// Executing the payments to the pgf counsil members
+pub fn execute_counsil_rewards<D, H>(
+    shell: &mut Shell<D, H>,
+    response: &mut shim::response::FinalizeBlock,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    // Read recipients map from storage
+    let counsil_members_key =
+        pgf_counsil_treasury_storage::get_counsil_members_key();
+
+    let counsil_members: PgfCounsilMembers =
+        match shell.read_storage_key(&counsil_members_key) {
+            Some(members) => members,
+            None => {
+                tracing::info!("No PGF counsil members found");
+                return Ok(());
+            }
+        };
+
+    let native_token = &shell
+        .wl_storage
+        .get_native_token()
+        .expect("Missing native token");
+
+    let pgf_counsil_treasury_balance_key = token::balance_key(
+        native_token,
+        &Address::Internal(InternalAddress::PgfCouncilTreasury),
+    );
+
+    let pgf_counsil_treasury_balance: Amount = shell
+        .read_storage_key(&pgf_counsil_treasury_balance_key)
+        .unwrap_or_default();
+
+    for member in counsil_members {
+        let reward_amount = member
+            .compute_reward_amount(pgf_counsil_treasury_balance)
+            .unwrap_or_default();
+
+        match storage_api::token::transfer(
+            &mut shell.wl_storage,
+            native_token,
+            &Address::Internal(InternalAddress::Pgf),
+            &member.address,
+            reward_amount,
+        ) {
+            Ok(()) => {
+                let event: Event = PgfCounsilTrasuryEvent::new(
+                    &member.address,
+                    &reward_amount,
+                )
+                .into();
+                response.events.push(event);
+                tracing::info!(
+                    "PGF counsil treasury transfer with amount {} has been sent to {}.",
+                    reward_amount,
+                    member.address,
+                );
+            }
+            Err(error) => {
+                tracing::info!(
+                    "PGF counsil treasury transfer to {}, failed: {}",
+                    &member.address,
+                    error
+                );
+
+                let event: Event =
+                    PgfCounsilTrasuryEvent::new(&member.address, &0.into())
+                        .into();
+                response.events.push(event);
+            }
+        };
+    }
     Ok(())
 }

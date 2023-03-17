@@ -141,7 +141,7 @@ where
         verifiers: &BTreeSet<Address>,
         native_token: &Address,
     ) -> Result<bool> {
-        self.is_signed_by_active_counsil(native_token, verifiers)
+        self.is_signed_by_active_counsil(verifiers)
     }
 
     /// Validate spent amount
@@ -216,13 +216,12 @@ where
         verifiers: &BTreeSet<Address>,
         native_token: &Address,
     ) -> Result<bool> {
-        self.is_signed_by_active_counsil(native_token, verifiers)
+        self.is_signed_by_active_counsil(verifiers)
     }
 
-    // Check if thesignature is valid for the active counsil
+    // Check if the signature is valid for the active counsil
     fn is_signed_by_active_counsil(
         &self,
-        _native_token: &Address,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let active_counsil_address_key = pgf_storage::get_active_counsil_key();

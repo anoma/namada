@@ -22,7 +22,7 @@ enum KeyType<'a> {
     Token(&'a Address),
     PoS,
     GovernanceVote(&'a Address),
-    Unknown,
+    Unknown
 }
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
