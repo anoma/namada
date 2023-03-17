@@ -865,25 +865,15 @@ fn test_validator_sets() {
     )
     .unwrap();
 
-    // Check tendermint validator set updates
-    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    assert_eq!(tm_updates.len(), 2);
-    assert_eq!(
-        tm_updates[0],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk1.clone(),
-            bonded_stake: stake1.into(),
-        })
-    );
-    assert_eq!(
-        tm_updates[1],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk2.clone(),
-            bonded_stake: stake2.into(),
-        })
-    );
-
     // Advance to EPOCH 1
+    //
+    // We cannot call `get_tendermint_set_updates` for the genesis state as
+    // `validator_set_update_tendermint` is only called 2 blocks before the
+    // start of an epoch and so we need to give it a predecessor epoch (see
+    // `get_tendermint_set_updates`), which we cannot have on the first
+    // epoch. In any way, the initial validator set is given to Tendermint
+    // from InitChain, so `validator_set_update_tendermint` is
+    // not being used for it.
     let epoch = advance_epoch(&mut s, &params);
     let pipeline_epoch = epoch + params.pipeline_len;
 
@@ -1570,8 +1560,13 @@ fn test_validator_sets_swap() {
 fn get_tendermint_set_updates(
     s: &TestWlStorage,
     params: &PosParams,
-    epoch: Epoch,
+    Epoch(epoch): Epoch,
 ) -> Vec<ValidatorSetUpdate> {
+    // Because the `validator_set_update_tendermint` is called 2 blocks before
+    // the start of a new epoch, it expects to receive the epoch that is before
+    // the start of a new one too and so we give it the predecessor of the
+    // current epoch here to actually get the update for the current epoch.
+    let epoch = Epoch(epoch - 1);
     validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
 }
 
