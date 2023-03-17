@@ -2553,10 +2553,6 @@ pub fn log_block_rewards<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // TODO: all values collected here need to be consistent with the same
-    // block that the voting info corresponds to, which is the
-    // previous block from the current one we are in.
-
     // The votes correspond to the last committed block (n-1 if we are
     // finalizing block n)
 
@@ -2565,7 +2561,6 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    // TODO: this will need to account for rewards products?
     let mut total_consensus_stake = 0_u64;
     for validator in consensus_validators.iter(storage)? {
         let (
@@ -2611,12 +2606,12 @@ where
     // consensus set status)
     let consensus_stake: Decimal = total_consensus_stake.into();
     let signing_stake: Decimal = total_signing_stake.into();
-    let rewards_calculator = PosRewardsCalculator::new(
-        params.block_proposer_reward,
-        params.block_vote_reward,
-        total_signing_stake,
-        total_consensus_stake,
-    );
+    let rewards_calculator = PosRewardsCalculator {
+        proposer_reward: params.block_proposer_reward,
+        signer_reward: params.block_vote_reward,
+        signing_stake: total_signing_stake,
+        total_stake: total_consensus_stake,
+    };
     let coeffs = match rewards_calculator.get_reward_coeffs() {
         Ok(coeffs) => coeffs,
         Err(_) => return Err(InflationError::Error.into()),

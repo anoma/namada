@@ -2,17 +2,15 @@
 
 use std::collections::HashMap;
 
-use namada::ledger::inflation::{self, RewardsController};
+use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{
-    decimal_mult_u64, into_tm_voting_power, VoteInfo,
-};
+use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
 use namada::ledger::pos::{
     namada_proof_of_stake, staking_token_address, ADDRESS as POS_ADDRESS,
 };
-use namada::ledger::protocol;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::{inflation, protocol};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -398,25 +396,32 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
-                if new_epoch {
-                    self.apply_inflation(
-                        current_epoch,
-                        &proposer_address,
-                        &req.votes,
-                    )?;
-                } else {
-                    namada_proof_of_stake::log_block_rewards(
-                        &mut self.wl_storage,
-                        current_epoch,
-                        &proposer_address,
-                        &req.votes,
-                    )
-                    .unwrap();
-                }
+                namada_proof_of_stake::log_block_rewards(
+                    &mut self.wl_storage,
+                    if new_epoch {
+                        current_epoch.prev()
+                    } else {
+                        current_epoch
+                    },
+                    &proposer_address,
+                    &req.votes,
+                )?;
             }
             None => {
-                tracing::debug!("Can't find last block proposer");
+                if height > BlockHeight::default().next_height() {
+                    tracing::error!(
+                        "Can't find the last block proposer at height {height}"
+                    );
+                } else {
+                    tracing::debug!(
+                        "No last block proposer at height {height}"
+                    );
+                }
             }
+        }
+
+        if new_epoch {
+            self.apply_inflation(current_epoch)?;
         }
 
         if !req.proposer_address.is_empty() {
@@ -495,7 +500,6 @@ where
                 .expect("Could not find the PoS parameters");
         // TODO ABCI validator updates on block H affects the validator set
         // on block H+2, do we need to update a block earlier?
-        // self.wl_storage.validator_set_update(current_epoch, |update| {
         response.validator_updates =
             namada_proof_of_stake::validator_set_update_tendermint(
                 &self.wl_storage,
@@ -535,27 +539,12 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(
-        &mut self,
-        current_epoch: Epoch,
-        proposer_address: &Address,
-        votes: &[VoteInfo],
-    ) -> Result<()> {
+    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch - 1;
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //
         // MASP is included below just for some completeness.
-
-        // Calculate the fractional block rewards for the previous block (final
-        // block of the previous epoch), which also gives the final
-        // accumulator value updates
-        namada_proof_of_stake::log_block_rewards(
-            &mut self.wl_storage,
-            last_epoch,
-            proposer_address,
-            votes,
-        )?;
 
         let params = read_pos_params(&self.wl_storage)?;
 
@@ -595,35 +584,39 @@ where
         let masp_d_gain = Decimal::new(1, 1);
 
         // Run rewards PD controller
-        let pos_controller = inflation::RewardsController::new(
-            pos_locked_supply,
+        let pos_controller = inflation::RewardsController {
+            locked_tokens: pos_locked_supply,
             total_tokens,
-            pos_locked_ratio_target,
-            pos_last_staked_ratio,
-            pos_max_inflation_rate,
-            token::Amount::from(pos_last_inflation_amount),
-            pos_p_gain_nom,
-            pos_d_gain_nom,
+            locked_ratio_target: pos_locked_ratio_target,
+            locked_ratio_last: pos_last_staked_ratio,
+            max_reward_rate: pos_max_inflation_rate,
+            last_inflation_amount: token::Amount::from(
+                pos_last_inflation_amount,
+            ),
+            p_gain_nom: pos_p_gain_nom,
+            d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
-        );
-        let _masp_controller = inflation::RewardsController::new(
-            masp_locked_supply,
+        };
+        let _masp_controller = inflation::RewardsController {
+            locked_tokens: masp_locked_supply,
             total_tokens,
-            masp_locked_ratio_target,
-            masp_locked_ratio_last,
-            masp_max_inflation_rate,
-            token::Amount::from(masp_last_inflation_rate),
-            masp_p_gain,
-            masp_d_gain,
+            locked_ratio_target: masp_locked_ratio_target,
+            locked_ratio_last: masp_locked_ratio_last,
+            max_reward_rate: masp_max_inflation_rate,
+            last_inflation_amount: token::Amount::from(
+                masp_last_inflation_rate,
+            ),
+            p_gain_nom: masp_p_gain,
+            d_gain_nom: masp_d_gain,
             epochs_per_year,
-        );
+        };
 
         // Run the rewards controllers
         let inflation::ValsToUpdate {
             locked_ratio,
             inflation,
-        } = RewardsController::run(&pos_controller);
-        // let new_masp_vals = RewardsController::run(&_masp_controller);
+        } = pos_controller.run();
+        // let new_masp_vals = _masp_controller.run();
 
         // Mint tokens to the PoS account for the last epoch's inflation
         inflation::mint_tokens(
@@ -753,6 +746,7 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::pos::types::VoteInfo;
     use namada::ledger::storage_api;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
