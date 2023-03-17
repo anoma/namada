@@ -1944,7 +1944,7 @@ where
 }
 
 /// Communicate imminent validator set updates to Tendermint. This function is
-/// called two blocks before the start of a new epoch becuase Tendermint
+/// called two blocks before the start of a new epoch because Tendermint
 /// validator updates become active two blocks after the updates are submitted.
 pub fn validator_set_update_tendermint<S, T>(
     storage: &S,
@@ -1955,6 +1955,8 @@ pub fn validator_set_update_tendermint<S, T>(
 where
     S: StorageRead,
 {
+    // Because this is called 2 blocks before a start on an epoch, we're gonna
+    // give Tendermint updates for the next epoch
     let next_epoch: Epoch = current_epoch.next();
 
     let cur_consensus_validators =
