@@ -92,6 +92,7 @@ const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
+const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -2821,6 +2822,43 @@ pub async fn submit_validator_commission_change(
 
     let tx = Tx::new(
         tx_code_hash.to_vec(),
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
+    let default_signer = args.validator;
+    process_tx(
+        ctx,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(default_signer),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+}
+
+pub async fn submit_unjail_validator(
+    ctx: Context,
+    args: args::TxUnjailValidator,
+) {
+    let tx_code = ctx.read_wasm(TX_UNJAIL_VALIDATOR_WASM);
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
+    let validator = ctx.get(&args.validator);
+    if !rpc::is_validator(&client, &validator).await {
+        eprintln!("The given address {validator} is not a validator.");
+        if !args.tx.force {
+            safe_exit(1)
+        }
+    }
+
+    let data = validator
+        .try_to_vec()
+        .expect("Encoding tx data shouldn't fail");
+
+    let tx = Tx::new(
+        tx_code,
         Some(data),
         ctx.config.ledger.chain_id.clone(),
         args.tx.expiration,

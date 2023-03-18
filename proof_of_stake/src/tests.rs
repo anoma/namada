@@ -38,15 +38,15 @@ use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
-    init_genesis, insert_validator_into_validator_set,
+    get_num_consensus_validators, init_genesis,
+    insert_validator_into_validator_set, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
-    read_consensus_validator_set_addresses_with_stake,
-    read_num_consensus_validators, read_total_stake,
-    read_validator_delta_value, read_validator_stake, staking_token_address,
-    total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
-    update_validator_set, validator_consensus_key_handle,
-    validator_set_update_tendermint, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash,
+    read_consensus_validator_set_addresses_with_stake, read_total_stake,
+    read_validator_delta_value, read_validator_stake, slash,
+    staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
+    unjail_validator, update_validator_deltas, update_validator_set,
+    validator_consensus_key_handle, validator_set_update_tendermint,
+    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
 };
 
 proptest! {
@@ -346,7 +346,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap()
     .unwrap_or_default();
@@ -362,7 +362,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let delegation = bond_handle(&delegator, &validator.address);
     assert_eq!(
         delegation
-            .get_sum(&s, pipeline_epoch - 1, &params)
+            .get_sum(&s, pipeline_epoch.prev(), &params)
             .unwrap()
             .unwrap_or_default(),
         token::Change::default()
@@ -478,7 +478,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap();
 
@@ -498,7 +498,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     assert_eq!(val_delta, Some(-amount_self_unbond.change()));
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &Epoch::default())
             .unwrap(),
         if unbonded_genesis_self_bond {
@@ -509,7 +511,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
         Some(amount_self_bond)
@@ -568,7 +572,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
                     start: start_epoch,
                     withdraw: self_unbond_epoch
                         + params.pipeline_len
-                        + params.unbonding_len,
+                        + params.unbonding_len
+                        + params.cubic_slashing_window_length,
                     amount: amount_self_unbond - amount_self_bond,
                     slashed_amount: None
                 }
@@ -580,7 +585,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
                 start: self_bond_epoch + params.pipeline_len,
                 withdraw: self_unbond_epoch
                     + params.pipeline_len
-                    + params.unbonding_len,
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length,
                 amount: amount_self_bond,
                 slashed_amount: None
             }
@@ -606,7 +612,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch - 1,
+        pipeline_epoch.prev(),
     )
     .unwrap();
     let val_stake_post =
@@ -627,7 +633,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch + params.unbonding_len))
+            .at(&(pipeline_epoch
+                + params.unbonding_len
+                + params.cubic_slashing_window_length))
             .get(&s, &(delegation_epoch + params.pipeline_len))
             .unwrap(),
         Some(amount_undel)
@@ -645,7 +653,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         )
     );
 
-    let withdrawable_offset = params.unbonding_len + params.pipeline_len;
+    let withdrawable_offset = params.unbonding_len
+        + params.pipeline_len
+        + params.cubic_slashing_window_length;
 
     // Advance to withdrawable epoch
     for _ in 0..withdrawable_offset {
@@ -742,7 +752,9 @@ fn test_become_validator_aux(
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut s, &params);
 
-    let num_consensus_before = read_num_consensus_validators(&s).unwrap();
+    let num_consensus_before =
+        get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
+            .unwrap();
     assert_eq!(
         min(validators.len() as u64, params.max_validator_slots),
         num_consensus_before
@@ -761,7 +773,9 @@ fn test_become_validator_aux(
     )
     .unwrap();
 
-    let num_consensus_after = read_num_consensus_validators(&s).unwrap();
+    let num_consensus_after =
+        get_num_consensus_validators(&s, current_epoch + params.pipeline_len)
+            .unwrap();
     assert_eq!(
         if validators.len() as u64 >= params.max_validator_slots {
             num_consensus_before
@@ -900,8 +914,15 @@ fn test_validator_sets() {
         )
         .unwrap();
 
-        update_validator_deltas(s, &params, addr, stake.change(), epoch)
-            .unwrap();
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1164,8 +1185,15 @@ fn test_validator_sets() {
     // checks
     update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val1, -unbond.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val1,
+        -unbond.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
     // Epoch 6
     let val1_unbond_epoch = pipeline_epoch;
 
@@ -1356,8 +1384,15 @@ fn test_validator_sets() {
     let stake6 = stake6 + bond;
     println!("val6 {val6} new stake {stake6}");
     update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
-    update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val6,
+        bond.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
     let val6_bond_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
@@ -1512,8 +1547,15 @@ fn test_validator_sets_swap() {
         )
         .unwrap();
 
-        update_validator_deltas(s, &params, addr, stake.change(), epoch)
-            .unwrap();
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1580,13 +1622,27 @@ fn test_validator_sets_swap() {
 
     update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val2, bond2.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val2,
+        bond2.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     update_validator_set(&mut s, &params, &val3, bond3.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val3, bond3.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val3,
+        bond3.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     // Advance to EPOCH 2
     let epoch = advance_epoch(&mut s, &params);
@@ -1605,13 +1661,27 @@ fn test_validator_sets_swap() {
 
     update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val2, bonds.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     update_validator_set(&mut s, &params, &val3, bonds.change(), epoch)
         .unwrap();
-    update_validator_deltas(&mut s, &params, &val3, bonds.change(), epoch)
-        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val3,
+        bonds.change(),
+        epoch,
+        params.pipeline_len,
+    )
+    .unwrap();
 
     // Advance to EPOCH 3
     let epoch = advance_epoch(&mut s, &params);
@@ -1675,7 +1745,7 @@ fn arb_genesis_validators(
     size: Range<usize>,
 ) -> impl Strategy<Value = Vec<GenesisValidator>> {
     let tokens: Vec<_> = (0..size.end)
-        .map(|_| (1..=10_u64).prop_map(token::Amount::from))
+        .map(|_| (1..=10_000_000_u64).prop_map(token::Amount::from))
         .collect();
     (size, tokens).prop_map(|(size, token_amounts)| {
         // use unique seeds to generate validators' address and consensus key
@@ -1688,7 +1758,7 @@ fn arb_genesis_validators(
                 let consensus_key = consensus_sk.to_public();
 
                 let commission_rate = Decimal::new(5, 2);
-                let max_commission_rate_change = Decimal::new(1, 3);
+                let max_commission_rate_change = Decimal::new(1, 2);
                 GenesisValidator {
                     address,
                     tokens,
