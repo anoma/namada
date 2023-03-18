@@ -672,88 +672,120 @@ pub trait EpochOffset:
 }
 
 // mod test {
-// use namada_core::ledger::storage::testing::TestStorage;
-// use namada_core::types::address::{self, Address};
-// use namada_core::types::storage::Key;
-//
-// use super::{
-// storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
-// OffsetPipelineLen,
-// };
-//
+//     use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
+//     use namada_core::ledger::storage_api::collections::LazyVec;
+//     use namada_core::types::address::{self, Address};
+//     use namada_core::types::storage::Key;
+
+//     use super::{
+//         storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
+//         OffsetPipelineLen,
+//     };
+
 // #[test]
 // fn testing_epoched_new() -> storage_api::Result<()> {
-// let mut storage = TestStorage::default();
-//
-// let key1 = storage::Key::parse("test_nested1").unwrap();
-// let nested1 =
-// NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
-// key1,
-// );
-// nested1.init(&mut storage, Epoch(0))?;
-//
-// let key2 = storage::Key::parse("test_nested2").unwrap();
-// let nested2 = NestedEpoched::<
-// NestedMap<u64, LazyMap<u64, Address>>,
-// OffsetPipelineLen,
-// >::open(key2);
-// nested2.init(&mut storage, Epoch(0))?;
-//
-// dbg!(&nested1.get_last_update_storage_key());
-// dbg!(&nested1.get_last_update(&storage));
-//
-// nested1.at(&Epoch(0)).insert(
-// &mut storage,
-// address::testing::established_address_1(),
-// 1432,
-// )?;
-// dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
-// dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
-//
-// nested2.at(&Epoch(0)).at(&100).insert(
-// &mut storage,
-// 1,
-// address::testing::established_address_2(),
-// )?;
-// dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
-// dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
-//
-// dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
-//
-// let epoch = Epoch::from(0);
-// let addr = address::testing::established_address_1();
-// let amount: u64 = 234235;
-//
-// nested_epoched
-//     .at(&epoch)
-//     .insert(&mut storage, addr.clone(), amount)?;
-//
-// let epoch = epoch + 3_u64;
-// nested_epoched.at(&epoch).insert(
-//     &mut storage,
-//     addr.clone(),
-//     999_u64,
-// )?;
-//
-// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
-// dbg!(
+//     let mut storage = TestStorage::default();
+
+//     let key1 = storage::Key::parse("test_nested1").unwrap();
+//     let nested1 =
+//         NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
+//             key1,
+//         );
+//     nested1.init(&mut storage, Epoch(0))?;
+
+//     let key2 = storage::Key::parse("test_nested2").unwrap();
+//     let nested2 = NestedEpoched::<
+//         NestedMap<u64, LazyMap<u64, Address>>,
+//         OffsetPipelineLen,
+//     >::open(key2);
+//     nested2.init(&mut storage, Epoch(0))?;
+
+//     dbg!(&nested1.get_last_update_storage_key());
+//     dbg!(&nested1.get_last_update(&storage));
+
+//     nested1.at(&Epoch(0)).insert(
+//         &mut storage,
+//         address::testing::established_address_1(),
+//         1432,
+//     )?;
+//     dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
+//     dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
+
+//     nested2.at(&Epoch(0)).at(&100).insert(
+//         &mut storage,
+//         1,
+//         address::testing::established_address_2(),
+//     )?;
+//     dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
+//     dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
+
+//     dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
+
+//     let epoch = Epoch::from(0);
+//     let addr = address::testing::established_address_1();
+//     let amount: u64 = 234235;
+
 //     nested_epoched
-//         .get_data_handler()
-//         .get_data_key(&Epoch::from(3))
-// );
-// dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
-// dbg!(
-//     nested_epoched
-//         .at(&Epoch::from(0))
-//         .get(&storage, &addr.clone())?
-// );
-// dbg!(
-//     nested_epoched
-//         .at(&Epoch::from(3))
-//         .get(&storage, &addr.clone())?
-// );
-// dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
-//
-// Ok(())
+//         .at(&epoch)
+//         .insert(&mut storage, addr.clone(), amount)?;
+
+//     let epoch = epoch + 3_u64;
+//     nested_epoched.at(&epoch).insert(
+//         &mut storage,
+//         addr.clone(),
+//         999_u64,
+//     )?;
+
+//     dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
+//     dbg!(
+//         nested_epoched
+//             .get_data_handler()
+//             .get_data_key(&Epoch::from(3))
+//     );
+//     dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
+//     dbg!(
+//         nested_epoched
+//             .at(&Epoch::from(0))
+//             .get(&storage, &addr.clone())?
+//     );
+//     dbg!(
+//         nested_epoched
+//             .at(&Epoch::from(3))
+//             .get(&storage, &addr.clone())?
+//     );
+//     dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
+
+//     Ok(())
 // }
+
+//     #[test]
+//     fn test_nested_epoched_with_vec() {
+//         let mut storage = TestWlStorage::default();
+
+//         let key = storage::Key::parse("test_nested").unwrap();
+//         let nested = NestedEpoched::<
+//             NestedMap<Address, LazyVec<String>>,
+//             OffsetPipelineLen,
+//         >::open(key);
+//         nested.init(&mut storage, Epoch::default()).unwrap();
+
+//         dbg!(&nested.get_last_update_storage_key());
+//         dbg!(&nested.get_last_update(&storage));
+
+//         let addr = address::testing::established_address_1();
+
+//         nested
+//             .at(&Epoch::default())
+//             .at(&addr)
+//             .push(&mut storage, "dangus".to_string());
+
+//         dbg!(nested.get_data_handler().is_empty(&storage));
+//         nested
+//             .get_data_handler()
+//             .iter(&storage)
+//             .unwrap()
+//             .for_each(|a| {
+//                 dbg!(a);
+//             });
+//     }
 // }
