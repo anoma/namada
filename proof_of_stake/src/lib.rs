@@ -29,7 +29,6 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
-use epoched::{EpochOffset, OffsetPipelineLen};
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
@@ -602,12 +601,12 @@ pub fn update_validator_deltas<S>(
     validator: &Address,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
+    offset: u64,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = validator_deltas_handle(validator);
-    let offset = OffsetPipelineLen::value(params);
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -757,12 +756,12 @@ pub fn update_total_deltas<S>(
     params: &PosParams,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
+    offset: u64,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = total_deltas_handle();
-    let offset = OffsetPipelineLen::value(params);
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -886,9 +885,10 @@ where
         validator,
         amount,
         current_epoch,
+        offset,
     )?;
 
-    update_total_deltas(storage, &params, amount, current_epoch)?;
+    update_total_deltas(storage, &params, amount, current_epoch, offset)?;
 
     // Transfer the bonded tokens from the source to PoS
     let staking_token = staking_token_address(storage);
