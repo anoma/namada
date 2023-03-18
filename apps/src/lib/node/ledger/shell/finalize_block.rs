@@ -1657,6 +1657,7 @@ mod test_finalize_block {
             .unwrap()
             .into_iter()
             .collect();
+        // let validator_set_copy = validator_set.clone();
 
         let val1 = validator_set[0].clone();
         let val2 = validator_set[1].clone();
@@ -1791,6 +1792,11 @@ mod test_finalize_block {
             if shell.wl_storage.storage.block.epoch == processing_epoch {
                 break;
             } else {
+                // println!(
+                //     "Block {} epoch {}",
+                //     shell.wl_storage.storage.block.height,
+                //     shell.wl_storage.storage.block.epoch
+                // );
                 assert!(
                     enqueued_slashes_handle()
                         .at(&shell.wl_storage.storage.block.epoch)
@@ -1820,6 +1826,7 @@ mod test_finalize_block {
                 assert_eq!(total_stake, total_initial_stake);
             }
         }
+        println!("LOOP ENDED");
 
         let num_slashes = storage_api::iter_prefix_bytes(
             &shell.wl_storage,

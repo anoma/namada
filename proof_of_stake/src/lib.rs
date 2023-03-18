@@ -990,13 +990,13 @@ where
                 &target_epoch,
                 address,
             )?;
+            // Update and set the validator states
             validator_state_handle(address).set(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
                 offset,
             )?;
-            // Update and set the validator states
         } else {
             // Insert the current genesis validator into the below-capacity set
             insert_validator_into_set(
@@ -2553,6 +2553,7 @@ where
     Ok(HashMap::from_iter([(bond_id, details)]))
 }
 
+// TODO: update for cubic slashing
 fn make_bond_details<S>(
     storage: &S,
     params: &PosParams,
@@ -2597,6 +2598,7 @@ where
     }
 }
 
+// TODO: update for cubic slashing
 fn make_unbond_details<S>(
     storage: &S,
     params: &PosParams,

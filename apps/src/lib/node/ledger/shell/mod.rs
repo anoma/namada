@@ -420,12 +420,14 @@ where
     /// Apply PoS slashes from the evidence
     fn record_slashes_from_evidence(&mut self) {
         if !self.byzantine_validators.is_empty() {
+            println!("BYZANTINE VALIDATORS NOT EMPTY");
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
             // TODO: resolve this unwrap() better
             let pos_params = read_pos_params(&self.wl_storage).unwrap();
             let current_epoch = self.wl_storage.storage.block.epoch;
             for evidence in byzantine_validators {
+                // dbg!(&evidence);
                 tracing::info!("Processing evidence {evidence:?}.");
                 let evidence_height = match u64::try_from(evidence.height) {
                     Ok(height) => height,
