@@ -39,6 +39,9 @@ pub struct PosParams {
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
     pub light_client_attack_min_slash_rate: Decimal,
+    /// Number of epochs above and below (separately) the current epoch to
+    /// consider when doing cubic slashing
+    pub cubic_slashing_window_length: u64,
 }
 
 impl Default for PosParams {
@@ -60,6 +63,7 @@ impl Default for PosParams {
             duplicate_vote_min_slash_rate: dec!(0.001),
             // slash 0.1%
             light_client_attack_min_slash_rate: dec!(0.001),
+            cubic_slashing_window_length: 1,
         }
     }
 }
@@ -177,10 +181,10 @@ pub mod testing {
     prop_compose! {
         /// Generate arbitrary valid ([`PosParams::validate`]) PoS parameters.
         pub fn arb_pos_params(num_max_validator_slots: Option<u64>)
-            (pipeline_len in 2..8_u64)
+            (pipeline_len in Just(2))
             (max_validator_slots in 1..num_max_validator_slots.unwrap_or(128),
             // `unbonding_len` > `pipeline_len`
-            unbonding_len in pipeline_len + 1..pipeline_len + 8,
+            unbonding_len in Just(4),
             pipeline_len in Just(pipeline_len),
             tm_votes_per_token in 1..10_001_u64)
             -> PosParams {

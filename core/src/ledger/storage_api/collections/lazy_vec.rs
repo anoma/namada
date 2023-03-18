@@ -407,7 +407,7 @@ impl<T> LazyVec<T> {
 // `LazyVec` methods with borsh encoded values `T`
 impl<T> LazyVec<T>
 where
-    T: BorshSerialize + BorshDeserialize + 'static,
+    T: BorshSerialize + BorshDeserialize + 'static + Debug,
 {
     /// Appends an element to the back of a collection.
     pub fn push<S>(&self, storage: &mut S, val: T) -> Result<()>
@@ -416,6 +416,7 @@ where
     {
         let len = self.len(storage)?;
         let data_key = self.get_data_key(len);
+        // dbg!(&data_key, &val);
         storage.write(&data_key, val)?;
         storage.write(&self.get_len_key(), len + 1)
     }
@@ -468,6 +469,23 @@ where
         S: StorageRead,
     {
         storage.read(&self.get_data_key(index))
+    }
+
+    /// Read the first element
+    pub fn front<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        self.get(storage, 0)
+    }
+
+    /// Read the last element
+    pub fn back<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        let len = self.len(storage)?;
+        self.get(storage, len - 1)
     }
 
     /// An iterator visiting all elements. The iterator element type is

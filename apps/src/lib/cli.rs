@@ -2700,6 +2700,31 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    /// Re-activate a jailed validator args
+    pub struct TxReactivateValidator {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// Validator address (should be self)
+        pub validator: WalletAddress,
+    }
+
+    impl Args for TxReactivateValidator {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            Self { tx, validator }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                VALIDATOR.def().about(
+                    "The address of the jailed validator to re-activate.",
+                ),
+            )
+        }
+    }
+
+    #[derive(Clone, Debug)]
     /// Commission rate change args
     pub struct TxCommissionRateChange {
         /// Common tx arguments
