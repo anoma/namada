@@ -181,10 +181,19 @@ pub enum CommissionRateChangeError {
     CannotRead(Address),
 }
 
-// ------------------------------------------------------------------------------------------
-// ------------------------------------------------------------------------------------------
-// ------------------------------------------------------------------------------------------
-// ------------------------------------------------------------------------------------------
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ReactivateValidatorError {
+    #[error("The given address {0} is not a validator address")]
+    NotAValidator(Address),
+    #[error("The given address {0} is not jailed in epoch {1}")]
+    NotJailed(Address, Epoch),
+    #[error(
+        "The given address {0} is not eligible for reactivation until epoch \
+         {1}: current epoch is {2}"
+    )]
+    NotEligible(Address, Epoch, Epoch),
+}
 
 impl From<BecomeValidatorError> for storage_api::Error {
     fn from(err: BecomeValidatorError) -> Self {
@@ -218,6 +227,12 @@ impl From<CommissionRateChangeError> for storage_api::Error {
 
 impl From<InflationError> for storage_api::Error {
     fn from(err: InflationError) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<ReactivateValidatorError> for storage_api::Error {
+    fn from(err: ReactivateValidatorError) -> Self {
         Self::new(err)
     }
 }
@@ -3167,5 +3182,71 @@ where
         &SLASH_POOL_ADDRESS,
     )?;
 
+    Ok(())
+}
+
+/// Re-activate a validator that is currently jailed
+pub fn reactivate_validator<S>(
+    storage: &mut S,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let params = read_pos_params(storage)?;
+
+    // Check that the validator is jailed up to the pipeline epoch
+    for epoch in current_epoch.iter_range(params.pipeline_len + 1) {
+        let state = validator_state_handle(validator).get(
+            storage,
+            current_epoch,
+            &params,
+        )?;
+        if let Some(state) = state {
+            if state != ValidatorState::Jailed {
+                return Err(ReactivateValidatorError::NotJailed(
+                    validator.clone(),
+                    epoch,
+                )
+                .into());
+            }
+        } else {
+            return Err(ReactivateValidatorError::NotAValidator(
+                validator.clone(),
+            )
+            .into());
+        }
+    }
+
+    // Check that the reactivation tx can be submitted given the current epoch
+    // and the most recent infraction epoch
+    let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?
+        .unwrap_or_default();
+    let eligible_epoch = last_slash_epoch + params.unbonding_len; // TODO: check this is the correct epoch to submit this tx
+    if current_epoch < eligible_epoch {
+        return Err(ReactivateValidatorError::NotEligible(
+            validator.clone(),
+            eligible_epoch,
+            current_epoch,
+        )
+        .into());
+    }
+    // TODO: any other checks that are needed? (deltas, etc)?
+
+    // Re-insert the validator into the validator set and update its state
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let stake =
+        read_validator_stake(storage, &params, validator, pipeline_epoch)?
+            .unwrap_or_default();
+
+    insert_validator_into_validator_set(
+        storage,
+        &params,
+        validator,
+        stake,
+        current_epoch,
+        params.pipeline_len,
+    )?;
     Ok(())
 }

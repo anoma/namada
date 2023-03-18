@@ -5,7 +5,7 @@ use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, change_validator_commission_rate,
-    read_pos_params, unbond_tokens, withdraw_tokens,
+    reactivate_validator, read_pos_params, unbond_tokens, withdraw_tokens,
 };
 pub use namada_proof_of_stake::{parameters, types};
 use rust_decimal::Decimal;
@@ -59,6 +59,12 @@ impl Ctx {
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
         change_validator_commission_rate(self, validator, *rate, current_epoch)
+    }
+
+    /// Re-activate a validator from being jailed
+    pub fn reactivate_validator(&mut self, validator: &Address) -> TxResult {
+        let current_epoch = self.get_block_epoch()?;
+        reactivate_validator(self, validator, current_epoch)
     }
 
     /// NEW: Attempt to initialize a validator account. On success, returns the
