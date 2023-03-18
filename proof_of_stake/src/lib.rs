@@ -1959,7 +1959,7 @@ where
     handle.contains(storage, consensus_key)
 }
 
-/// Get the total bond amount for a given bond ID at a given epoch
+/// Get the total bond amount, including slashes, for a given bond ID and epoch
 pub fn bond_amount<S>(
     storage: &S,
     params: &PosParams,
@@ -1980,17 +1980,27 @@ where
         // if bond_epoch > epoch {
         //     break;
         // }
-        for slash in slashes.iter() {
+
+        // TODO: do we need to consider the adjusted amounts of previous bonds
+        // and their slashes when iterating?
+        for slash in &slashes {
             let Slash {
                 epoch: slash_epoch,
                 block_height: _,
                 r#type: slash_type,
+                rate: _,
             } = slash;
-            if slash_epoch > &bond_epoch {
+            if *slash_epoch < bond_epoch {
                 continue;
             }
-            let current_slashed =
-                decimal_mult_i128(slash_type.get_slash_rate(params), delta);
+            // TODO: consider edge cases with the cubic slashing window
+            let cubic_rate = get_final_cubic_slash_rate(
+                storage,
+                params,
+                *slash_epoch,
+                slash_type.clone(),
+            )?;
+            let current_slashed = decimal_mult_i128(cubic_rate, delta);
             let delta = token::Amount::from_change(delta - current_slashed);
             total += delta;
             if bond_epoch <= epoch {
@@ -2238,7 +2248,7 @@ where
     validator_slashes_handle(validator).iter(storage)?.collect()
 }
 
-/// Find bond deltas for the given source and validator address.
+/// Find raw bond deltas for the given source and validator address.
 pub fn find_bonds<S>(
     storage: &S,
     source: &Address,
@@ -2253,7 +2263,7 @@ where
         .collect()
 }
 
-/// Find unbond deltas for the given source and validator address.
+/// Find raw unbond deltas for the given source and validator address.
 pub fn find_unbonds<S>(
     storage: &S,
     source: &Address,
@@ -2529,20 +2539,30 @@ where
 }
 
 fn make_bond_details<S>(
-    _storage: &S,
+    storage: &S,
     params: &PosParams,
     validator: &Address,
     change: token::Change,
     start: Epoch,
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
-) -> BondDetails {
+) -> BondDetails
+where
+    S: StorageRead,
+{
     let amount = token::Amount::from_change(change);
     let slashed_amount =
         slashes
             .iter()
             .fold(None, |acc: Option<token::Amount>, slash| {
                 if slash.epoch >= start {
+                    let slash_rate = get_final_cubic_slash_rate(
+                        storage,
+                        params,
+                        slash.epoch,
+                        slash.r#type.clone(),
+                    )
+                    .unwrap();
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
                     if !validator_slashes.contains(slash) {
@@ -2550,10 +2570,7 @@ fn make_bond_details<S>(
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + mult_change_to_amount(
-                                slash.r#type.get_slash_rate(params),
-                                change,
-                            ),
+                            + mult_change_to_amount(slash_rate, change),
                     );
                 }
                 None
@@ -2566,14 +2583,17 @@ fn make_bond_details<S>(
 }
 
 fn make_unbond_details<S>(
-    _storage: &S,
+    storage: &S,
     params: &PosParams,
     validator: &Address,
     amount: token::Amount,
     (start, withdraw): (Epoch, Epoch),
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, HashSet<Slash>>,
-) -> UnbondDetails {
+) -> UnbondDetails
+where
+    S: StorageRead,
+{
     let slashed_amount =
         slashes
             .iter()
@@ -2584,6 +2604,13 @@ fn make_unbond_details<S>(
                             .checked_sub(Epoch(params.unbonding_len))
                             .unwrap_or_default()
                 {
+                    let slash_rate = get_final_cubic_slash_rate(
+                        storage,
+                        params,
+                        slash.epoch,
+                        slash.r#type.clone(),
+                    )
+                    .unwrap();
                     let validator_slashes =
                         applied_slashes.entry(validator.clone()).or_default();
                     if !validator_slashes.contains(slash) {
@@ -2591,10 +2618,7 @@ fn make_unbond_details<S>(
                     }
                     return Some(
                         acc.unwrap_or_default()
-                            + mult_amount(
-                                slash.r#type.get_slash_rate(params),
-                                amount,
-                            ),
+                            + decimal_mult_amount(slash_rate, amount),
                     );
                 }
                 None
