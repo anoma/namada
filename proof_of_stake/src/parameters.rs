@@ -39,6 +39,9 @@ pub struct PosParams {
     /// Fraction of validator's stake that should be slashed on a light client
     /// attack.
     pub light_client_attack_min_slash_rate: Decimal,
+    /// Number of epochs above and below (separately) the current epoch to
+    /// consider when doing cubic slashing
+    pub cubic_slashing_window_length: u64,
 }
 
 impl Default for PosParams {
@@ -60,6 +63,7 @@ impl Default for PosParams {
             duplicate_vote_min_slash_rate: dec!(0.001),
             // slash 0.1%
             light_client_attack_min_slash_rate: dec!(0.001),
+            cubic_slashing_window_length: 1,
         }
     }
 }

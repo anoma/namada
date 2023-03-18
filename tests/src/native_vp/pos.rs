@@ -581,7 +581,7 @@ pub mod testing {
     use namada::proof_of_stake::storage::BondId;
     use namada::proof_of_stake::types::ValidatorState;
     use namada::proof_of_stake::{
-        read_num_consensus_validators, read_pos_params, unbond_handle,
+        get_num_consensus_validators, read_pos_params, unbond_handle,
         ADDRESS as POS_ADDRESS,
     };
     use namada::types::key::common::PublicKey;
@@ -1579,10 +1579,10 @@ pub mod testing {
     /// Find if there are any vacant consensus validator slots
     pub fn has_vacant_consensus_validator_slots(
         params: &PosParams,
-        _current_epoch: Epoch,
+        current_epoch: Epoch,
     ) -> bool {
         let num_consensus_validators =
-            read_num_consensus_validators(tx::ctx()).unwrap();
+            get_num_consensus_validators(tx::ctx(), current_epoch).unwrap();
         params.max_validator_slots > num_consensus_validators
     }
 }

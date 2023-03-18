@@ -1087,6 +1087,9 @@ impl AbstractPosState {
             ValidatorState::Inactive => {
                 panic!("unexpected state")
             }
+            ValidatorState::Jailed => {
+                panic!("unexpected state (jailed)")
+            }
         }
     }
 

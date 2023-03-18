@@ -33,7 +33,7 @@ use namada::ledger::storage::{
 };
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, pos, protocol};
-use namada::proof_of_stake::{self, read_pos_params, slash};
+use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
 use namada::proto::{self, Tx};
 use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -418,7 +418,7 @@ where
     }
 
     /// Apply PoS slashes from the evidence
-    fn slash(&mut self) {
+    fn record_slashes_from_evidence(&mut self) {
         if !self.byzantine_validators.is_empty() {
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
@@ -453,6 +453,8 @@ where
                         continue;
                     }
                 };
+                // Disregard evidences that occurred at least unbonding_len
+                // epochs before the current epoch
                 if evidence_epoch + pos_params.unbonding_len <= current_epoch {
                     tracing::info!(
                         "Skipping outdated evidence from epoch \
@@ -530,6 +532,19 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
+        }
+    }
+
+    /// Process and apply slashes that have already been recorded for the
+    /// current epoch
+    fn process_slashes(&mut self) {
+        let current_epoch = self.wl_storage.storage.block.epoch;
+        if let Err(err) = process_slashes(&mut self.wl_storage, current_epoch) {
+            tracing::error!(
+                "Error while processing slashes queued for epoch {}: {}",
+                current_epoch,
+                err
+            );
         }
     }
 

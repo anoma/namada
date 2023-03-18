@@ -104,8 +104,11 @@ where
 
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` if we're starting a new epoch
-        self.slash();
-
+        self.record_slashes_from_evidence();
+        if new_epoch {
+            self.process_slashes();
+        }
+        
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
