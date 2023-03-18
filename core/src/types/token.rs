@@ -127,7 +127,7 @@ impl<'de> serde::Deserialize<'de> for Amount {
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
+        Into::<Decimal>::into(amount.micro)
     }
 }
 
