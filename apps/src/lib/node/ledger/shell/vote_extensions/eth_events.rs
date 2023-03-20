@@ -316,42 +316,54 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
+    use std::collections::HashSet;
     use std::convert::TryInto;
 
     #[cfg(feature = "abcipp")]
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
+    use namada::core::types::erc20tokens::Erc20Amount;
+    use namada::eth_bridge::oracle::config::UpdateErc20;
+    use namada::eth_bridge::storage::wrapped_erc20s;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
     use namada::types::address::testing::gen_established_address;
+    use namada::types::address::wnam;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     #[cfg(feature = "abcipp")]
     use namada::types::ethereum_events::Uint;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToEthereum,
+        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
     };
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::keccak_hash;
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::{BlockHeight, Epoch, TxIndex};
     use namada::types::token::Amount;
+    use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+    use namada::types::transaction::TxType;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada::vm::wasm::{TxCache, VpCache};
+    use namada::vm::WasmCacheRwAccess;
+    use tempfile::tempdir;
 
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
+    use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -646,6 +658,130 @@ mod test_vote_extensions {
         );
 
         assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
+    }
+
+    /// Test that we correctly identify changes to ERC20 whitelist
+    /// storage and forward that info the Ethereum oracle.
+    #[tokio::test]
+    async fn test_update_oracle() {
+        let (mut shell, _, _, mut oracle_command) = setup();
+        let Command::UpdateConfig(config) =
+            oracle_command.recv().await.expect("Test failed");
+        let expected = HashSet::from([UpdateErc20::Add(wnam(), 6)]);
+        let actual: HashSet<UpdateErc20> =
+            config.whitelist_update.into_iter().collect();
+        assert_eq!(actual, expected);
+
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let signed_height =
+            shell.wl_storage.pos_queries().get_current_decision_height();
+        let asset_1 = EthAddress([0; 20]);
+        let asset_2 = EthAddress([1; 20]);
+        let asset_3 = EthAddress([2; 20]);
+        let keys_1 = wrapped_erc20s::Keys::from(&asset_1);
+        let keys_2 = wrapped_erc20s::Keys::from(&asset_2);
+
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &keys_1.cap(),
+                Erc20Amount::from_int(1000u64, 8)
+                    .expect("Test failed")
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &keys_2.cap(),
+                Erc20Amount::from_int(1000u64, 9)
+                    .expect("Test failed")
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &keys_1.denomination(),
+                8u8.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &keys_2.denomination(),
+                9u8.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        let vote_ext = ethereum_events::Vext {
+            ethereum_events: vec![EthereumEvent::UpdateBridgeWhitelist {
+                nonce: 1.into(),
+                whitelist: vec![
+                    TokenWhitelist {
+                        token: asset_1,
+                        cap: Erc20Amount::from_int(10_000u64, 8)
+                            .expect("Test failed"),
+                    },
+                    TokenWhitelist {
+                        token: asset_3,
+                        cap: Erc20Amount::from_int(5000u64, 10)
+                            .expect("Test failed"),
+                    },
+                ],
+            }],
+            block_height: signed_height,
+            validator_addr: address,
+        }
+        .sign(shell.mode.get_protocol_key().expect("Test failed"));
+
+        let mut gas_meter = Default::default();
+        let mut vp_wasm_cache = VpCache::<WasmCacheRwAccess>::new(
+            tempdir().unwrap().as_ref().canonicalize().unwrap(),
+            10,
+        );
+        let mut tx_wasm_cache = TxCache::<WasmCacheRwAccess>::new(
+            tempdir().unwrap().as_ref().canonicalize().unwrap(),
+            10,
+        );
+        namada::ledger::protocol::dispatch_tx(
+            TxType::Protocol(ProtocolTx {
+                pk: shell
+                    .mode
+                    .get_protocol_key()
+                    .expect("Test failed")
+                    .ref_to(),
+                tx: ProtocolTxType::EthEventsVext(vote_ext),
+            }),
+            0,
+            TxIndex(0),
+            &mut gas_meter,
+            &mut shell.wl_storage,
+            &mut vp_wasm_cache,
+            &mut tx_wasm_cache,
+        )
+        .expect("Test failed");
+        shell.update_eth_oracle();
+        let Command::UpdateConfig(config) =
+            oracle_command.recv().await.expect("Test failed");
+        let expected = HashSet::from([
+            UpdateErc20::Add(asset_1, 8),
+            UpdateErc20::Add(asset_3, 10),
+            UpdateErc20::Add(wnam(), 6),
+            UpdateErc20::Remove(asset_2),
+        ]);
+        let actual: HashSet<UpdateErc20> =
+            config.whitelist_update.into_iter().collect();
+        assert_eq!(actual, expected);
     }
 
     /// Test for ABCI++ that an [`ethereum_events::Vext`] that incorrectly

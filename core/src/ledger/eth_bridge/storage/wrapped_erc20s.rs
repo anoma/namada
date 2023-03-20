@@ -18,6 +18,7 @@ pub fn prefix() -> storage::Key {
         .expect("should always be able to construct this key")
 }
 
+const CAP_KEY_SEGMENT: &str = "cap";
 const BALANCE_KEY_SEGMENT: &str = "balance";
 const SUPPLY_KEY_SEGMENT: &str = "supply";
 const DENOMINATION_KEY_SEGMENT: &str = "denomination";
@@ -31,7 +32,15 @@ pub struct Keys {
 
 impl Keys {
     /// Get the `balance` key for a specific owner - there should be a
-    /// [`crate::types::token::Amount`] stored here
+    /// [`crate::types::erc20tokens::Erc20Amount`] stored here
+    pub fn cap(&self) -> storage::Key {
+        self.prefix
+            .push(&CAP_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
+    }
+
+    /// Get the `balance` key for a specific owner - there should be a
+    /// [`crate::types::erc20tokens::Erc20Amount`] stored here
     pub fn balance(&self, owner: &Address) -> storage::Key {
         self.prefix
             .push(&BALANCE_KEY_SEGMENT.to_owned())
@@ -41,7 +50,7 @@ impl Keys {
     }
 
     /// Get the `supply` key - there should be a
-    /// [`crate::types::token::Erc20Amount`] stored here
+    /// [`crate::types::erc20tokens::Erc20Amount`] stored here
     pub fn supply(&self) -> storage::Key {
         self.prefix
             .push(&SUPPLY_KEY_SEGMENT.to_owned())
@@ -130,6 +139,29 @@ pub fn is_erc20_denomination_key(key: &storage::Key) -> Option<EthAddress> {
     if matches!(
         key.segments.get(3),
         Some(seg) if seg == &DbKeySeg::StringSeg(DENOMINATION_KEY_SEGMENT.to_owned())
+    ) {
+        if has_erc20_segment(key) {
+            key.segments.get(2).and_then(|seg| {
+                if let DbKeySeg::StringSeg(seg) = seg {
+                    EthAddress::from_str(seg).ok()
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Checks if a key is the key for an ERC20 cap
+/// and returns the address of the asset if so.
+pub fn is_erc20_cap_key(key: &storage::Key) -> Option<EthAddress> {
+    if matches!(
+        key.segments.get(3),
+        Some(seg) if seg == &DbKeySeg::StringSeg(CAP_KEY_SEGMENT.to_owned())
     ) {
         if has_erc20_segment(key) {
             key.segments.get(2).and_then(|seg| {

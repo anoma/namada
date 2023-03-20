@@ -147,12 +147,7 @@ where
     /// Get the Ethereum address of the wrapped NAM token.
     pub fn get_wnam_address(self) -> Option<EthAddress> {
         let key = native_erc20_key();
-        self.wl_storage
-            .storage
-            .read(&key)
-            .unwrap()
-            .0
-            .map(|bytes| EthAddress::try_from_slice(&bytes).unwrap())
+        self.wl_storage.read(&key).unwrap()
     }
 
     /// Get the number of decimal places of a whitelisted ERC20.

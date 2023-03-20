@@ -35,7 +35,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A storage modification
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StorageModification {
     /// Write a new value
     Write {

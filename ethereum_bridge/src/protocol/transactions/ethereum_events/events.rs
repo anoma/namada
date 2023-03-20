@@ -1,14 +1,17 @@
 //! Logic for acting on events
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{Result, WrapErr};
 use namada_core::hints::likely;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
+};
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s::{
+    is_erc20_cap_key, is_erc20_denomination_key,
 };
 use namada_core::ledger::eth_bridge::storage::{
     self as bridge_storage, wrapped_erc20s,
@@ -22,7 +25,8 @@ use namada_core::types::address::{nam, Address};
 use namada_core::types::erc20tokens::Erc20Amount;
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
-    EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
+    EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
+    TransferToNamada,
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
@@ -52,6 +56,15 @@ where
         EthereumEvent::TransfersToEthereum {
             transfers, relayer, ..
         } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
+        EthereumEvent::UpdateBridgeWhitelist { whitelist, .. } => {
+            Ok(act_on_whitelist_updates(
+                wl_storage,
+                whitelist
+                    .iter()
+                    .map(|TokenWhitelist { token, cap }| (*token, *cap))
+                    .collect(),
+            ))
+        }
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(BTreeSet::default())
@@ -421,6 +434,66 @@ where
     Ok(changed_key)
 }
 
+fn act_on_whitelist_updates<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    whitelist: HashMap<EthAddress, Erc20Amount>,
+) -> BTreeSet<Key>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::new();
+    // first clear out the old whitelist.
+    for (key, _, _) in
+        wl_storage.iter_prefix(&wrapped_erc20s::prefix()).unwrap()
+    {
+        let key = Key::from_str(&key).expect("This should not fail");
+        if let Some(asset) = is_erc20_cap_key(&key) {
+            if !whitelist.contains_key(&asset) {
+                changed_keys.insert(key);
+            }
+        } else if let Some(asset) = is_erc20_denomination_key(&key) {
+            if !whitelist.contains_key(&asset) {
+                changed_keys.insert(key);
+            }
+        }
+    }
+    for key in &changed_keys {
+        wl_storage
+            .write_log
+            .delete(key)
+            .expect("Deleting a key from storage shouldn't fail.");
+    }
+
+    // update the caps and denominations for the new whitelist.
+    for (asset, cap) in whitelist {
+        let keys = wrapped_erc20s::Keys::from(&asset);
+        let cap_key = keys.cap();
+        wl_storage
+            .write_log
+            .write(
+                &cap_key,
+                cap.try_to_vec()
+                    .expect("Serializing an Erc20Amount should not fail"),
+            )
+            .expect("Writing to the write log should not fail");
+        let denom_key = keys.denomination();
+        wl_storage
+            .write_log
+            .write(
+                &denom_key,
+                cap.denomination()
+                    .try_to_vec()
+                    .expect("Serializing a byte should not fail"),
+            )
+            .expect("Writing to the write log should not fail");
+        changed_keys.insert(cap_key);
+        changed_keys.insert(denom_key);
+    }
+
+    changed_keys
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -431,6 +504,7 @@ mod tests {
     };
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
+    use namada_core::ledger::storage::write_log::StorageModification;
     use namada_core::types::address::gen_established_address;
     use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::eth_bridge_pool::GasFee;
@@ -438,6 +512,7 @@ mod tests {
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
         DAI_ERC20_ETH_ADDRESS,
     };
+    use namada_core::types::storage::Key;
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
     use namada_core::types::{address, eth_bridge_pool};
@@ -589,10 +664,6 @@ mod tests {
                 nonce: arbitrary_nonce(),
                 transfers: vec![],
                 relayer: gen_implicit_address(),
-            },
-            EthereumEvent::UpdateBridgeWhitelist {
-                nonce: arbitrary_nonce(),
-                whitelist: vec![],
             },
             EthereumEvent::UpgradedContract {
                 name: "bridge".to_string(),
@@ -904,5 +975,124 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Test that whitelist Ethereum events change storage
+    /// correctly.
+    #[test]
+    fn test_act_on_whitelist_event() {
+        let mut wl_storage = TestWlStorage::default();
+        init_storage(&mut wl_storage);
+        let asset_1 = EthAddress([0; 20]);
+        let asset_2 = EthAddress([1; 20]);
+        let asset_3 = EthAddress([2; 20]);
+        let keys_1 = wrapped_erc20s::Keys::from(&asset_1);
+        let keys_2 = wrapped_erc20s::Keys::from(&asset_2);
+        let keys_3 = wrapped_erc20s::Keys::from(&asset_3);
+
+        wl_storage
+            .storage
+            .write(
+                &keys_1.cap(),
+                Erc20Amount::from_int(1000u64, 8)
+                    .expect("Test failed")
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        wl_storage
+            .storage
+            .write(
+                &keys_2.cap(),
+                Erc20Amount::from_int(1000u64, 9)
+                    .expect("Test failed")
+                    .try_to_vec()
+                    .expect("Test failed"),
+            )
+            .expect("Test failed");
+        wl_storage
+            .storage
+            .write(
+                &keys_1.denomination(),
+                8u8.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        wl_storage
+            .storage
+            .write(
+                &keys_2.denomination(),
+                9u8.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+
+        let event = EthereumEvent::UpdateBridgeWhitelist {
+            nonce: Default::default(),
+            whitelist: vec![
+                TokenWhitelist {
+                    token: asset_1,
+                    cap: Erc20Amount::from_int(10_000u64, 8)
+                        .expect("Test failed"),
+                },
+                TokenWhitelist {
+                    token: asset_3,
+                    cap: Erc20Amount::from_int(5000u64, 10)
+                        .expect("Test failed"),
+                },
+            ],
+        };
+
+        let changed_keys =
+            act_on(&mut wl_storage, &event).expect("Test failed");
+        let expected = BTreeSet::from([
+            keys_1.cap(),
+            keys_1.denomination(),
+            keys_2.cap(),
+            keys_2.denomination(),
+            keys_3.cap(),
+            keys_3.denomination(),
+        ]);
+        assert_eq!(changed_keys, expected);
+        let tx_write_log: HashMap<Key, StorageModification> = wl_storage
+            .write_log
+            .iter_prefix_post(&wrapped_erc20s::prefix())
+            .map(|(ref key, modification)| {
+                (Key::from_str(key).expect("Test failed"), modification)
+            })
+            .collect();
+        let expected = HashMap::from([
+            (
+                keys_1.cap(),
+                StorageModification::Write {
+                    value: Erc20Amount::from_int(10_000u64, 8)
+                        .expect("Test failed")
+                        .try_to_vec()
+                        .expect("Test failed"),
+                },
+            ),
+            (
+                keys_1.denomination(),
+                StorageModification::Write {
+                    value: 8u8.try_to_vec().expect("Test failed"),
+                },
+            ),
+            (keys_2.cap(), StorageModification::Delete),
+            (keys_2.denomination(), StorageModification::Delete),
+            (
+                keys_3.cap(),
+                StorageModification::Write {
+                    value: Erc20Amount::from_int(5000u64, 10)
+                        .expect("Test failed")
+                        .try_to_vec()
+                        .expect("Test failed"),
+                },
+            ),
+            (
+                keys_3.denomination(),
+                StorageModification::Write {
+                    value: 10u8.try_to_vec().expect("Test failed"),
+                },
+            ),
+        ]);
+        assert_eq!(tx_write_log, expected);
     }
 }
