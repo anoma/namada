@@ -645,17 +645,18 @@ fn merge_vp_results(
 mod tests {
     use std::collections::HashMap;
 
-    use borsh::BorshDeserialize;
+    use borsh::{BorshDeserialize, BorshSerialize};
     use eyre::Result;
-    use namada_core::ledger::storage_api::StorageRead;
+    use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
     use namada_core::proto::{SignableEthMessage, Signed};
+    use namada_core::types::erc20tokens::Erc20Amount;
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::keccak::keccak_hash;
     use namada_core::types::storage::BlockHeight;
-    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
     use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
     use namada_core::types::{address, key};
@@ -680,10 +681,15 @@ mod tests {
                 (validator_b, 100_u64.into()),
             ]),
         );
+        let denom_key =
+            wrapped_erc20s::Keys::from(&DAI_ERC20_ETH_ADDRESS).denomination();
+        wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Erc20Amount::from_int(100u64, 8).expect("Test failed"),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver: address::testing::established_address_4(),
             }],
@@ -739,7 +745,7 @@ mod tests {
             &root,
             100.into(),
         );
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let signing_key = key::testing::keypair_1();
         let hot_key =
             &keys[&address::testing::established_address_2()].eth_bridge;

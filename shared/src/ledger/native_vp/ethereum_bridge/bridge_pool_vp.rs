@@ -17,6 +17,7 @@ use eyre::eyre;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use namada_core::types::erc20tokens::Erc20Amount;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::wrapped_erc20s;
 
@@ -88,9 +89,11 @@ where
         let EscrowDelta {
             payer_account,
             escrow_account,
-            expected_debit,
-            expected_credit,
-        } = delta;
+            expected_debit: EscrowAmount::Nam(expected_debit),
+            expected_credit: EscrowAmount::Nam(expected_credit),
+        } = delta else {
+            unreachable!("Bridge pool VP should correctly quantify gas costs in terms of `Amount`.");
+        };
         let debited = self.account_balance_delta(payer_account);
         let credited = self.account_balance_delta(escrow_account);
 
@@ -127,16 +130,23 @@ where
         transfer: &'trans PendingTransfer,
     ) -> Result<EscrowCheck<'trans>, Error> {
         // there is a corner case where the gas fees and escrowed Nam
-        // are debited from the same address when mint wNam.
+        // are debited from the same address when minting wNam.
+        let native = transfer.transfer.asset
+            == read_native_erc20_address(&self.ctx.pre())?;
         Ok(
-            if transfer.gas_fee.payer == transfer.transfer.sender
-                && transfer.transfer.asset
-                    == read_native_erc20_address(&self.ctx.pre())?
-            {
+            if transfer.gas_fee.payer == transfer.transfer.sender && native {
+                let escrow_amount = Amount::try_from(transfer.transfer.amount)
+                    .map_err(|e| {
+                        eyre!(
+                            "Could not process the amount of NAM to be \
+                             escrowed into the bridge pool: {:?}",
+                            e
+                        )
+                    })?;
                 let debit = transfer
                     .gas_fee
                     .amount
-                    .checked_add(transfer.transfer.amount)
+                    .checked_add(escrow_amount)
                     .ok_or_else(|| {
                         Error(eyre!(
                             "Addition oveflowed adding gas fee + transfer \
@@ -147,33 +157,54 @@ where
                     gas_check: EscrowDelta {
                         payer_account: &transfer.gas_fee.payer,
                         escrow_account: &BRIDGE_POOL_ADDRESS,
-                        expected_debit: debit,
-                        expected_credit: transfer.gas_fee.amount,
+                        expected_debit: EscrowAmount::Nam(debit),
+                        expected_credit: EscrowAmount::Nam(
+                            transfer.gas_fee.amount,
+                        ),
                     },
                     token_check: EscrowDelta {
                         payer_account: &transfer.transfer.sender,
                         escrow_account: &Address::Internal(
                             InternalAddress::EthBridge,
                         ),
-                        expected_debit: debit,
-                        expected_credit: transfer.transfer.amount,
+                        expected_debit: EscrowAmount::Nam(debit),
+                        expected_credit: EscrowAmount::Nam(escrow_amount),
                     },
                 }
             } else {
+                let escrow_amount = if native {
+                    EscrowAmount::Nam(
+                        Amount::try_from(transfer.transfer.amount).map_err(
+                            |e| {
+                                eyre!(
+                                    "Could not process the amount of NAM to \
+                                     be escrowed into the bridge pool: {:?}",
+                                    e
+                                )
+                            },
+                        )?,
+                    )
+                } else {
+                    EscrowAmount::Erc20(transfer.transfer.amount)
+                };
                 EscrowCheck {
                     gas_check: EscrowDelta {
                         payer_account: &transfer.gas_fee.payer,
                         escrow_account: &BRIDGE_POOL_ADDRESS,
-                        expected_debit: transfer.gas_fee.amount,
-                        expected_credit: transfer.gas_fee.amount,
+                        expected_debit: EscrowAmount::Nam(
+                            transfer.gas_fee.amount,
+                        ),
+                        expected_credit: EscrowAmount::Nam(
+                            transfer.gas_fee.amount,
+                        ),
                     },
                     token_check: EscrowDelta {
                         payer_account: &transfer.transfer.sender,
                         escrow_account: &Address::Internal(
                             InternalAddress::EthBridge,
                         ),
-                        expected_debit: transfer.transfer.amount,
-                        expected_credit: transfer.transfer.amount,
+                        expected_debit: escrow_amount,
+                        expected_credit: escrow_amount,
                     },
                 }
             },
@@ -184,10 +215,19 @@ where
 /// Check if a delta matches the delta given by a transfer
 fn check_delta(
     sender: &Address,
-    amount: &Amount,
+    amount: &Erc20Amount,
     transfer: &PendingTransfer,
 ) -> bool {
     *sender == transfer.transfer.sender && *amount == transfer.transfer.amount
+}
+
+/// An amount of toke to be escrowed.
+/// Namada's native token and ERC20's use different
+/// types for specifying amounts.
+#[derive(Copy, Clone)]
+enum EscrowAmount {
+    Nam(Amount),
+    Erc20(Erc20Amount),
 }
 
 /// Helper struct for handling the different escrow
@@ -195,8 +235,8 @@ fn check_delta(
 struct EscrowDelta<'a> {
     payer_account: &'a Address,
     escrow_account: &'a Address,
-    expected_debit: Amount,
-    expected_credit: Amount,
+    expected_debit: EscrowAmount,
+    expected_credit: EscrowAmount,
 }
 
 /// There are two checks we must do when minting wNam.
@@ -357,6 +397,7 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::types::address;
+    use namada_core::types::token::TokenAmount;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
@@ -381,6 +422,7 @@ mod test_bridge_pool_vp {
 
     /// The amount of NAM Bertha has
     const ASSET: EthAddress = EthAddress([0; 20]);
+    const ASSET_DENOM: u8 = 16;
     const BERTHA_WEALTH: u64 = 1_000_000;
     const BERTHA_TOKENS: u64 = 10_000;
     const ESCROWED_AMOUNT: u64 = 1_000;
@@ -388,11 +430,17 @@ mod test_bridge_pool_vp {
     const GAS_FEE: u64 = 100;
     const TOKENS: u64 = 100;
 
+    /// A helper function to create Erc20Amounts with correct
+    /// denomination.
+    fn into_erc20<T: Into<u64>>(amount: T) -> Erc20Amount {
+        Erc20Amount::from_int(amount, ASSET_DENOM).expect("Test failed")
+    }
+
     /// A set of balances for an address
     struct Balance {
         owner: Address,
         balance: Amount,
-        token: Amount,
+        token: Erc20Amount,
     }
 
     impl Balance {
@@ -400,7 +448,7 @@ mod test_bridge_pool_vp {
             Self {
                 owner: address,
                 balance: 0.into(),
-                token: 0.into(),
+                token: into_erc20(0u64),
             }
         }
     }
@@ -436,7 +484,7 @@ mod test_bridge_pool_vp {
                 asset: ASSET,
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
-                amount: 0.into(),
+                amount: into_erc20(0u64),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -479,7 +527,7 @@ mod test_bridge_pool_vp {
     /// return the keys changed
     fn update_balances(
         write_log: &mut WriteLog,
-        balance: Balance,
+        mut balance: Balance,
         gas_delta: SignedAmount,
         token_delta: SignedAmount,
     ) -> BTreeSet<Key> {
@@ -497,12 +545,17 @@ mod test_bridge_pool_vp {
         .expect("Test failed");
 
         // update the balance of tokens
-        let new_token_balance = match token_delta {
-            SignedAmount::Positive(amount) => balance.token + amount,
-            SignedAmount::Negative(amount) => balance.token - amount,
-        }
-        .try_to_vec()
-        .expect("Test failed");
+        let new_token_balance = {
+            match token_delta {
+                SignedAmount::Positive(amount) => {
+                    balance.token.receive(&into_erc20(amount))
+                }
+                SignedAmount::Negative(amount) => {
+                    balance.token.spend(&into_erc20(amount))
+                }
+            };
+            balance.token.try_to_vec().expect("Test failed")
+        };
 
         // write the changes to the log
         write_log
@@ -543,6 +596,14 @@ mod test_bridge_pool_vp {
             write_log: Default::default(),
         };
         config.init_storage(&mut wl_storage);
+
+        let denom_key = wrapped_erc20s::Keys::from(&ASSET).denomination();
+        wl_storage
+            .write_bytes(
+                &denom_key,
+                ASSET_DENOM.try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
         wl_storage.commit_block().expect("Test failed");
         wl_storage.write_log = new_writelog();
         wl_storage.commit_block().expect("Test failed");
@@ -598,7 +659,7 @@ mod test_bridge_pool_vp {
                 asset: ASSET,
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: TOKENS.into(),
+                amount: into_erc20(TOKENS),
             },
             gas_fee: GasFee {
                 amount: GAS_FEE.into(),
@@ -615,7 +676,7 @@ mod test_bridge_pool_vp {
             Balance {
                 owner: bertha_address(),
                 balance: BERTHA_WEALTH.into(),
-                token: BERTHA_TOKENS.into(),
+                token: into_erc20(BERTHA_TOKENS),
             },
             payer_gas_delta,
             payer_delta,
@@ -628,7 +689,7 @@ mod test_bridge_pool_vp {
             Balance {
                 owner: BRIDGE_POOL_ADDRESS,
                 balance: ESCROWED_AMOUNT.into(),
-                token: ESCROWED_TOKENS.into(),
+                token: into_erc20(ESCROWED_TOKENS),
             },
             gas_escrow_delta,
             escrow_delta,
@@ -860,7 +921,7 @@ mod test_bridge_pool_vp {
                         asset: EthAddress([0; 20]),
                         sender: bertha_address(),
                         recipient: EthAddress([11; 20]),
-                        amount: 100.into(),
+                        amount: into_erc20(100u64),
                     },
                     gas_fee: GasFee {
                         amount: GAS_FEE.into(),
@@ -890,7 +951,7 @@ mod test_bridge_pool_vp {
                         asset: EthAddress([0; 20]),
                         sender: bertha_address(),
                         recipient: EthAddress([11; 20]),
-                        amount: 100.into(),
+                        amount: into_erc20(100u64),
                     },
                     gas_fee: GasFee {
                         amount: GAS_FEE.into(),
@@ -958,7 +1019,7 @@ mod test_bridge_pool_vp {
             Balance {
                 owner: bertha_address(),
                 balance: BERTHA_WEALTH.into(),
-                token: BERTHA_TOKENS.into(),
+                token: into_erc20(BERTHA_TOKENS),
             },
             SignedAmount::Negative(GAS_FEE.into()),
             SignedAmount::Negative(TOKENS.into()),
@@ -971,7 +1032,7 @@ mod test_bridge_pool_vp {
             Balance {
                 owner: BRIDGE_POOL_ADDRESS,
                 balance: ESCROWED_AMOUNT.into(),
-                token: ESCROWED_TOKENS.into(),
+                token: into_erc20(ESCROWED_TOKENS),
             },
             SignedAmount::Positive(GAS_FEE.into()),
             SignedAmount::Positive(TOKENS.into()),
@@ -1017,7 +1078,7 @@ mod test_bridge_pool_vp {
                 asset: ASSET,
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: 0.into(),
+                amount: into_erc20(0u64),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -1087,7 +1148,7 @@ mod test_bridge_pool_vp {
                 asset: wnam(),
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),
@@ -1180,7 +1241,7 @@ mod test_bridge_pool_vp {
                 asset: wnam(),
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),
@@ -1292,7 +1353,7 @@ mod test_bridge_pool_vp {
                 asset: wnam(),
                 sender: bertha_address(),
                 recipient: EthAddress([1; 20]),
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
             },
             gas_fee: GasFee {
                 amount: 100.into(),

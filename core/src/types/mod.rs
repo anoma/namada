@@ -2,6 +2,7 @@
 
 pub mod address;
 pub mod chain;
+pub mod erc20tokens;
 pub mod eth_abi;
 pub mod eth_bridge_pool;
 pub mod ethereum_events;

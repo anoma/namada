@@ -16,6 +16,7 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_core::types::token::TokenAmount;
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
 
@@ -160,12 +161,12 @@ impl TestTxEnv {
     }
 
     /// Credit tokens to the target account.
-    pub fn credit_tokens(
+    pub fn credit_tokens<T: TokenAmount>(
         &mut self,
         target: &Address,
         token: &Address,
         sub_prefix: Option<Key>,
-        amount: token::Amount,
+        amount: T,
     ) {
         let storage_key = match &sub_prefix {
             Some(sub_prefix) => {

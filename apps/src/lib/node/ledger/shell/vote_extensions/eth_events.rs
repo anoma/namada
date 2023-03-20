@@ -341,6 +341,7 @@ mod test_vote_extensions {
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::token::Amount;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
@@ -366,7 +367,7 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
@@ -378,7 +379,7 @@ mod test_vote_extensions {
         let event_2 = EthereumEvent::TransfersToEthereum {
             nonce: 2.into(),
             transfers: vec![TransferToEthereum {
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
@@ -489,7 +490,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
-                    amount: 100.into(),
+                    amount: Amount::from(100).into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
@@ -579,7 +580,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
-                    amount: 100.into(),
+                    amount: Amount::from(100).into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
@@ -660,7 +661,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
-                    amount: 100.into(),
+                    amount: Amount::from(100).into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
@@ -737,7 +738,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 1.into(),
                 transfers: vec![TransferToEthereum {
-                    amount: 100.into(),
+                    amount: Amount::from(100).into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),

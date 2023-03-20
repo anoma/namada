@@ -11,14 +11,21 @@ use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
+use crate::types::erc20tokens::Erc20Amount;
 use crate::types::eth_abi::Encode;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::token::Amount;
 
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+/// Generic error type
+pub struct Error(#[from] eyre::Error);
+
 /// Namada native type to replace the ethabi::Uint type
 #[derive(
+    Copy,
     Clone,
     Debug,
     Default,
@@ -78,6 +85,13 @@ impl From<&Uint> for ethUint {
 impl From<u64> for Uint {
     fn from(value: u64) -> Self {
         ethUint::from(value).into()
+    }
+}
+
+impl From<Uint> for u64 {
+    fn from(uint: Uint) -> Self {
+        // N.B. this will panic if `uint` > `u64::MAX`.
+        ethUint::from(uint).as_u64()
     }
 }
 
@@ -283,7 +297,7 @@ impl EthereumEvent {
 )]
 pub struct TransferToNamada {
     /// Quantity of the ERC20 token in the transfer
-    pub amount: Amount,
+    pub amount: Erc20Amount,
     /// Address of the smart contract issuing the token
     pub asset: EthAddress,
     /// The address receiving wrapped assets on Namada
@@ -307,7 +321,7 @@ pub struct TransferToNamada {
 )]
 pub struct TransferToEthereum {
     /// Quantity of wrapped Asset in the transfer
-    pub amount: Amount,
+    pub amount: Erc20Amount,
     /// Address of the smart contract issuing the token
     pub asset: EthAddress,
     /// The address receiving assets on Ethereum
@@ -341,7 +355,7 @@ pub struct TokenWhitelist {
     /// Address of Ethereum smart contract issuing token
     pub token: EthAddress,
     /// Maximum amount of token allowed on the bridge
-    pub cap: Amount,
+    pub cap: Erc20Amount,
 }
 
 #[cfg(test)]
@@ -448,7 +462,7 @@ pub mod testing {
         EthereumEvent::TransfersToNamada {
             nonce,
             transfers: vec![TransferToNamada {
-                amount: arbitrary_amount(),
+                amount: arbitrary_amount().into(),
                 asset: arbitrary_eth_address(),
                 receiver,
             }],

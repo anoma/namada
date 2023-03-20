@@ -39,6 +39,7 @@ pub mod signatures {
 }
 
 pub mod eth_events {
+    use std::collections::HashMap;
     use std::convert::TryInto;
     use std::fmt::Debug;
     use std::str::FromStr;
@@ -48,6 +49,7 @@ pub mod eth_events {
     use ethabi::encode;
     use ethabi::param_type::ParamType;
     use ethabi::token::Token;
+    use namada::core::types::erc20tokens::Erc20Amount;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
@@ -64,6 +66,8 @@ pub mod eth_events {
     pub enum Error {
         #[error("Could not decode Ethereum event: {0}")]
         Decode(String),
+        #[error("ERC20 token missing from the oracls whitelist: {0}")]
+        Whitelist(String),
     }
 
     pub type Result<T> = std::result::Result<T, Error>;
@@ -124,22 +128,25 @@ pub mod eth_events {
             block_height: Uint256,
             data: &[u8],
             min_confirmations: Uint256,
+            erc20_tokens: &HashMap<EthAddress, u8>,
         ) -> Result<Self> {
             match signature {
                 signatures::TRANSFER_TO_NAMADA_SIG => {
-                    RawTransfersToNamada::decode(data).map(|txs| PendingEvent {
-                        confirmations: min_confirmations
-                            .max(txs.confirmations.into()),
-                        block_height,
-                        event: EthereumEvent::TransfersToNamada {
-                            nonce: txs.nonce,
-                            transfers: txs.transfers,
+                    RawTransfersToNamada::decode(data, erc20_tokens).map(
+                        |txs| PendingEvent {
+                            confirmations: min_confirmations
+                                .max(txs.confirmations.into()),
+                            block_height,
+                            event: EthereumEvent::TransfersToNamada {
+                                nonce: txs.nonce,
+                                transfers: txs.transfers,
+                            },
                         },
-                    })
+                    )
                 }
                 signatures::TRANSFER_TO_ETHEREUM_SIG => {
-                    RawTransfersToEthereum::decode(data).map(|txs| {
-                        PendingEvent {
+                    RawTransfersToEthereum::decode(data, erc20_tokens).map(
+                        |txs| PendingEvent {
                             confirmations: min_confirmations,
                             block_height,
                             event: EthereumEvent::TransfersToEthereum {
@@ -147,8 +154,8 @@ pub mod eth_events {
                                 transfers: txs.transfers,
                                 relayer: txs.relayer,
                             },
-                        }
-                    })
+                        },
+                    )
                 }
                 signatures::VALIDATOR_SET_UPDATE_SIG => {
                     ValidatorSetUpdate::decode(data).map(
@@ -234,7 +241,10 @@ pub mod eth_events {
     impl RawTransfersToNamada {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToNamada`]
-        fn decode(data: &[u8]) -> Result<Self> {
+        fn decode(
+            data: &[u8],
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<Self> {
             let [nonce, transfers, confs]: [Token; 3] = decode(
                 &[
                     ParamType::Uint(256),
@@ -258,7 +268,8 @@ pub mod eth_events {
             })?;
 
             Ok(Self {
-                transfers: transfers.parse_transfer_to_namada_array()?,
+                transfers: transfers
+                    .parse_transfer_to_namada_array(erc20_tokens)?,
                 nonce: nonce.parse_uint256()?,
                 confirmations: confs.parse_u32()?,
             })
@@ -284,7 +295,7 @@ pub mod eth_events {
                      }| {
                         Token::Tuple(vec![
                             Token::Address(asset.0.into()),
-                            Token::Uint(u64::from(amount).into()),
+                            Token::Uint(Uint::from(amount).into()),
                             Token::String(receiver.to_string()),
                         ])
                     },
@@ -302,7 +313,10 @@ pub mod eth_events {
     impl RawTransfersToEthereum {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`RawTransfersToEthereum`]
-        fn decode(data: &[u8]) -> Result<Self> {
+        fn decode(
+            data: &[u8],
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<Self> {
             let [nonce, transfers, relayer]: [Token; 3] = decode(
                 &[
                     ParamType::Uint(256),
@@ -327,7 +341,8 @@ pub mod eth_events {
                 )
             })?;
 
-            let transfers = transfers.parse_transfer_to_eth_array()?;
+            let transfers =
+                transfers.parse_transfer_to_eth_array(erc20_tokens)?;
             Ok(Self {
                 transfers,
                 nonce: nonce.parse_uint256()?,
@@ -360,7 +375,7 @@ pub mod eth_events {
                             Token::Address(asset.0.into()),
                             Token::Address(receiver.0.into()),
                             Token::String(sender.to_string()),
-                            Token::Uint(u64::from(amount).into()),
+                            Token::Uint(Uint::from(amount).into()),
                             Token::String(gas_payer.to_string()),
                             Token::Uint(u64::from(gas_amount).into()),
                             Token::String(relayer.to_string()),
@@ -458,11 +473,12 @@ pub mod eth_events {
         /// Parse ABI serialized data from an Ethereum event into
         /// an instance of [`UpdateBridgeWhitelist`]
         fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, tokens, caps]: [Token; 3] = decode(
+            let [nonce, tokens, caps, denoms]: [Token; 4] = decode(
                 &[
                     ParamType::Uint(256),
                     ParamType::Array(Box::new(ParamType::Address)),
                     ParamType::Array(Box::new(ParamType::Uint(256))),
+                    ParamType::Array(Box::new(ParamType::Uint(8))),
                 ],
                 data,
             )
@@ -477,7 +493,8 @@ pub mod eth_events {
             })?;
 
             let tokens = tokens.parse_eth_address_array()?;
-            let caps = caps.parse_amount_array()?;
+            let caps = caps.parse_uint256_array()?;
+            let denoms = denoms.parse_u8_array()?;
             if tokens.len() != caps.len() {
                 Err(Error::Decode(
                     "UpdatedBridgeWhitelist received different number of \
@@ -490,7 +507,11 @@ pub mod eth_events {
                     whitelist: tokens
                         .into_iter()
                         .zip(caps.into_iter())
-                        .map(|(token, cap)| TokenWhitelist { token, cap })
+                        .zip(denoms.into_iter())
+                        .map(|((token, cap), denom)| TokenWhitelist {
+                            token,
+                            cap: Erc20Amount::from_uint(cap, denom),
+                        })
                         .collect(),
                 })
             }
@@ -502,19 +523,26 @@ pub mod eth_events {
         fn encode(self) -> Vec<u8> {
             let UpdateBridgeWhitelist { nonce, whitelist } = self;
 
-            let (tokens, caps): (Vec<Token>, Vec<Token>) = whitelist
-                .into_iter()
-                .map(|TokenWhitelist { token, cap }| {
-                    (
-                        Token::Address(token.0.into()),
-                        Token::Uint(u64::from(cap).into()),
-                    )
-                })
-                .unzip();
+            let (tokens, caps_and_decimals): (Vec<Token>, Vec<(Token, Token)>) =
+                whitelist
+                    .into_iter()
+                    .map(|TokenWhitelist { token, cap }| {
+                        (
+                            Token::Address(token.0.into()),
+                            (
+                                Token::Uint(Uint::from(cap).into()),
+                                Token::Uint(cap.denomination().into()),
+                            ),
+                        )
+                    })
+                    .unzip();
+            let (caps, decimals): (Vec<Token>, Vec<Token>) =
+                caps_and_decimals.into_iter().unzip();
             encode(&[
                 Token::Uint(nonce.into()),
                 Token::Array(tokens),
                 Token::Array(caps),
+                Token::Array(decimals),
             ])
         }
     }
@@ -525,22 +553,34 @@ pub mod eth_events {
         fn parse_eth_address(self) -> Result<EthAddress>;
         fn parse_address(self) -> Result<Address>;
         fn parse_amount(self) -> Result<Amount>;
+        fn parse_u8(self) -> Result<u8>;
         fn parse_u32(self) -> Result<u32>;
         fn parse_uint256(self) -> Result<Uint>;
         fn parse_bool(self) -> Result<bool>;
         fn parse_string(self) -> Result<String>;
         fn parse_keccak(self) -> Result<KeccakHash>;
         fn parse_amount_array(self) -> Result<Vec<Amount>>;
+        fn parse_u8_array(self) -> Result<Vec<u8>>;
         fn parse_eth_address_array(self) -> Result<Vec<EthAddress>>;
         fn parse_address_array(self) -> Result<Vec<Address>>;
         fn parse_string_array(self) -> Result<Vec<String>>;
         fn parse_transfer_to_namada_array(
             self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
         ) -> Result<Vec<TransferToNamada>>;
-        fn parse_transfer_to_namada(self) -> Result<TransferToNamada>;
-        fn parse_transfer_to_eth_array(self)
-        -> Result<Vec<TransferToEthereum>>;
-        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum>;
+        fn parse_transfer_to_namada(
+            self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<TransferToNamada>;
+        fn parse_transfer_to_eth_array(
+            self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<Vec<TransferToEthereum>>;
+        fn parse_transfer_to_eth(
+            self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<TransferToEthereum>;
+        fn parse_uint256_array(self) -> Result<Vec<Uint>>;
     }
 
     impl Parse for Token {
@@ -570,6 +610,23 @@ pub mod eth_events {
         fn parse_amount(self) -> Result<Amount> {
             if let Token::Uint(amount) = self {
                 Ok(Amount::from(amount.as_u64()))
+            } else {
+                Err(Error::Decode(format!(
+                    "Expected type `Uint`, got {:?}",
+                    self
+                )))
+            }
+        }
+
+        fn parse_u8(self) -> Result<u8> {
+            if let Token::Uint(amount) = self {
+                let byte = u8::try_from(amount.as_u32()).map_err(|e| {
+                    Error::Decode(format!(
+                        "Could not parse Uint as u8: {:?}",
+                        e
+                    ))
+                })?;
+                Ok(byte)
             } else {
                 Err(Error::Decode(format!(
                     "Expected type `Uint`, got {:?}",
@@ -653,6 +710,40 @@ pub mod eth_events {
             Ok(amounts)
         }
 
+        fn parse_uint256_array(self) -> Result<Vec<Uint>> {
+            let array = if let Token::Array(array) = self {
+                array
+            } else {
+                return Err(Error::Decode(format!(
+                    "Expected type `Array`, got {:?}",
+                    self
+                )));
+            };
+            let mut amounts = vec![];
+            for token in array.into_iter() {
+                let amount = token.parse_uint256()?;
+                amounts.push(amount);
+            }
+            Ok(amounts)
+        }
+
+        fn parse_u8_array(self) -> Result<Vec<u8>> {
+            let array = if let Token::Array(array) = self {
+                array
+            } else {
+                return Err(Error::Decode(format!(
+                    "Expected type `Array`, got {:?}",
+                    self
+                )));
+            };
+            let mut amounts = vec![];
+            for token in array.into_iter() {
+                let amount = token.parse_u8()?;
+                amounts.push(amount);
+            }
+            Ok(amounts)
+        }
+
         fn parse_eth_address_array(self) -> Result<Vec<EthAddress>> {
             let array = if let Token::Array(array) = self {
                 array
@@ -672,6 +763,7 @@ pub mod eth_events {
 
         fn parse_transfer_to_namada_array(
             self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
         ) -> Result<Vec<TransferToNamada>> {
             let array = if let Token::Array(array) = self {
                 array
@@ -683,20 +775,26 @@ pub mod eth_events {
             };
             let mut transfers = vec![];
             for token in array.into_iter() {
-                let transfer = token.parse_transfer_to_namada()?;
+                let transfer = token.parse_transfer_to_namada(erc20_tokens)?;
                 transfers.push(transfer);
             }
             Ok(transfers)
         }
 
-        fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
+        fn parse_transfer_to_namada(
+            self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<TransferToNamada> {
             if let Token::Tuple(mut items) = self {
                 let asset = items.remove(0).parse_eth_address()?;
-                let amount = items.remove(0).parse_amount()?;
+                let amount = items.remove(0).parse_uint256()?;
                 let receiver = items.remove(0).parse_address()?;
+                let denom = *erc20_tokens
+                    .get(&asset)
+                    .ok_or_else(|| Error::Whitelist(asset.to_canonical()))?;
                 Ok(TransferToNamada {
                     asset,
-                    amount,
+                    amount: Erc20Amount::from_uint(amount, denom),
                     receiver,
                 })
             } else {
@@ -709,6 +807,7 @@ pub mod eth_events {
 
         fn parse_transfer_to_eth_array(
             self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
         ) -> Result<Vec<TransferToEthereum>> {
             let array = if let Token::Array(array) = self {
                 array
@@ -720,23 +819,29 @@ pub mod eth_events {
             };
             let mut transfers = vec![];
             for token in array.into_iter() {
-                let transfer = token.parse_transfer_to_eth()?;
+                let transfer = token.parse_transfer_to_eth(erc20_tokens)?;
                 transfers.push(transfer);
             }
             Ok(transfers)
         }
 
-        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
+        fn parse_transfer_to_eth(
+            self,
+            erc20_tokens: &HashMap<EthAddress, u8>,
+        ) -> Result<TransferToEthereum> {
             if let Token::Tuple(mut items) = self {
                 let asset = items.remove(0).parse_eth_address()?;
                 let receiver = items.remove(0).parse_eth_address()?;
                 let sender = items.remove(0).parse_address()?;
-                let amount = items.remove(0).parse_amount()?;
+                let amount = items.remove(0).parse_uint256()?;
                 let gas_payer = items.remove(0).parse_address()?;
                 let gas_amount = items.remove(0).parse_amount()?;
+                let denom = *erc20_tokens
+                    .get(&asset)
+                    .ok_or_else(|| Error::Whitelist(asset.to_canonical()))?;
                 Ok(TransferToEthereum {
                     asset,
-                    amount,
+                    amount: Erc20Amount::from_uint(amount, denom),
                     sender,
                     receiver,
                     gas_amount,
@@ -818,13 +923,20 @@ pub mod eth_events {
                 0, 0, 0, 0, 0,
             ];
 
-            let raw = RawTransfersToNamada::decode(&data);
+            let erc20_tokens = HashMap::from([(
+                EthAddress::from_str(
+                    "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+                )
+                .unwrap(),
+                7,
+            )]);
+            let raw = RawTransfersToNamada::decode(&data, &erc20_tokens);
 
             let raw = raw.unwrap();
             assert_eq!(
                 raw.transfers,
                 vec![TransferToNamada {
-                    amount: Amount::from(100),
+                    amount: Erc20Amount::from_uint(Uint::from(100), 7),
                     asset: EthAddress::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
                     receiver: Address::decode("atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f").unwrap(),
                 }]
@@ -850,11 +962,13 @@ pub mod eth_events {
                 },
             );
             let data = event.encode();
+            let erc20_tokens = HashMap::default();
             let pending_event = PendingEvent::decode(
                 sig,
                 arbitrary_block_height,
                 &data,
                 min_confirmations.clone(),
+                &erc20_tokens,
             )?;
 
             assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
@@ -880,11 +994,14 @@ pub mod eth_events {
                 },
             );
             let data = event.encode();
+            let erc20_tokens = HashMap::default();
+
             let pending_event = PendingEvent::decode(
                 sig,
                 arbitrary_block_height,
                 &data,
                 min_confirmations,
+                &erc20_tokens,
             )
             .unwrap();
 
@@ -943,7 +1060,7 @@ pub mod eth_events {
 
             let [token]: [Token; 1] = decode(
                 &[ParamType::Uint(256)],
-                encode(&[Token::Uint(uint.clone().into())]).as_slice(),
+                encode(&[Token::Uint(uint.into())]).as_slice(),
             )
             .expect("Test failed")
             .try_into()
@@ -987,7 +1104,7 @@ pub mod eth_events {
             let nam_transfers = RawTransfersToNamada {
                 transfers: vec![
                     TransferToNamada {
-                        amount: Default::default(),
+                        amount: Erc20Amount::from_uint(Uint::from(0), 7),
                         asset: EthAddress([0; 20]),
                         receiver: address.clone(),
                     };
@@ -999,7 +1116,7 @@ pub mod eth_events {
             let eth_transfers = RawTransfersToEthereum {
                 transfers: vec![
                     TransferToEthereum {
-                        amount: Default::default(),
+                        amount: Erc20Amount::from_uint(Uint::from(0), 10),
                         asset: EthAddress([1; 20]),
                         sender: address.clone(),
                         receiver: EthAddress([2; 20]),
@@ -1025,19 +1142,29 @@ pub mod eth_events {
                 whitelist: vec![
                     TokenWhitelist {
                         token: EthAddress([0; 20]),
-                        cap: Amount::from(1000),
+                        cap: Erc20Amount::from_uint(Uint::from(1000), 7),
                     };
                     2
                 ],
             };
+            let erc20_tokens = HashMap::from([
+                (EthAddress([1; 20]), 10u8),
+                (EthAddress([0; 20]), 7u8),
+            ]);
             assert_eq!(
-                RawTransfersToNamada::decode(&nam_transfers.clone().encode())
-                    .expect("Test failed"),
+                RawTransfersToNamada::decode(
+                    &nam_transfers.clone().encode(),
+                    &erc20_tokens
+                )
+                .expect("Test failed"),
                 nam_transfers
             );
             assert_eq!(
-                RawTransfersToEthereum::decode(&eth_transfers.clone().encode())
-                    .expect("Test failed"),
+                RawTransfersToEthereum::decode(
+                    &eth_transfers.clone().encode(),
+                    &erc20_tokens
+                )
+                .expect("Test failed"),
                 eth_transfers
             );
             assert_eq!(

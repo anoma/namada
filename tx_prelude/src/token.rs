@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::KeySeg;
@@ -8,17 +10,21 @@ use super::*;
 
 #[allow(clippy::too_many_arguments)]
 /// A token transfer that can be used in a transaction.
-pub fn transfer(
+pub fn transfer<T>(
     ctx: &mut Ctx,
     src: &Address,
     dest: &Address,
     token: &Address,
     sub_prefix: Option<storage::Key>,
-    amount: Amount,
+    amount: T,
     key: &Option<String>,
     shielded: &Option<Transaction>,
-) -> TxResult {
-    if amount != Amount::default() {
+) -> TxResult
+where
+    T: TokenAmount + TryInto<Amount>,
+    <T as TryInto<Amount>>::Error: Debug,
+{
+    if !amount.is_zero() {
         let src_key = match &sub_prefix {
             Some(sub_prefix) => {
                 let prefix =
@@ -35,8 +41,8 @@ pub fn transfer(
             }
             None => token::balance_key(token, dest),
         };
-        let src_bal: Option<Amount> = match src {
-            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max()),
+        let src_bal: Option<T> = match src {
+            Address::Internal(InternalAddress::IbcMint) => Some(amount.max()),
             Address::Internal(InternalAddress::IbcBurn) => {
                 log_string("invalid transfer from the burn address");
                 unreachable!()
@@ -48,12 +54,12 @@ pub fn transfer(
             unreachable!()
         });
         src_bal.spend(&amount);
-        let mut dest_bal: Amount = match dest {
+        let mut dest_bal: T = match dest {
             Address::Internal(InternalAddress::IbcMint) => {
                 log_string("invalid transfer to the mint address");
                 unreachable!()
             }
-            _ => ctx.read(&dest_key)?.unwrap_or_default(),
+            _ => ctx.read(&dest_key)?.unwrap_or_else(|| amount.zero()),
         };
         dest_bal.receive(&amount);
         if src != dest {
@@ -106,7 +112,9 @@ pub fn transfer(
             token: token.clone(),
             // todo: build asset types for multitokens
             sub_prefix: None,
-            amount,
+            amount: amount.try_into().map_err(|_| {
+                Error::SimpleMessage("MASP transfer expects an `Amount` type")
+            })?,
             key: key.clone(),
             shielded: Some(shielded.clone()),
         };

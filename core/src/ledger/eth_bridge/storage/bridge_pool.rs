@@ -404,6 +404,7 @@ mod test_bridge_pool_tree {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::erc20tokens::Erc20Amount;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::ethereum_events::EthAddress;
 
@@ -424,7 +425,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
-                amount: 1.into(),
+                amount: Erc20Amount::from_int(1u64, 6).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -450,7 +451,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -477,7 +479,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -514,7 +517,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
-                amount: 1.into(),
+                amount: Erc20Amount::from_int(1u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -541,7 +544,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -571,7 +575,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
-                amount: 1u64.into(),
+                amount: Erc20Amount::from_int(1u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -594,7 +598,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
-                amount: 1u64.into(),
+                amount: Erc20Amount::from_int(1u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -629,7 +633,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([2; 20]),
-                amount: 1.into(),
+                amount: Erc20Amount::from_int(1u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -647,7 +651,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([1; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
-                amount: 1u64.into(),
+                amount: Erc20Amount::from_int(1u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -678,7 +682,7 @@ mod test_bridge_pool_tree {
                 asset: EthAddress([0; 20]),
                 sender: bertha_address(),
                 recipient: EthAddress([0; 20]),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u64, 7).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -706,7 +710,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -735,7 +740,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -764,7 +770,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -791,7 +798,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -818,7 +826,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -845,7 +854,8 @@ mod test_bridge_pool_tree {
                     asset: EthAddress([i; 20]),
                     sender: bertha_address(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: (i as u64).into(),
+                    amount: Erc20Amount::from_int(i as u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: 0.into(),
@@ -873,10 +883,10 @@ mod test_bridge_pool_tree {
                         .into_iter()
                         .map(|addr| PendingTransfer {
                             transfer: TransferToEthereum {
-                                asset: EthAddress(addr),
+                                asset: EthAddress([0; 20]),
                                 sender: bertha_address(),
                                 recipient: EthAddress(addr),
-                                amount: Default::default(),
+                                amount: Erc20Amount::from_int(0u64, 5).unwrap(),
                             },
                             gas_fee: GasFee {
                                 amount: Default::default(),

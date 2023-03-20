@@ -2106,6 +2106,7 @@ pub mod args {
     const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
+    const TOKEN_AMOUNT: Arg<Decimal> = arg("token-amount");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const TX_HASH: Arg<String> = arg("tx-hash");
@@ -2274,7 +2275,7 @@ pub mod args {
         /// The sender of the transfer
         pub sender: WalletAddress,
         /// The amount to be transferred
-        pub amount: Amount,
+        pub amount: Decimal,
         /// The amount of fees (in NAM)
         pub gas_amount: Amount,
         /// The account of fee payer.
@@ -2287,7 +2288,7 @@ pub mod args {
             let asset = ERC20.parse(matches);
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = TOKEN_AMOUNT.parse(matches);
             let gas_amount = FEE_AMOUNT.parse(matches);
             let gas_payer = FEE_PAYER.parse(matches);
             Self {
@@ -2318,7 +2319,7 @@ pub mod args {
                         .def()
                         .about("The Namada address sending the tokens."),
                 )
-                .arg(AMOUNT.def().about(
+                .arg(TOKEN_AMOUNT.def().about(
                     "The amount of tokens being sent across the bridge.",
                 ))
                 .arg(FEE_AMOUNT.def().about(

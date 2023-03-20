@@ -1,5 +1,6 @@
 //! Validity predicate for the Ethereum bridge
 use std::collections::{BTreeSet, HashSet};
+use std::ops::Neg;
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
@@ -10,8 +11,9 @@ use namada_core::ledger::eth_bridge::storage::{
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::{eth_bridge, storage as ledger_storage};
 use namada_core::types::address::{nam, Address, InternalAddress};
+use namada_core::types::erc20tokens::Erc20Amount;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{balance_key, Amount};
+use namada_core::types::token::{balance_key, Amount, TokenAmount};
 
 use crate::ledger::native_vp::ethereum_bridge::authorize;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
@@ -250,13 +252,13 @@ fn determine_check_type(
 ///   decreasing
 /// - the `Address` of the receiver i.e. the owner of the balance which is
 ///   increasing
-/// - the `Amount` of the transfer i.e. by how much the sender's balance
+/// - the `Erc20Amount` of the transfer i.e. by how much the sender's balance
 ///   decreased, or equivalently by how much the receiver's balance increased
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
     key_a: wrapped_erc20s::Key,
     key_b: wrapped_erc20s::Key,
-) -> Result<Option<(Address, Address, Amount)>> {
+) -> Result<Option<(Address, Address, Erc20Amount)>> {
     let (balance_a, balance_b) =
         match (key_a.suffix.clone(), key_b.suffix.clone()) {
             (
@@ -294,37 +296,65 @@ pub(super) fn check_balance_changes(
                 );
                 return Ok(None);
             }
+            _ => {
+                tracing::debug!(
+                    ?key_a,
+                    ?key_b,
+                    "Rejecting transaction that is attempting to change an \
+                     ERC20 denomination key",
+                );
+                return Ok(None);
+            }
         };
+
+    let balance_a_denom = reader
+        .read_pre_value::<u8>(&key_a.denomination())?
+        .expect("A whitelisted ERC20 must have a denomination in storage");
     let balance_a_pre = reader
-        .read_pre_value::<Amount>(&balance_a)?
-        .unwrap_or_default()
-        .change();
-    let balance_a_post = match reader.read_post_value::<Amount>(&balance_a)? {
-        Some(value) => value,
-        None => {
-            tracing::debug!(
-                ?balance_a,
-                "Rejecting transaction as could not read_post balance key"
-            );
-            return Ok(None);
-        }
-    }
-    .change();
+        .read_pre_value::<Erc20Amount>(&balance_a)?
+        .unwrap_or_else(|| {
+            Erc20Amount::from_int(0u64, balance_a_denom).unwrap()
+        });
+    let balance_a_post =
+        match reader.read_post_value::<Erc20Amount>(&balance_a)? {
+            Some(value) => value,
+            None => {
+                tracing::debug!(
+                    ?balance_a,
+                    "Rejecting transaction as could not read_post balance key"
+                );
+                return Ok(None);
+            }
+        };
+
+    let balance_b_denom = reader
+        .read_pre_value::<u8>(&key_b.denomination())?
+        .expect("A whitelisted ERC20 must have a denomination in storage.");
     let balance_b_pre = reader
-        .read_pre_value::<Amount>(&balance_b)?
-        .unwrap_or_default()
-        .change();
-    let balance_b_post = match reader.read_post_value::<Amount>(&balance_b)? {
-        Some(value) => value,
-        None => {
-            tracing::debug!(
-                ?balance_b,
-                "Rejecting transaction as could not read_post balance key"
-            );
-            return Ok(None);
-        }
+        .read_pre_value::<Erc20Amount>(&balance_b)?
+        .unwrap_or_else(|| {
+            Erc20Amount::from_int(0u64, balance_b_denom).unwrap()
+        });
+    if balance_a_denom != balance_b_denom {
+        tracing::debug!(
+            ?balance_a_denom,
+            ?balance_b_denom,
+            "Rejecting transaction as ERC20 denominations in the \
+             sender/receiver accounts don't match."
+        );
+        return Ok(None);
     }
-    .change();
+    let balance_b_post =
+        match reader.read_post_value::<Erc20Amount>(&balance_b)? {
+            Some(value) => value,
+            None => {
+                tracing::debug!(
+                    ?balance_b,
+                    "Rejecting transaction as could not read_post balance key."
+                );
+                return Ok(None);
+            }
+        };
 
     let balance_a_delta = calculate_delta(balance_a_pre, balance_a_post)?;
     let balance_b_delta = calculate_delta(balance_b_pre, balance_b_post)?;
@@ -336,76 +366,98 @@ pub(super) fn check_balance_changes(
             ?balance_b_post,
             ?balance_a_delta,
             ?balance_b_delta,
-            "Rejecting transaction as balance changes do not match"
+            "Rejecting transaction as balance changes do not match."
         );
         return Ok(None);
     }
-    if balance_a_delta == 0 {
-        assert_eq!(balance_b_delta, 0);
-        tracing::debug!("Rejecting transaction as no balance change");
-        return Ok(None);
-    }
-    if balance_a_post < 0 {
-        tracing::debug!(
-            ?balance_a_post,
-            "Rejecting transaction as balance is negative"
-        );
-        return Ok(None);
-    }
-    if balance_b_post < 0 {
-        tracing::debug!(
-            ?balance_b_post,
-            "Rejecting transaction as balance is negative"
-        );
+    if balance_a_delta.is_zero() {
+        assert!(balance_b_delta.is_zero());
+        tracing::debug!("Rejecting transaction as no balance changed.");
         return Ok(None);
     }
 
-    if balance_a_delta < 0 {
-        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_a.suffix
-        {
-            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
+    match balance_a_delta {
+        Erc20Delta::Negative(amount) => {
+            if let wrapped_erc20s::KeyType::Balance { owner: sender } =
+                key_a.suffix
+            {
+                let wrapped_erc20s::KeyType::Balance { owner: receiver } =
                 key_b.suffix else { unreachable!() };
-            Ok(Some((
-                sender,
-                receiver,
-                Amount::from(
-                    u64::try_from(balance_b_delta)
-                        .expect("This should not fail"),
-                ),
-            )))
-        } else {
-            unreachable!()
+
+                Ok(Some((sender, receiver, amount)))
+            } else {
+                unreachable!()
+            }
         }
-    } else {
-        assert!(balance_b_delta < 0);
-        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_b.suffix
-        {
-            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
+        Erc20Delta::Positive(amount) => {
+            if let wrapped_erc20s::KeyType::Balance { owner: sender } =
+                key_b.suffix
+            {
+                let wrapped_erc20s::KeyType::Balance { owner: receiver } =
                 key_a.suffix else { unreachable!() };
-            Ok(Some((
-                sender,
-                receiver,
-                Amount::from(
-                    u64::try_from(balance_a_delta)
-                        .expect("This should not fail"),
-                ),
-            )))
-        } else {
-            unreachable!()
+                Ok(Some((sender, receiver, amount)))
+            } else {
+                unreachable!()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum Erc20Delta {
+    Positive(Erc20Amount),
+    Negative(Erc20Amount),
+}
+
+impl Erc20Delta {
+    fn is_zero(&self) -> bool {
+        match &self {
+            Erc20Delta::Positive(amount) | Erc20Delta::Negative(amount) => {
+                amount.is_zero()
+            }
+        }
+    }
+}
+
+impl Neg for Erc20Delta {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::Positive(amount) => Self::Negative(amount),
+            Self::Negative(amount) => Self::Positive(amount),
         }
     }
 }
 
 /// Return the delta between `balance_pre` and `balance_post`, erroring if there
 /// is an underflow
-fn calculate_delta(balance_pre: i128, balance_post: i128) -> Result<i128> {
-    match balance_post.checked_sub(balance_pre) {
-        Some(result) => Ok(result),
-        None => Err(eyre!(
-            "Underflow while calculating delta: {} - {}",
-            balance_post,
-            balance_pre
-        )),
+fn calculate_delta(
+    balance_pre: Erc20Amount,
+    balance_post: Erc20Amount,
+) -> Result<Erc20Delta> {
+    if !balance_pre.same_denomination(&balance_post) {
+        return Err(eyre!(
+            "Cannot compare ERC20 amounts in different denominations"
+        ));
+    } else if balance_post >= balance_pre {
+        match balance_post.checked_sub(&balance_pre) {
+            Some(result) => Ok(Erc20Delta::Positive(result)),
+            None => Err(eyre!(
+                "Underflow while calculating delta: {} - {}",
+                balance_post,
+                balance_pre
+            )),
+        }
+    } else {
+        match balance_pre.checked_sub(&balance_post) {
+            Some(result) => Ok(Erc20Delta::Negative(result)),
+            None => Err(eyre!(
+                "Underflow while calculating delta: {} - {}",
+                balance_post,
+                balance_pre
+            )),
+        }
     }
 }
 

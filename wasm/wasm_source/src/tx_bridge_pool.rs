@@ -4,6 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eth_bridge::storage::{bridge_pool, native_erc20_key, wrapped_erc20s};
 use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 use namada_tx_prelude::*;
+use token::Amount;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
@@ -16,7 +17,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     log_string("Received transfer to add to pool.");
     // pay the gas fees
     let GasFee { amount, ref payer } = transfer.gas_fee;
-    token::transfer(
+    token::transfer::<Amount>(
         ctx,
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
@@ -35,20 +36,20 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     } = transfer.transfer;
     // if minting wNam, escrow the correct amount
     if asset == native_erc20_address(ctx)? {
-        token::transfer(
+        token::transfer::<Amount>(
             ctx,
             sender,
             &eth_bridge::ADDRESS,
             &address::nam(),
             None,
-            amount,
+            Amount::try_from(amount).unwrap(),
             &None,
             &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
         let sub_prefix = wrapped_erc20s::sub_prefix(&asset);
-        token::transfer(
+        token::transfer::<Erc20Amount>(
             ctx,
             sender,
             &bridge_pool::BRIDGE_POOL_ADDRESS,

@@ -266,9 +266,10 @@ mod tests {
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
+    use namada_core::types::erc20tokens::Erc20Amount;
     use namada_core::types::ethereum_events::testing::{
-        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
+        arbitrary_eth_address, arbitrary_nonce, arbitrary_single_transfer,
+        DAI_ERC20_ETH_ADDRESS,
     };
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
@@ -286,7 +287,7 @@ mod tests {
         let sole_validator = address::testing::gen_established_address();
         let receiver = address::testing::established_address_2();
 
-        let amount = arbitrary_amount();
+        let amount = Erc20Amount::from_int(10u64, 10).expect("Test failed");
         let asset = arbitrary_eth_address();
         let body = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
@@ -354,7 +355,7 @@ mod tests {
             wl_storage.read_bytes(&wrapped_erc20_keys.balance(&receiver))?;
         let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
         assert_eq!(
-            Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
+            Erc20Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
             amount
         );
 
@@ -362,7 +363,7 @@ mod tests {
             wl_storage.read_bytes(&wrapped_erc20_keys.supply())?;
         let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
         assert_eq!(
-            Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
+            Erc20Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
             amount
         );
 
@@ -384,7 +385,7 @@ mod tests {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Amount::from(100).into(),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver: receiver.clone(),
             }],
@@ -446,7 +447,7 @@ mod tests {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Amount::from(100).into(),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver,
             }],
@@ -497,7 +498,7 @@ mod tests {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Amount::from(100).into(),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver: address::testing::established_address_1(),
             }],
@@ -619,7 +620,7 @@ mod tests {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Amount::from(100).into(),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver: receiver.clone(),
             }],
@@ -649,7 +650,7 @@ mod tests {
         let new_event = EthereumEvent::TransfersToNamada {
             nonce: 2.into(),
             transfers: vec![TransferToNamada {
-                amount: Amount::from(100),
+                amount: Amount::from(100).into(),
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver,
             }],

@@ -5,19 +5,6 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::storage;
-use namada_core::types::token::Amount;
-
-/// Returns the stored Amount, or 0 if not stored
-pub(super) fn amount_or_default<D, H>(
-    wl_storage: &WlStorage<D, H>,
-    key: &storage::Key,
-) -> Result<Amount>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    Ok(maybe_value(wl_storage, key)?.unwrap_or_default())
-}
 
 /// Read some arbitrary value from storage, erroring if it's not found
 pub(super) fn value<D, H, T: BorshDeserialize>(
@@ -54,7 +41,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::StorageWrite;
@@ -66,11 +52,12 @@ mod tests {
     #[test]
     fn test_amount_returns_zero_for_uninitialized_storage() {
         let fake_storage = TestWlStorage::default();
-        let amt = read::amount_or_default(
+        let amt: Amount = read::maybe_value(
             &fake_storage,
             &storage::Key::parse("some arbitrary key with no stored value")
                 .unwrap(),
         )
+        .map(|val| val.unwrap_or_default())
         .unwrap();
         assert_eq!(amt, Amount::from(0));
     }
@@ -84,7 +71,9 @@ mod tests {
             .write_bytes(&key, amount.try_to_vec().unwrap())
             .unwrap();
 
-        let amt = read::amount_or_default(&fake_storage, &key).unwrap();
+        let amt: Amount = read::maybe_value(&fake_storage, &key)
+            .map(|val| val.unwrap_or_default())
+            .unwrap();
         assert_eq!(amt, amount);
     }
 
@@ -95,6 +84,10 @@ mod tests {
         let mut fake_storage = TestWlStorage::default();
         fake_storage.write_bytes(&key, amount.as_bytes()).unwrap();
 
-        assert_matches!(read::amount_or_default(&fake_storage, &key), Err(_));
+        assert!(
+            read::maybe_value(&fake_storage, &key)
+                .map(|val: Option<Amount>| val.unwrap_or_default())
+                .is_err()
+        );
     }
 }

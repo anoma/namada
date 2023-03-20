@@ -21,10 +21,14 @@ use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
-use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
+use namada::eth_bridge::oracle::config::UpdateErc20;
+use namada::ledger::eth_bridge::{
+    wrapped_erc20s, EthBridgeQueries, EthereumBridgeConfig,
+};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -823,11 +827,32 @@ where
                 "Found Ethereum height from which the Ethereum oracle should \
                  start"
             );
+            let whitelist_update: Vec<UpdateErc20> = self
+                .wl_storage
+                .write_log
+                .iter_prefix_post(&wrapped_erc20s::prefix())
+                .filter_map(|(key, _)| {
+                    let key =
+                        Key::from_str(&key).expect("This should not fail");
+                    wrapped_erc20s::is_erc20_denomination_key(&key).map(
+                        |asset| {
+                            let modification =
+                                self.wl_storage.write_log.read(&key).0.expect(
+                                    "This is checked by `iter_prefix_post`",
+                                );
+                            UpdateErc20::try_from((asset, modification))
+                                .expect("This should not fail")
+                        },
+                    )
+                })
+                .collect();
+
             let config = namada::eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 governance_contract: config.contracts.governance.address,
                 start_block,
+                whitelist_update,
             };
             tracing::info!(
                 ?config,

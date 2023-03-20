@@ -94,6 +94,9 @@ router! {ETH_BRIDGE,
 
     // Read the voting powers map for the requested validator set.
     ( "eth_voting_powers" / [height: BlockHeight]) -> VotingPowersMap = eth_voting_powers,
+
+    // Get the number of decimal places for a whitelisted ERC20 token
+    ("erc20_denomination" / [token_address: EthAddress]) -> Option<u8> = erc20_denomination,
 }
 
 /// Helper function to read a smart contract from storage.
@@ -498,6 +501,21 @@ where
     Ok(voting_powers)
 }
 
+/// The denomination of a whitelisted ERC20 token
+fn erc20_denomination<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    token_address: EthAddress,
+) -> storage_api::Result<Option<u8>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx
+        .wl_storage
+        .ethbridge_queries()
+        .get_erc20_denomination(&token_address))
+}
+
 #[cfg(test)]
 mod test_ethbridge_router {
     use std::collections::BTreeMap;
@@ -506,8 +524,10 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::established_address_1;
+    use namada_core::types::erc20tokens::Erc20Amount;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::vote_extensions::validator_set_update;
     use namada_core::types::vote_extensions::validator_set_update::{
@@ -722,13 +742,19 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_bridge_pool() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
 
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -764,12 +790,18 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_bridge_pool_updates() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -796,7 +828,8 @@ mod test_ethbridge_router {
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
         let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(
@@ -824,12 +857,18 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_get_merkle_proof() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -861,7 +900,8 @@ mod test_ethbridge_router {
 
         // update the pool
         let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(
@@ -933,12 +973,18 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_cannot_get_proof() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -973,7 +1019,8 @@ mod test_ethbridge_router {
 
         // update the pool
         let mut transfer2 = transfer;
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(
@@ -1023,12 +1070,18 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_signed_bp_transfers() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -1059,7 +1112,8 @@ mod test_ethbridge_router {
 
         // update the pool
         let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(
@@ -1094,12 +1148,18 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_transfer_to_eth_progress() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -1158,7 +1218,8 @@ mod test_ethbridge_router {
 
         // update the pool
         let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(
@@ -1195,6 +1256,12 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_cannot_get_proof_for_removed_transfer() {
         let mut client = TestClient::new(RPC);
+        let denom_key =
+            wrapped_erc20s::Keys::from(&EthAddress([0; 20])).denomination();
+        client
+            .wl_storage
+            .write_bytes(&denom_key, 8u8.try_to_vec().expect("Test failed"))
+            .expect("Test failed");
         // write validator to storage
         test_utils::init_default_storage(&mut client.wl_storage);
         let transfer = PendingTransfer {
@@ -1202,7 +1269,7 @@ mod test_ethbridge_router {
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: 0.into(),
+                amount: Erc20Amount::from_int(0u8, 8).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: 0.into(),
@@ -1231,7 +1298,8 @@ mod test_ethbridge_router {
 
         // update the pool
         let mut transfer2 = transfer.clone();
-        transfer2.transfer.amount = 1.into();
+        transfer2.transfer.amount =
+            Erc20Amount::from_int(1u8, 8).expect("Test failed");
         client
             .wl_storage
             .write_bytes(

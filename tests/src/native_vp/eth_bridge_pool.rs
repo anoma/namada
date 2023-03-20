@@ -19,12 +19,14 @@ mod test_bridge_pool_vp {
     use namada::types::token::Amount;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
+    use namada_core::types::erc20tokens::Erc20Amount;
 
     use crate::native_vp::TestNativeVpEnv;
     use crate::tx::{tx_host_env, TestTxEnv};
 
     const ADD_TRANSFER_WASM: &str = "tx_bridge_pool.wasm";
     const ASSET: EthAddress = EthAddress([1; 20]);
+    const ASSET_DENOM: u8 = 10;
     const BERTHA_WEALTH: u64 = 1_000_000;
     const BERTHA_TOKENS: u64 = 10_000;
     const GAS_FEE: u64 = 100;
@@ -81,14 +83,14 @@ mod test_bridge_pool_vp {
         // initialize Bertha's account
         env.spawn_accounts([&albert_address(), &bertha_address(), &nam()]);
         // enrich Albert
-        env.credit_tokens(
+        env.credit_tokens::<Amount>(
             &albert_address(),
             &nam(),
             None,
             BERTHA_WEALTH.into(),
         );
         // enrich Bertha
-        env.credit_tokens(
+        env.credit_tokens::<Amount>(
             &bertha_address(),
             &nam(),
             None,
@@ -100,8 +102,14 @@ mod test_bridge_pool_vp {
             &bertha_address(),
             &ADDRESS,
             Some(sub_prefix),
-            BERTHA_TOKENS.into(),
+            Erc20Amount::from_int(BERTHA_TOKENS, ASSET_DENOM).unwrap(),
         );
+        // We need to add this asset's denom to storage.
+        let denom_key = wrapped_erc20s::Keys::from(&ASSET).denomination();
+        env.wl_storage
+            .storage
+            .write(&denom_key, ASSET_DENOM.try_to_vec().unwrap())
+            .unwrap();
         env
     }
 
@@ -124,7 +132,7 @@ mod test_bridge_pool_vp {
                 asset: ASSET,
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: Amount::from(TOKENS),
+                amount: Erc20Amount::from_int(TOKENS, ASSET_DENOM).unwrap(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),
@@ -145,7 +153,7 @@ mod test_bridge_pool_vp {
                 asset: wnam(),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: Amount::from(TOKENS),
+                amount: Amount::from(TOKENS).into(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),
@@ -166,7 +174,7 @@ mod test_bridge_pool_vp {
                 asset: wnam(),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
-                amount: Amount::from(TOKENS),
+                amount: Amount::from(TOKENS).into(),
             },
             gas_fee: GasFee {
                 amount: Amount::from(GAS_FEE),

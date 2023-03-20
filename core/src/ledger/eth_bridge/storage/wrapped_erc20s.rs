@@ -20,6 +20,7 @@ pub fn prefix() -> storage::Key {
 
 const BALANCE_KEY_SEGMENT: &str = "balance";
 const SUPPLY_KEY_SEGMENT: &str = "supply";
+const DENOMINATION_KEY_SEGMENT: &str = "denomination";
 
 /// Generator for the keys under which details of an ERC20 token are stored
 pub struct Keys {
@@ -40,10 +41,18 @@ impl Keys {
     }
 
     /// Get the `supply` key - there should be a
-    /// [`crate::types::token::Amount`] stored here
+    /// [`crate::types::token::Erc20Amount`] stored here
     pub fn supply(&self) -> storage::Key {
         self.prefix
             .push(&SUPPLY_KEY_SEGMENT.to_owned())
+            .expect("should always be able to construct this key")
+    }
+
+    /// Get the `denomination` key - there should be a
+    /// [`u8`] stored here
+    pub fn denomination(&self) -> storage::Key {
+        self.prefix
+            .push(&DENOMINATION_KEY_SEGMENT.to_owned())
             .expect("should always be able to construct this key")
     }
 }
@@ -75,6 +84,8 @@ pub enum KeyType {
     },
     /// A type of key which tracks the total supply of some wrapped ERC20
     Supply,
+    /// A type of key which tracks the denomination of some wrapped ERC20
+    Denom,
 }
 
 /// Represents a key relating to a wrapped ERC20
@@ -86,12 +97,22 @@ pub struct Key {
     pub suffix: KeyType,
 }
 
+impl Key {
+    /// Get the denomination key associated with this
+    /// wrapped ERC20.
+    pub fn denomination(&self) -> storage::Key {
+        let keys = Keys::from(&self.asset);
+        keys.denomination()
+    }
+}
+
 impl From<&Key> for storage::Key {
     fn from(mt_key: &Key) -> Self {
         let keys = Keys::from(&mt_key.asset);
         match &mt_key.suffix {
             KeyType::Balance { owner } => keys.balance(owner),
             KeyType::Supply => keys.supply(),
+            KeyType::Denom => keys.denomination(),
         }
     }
 }
@@ -101,6 +122,29 @@ fn has_erc20_segment(key: &storage::Key) -> bool {
         key.segments.get(1),
         Some(segment) if segment == &DbKeySeg::StringSeg(MULTITOKEN_KEY_SEGMENT.to_owned()),
     )
+}
+
+/// Checks if a key is the key for an ERC20 denomination
+/// and returns the address of the asset if so.
+pub fn is_erc20_denomination_key(key: &storage::Key) -> Option<EthAddress> {
+    if matches!(
+        key.segments.get(3),
+        Some(seg) if seg == &DbKeySeg::StringSeg(DENOMINATION_KEY_SEGMENT.to_owned())
+    ) {
+        if has_erc20_segment(key) {
+            key.segments.get(2).and_then(|seg| {
+                if let DbKeySeg::StringSeg(seg) = seg {
+                    EthAddress::from_str(seg).ok()
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 impl TryFrom<&storage::Key> for Key {
@@ -141,6 +185,13 @@ impl TryFrom<&storage::Key> for Key {
                     suffix: KeyType::Supply,
                 };
                 Ok(supply_key)
+            }
+            DENOMINATION_KEY_SEGMENT => {
+                let denom_key = Key {
+                    asset,
+                    suffix: KeyType::Denom,
+                };
+                Ok(denom_key)
             }
             BALANCE_KEY_SEGMENT => {
                 let owner = if let Some(DbKeySeg::AddressSeg(address)) =

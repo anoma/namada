@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
+use namada::core::types::erc20tokens::Erc20Amount;
 use namada::eth_bridge::ethers::abi::AbiDecode;
 use namada::eth_bridge::ethers::prelude::{Http, Provider};
 use namada::eth_bridge::structs::RelayProof;
@@ -43,30 +44,45 @@ pub async fn add_to_eth_bridge_pool(
         ref gas_payer,
     } = args;
     let tx_code = ctx.read_wasm(ADD_TRANSFER_WASM);
-    let transfer = PendingTransfer {
-        transfer: TransferToEthereum {
-            asset,
-            recipient,
-            sender: ctx.get(sender),
-            amount,
-        },
-        gas_fee: GasFee {
-            amount: gas_amount,
-            payer: ctx.get(gas_payer),
-        },
-    };
-    let data = transfer.try_to_vec().unwrap();
-    let transfer_tx = Tx::new(tx_code, Some(data));
-    // this should not initialize any new addresses, so we ignore the result.
-    process_tx(
-        ctx,
-        tx,
-        transfer_tx,
-        TxSigningKey::None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await;
+    let client = HttpClient::new(tx.ledger_address.clone()).unwrap();
+    if let Ok(Some(denom)) = RPC
+        .shell()
+        .eth_bridge()
+        .erc20_denomination(&client, &asset)
+        .await
+    {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                asset,
+                recipient,
+                sender: ctx.get(sender),
+                amount: Erc20Amount::from_decimal(amount, denom).unwrap(),
+            },
+            gas_fee: GasFee {
+                amount: gas_amount,
+                payer: ctx.get(gas_payer),
+            },
+        };
+        let data = transfer.try_to_vec().unwrap();
+        let transfer_tx = Tx::new(tx_code, Some(data));
+        // this should not initialize any new addresses, so we ignore the
+        // result.
+        process_tx(
+            ctx,
+            tx,
+            transfer_tx,
+            TxSigningKey::None,
+            #[cfg(not(feature = "mainnet"))]
+            false,
+        )
+        .await;
+    } else {
+        println!(
+            "The denomination for the ERC20 address {} could not be found in \
+             storage",
+            asset
+        )
+    }
 }
 
 /// A json serializable representation of the Ethereum
@@ -561,7 +577,8 @@ mod recommendations {
                     asset: EthAddress([1; 20]),
                     recipient: EthAddress([2; 20]),
                     sender: bertha_address(),
-                    amount: Default::default(),
+                    amount: Erc20Amount::from_int(0u64, 7)
+                        .expect("Test failed"),
                 },
                 gas_fee: GasFee {
                     amount: gas_amount.into(),

@@ -1,7 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_nonce_key, get_signed_root_key,
+};
+use namada_core::ledger::eth_bridge::storage::{
+    active_key, native_erc20_key, wrapped_erc20s,
 };
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
@@ -140,6 +142,36 @@ where
                 enabled_epoch,
             )) => queried_epoch >= enabled_epoch,
         }
+    }
+
+    /// Get the Ethereum address of the wrapped NAM token.
+    pub fn get_wnam_address(self) -> Option<EthAddress> {
+        let key = native_erc20_key();
+        self.wl_storage
+            .storage
+            .read(&key)
+            .unwrap()
+            .0
+            .map(|bytes| EthAddress::try_from_slice(&bytes).unwrap())
+    }
+
+    /// Get the number of decimal places of a whitelisted ERC20.
+    pub fn get_erc20_denomination(
+        self,
+        token_address: &EthAddress,
+    ) -> Option<u8> {
+        if let Some(addr) =
+            self.wl_storage.ethbridge_queries().get_wnam_address()
+        {
+            if addr == *token_address {
+                return Some(6);
+            }
+        }
+        let denom_key =
+            wrapped_erc20s::Keys::from(token_address).denomination();
+        self.wl_storage
+            .read(&denom_key)
+            .expect("We should able to read denominations from storage")
     }
 
     /// Get the latest nonce for the Ethereum bridge

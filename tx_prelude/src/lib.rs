@@ -28,6 +28,7 @@ pub use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::proto::{Signed, SignedTxData};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
+pub use namada_core::types::erc20tokens::Erc20Amount;
 pub use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::TxIndex;

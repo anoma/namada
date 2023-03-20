@@ -2,14 +2,15 @@ pub mod control;
 pub mod events;
 pub mod test_tools;
 
+use std::collections::HashMap;
 use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
 
 use clarity::Address;
 use eyre::eyre;
 use namada::core::types::ethereum_structs;
-use namada::eth_bridge::oracle::config::Config;
-use namada::types::ethereum_events::EthereumEvent;
+use namada::eth_bridge::oracle::config::{Config, UpdateErc20};
+use namada::types::ethereum_events::{EthAddress, EthereumEvent};
 use num256::Uint256;
 use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -75,6 +76,8 @@ impl SyncStatus {
 pub struct Oracle {
     /// The client that talks to the Ethereum fullnode
     client: Web3,
+    /// A list of whitelisted token addresses and their ERC20 denominations
+    erc20_tokens: HashMap<EthAddress, u8>,
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
@@ -121,6 +124,7 @@ impl Oracle {
     ) -> Self {
         Self {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
+            erc20_tokens: Default::default(),
             sender,
             backoff,
             ceiling,
@@ -264,7 +268,11 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                 return;
             }
         };
-
+    for update in config.whitelist_update.drain(0..) {
+        if let UpdateErc20::Add(token, denom) = update {
+            oracle.erc20_tokens.insert(token, denom);
+        }
+    }
     let mut next_block_to_process = config.start_block.clone();
 
     loop {
@@ -311,6 +319,19 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             // check if a new config has been sent.
             if let Some(new_config) = oracle.update_config() {
                 config = new_config;
+                // apply updates to the whitelist
+                // TODO: Actually send these updates on start up and when the
+                // TODO: whitelist is changed
+                for update in config.whitelist_update.drain(0..) {
+                    match update {
+                        UpdateErc20::Add(token, denom) => {
+                            oracle.erc20_tokens.insert(token, denom)
+                        }
+                        UpdateErc20::Remove(token) => {
+                            oracle.erc20_tokens.remove(&token)
+                        }
+                    };
+                }
             }
             next_block_to_process += 1.into();
         }
@@ -400,6 +421,7 @@ async fn process(
                         block_to_process.clone().into(),
                         log.data.0.as_slice(),
                         u64::from(config.min_confirmations).into(),
+                        &oracle.erc20_tokens,
                     ) {
                         Ok(event) => Some(event),
                         Err(error) => {
@@ -487,8 +509,11 @@ pub mod last_processed_block {
 mod test_oracle {
     use std::num::NonZeroU64;
 
+    use namada::core::types::erc20tokens::Erc20Amount;
     use namada::types::address::testing::gen_established_address;
-    use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
+    use namada::types::ethereum_events::{
+        EthAddress, TransferToEthereum, Uint,
+    };
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
@@ -542,6 +567,7 @@ mod test_oracle {
         TestPackage {
             oracle: Oracle {
                 client,
+                erc20_tokens: HashMap::from([(EthAddress([0; 20]), 7)]),
                 sender: eth_sender,
                 last_processed_block: last_processed_block_sender,
                 // backoff should be short for tests so that they run faster
@@ -759,7 +785,7 @@ mod test_oracle {
         let gas_payer = gen_established_address();
         let second_event = RawTransfersToEthereum {
             transfers: vec![TransferToEthereum {
-                amount: Default::default(),
+                amount: Erc20Amount::from_uint(Uint::from(0), 7),
                 asset: EthAddress([0; 20]),
                 sender: gas_payer.clone(),
                 receiver: EthAddress([1; 20]),
@@ -831,7 +857,7 @@ mod test_oracle {
             assert_eq!(
                 transfer,
                 TransferToEthereum {
-                    amount: Default::default(),
+                    amount: Erc20Amount::from_uint(Uint::from(0), 7),
                     asset: EthAddress([0; 20]),
                     sender: gas_payer.clone(),
                     receiver: EthAddress([1; 20]),

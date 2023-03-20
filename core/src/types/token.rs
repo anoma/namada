@@ -1,6 +1,6 @@
 //! A basic fungible token
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
@@ -43,6 +43,41 @@ pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
 
 /// A change in tokens amount
 pub type Change = i128;
+
+/// A common interface for types representing
+/// the amount of some token.
+pub trait TokenAmount:
+    BorshDeserialize + BorshSerialize + Debug + Copy
+where
+    Self: Sized,
+{
+    /// Spend a given amount.
+    /// Panics if the resulting amount would be negative.
+    fn spend(&mut self, amount: &Self) {
+        *self = self.checked_sub(amount).unwrap()
+    }
+
+    /// Receive a given amount.
+    /// Panics on overflow.
+    fn receive(&mut self, amount: &Self) {
+        *self = self.checked_add(amount).unwrap()
+    }
+
+    /// Checked addition. Returns `None` on overflow.
+    fn checked_add(&self, amount: &Self) -> Option<Self>;
+
+    /// Checked subtraction. Returns `None` on underflow.
+    fn checked_sub(&self, amount: &Self) -> Option<Self>;
+
+    /// Check if the amount is zero.
+    fn is_zero(&self) -> bool;
+
+    /// Get the maximum value
+    fn max(&self) -> Self;
+
+    /// Get the zero value of this amount
+    fn zero(&self) -> Self;
+}
 
 impl Amount {
     /// Get the amount as a [`Change`]
@@ -97,6 +132,36 @@ impl Amount {
         Self {
             micro: change as u64,
         }
+    }
+}
+
+impl TokenAmount for Amount {
+    fn spend(&mut self, amount: &Self) {
+        self.spend(amount);
+    }
+
+    fn receive(&mut self, amount: &Self) {
+        self.receive(amount);
+    }
+
+    fn checked_add(&self, amount: &Self) -> Option<Self> {
+        self.checked_add(*amount)
+    }
+
+    fn checked_sub(&self, amount: &Self) -> Option<Self> {
+        self.checked_sub(*amount)
+    }
+
+    fn is_zero(&self) -> bool {
+        self.micro == 0u64
+    }
+
+    fn max(&self) -> Self {
+        Amount::max()
+    }
+
+    fn zero(&self) -> Self {
+        Self::from(0)
     }
 }
 

@@ -1,24 +1,35 @@
 //! Helpers for writing to storage
+use std::fmt::Debug;
+
 use borsh::{BorshDeserialize, BorshSerialize};
-use eyre::Result;
+use eyre::{eyre, Result};
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageWrite;
+use namada_core::types::address::nam;
 use namada_core::types::storage;
-use namada_core::types::token::Amount;
+use namada_core::types::token::{is_balance_key, Amount, TokenAmount};
 
 /// Reads the `Amount` from key, applies update then writes it back
-pub fn amount<D, H>(
+pub fn amount<D, H, T>(
     wl_storage: &mut WlStorage<D, H>,
     key: &storage::Key,
-    update: impl FnOnce(&mut Amount),
-) -> Result<Amount>
+    update: impl FnOnce(Option<T>) -> T,
+) -> Result<T>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    T: TokenAmount + TryInto<Amount>,
+    <T as TryInto<Amount>>::Error: Debug,
 {
-    let mut amount = super::read::amount_or_default(wl_storage, key)?;
-    update(&mut amount);
-    wl_storage.write_bytes(key, amount.try_to_vec()?)?;
+    let amount = update(super::read::maybe_value(wl_storage, key)?);
+    if is_balance_key(&nam(), key).is_some() {
+        let to_write = amount.try_into().map_err(|e| {
+            eyre!("Failed to convert to type `Amount`: {:?}", e)
+        })?;
+        wl_storage.write_bytes(key, to_write.try_to_vec()?)?;
+    } else {
+        wl_storage.write_bytes(key, amount.try_to_vec()?)?;
+    }
     Ok(amount)
 }
 

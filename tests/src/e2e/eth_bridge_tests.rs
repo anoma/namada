@@ -16,6 +16,7 @@ use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
+use namada_core::types::erc20tokens::Erc20Amount;
 use namada_core::types::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
 };
@@ -331,7 +332,7 @@ async fn test_bridge_pool_e2e() {
     let transfers = EthereumEvent::TransfersToEthereum {
         nonce: 0.into(),
         transfers: vec![TransferToEthereum {
-            amount: Amount::whole(100),
+            amount: Amount::whole(100).into(),
             asset: EthAddress::from_str(&wnam_address).expect("Test failed"),
             receiver: EthAddress::from_str(RECEIVER).expect("Test failed"),
             gas_amount: Amount::whole(10),
@@ -430,7 +431,7 @@ async fn test_wnam_transfer() -> Result<()> {
 
     const WNAM_TRANSFER_AMOUNT_MICROS: u64 = 10_000_000;
     let wnam_transfer = TransferToNamada {
-        amount: token::Amount::from(WNAM_TRANSFER_AMOUNT_MICROS),
+        amount: token::Amount::from(WNAM_TRANSFER_AMOUNT_MICROS).into(),
         asset: ethereum_bridge_params.contracts.native_erc20,
         receiver: address::testing::established_address_1(),
     };
@@ -447,12 +448,13 @@ async fn test_wnam_transfer() -> Result<()> {
     let _bg_ledger = ledger.background();
 
     // check NAM balance of receiver and bridge
-    let receiver_balance = find_balance(
+    let receiver_balance: Erc20Amount = find_balance(
         &test,
         &Who::Validator(0),
         &native_token_address,
         &wnam_transfer.receiver,
-    )?;
+    )?
+    .into();
     assert_eq!(receiver_balance, wnam_transfer.amount);
 
     let bridge_balance = find_balance(
@@ -464,7 +466,7 @@ async fn test_wnam_transfer() -> Result<()> {
     assert_eq!(
         bridge_balance,
         token::Amount::from(BRIDGE_INITIAL_NAM_BALANCE * 1_000_000)
-            - wnam_transfer.amount
+            - Amount::try_from(wnam_transfer.amount).unwrap()
     );
 
     Ok(())
@@ -527,6 +529,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
             .governance
             .address,
         start_block: 0.into(),
+        whitelist_update: vec![],
     };
     ledger.exp_string(&format!(
         "Oracle received initial configuration - {:?}",
@@ -545,7 +548,7 @@ async fn test_dai_transfer_implicit() -> Result<()> {
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: transfer_amount.to_owned(),
+        amount: transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -583,7 +586,7 @@ async fn test_dai_transfer_established() -> Result<()> {
     let transfer_amount = token::Amount::from(10_000_000);
 
     let dai_transfer = TransferToNamada {
-        amount: transfer_amount.to_owned(),
+        amount: transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: established_addr.to_owned(),
     };
@@ -612,7 +615,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: initial_transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -678,7 +681,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         find_address(&test, albert_established_alias)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: initial_transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };
@@ -732,7 +735,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: initial_transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -794,20 +797,24 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: Erc20Amount::from(initial_transfer_amount),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
     let _bg_ledger =
         send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
 
-    let albert_wdai_balance = find_wrapped_erc20_balance(
+    let albert_wdai_balance: Erc20Amount = find_wrapped_erc20_balance(
         &test,
         &Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
-    )?;
-    assert_eq!(albert_wdai_balance, initial_transfer_amount);
+    )?
+    .into();
+    assert_eq!(
+        albert_wdai_balance,
+        Erc20Amount::from(initial_transfer_amount)
+    );
 
     // create an established account that Bertha controls
     let bertha_established_alias = "bertha-established";
@@ -879,7 +886,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     let initial_transfer_amount = token::Amount::from(10_000_000);
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: initial_transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };
@@ -955,7 +962,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     let initial_transfer_amount = token::Amount::from(10_000_000);
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned(),
+        amount: initial_transfer_amount.to_owned().into(),
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };

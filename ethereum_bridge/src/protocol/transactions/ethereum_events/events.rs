@@ -1,6 +1,7 @@
 //! Logic for acting on events
 
 use std::collections::{BTreeSet, HashSet};
+use std::fmt::Debug;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
@@ -18,6 +19,7 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{nam, Address};
+use namada_core::types::erc20tokens::Erc20Amount;
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
@@ -25,7 +27,8 @@ use namada_core::types::ethereum_events::{
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::{
-    balance_key, multitoken_balance_key, multitoken_balance_prefix,
+    balance_key, multitoken_balance_key, multitoken_balance_prefix, Amount,
+    TokenAmount,
 };
 
 use crate::parameters::read_native_erc20_address;
@@ -81,7 +84,11 @@ where
             );
             changed
         } else {
-            redeem_native_token(wl_storage, receiver, amount)?
+            redeem_native_token(
+                wl_storage,
+                receiver,
+                &Amount::try_from(*amount)?,
+            )?
         };
         changed_keys.append(&mut changed)
     }
@@ -151,47 +158,61 @@ where
 }
 
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
-fn mint_wrapped_erc20s<D, H>(
+fn mint_wrapped_erc20s<D, H, T>(
     wl_storage: &mut WlStorage<D, H>,
     asset: &EthAddress,
     receiver: &Address,
-    amount: &token::Amount,
+    amount: &T,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    T: TokenAmount + TryInto<Amount>,
+    <T as TryInto<Amount>>::Error: Debug,
 {
     let mut changed_keys = BTreeSet::default();
     let keys: wrapped_erc20s::Keys = asset.into();
     let balance_key = keys.balance(receiver);
-    update::amount(wl_storage, &balance_key, |balance| {
+    update::amount(wl_storage, &balance_key, |balance: Option<T>| {
         tracing::debug!(
             %balance_key,
             ?balance,
             "Existing value found",
         );
-        balance.receive(amount);
+        let balance = balance
+            .map(|mut val| {
+                val.receive(amount);
+                val
+            })
+            .unwrap_or(*amount);
         tracing::debug!(
             %balance_key,
             ?balance,
             "New value calculated",
         );
+        balance
     })?;
     _ = changed_keys.insert(balance_key);
 
     let supply_key = keys.supply();
-    update::amount(wl_storage, &supply_key, |supply| {
+    update::amount(wl_storage, &supply_key, |supply: Option<T>| {
         tracing::debug!(
             %supply_key,
             ?supply,
             "Existing value found",
         );
-        supply.receive(amount);
+        let supply = supply
+            .map(|mut val| {
+                val.receive(amount);
+                val
+            })
+            .unwrap_or(*amount);
         tracing::debug!(
             %supply_key,
             ?supply,
             "New value calculated",
         );
+        supply
     })?;
     _ = changed_keys.insert(supply_key);
     Ok(changed_keys)
@@ -225,13 +246,25 @@ where
         let key = get_pending_key(&pending_transfer);
         if likely(wl_storage.has_key(&key)?) {
             // give the relayer the gas fee for this transfer.
-            update::amount(wl_storage, &relayer_rewards_key, |balance| {
-                balance.receive(&pending_transfer.gas_fee.amount);
-            })?;
+            update::amount(
+                wl_storage,
+                &relayer_rewards_key,
+                |balance: Option<Amount>| {
+                    let mut balance = balance.unwrap_or_default();
+                    balance.receive(&pending_transfer.gas_fee.amount);
+                    balance
+                },
+            )?;
             // the gas fee is removed from escrow.
-            update::amount(wl_storage, &pool_balance_key, |balance| {
-                balance.spend(&pending_transfer.gas_fee.amount);
-            })?;
+            update::amount(
+                wl_storage,
+                &pool_balance_key,
+                |balance: Option<Amount>| {
+                    let mut balance = balance.unwrap_or_default();
+                    balance.spend(&pending_transfer.gas_fee.amount);
+                    balance
+                },
+            )?;
             wl_storage.delete(&key)?;
             _ = pending_keys.remove(&key);
         } else {
@@ -289,12 +322,24 @@ where
 
     let payer_balance_key = balance_key(&nam(), &transfer.gas_fee.payer);
     let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-    update::amount(wl_storage, &payer_balance_key, |balance| {
-        balance.receive(&transfer.gas_fee.amount);
-    })?;
-    update::amount(wl_storage, &pool_balance_key, |balance| {
-        balance.spend(&transfer.gas_fee.amount);
-    })?;
+    update::amount(
+        wl_storage,
+        &payer_balance_key,
+        |balance: Option<Amount>| {
+            let mut balance = balance.unwrap_or_default();
+            balance.receive(&transfer.gas_fee.amount);
+            balance
+        },
+    )?;
+    update::amount(
+        wl_storage,
+        &pool_balance_key,
+        |balance: Option<Amount>| {
+            let mut balance = balance.unwrap_or_default();
+            balance.spend(&transfer.gas_fee.amount);
+            balance
+        },
+    )?;
     _ = changed_key.insert(payer_balance_key);
     _ = changed_key.insert(pool_balance_key);
 
@@ -310,6 +355,29 @@ where
     let (source, target) = if transfer.transfer.asset == native_erc20_addr {
         let escrow_balance_key = balance_key(&nam(), &BRIDGE_ADDRESS);
         let sender_balance_key = balance_key(&nam(), &transfer.transfer.sender);
+        update::amount(
+            wl_storage,
+            &escrow_balance_key,
+            |balance: Option<Amount>| {
+                let mut balance = balance
+                    .expect("The bridge pool should have an escrowed balance.");
+                let transfer_amount =
+                    Amount::try_from(transfer.transfer.amount).unwrap();
+                balance.spend(&transfer_amount);
+                balance
+            },
+        )?;
+        update::amount(
+            wl_storage,
+            &sender_balance_key,
+            |balance: Option<Amount>| {
+                let mut balance = balance.unwrap_or_default();
+                let transfer_amount =
+                    Amount::try_from(transfer.transfer.amount).unwrap();
+                balance.receive(&transfer_amount);
+                balance
+            },
+        )?;
         (escrow_balance_key, sender_balance_key)
     } else {
         let sub_prefix = wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
@@ -318,14 +386,31 @@ where
             multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
         let sender_balance_key =
             multitoken_balance_key(&prefix, &transfer.transfer.sender);
+        update::amount(
+            wl_storage,
+            &escrow_balance_key,
+            |balance: Option<Erc20Amount>| {
+                let mut balance = balance
+                    .expect("The bridge pool should have an escrowed balance.");
+                balance.spend(&transfer.transfer.amount);
+                balance
+            },
+        )?;
+        update::amount(
+            wl_storage,
+            &sender_balance_key,
+            |balance: Option<Erc20Amount>| {
+                balance
+                    .map(|mut val| {
+                        val.receive(&transfer.transfer.amount);
+                        val
+                    })
+                    .unwrap_or(transfer.transfer.amount)
+            },
+        )?;
         (escrow_balance_key, sender_balance_key)
     };
-    update::amount(wl_storage, &source, |balance| {
-        balance.spend(&transfer.transfer.amount);
-    })?;
-    update::amount(wl_storage, &target, |balance| {
-        balance.receive(&transfer.transfer.amount);
-    })?;
+
     _ = changed_key.insert(source);
     _ = changed_key.insert(target);
 
@@ -391,7 +476,11 @@ mod tests {
                     asset: EthAddress([i; 20]),
                     sender: sender.clone(),
                     recipient: EthAddress([i + 1; 20]),
-                    amount: Amount::from(10),
+                    amount: if i == 0 {
+                        Amount::from(10).into()
+                    } else {
+                        Erc20Amount::from_int(10u64, 10).expect("Test failed")
+                    },
                 },
                 gas_fee: GasFee {
                     amount: Amount::from(1),
@@ -450,7 +539,8 @@ mod tests {
                     multitoken_balance_prefix(&BRIDGE_ADDRESS, &sub_prefix);
                 let sender_key =
                     multitoken_balance_key(&prefix, &transfer.transfer.sender);
-                let sender_balance = Amount::from(0);
+                let sender_balance =
+                    Erc20Amount::from_int(0u64, 10).expect("Test failed");
                 wl_storage
                     .write_bytes(
                         &sender_key,
@@ -459,7 +549,8 @@ mod tests {
                     .expect("Test failed");
                 let escrow_key =
                     multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
-                let escrow_balance = Amount::from(10);
+                let escrow_balance =
+                    Erc20Amount::from_int(10u64, 10).expect("Test failed");
                 wl_storage
                     .write_bytes(
                         &escrow_key,
@@ -469,9 +560,15 @@ mod tests {
             };
             let gas_fee = Amount::from(1);
             let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-            update::amount(wl_storage, &escrow_key, |balance| {
-                balance.receive(&gas_fee);
-            })
+            update::amount(
+                wl_storage,
+                &escrow_key,
+                |balance: Option<Amount>| {
+                    let mut balance = balance.unwrap_or_default();
+                    balance.receive(&gas_fee);
+                    balance
+                },
+            )
             .expect("Test failed");
         }
     }
@@ -530,7 +627,7 @@ mod tests {
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
-            amount,
+            amount: amount.into(),
             asset: DAI_ERC20_ETH_ADDRESS,
             receiver,
         }];
@@ -554,7 +651,7 @@ mod tests {
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let initial_stored_keys_count = stored_keys_count(&wl_storage);
 
-        let amount = Amount::from(100);
+        let amount: Erc20Amount = Amount::from(100).into();
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
             amount,
@@ -668,7 +765,7 @@ mod tests {
                 asset: EthAddress([4; 20]),
                 sender: address::testing::established_address_1(),
                 recipient: EthAddress([5; 20]),
-                amount: Amount::from(10),
+                amount: Erc20Amount::from_int(10u64, 10).expect("Test failed"),
             },
             gas_fee: GasFee {
                 amount: Amount::from(1),
@@ -727,7 +824,11 @@ mod tests {
                 let sender_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
-                assert_eq!(sender_balance, transfer.transfer.amount);
+                assert_eq!(
+                    sender_balance,
+                    Amount::try_from(transfer.transfer.amount)
+                        .expect("Test failed"),
+                );
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
                 let value =
                     wl_storage.read_bytes(&escrow_key).expect("Test failed");
@@ -745,17 +846,17 @@ mod tests {
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
                 let sender_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
+                    Erc20Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
-                assert_eq!(sender_balance, transfer.transfer.amount);
+                assert_eq!(sender_balance, transfer.transfer.amount,);
                 let escrow_key =
                     multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
                 let value =
                     wl_storage.read_bytes(&escrow_key).expect("Test failed");
                 let escrow_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
+                    Erc20Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
-                assert_eq!(escrow_balance, Amount::from(0));
+                assert!(escrow_balance.is_zero());
             }
         }
     }
