@@ -4,6 +4,8 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use thiserror::Error;
 
+const MIN_PROPOSER_REWARD: Decimal = dec!(0.01);
+
 /// Errors during rewards calculation
 #[derive(Debug, Error)]
 pub enum RewardsError {
@@ -63,7 +65,7 @@ impl PosRewardsCalculator {
         let proposer_coeff = proposer_reward
             * Decimal::from(signing_stake - votes_needed)
             / Decimal::from(total_stake)
-            + dec!(0.01);
+            + MIN_PROPOSER_REWARD;
         let signer_coeff = signer_reward;
         let active_val_coeff = dec!(1.0) - proposer_coeff - signer_coeff;
 
