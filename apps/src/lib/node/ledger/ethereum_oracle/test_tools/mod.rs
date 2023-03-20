@@ -13,7 +13,6 @@ pub mod mock_web3_client {
     use web30::types::Log;
 
     use super::super::super::ethereum_oracle::Error;
-    use super::super::events::signatures::*;
     use crate::node::ledger::ethereum_oracle::SyncStatus;
 
     /// Commands we can send to the mock client
