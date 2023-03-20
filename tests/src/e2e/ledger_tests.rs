@@ -1908,14 +1908,7 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 3200 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
-    let epoch_raw = matched
-        .trim()
-        .split_once(expected)
-        .unwrap()
-        .1
-        .split_once('.')
-        .unwrap()
-        .0;
+    let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
     client.assert_success();
 
