@@ -31,15 +31,7 @@ pub mod mock_web3_client {
     }
 
     /// The type of events supported
-    #[derive(Debug, PartialEq)]
-    pub enum MockEventType {
-        TransferToNamada,
-        TransferToEthereum,
-        ValSetUpdate,
-        NewContract,
-        UpgradedContract,
-        BridgeWhitelist,
-    }
+    pub type MockEventType = &'static str;
 
     /// A pointer to a mock Web3 client. The
     /// reason is for interior mutability.
@@ -140,23 +132,11 @@ pub mod mock_web3_client {
             block_to_check: Uint256,
             _: Option<Uint256>,
             _: impl Debug,
-            mut events: Vec<&str>,
+            mut events: Vec<MockEventType>,
         ) -> eyre::Result<Vec<Log>> {
             self.check_cmd_channel();
             if self.0.borrow().active {
-                let ty = match events.remove(0) {
-                    TRANSFER_TO_NAMADA_SIG => MockEventType::TransferToNamada,
-                    TRANSFER_TO_ETHEREUM_SIG => {
-                        MockEventType::TransferToEthereum
-                    }
-                    VALIDATOR_SET_UPDATE_SIG => MockEventType::ValSetUpdate,
-                    NEW_CONTRACT_SIG => MockEventType::NewContract,
-                    UPGRADED_CONTRACT_SIG => MockEventType::UpgradedContract,
-                    UPDATE_BRIDGE_WHITELIST_SIG => {
-                        MockEventType::BridgeWhitelist
-                    }
-                    _ => return Ok(vec![]),
-                };
+                let ty = events.remove(0);
                 let mut logs = vec![];
                 let mut events = vec![];
                 let mut client = self.0.borrow_mut();
