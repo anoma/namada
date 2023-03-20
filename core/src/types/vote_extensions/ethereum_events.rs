@@ -161,6 +161,7 @@ mod tests {
         let event = EthereumEvent::TransfersToNamada {
             nonce,
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let hash = event.hash().unwrap();
 
@@ -186,10 +187,12 @@ mod tests {
         let ev_1 = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ev_2 = EthereumEvent::TransfersToEthereum {
             nonce: 2u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
             relayer: address::testing::established_address_1(),
         };
 

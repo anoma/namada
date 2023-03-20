@@ -43,9 +43,11 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match &event {
+        // TODO: handle invalid transfs
         EthereumEvent::TransfersToNamada { transfers, .. } => {
             act_on_transfers_to_namada(wl_storage, transfers)
         }
+        // TODO: handle invalid transfs
         EthereumEvent::TransfersToEthereum {
             transfers, relayer, ..
         } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
@@ -491,6 +493,7 @@ mod tests {
             EthereumEvent::TransfersToEthereum {
                 nonce: arbitrary_nonce(),
                 transfers: vec![],
+                valid_transfers_map: vec![],
                 relayer: gen_implicit_address(),
             },
             EthereumEvent::UpdateBridgeWhitelist {
@@ -536,6 +539,7 @@ mod tests {
         }];
         let event = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
+            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
         };
 
@@ -605,6 +609,7 @@ mod tests {
         }
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
+            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
             relayer: relayer.clone(),
         };
@@ -687,6 +692,7 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers: vec![],
+            valid_transfers_map: vec![],
             relayer: gen_implicit_address(),
         };
         let _ = act_on(&mut wl_storage, &event).unwrap();

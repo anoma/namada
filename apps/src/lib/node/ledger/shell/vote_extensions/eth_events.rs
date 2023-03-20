@@ -373,6 +373,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
@@ -385,6 +386,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
         let event_3 = EthereumEvent::NewContract {
@@ -435,6 +437,7 @@ mod test_vote_extensions {
                 gas_amount: 10.into(),
                 gas_payer: gen_established_address(),
             }],
+            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::NewContract {
@@ -496,6 +499,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell
@@ -586,6 +590,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: signed_height,
@@ -667,6 +672,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell.wl_storage.storage.last_height,
@@ -744,6 +750,7 @@ mod test_vote_extensions {
                     gas_amount: 10.into(),
                     gas_payer: gen_established_address(),
                 }],
+                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell.wl_storage.storage.last_height,

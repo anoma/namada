@@ -932,6 +932,7 @@ mod test_process_proposal {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
@@ -1058,6 +1059,7 @@ mod test_process_proposal {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
@@ -1160,6 +1162,7 @@ mod test_process_proposal {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = {
             // generate a valid signature
@@ -1224,6 +1227,7 @@ mod test_process_proposal {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = {
             #[allow(clippy::redundant_clone)]
@@ -1280,6 +1284,7 @@ mod test_process_proposal {
         let event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = {
             #[allow(clippy::redundant_clone)]

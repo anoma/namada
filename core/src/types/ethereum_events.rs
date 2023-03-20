@@ -458,6 +458,7 @@ pub mod testing {
                 asset: arbitrary_eth_address(),
                 receiver,
             }],
+            valid_transfers_map: vec![true],
         }
     }
 }

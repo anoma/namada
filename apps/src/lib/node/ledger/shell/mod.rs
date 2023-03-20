@@ -1648,6 +1648,7 @@ mod mempool_tests {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let eth_vext = ProtocolTxType::EthEventsVext(
             ethereum_events::Vext {
@@ -1746,6 +1747,7 @@ mod mempool_tests {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 1u64.into(),
             transfers: vec![],
+            valid_transfers_map: vec![],
         };
         let ext = {
             let ext = ethereum_events::Vext {
