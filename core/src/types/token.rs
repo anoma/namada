@@ -133,7 +133,7 @@ impl From<Amount> for Decimal {
 
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
-        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
+        let res = micro.to_u64().unwrap();
         Self { micro: res }
     }
 }
