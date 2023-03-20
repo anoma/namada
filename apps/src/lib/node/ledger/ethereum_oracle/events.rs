@@ -9,11 +9,9 @@ pub mod signatures {
 }
 
 pub mod eth_events {
-    use std::convert::TryInto;
     use std::fmt::Debug;
     use std::str::FromStr;
 
-    use ethabi::token::Token;
     use ethbridge_bridge_events::{
         BridgeEvents, TransferToErcFilter, TransferToNamadaFilter,
     };
@@ -21,13 +19,13 @@ pub mod eth_events {
         GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
         UpgradedContractFilter, ValidatorSetUpdateFilter,
     };
+    use namada::core::types::ethereum_structs;
     use namada::eth_bridge::ethers::contract::{EthEvent, EthLogDecode};
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
         TransferToNamada, Uint,
     };
-    use namada::core::types::ethereum_structs;
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
     use num256::Uint256;
@@ -98,10 +96,10 @@ pub mod eth_events {
                         relayer_address,
                     },
                 )) => EthereumEvent::TransfersToEthereum {
-                    nonce: nonce.parse_uint256(),
-                    transfers: transfers.parse_transfer_to_eth_array(),
+                    nonce: nonce.parse_uint256()?,
+                    transfers: transfers.parse_transfer_to_eth_array()?,
                     valid_transfers_map: valid_map,
-                    relayer: relayer_address.parse_address(),
+                    relayer: relayer_address.parse_address()?,
                 },
                 RawEvents::Bridge(BridgeEvents::TransferToNamadaFilter(
                     TransferToNamadaFilter {
@@ -111,8 +109,8 @@ pub mod eth_events {
                         confirmations: _,
                     },
                 )) => EthereumEvent::TransfersToNamada {
-                    nonce: nonce.parse_uint256(),
-                    transfers: transfers.parse_transfer_to_namada_array(),
+                    nonce: nonce.parse_uint256()?,
+                    transfers: transfers.parse_transfer_to_namada_array()?,
                     valid_transfers_map: valid_map,
                 },
                 RawEvents::Governance(GovernanceEvents::NewContractFilter(
@@ -143,7 +141,7 @@ pub mod eth_events {
                     }
 
                     EthereumEvent::UpdateBridgeWhitelist {
-                        nonce: nonce.parse_uint256(),
+                        nonce: nonce.parse_uint256()?,
                         whitelist,
                     }
                 }
@@ -187,7 +185,7 @@ pub mod eth_events {
     }
 
     /// Trait to add parsing methods to foreign types.
-    trait Parse {
+    trait Parse: Sized {
         fn parse_eth_address(self) -> Result<EthAddress> {
             unimplemented!()
         }
@@ -261,7 +259,7 @@ pub mod eth_events {
 
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
-            Ok(Amount::from(amount.as_u64()))
+            Ok(Amount::from(self.as_u64()))
         }
 
         fn parse_u32(self) -> Result<u32> {
@@ -275,7 +273,7 @@ pub mod eth_events {
 
     impl Parse for bool {
         fn parse_bool(self) -> Result<bool> {
-            Ok(b)
+            Ok(self)
         }
     }
 
