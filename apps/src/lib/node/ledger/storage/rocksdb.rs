@@ -971,6 +971,30 @@ impl DB for RocksDB {
 
         Ok(prev_len)
     }
+
+    fn prune_merkle_tree_stores(&mut self, height: BlockHeight) -> Result<()> {
+        let mut batch = WriteBatch::default();
+        let prefix_key = Key::from(height.to_db_key())
+            .push(&"tree".to_owned())
+            .map_err(Error::KeyError)?;
+        for st in StoreType::iter() {
+            if *st != StoreType::Base {
+                let prefix_key = prefix_key
+                    .push(&st.to_string())
+                    .map_err(Error::KeyError)?;
+                let root_key = prefix_key
+                    .push(&"root".to_owned())
+                    .map_err(Error::KeyError)?;
+                batch.delete(root_key.to_string());
+                let store_key = prefix_key
+                    .push(&"store".to_owned())
+                    .map_err(Error::KeyError)?;
+                batch.delete(store_key.to_string());
+            }
+        }
+
+        self.exec_batch(batch)
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {

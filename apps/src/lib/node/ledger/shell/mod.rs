@@ -254,8 +254,13 @@ where
                 .expect("Creating directory for Namada should not fail");
         }
         // load last state from storage
-        let mut storage =
-            Storage::open(db_path, chain_id.clone(), native_token, db_cache);
+        let mut storage = Storage::open(
+            db_path,
+            chain_id.clone(),
+            native_token,
+            db_cache,
+            config.shell.storage_read_past_height_limit,
+        );
         storage
             .load_last_state()
             .map_err(|e| {

@@ -441,6 +441,28 @@ impl DB for MockDB {
             None => 0,
         })
     }
+
+    fn prune_merkle_tree_stores(&mut self, height: BlockHeight) -> Result<()> {
+        let prefix_key = Key::from(height.to_db_key())
+            .push(&"tree".to_owned())
+            .map_err(Error::KeyError)?;
+        for st in StoreType::iter() {
+            if *st != StoreType::Base {
+                let prefix_key = prefix_key
+                    .push(&st.to_string())
+                    .map_err(Error::KeyError)?;
+                let root_key = prefix_key
+                    .push(&"root".to_owned())
+                    .map_err(Error::KeyError)?;
+                self.0.borrow_mut().remove(&root_key.to_string());
+                let store_key = prefix_key
+                    .push(&"store".to_owned())
+                    .map_err(Error::KeyError)?;
+                self.0.borrow_mut().remove(&store_key.to_string());
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {

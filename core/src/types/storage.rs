@@ -1120,6 +1120,26 @@ impl Epochs {
         }
         None
     }
+
+    /// Look-up the starting block height of the given epoch
+    pub fn get_start_height_of_epoch(
+        &self,
+        epoch: Epoch,
+    ) -> Option<BlockHeight> {
+        if epoch < self.first_known_epoch {
+            return None;
+        }
+
+        let mut cur_epoch = self.first_known_epoch;
+        for height in &self.first_block_heights {
+            if epoch == cur_epoch {
+                return Some(*height);
+            } else {
+                cur_epoch = cur_epoch.next();
+            }
+        }
+        None
+    }
 }
 
 /// A value of a storage prefix iterator.
