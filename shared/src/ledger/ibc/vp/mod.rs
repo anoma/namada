@@ -123,42 +123,11 @@ where
         }
 
         for key in changed_ibc_keys {
-            match self
+            let actual = self
                 .ctx
                 .read_bytes_post(key)
-                .map_err(Error::NativeVpError)?
-            {
-                Some(v) => match ctx.borrow().get_changed_value(key) {
-                    Some(StorageModification::Write { value }) => {
-                        if v != *value {
-                            return Err(Error::StateChange(format!(
-                                "The value mismatched: Key {} actual {:?}, \
-                                 expected {:?}",
-                                key, v, value
-                            )));
-                        }
-                    }
-                    _ => {
-                        return Err(Error::StateChange(format!(
-                            "The value was invalid: Key {}",
-                            key
-                        )));
-                    }
-                },
-                None => {
-                    match ctx.borrow().get_changed_value(key) {
-                        Some(StorageModification::Delete) => {
-                            // the key was deleted expectedly
-                        }
-                        _ => {
-                            return Err(Error::StateChange(format!(
-                                "The key was deleted unexpectedly: Key {}",
-                                key
-                            )));
-                        }
-                    }
-                }
-            }
+                .map_err(Error::NativeVpError)?;
+            match_value(key, actual, ctx.borrow().get_changed_value(key))?;
         }
 
         // check the event
@@ -182,6 +151,34 @@ where
         let module = TransferModule::new(ctx);
         actions.add_transfer_route(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
+    }
+}
+
+fn match_value(
+    key: &Key,
+    actual: Option<Vec<u8>>,
+    expected: Option<&StorageModification>,
+) -> VpResult<()> {
+    match (actual, expected) {
+        (Some(v), Some(StorageModification::Write { value })) => {
+            if v == *value {
+                Ok(())
+            } else {
+                Err(Error::StateChange(format!(
+                    "The value mismatched: Key {} actual {:?}, expected {:?}",
+                    key, v, value
+                )))
+            }
+        }
+        (Some(_), _) => Err(Error::StateChange(format!(
+            "The value was invalid: Key {}",
+            key
+        ))),
+        (None, Some(StorageModification::Delete)) => Ok(()),
+        (None, _) => Err(Error::StateChange(format!(
+            "The key was deleted unexpectedly: Key {}",
+            key
+        ))),
     }
 }
 
@@ -2252,7 +2249,8 @@ mod tests {
                 .expect("invalid signer"),
             receiver: Signer::from_str("receiver").expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: (Timestamp::now() - Duration::new(10, 0))
+                .unwrap(),
         };
         let sequence = 1.into();
         let packet = packet_from_message(
