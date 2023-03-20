@@ -4,8 +4,7 @@ use std::hash::Hash;
 
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::parameters::storage::get_staked_ratio_key;
-use namada::ledger::parameters::Parameters;
+use namada::ledger::parameters::{self, Parameters};
 use namada::ledger::pos::{into_tm_voting_power, staking_token_address};
 use namada::ledger::storage_api::token::{
     credit_tokens, read_balance, read_total_supply,
@@ -369,12 +368,11 @@ where
         tracing::info!("Total staked tokens: {total_staked_nam}.");
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
-        self.wl_storage
-            .write(
-                &get_staked_ratio_key(),
-                Decimal::from(total_staked_nam) / Decimal::from(total_nam),
-            )
-            .expect("unable to set staked ratio of NAM in storage");
+        parameters::update_staked_ratio_parameter(
+            &mut self.wl_storage,
+            &(Decimal::from(total_staked_nam) / Decimal::from(total_nam)),
+        )
+        .expect("unable to set staked ratio of NAM in storage");
 
         ibc::init_genesis_storage(&mut self.wl_storage);
 
