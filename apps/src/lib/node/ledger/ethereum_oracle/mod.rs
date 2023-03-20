@@ -1009,7 +1009,7 @@ mod test_oracle {
             mut eth_recv,
             admin_channel,
             mut control_sender,
-            ..
+            blocks_processed_recv: _recv,
         } = setup();
         let min_confirmations = 100;
         let config = Config {
@@ -1085,7 +1085,6 @@ mod test_oracle {
         admin_channel
             .send(TestCmd::NewHeight(Uint256::from(201u32)))
             .expect("Test failed");
-        // seen.try_recv().expect("Test failed");
         // check the event is received
         let received_event = eth_recv.recv().await.expect("Test failed");
         if let EthereumEvent::TransfersToEthereum {
