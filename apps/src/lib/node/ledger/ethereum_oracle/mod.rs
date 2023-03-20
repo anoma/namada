@@ -351,8 +351,14 @@ async fn process(
     );
     // check for events in Ethereum blocks that have reached the minimum number
     // of confirmations
-    for sig in signatures::SIGNATURES {
-        let addr: Address = match signatures::SigType::from(sig) {
+    let bridge_signatures = ethbridge_bridge_events::abi_signatures()
+        .into_iter()
+        .map(|sig| (sig, signatures::SigType::Bridge));
+    let gov_signatures = ethbridge_governance_events::abi_signatures()
+        .into_iter()
+        .map(|sig| (sig, signatures::SigType::Governance));
+    for (sig, sig_type) in bridge_signatures.chain(gov_signatures) {
+        let addr: Address = match sig_type {
             signatures::SigType::Bridge => config.bridge_contract.0.into(),
             signatures::SigType::Governance => {
                 config.governance_contract.0.into()
@@ -394,11 +400,12 @@ async fn process(
                 )
             }
             logs.into_iter()
+                .map(Web30LogExt::into_ethabi)
                 .filter_map(|log| {
                     match PendingEvent::decode(
-                        sig,
+                        sig_type,
                         block_to_process.clone().into(),
-                        log.data.0.as_slice(),
+                        &log,
                         u64::from(config.min_confirmations).into(),
                     ) {
                         Ok(event) => Some(event),
@@ -471,14 +478,14 @@ fn process_queue(
 trait Web30LogExt {
     /// Convert a [`web30`] event log to the corresponding
     /// [`ethabi`] type.
-    fn to_ethabi(self) -> ethabi::RawLog;
+    fn into_ethabi(self) -> ethabi::RawLog;
 }
 
 impl Web30LogExt for web30::types::Log {
-    fn to_ethabi(self) -> ethabi::RawLog {
+    fn into_ethabi(self) -> ethabi::RawLog {
         let topics = self
             .topics
-            .into_iter()
+            .iter()
             .map(|topic| ethabi::Hash::from_slice(topic.as_slice()))
             .collect();
         let data = self.data.0;
