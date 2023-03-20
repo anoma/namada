@@ -201,6 +201,9 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToNamada>,
+        /// The indices of the transfers which succeeded or failed
+        #[allow(dead_code)]
+        valid_transfers_map: Vec<bool>,
     },
     /// A confirmation event that a batch of transfers have been made
     /// from Namada to Ethereum
@@ -211,6 +214,9 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
+        /// The indices of the transfers which succeeded or failed
+        #[allow(dead_code)]
+        valid_transfers_map: Vec<bool>,
         /// The Namada address that receives the gas fees
         /// for relaying a batch of transfers
         #[allow(dead_code)]

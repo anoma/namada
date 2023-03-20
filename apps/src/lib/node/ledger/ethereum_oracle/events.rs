@@ -13,12 +13,14 @@ pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
 
-    use ethabi::param_type::ParamType;
     use ethabi::token::Token;
     use ethbridge_bridge_events::{
         BridgeEvents, TransferToErcFilter, TransferToNamadaFilter,
     };
-    use ethbridge_governance_events::GovernanceEvents;
+    use ethbridge_governance_events::{
+        GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
+        UpgradedContractFilter, ValidatorSetUpdateFilter,
+    };
     use namada::eth_bridge::ethers::contract::{EthEvent, EthLogDecode};
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
@@ -36,6 +38,8 @@ pub mod eth_events {
     pub enum Error {
         #[error("Could not decode Ethereum event: {0}")]
         Decode(String),
+        #[error("The given Ethereum contract is not in use: {0}")]
+        NotInUse(String),
     }
 
     pub type Result<T> = std::result::Result<T, Error>;
@@ -87,25 +91,85 @@ pub mod eth_events {
             let event = match raw_event {
                 RawEvents::Bridge(BridgeEvents::TransferToErcFilter(
                     TransferToErcFilter {
-                        nonce: _,
-                        transfers: _,
-                        valid_map: _,
-                        relayer_address: _,
+                        nonce,
+                        transfers,
+                        valid_map,
+                        relayer_address,
                     },
-                )) => {
-                    todo!()
-                }
+                )) => EthereumEvent::TransfersToEthereum {
+                    nonce: nonce.parse_uint256(),
+                    transfers: transfers.parse_transfer_to_eth_array(),
+                    valid_transfers_map: valid_map,
+                    relayer: relayer_address.parse_address(),
+                },
                 RawEvents::Bridge(BridgeEvents::TransferToNamadaFilter(
                     TransferToNamadaFilter {
-                        nonce: _,
-                        trasfers: _transfers,
-                        valid_map: _,
+                        nonce,
+                        transfers,
+                        valid_map,
                         confirmations: _,
                     },
+                )) => EthereumEvent::TransfersToNamada {
+                    nonce: nonce.parse_uint256(),
+                    transfers: transfers.parse_transfer_to_namada_array(),
+                    valid_transfers_map: valid_map,
+                },
+                RawEvents::Governance(GovernanceEvents::NewContractFilter(
+                    NewContractFilter { name: _, addr: _ },
                 )) => {
-                    todo!()
+                    return Err(Error::NotInUse(
+                        NewContractFilter::name().into(),
+                    ));
                 }
-                _ => todo!(),
+                RawEvents::Governance(
+                    GovernanceEvents::UpdateBridgeWhitelistFilter(
+                        UpdateBridgeWhitelistFilter {
+                            nonce,
+                            tokens,
+                            token_cap,
+                        },
+                    ),
+                ) => {
+                    let mut whitelist = vec![];
+
+                    for (token, cap) in
+                        tokens.into_iter().zip(token_cap.into_iter())
+                    {
+                        whitelist.push(TokenWhitelist {
+                            token: token.parse_eth_address()?,
+                            cap: cap.parse_amount()?,
+                        });
+                    }
+
+                    EthereumEvent::UpdateBridgeWhitelist {
+                        nonce: nonce.parse_uint256(),
+                        whitelist,
+                    }
+                }
+                RawEvents::Governance(
+                    GovernanceEvents::UpgradedContractFilter(
+                        UpgradedContractFilter { name: _, addr: _ },
+                    ),
+                ) => {
+                    return Err(Error::NotInUse(
+                        UpgradedContractFilter::name().into(),
+                    ));
+                }
+                RawEvents::Governance(
+                    GovernanceEvents::ValidatorSetUpdateFilter(
+                        ValidatorSetUpdateFilter {
+                            validator_set_nonce,
+                            bridge_validator_set_hash,
+                            governance_validator_set_hash,
+                        },
+                    ),
+                ) => EthereumEvent::ValidatorSetUpdate {
+                    nonce: validator_set_nonce.into(),
+                    bridge_validator_hash: bridge_validator_set_hash
+                        .parse_keccak()?,
+                    governance_validator_hash: governance_validator_set_hash
+                        .parse_keccak()?,
+                },
             };
             Ok(PendingEvent {
                 confirmations,
@@ -121,269 +185,187 @@ pub mod eth_events {
         }
     }
 
-    /// Trait to add parsing methods to `Token`, which is a
-    /// foreign type
+    /// Trait to add parsing methods to foreign types.
     trait Parse {
-        fn parse_eth_address(self) -> Result<EthAddress>;
-        fn parse_address(self) -> Result<Address>;
-        fn parse_amount(self) -> Result<Amount>;
-        fn parse_u32(self) -> Result<u32>;
-        fn parse_uint256(self) -> Result<Uint>;
-        fn parse_bool(self) -> Result<bool>;
-        fn parse_string(self) -> Result<String>;
-        fn parse_keccak(self) -> Result<KeccakHash>;
-        fn parse_amount_array(self) -> Result<Vec<Amount>>;
-        fn parse_eth_address_array(self) -> Result<Vec<EthAddress>>;
-        fn parse_address_array(self) -> Result<Vec<Address>>;
-        fn parse_string_array(self) -> Result<Vec<String>>;
-        fn parse_transfer_to_namada_array(
-            self,
-        ) -> Result<Vec<TransferToNamada>>;
-        fn parse_transfer_to_namada(self) -> Result<TransferToNamada>;
-        fn parse_transfer_to_eth_array(self)
-        -> Result<Vec<TransferToEthereum>>;
-        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum>;
-    }
-
-    impl Parse for Token {
         fn parse_eth_address(self) -> Result<EthAddress> {
-            if let Token::Address(addr) = self {
-                Ok(EthAddress(addr.0))
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Address`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_address(self) -> Result<Address> {
-            if let Token::String(addr) = self {
-                Address::from_str(&addr)
-                    .map_err(|err| Error::Decode(format!("{:?}", err)))
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `String`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_amount(self) -> Result<Amount> {
-            if let Token::Uint(amount) = self {
-                Ok(Amount::from(amount.as_u64()))
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Uint`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_u32(self) -> Result<u32> {
-            if let Token::Uint(amount) = self {
-                Ok(amount.as_u32())
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Uint`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_uint256(self) -> Result<Uint> {
-            if let Token::Uint(uint) = self {
-                Ok(uint.into())
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Uint`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_bool(self) -> Result<bool> {
-            if let Token::Bool(b) = self {
-                Ok(b)
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `bool`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_string(self) -> Result<String> {
-            if let Token::String(string) = self {
-                Ok(string)
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `String`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_keccak(self) -> Result<KeccakHash> {
-            if let Token::FixedBytes(bytes) = self {
-                let bytes = bytes.try_into().map_err(|_| {
-                    Error::Decode("Expect 32 bytes for a Keccak hash".into())
-                })?;
-                Ok(KeccakHash(bytes))
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `FixedBytes`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_amount_array(self) -> Result<Vec<Amount>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut amounts = vec![];
-            for token in array.into_iter() {
-                let amount = token.parse_amount()?;
-                amounts.push(amount);
-            }
-            Ok(amounts)
+            unimplemented!()
         }
-
         fn parse_eth_address_array(self) -> Result<Vec<EthAddress>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut addrs = vec![];
-            for token in array.into_iter() {
-                let addr = token.parse_eth_address()?;
-                addrs.push(addr);
-            }
-            Ok(addrs)
+            unimplemented!()
         }
-
+        fn parse_address_array(self) -> Result<Vec<Address>> {
+            unimplemented!()
+        }
+        fn parse_string_array(self) -> Result<Vec<String>> {
+            unimplemented!()
+        }
         fn parse_transfer_to_namada_array(
             self,
         ) -> Result<Vec<TransferToNamada>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut transfers = vec![];
-            for token in array.into_iter() {
-                let transfer = token.parse_transfer_to_namada()?;
-                transfers.push(transfer);
-            }
-            Ok(transfers)
+            unimplemented!()
         }
-
         fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
-            if let Token::Tuple(mut items) = self {
-                let asset = items.remove(0).parse_eth_address()?;
-                let amount = items.remove(0).parse_amount()?;
-                let receiver = items.remove(0).parse_address()?;
-                Ok(TransferToNamada {
-                    asset,
-                    amount,
-                    receiver,
-                })
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Tuple`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
         }
-
         fn parse_transfer_to_eth_array(
             self,
         ) -> Result<Vec<TransferToEthereum>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut transfers = vec![];
-            for token in array.into_iter() {
-                let transfer = token.parse_transfer_to_eth()?;
-                transfers.push(transfer);
-            }
-            Ok(transfers)
+            unimplemented!()
         }
-
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
-            if let Token::Tuple(mut items) = self {
-                let asset = items.remove(0).parse_eth_address()?;
-                let receiver = items.remove(0).parse_eth_address()?;
-                let sender = items.remove(0).parse_address()?;
-                let amount = items.remove(0).parse_amount()?;
-                let gas_payer = items.remove(0).parse_address()?;
-                let gas_amount = items.remove(0).parse_amount()?;
-                Ok(TransferToEthereum {
-                    asset,
-                    amount,
-                    sender,
-                    receiver,
-                    gas_amount,
-                    gas_payer,
-                })
-            } else {
-                Err(Error::Decode(format!(
-                    "Expected type `Tuple`, got {:?}",
-                    self
-                )))
-            }
+            unimplemented!()
+        }
+    }
+
+    impl Parse for ethabi::Address {
+        fn parse_eth_address(self) -> Result<EthAddress> {
+            Ok(EthAddress(self.0))
+        }
+    }
+
+    impl Parse for String {
+        fn parse_address(self) -> Result<Address> {
+            Address::from_str(&self)
+                .map_err(|err| Error::Decode(format!("{:?}", err)))
         }
 
+        fn parse_string(self) -> Result<String> {
+            Ok(self)
+        }
+    }
+
+    impl Parse for ethabi::Uint {
+        fn parse_amount(self) -> Result<Amount> {
+            Ok(Amount::from(amount.as_u64()))
+        }
+
+        fn parse_u32(self) -> Result<u32> {
+            Ok(self.as_u32())
+        }
+
+        fn parse_uint256(self) -> Result<Uint> {
+            Ok(self.into())
+        }
+    }
+
+    impl Parse for bool {
+        fn parse_bool(self) -> Result<bool> {
+            Ok(b)
+        }
+    }
+
+    impl Parse for [u8; 32] {
+        fn parse_keccak(self) -> Result<KeccakHash> {
+            Ok(KeccakHash(self))
+        }
+    }
+
+    impl Parse for Vec<ethabi::Uint> {
+        fn parse_amount_array(self) -> Result<Vec<Amount>> {
+            self.into_iter().try_fold(Vec::new(), |mut acc, amount| {
+                acc.push(amount.parse_amount()?);
+                Ok(acc)
+            })
+        }
+    }
+
+    impl Parse for Vec<ethabi::Address> {
+        fn parse_eth_address_array(self) -> Result<Vec<EthAddress>> {
+            self.into_iter().try_fold(Vec::new(), |mut acc, addr| {
+                acc.push(addr.parse_eth_address()?);
+                Ok(acc)
+            })
+        }
+    }
+
+    impl Parse for Vec<ethbridge_structs::NamadaTransfer> {
+        fn parse_transfer_to_namada_array(
+            self,
+        ) -> Result<Vec<TransferToNamada>> {
+            self.into_iter().try_fold(Vec::new(), |mut acc, transf| {
+                acc.push(transf.parse_transfer_to_namada()?);
+                Ok(acc)
+            })
+        }
+    }
+
+    impl Parse for ethbridge_structs::NamadaTransfer {
+        fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
+            let asset = self.from.parse_eth_address()?;
+            let amount = self.amount.parse_amount()?;
+            let receiver = self.to.parse_address()?;
+            Ok(TransferToNamada {
+                asset,
+                amount,
+                receiver,
+            })
+        }
+    }
+
+    impl Parse for Vec<ethbridge_structs::Erc20Transfer> {
+        fn parse_transfer_to_eth_array(
+            self,
+        ) -> Result<Vec<TransferToEthereum>> {
+            self.into_iter().try_fold(Vec::new(), |mut acc, transf| {
+                acc.push(transf.parse_transfer_to_eth()?);
+                Ok(acc)
+            })
+        }
+    }
+
+    impl Parse for ethbridge_structs::Erc20Transfer {
+        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
+            let asset = self.from.parse_eth_address()?;
+            let receiver = self.to.parse_eth_address()?;
+            let sender = self.sender.parse_address()?;
+            let amount = self.amount.parse_amount()?;
+            let gas_payer = self.fee_from.parse_address()?;
+            let gas_amount = self.fee.parse_amount()?;
+            Ok(TransferToEthereum {
+                asset,
+                amount,
+                sender,
+                receiver,
+                gas_amount,
+                gas_payer,
+            })
+        }
+    }
+
+    impl Parse for Vec<String> {
         fn parse_address_array(self) -> Result<Vec<Address>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut addrs = vec![];
-            for token in array.into_iter() {
-                let addr = token.parse_address()?;
-                addrs.push(addr);
-            }
-            Ok(addrs)
+            self.into_iter().try_fold(Vec::new(), |mut acc, addr| {
+                acc.push(addr.parse_address()?);
+                Ok(acc)
+            })
         }
 
         fn parse_string_array(self) -> Result<Vec<String>> {
-            let array = if let Token::Array(array) = self {
-                array
-            } else {
-                return Err(Error::Decode(format!(
-                    "Expected type `Array`, got {:?}",
-                    self
-                )));
-            };
-            let mut strings = vec![];
-            for token in array.into_iter() {
-                let string = token.parse_string()?;
-                strings.push(string);
-            }
-            Ok(strings)
+            Ok(self)
         }
     }
 
