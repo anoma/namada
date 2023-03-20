@@ -50,7 +50,10 @@ impl TestNativeVpEnv {
     {
         let ctx = Ctx {
             iterators: Default::default(),
-            gas_meter: RefCell::new(VpGasMeter::new(0, 0)),
+            gas_meter: RefCell::new(VpGasMeter::new(
+                self.tx_env.gas_meter.tx_gas_limit,
+                self.tx_env.gas_meter.get_current_transaction_gas(),
+            )),
             storage: &self.tx_env.wl_storage.storage,
             write_log: &self.tx_env.wl_storage.write_log,
             tx: &self.tx_env.tx,

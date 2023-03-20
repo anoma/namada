@@ -147,7 +147,7 @@ where
                 self.read_storage_key(
                     &parameters::storage::get_max_block_gas_key(),
                 )
-                .expect("Missing parameter in storage"),
+                .expect("Missing max_block_gas parameter in storage"),
             );
         let gas_table: BTreeMap<String, u64> = self
             .read_storage_key(&parameters::storage::get_gas_table_storage_key())
@@ -387,7 +387,7 @@ where
  if let Err(e) = tx_gas_meter.add(tx_gas) {
                                         
  return TxResult {
-                                            code: ErrorCodes::TxGasLimit.into(),
+                                            code: ErrorCodes::DecryptedTxGasLimit.into(),
                                             info: format!("Decrypted transaction gas error: {}", e)
                                         };
                                 }
@@ -418,10 +418,10 @@ where
                 TxType::Wrapper(wrapper) => {
                     // Account for gas. This is done even if the transaction is later deemed invalid, to incentivize the proposer to
                     // include only valid transaction and avoid wasting block gas limit
-                    // Wrapper gas limit, Max block gas and cumulated block gas
                     let mut tx_gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
                     if let Err(_) =  tx_gas_meter.add_tx_size_gas(tx_bytes.len()) {
-                        let _ = temp_block_gas_meter.finalize_transaction(tx_gas_meter.get_current_transaction_gas());
+                        // Add the declared tx gas limit to the block gas meter even in case of an error
+                        let _ = temp_block_gas_meter.finalize_transaction(tx_gas_meter);
 
                         return TxResult {
                             code: ErrorCodes::TxGasLimit.into(),
@@ -429,7 +429,7 @@ where
                         };
                     }
                     
-                                        if let Err(_) = temp_block_gas_meter.finalize_transaction(tx_gas_meter.get_current_transaction_gas()){
+                                        if let Err(_) = temp_block_gas_meter.finalize_transaction(tx_gas_meter){
                         return TxResult {
                             code: ErrorCodes::BlockGasLimit.into(),
                             
@@ -793,6 +793,17 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             )
             .unwrap();
         let keypair = gen_keypair();
+// reduce address balance to match the 100 token min fee
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .unwrap();
+
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
@@ -842,7 +853,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
-        // reduce address balance to match the 100 token fee
+        // reduce address balance to match the 100 token min fee
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
@@ -869,7 +880,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         );
         let wrapper = WrapperTx::new(
             Fee {
-                amount: Amount::whole(1_000_100),
+                amount: Amount::whole(100),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
@@ -1720,4 +1731,152 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             Err(_) => panic!("Test failed"),
         }
     }
+
+    
+    /// Test that a decrypted transaction requiring more gas than the limit imposed
+    /// by its wrapper is rejected.
+    #[test]
+    fn test_decrypted_gas_limit() {
+        let (mut shell, _) = test_utils::setup(1);
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let gas = u64::from(&wrapper.gas_limit) ;
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            gas,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed_decrypted.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::DecryptedTxGasLimit)
+                );
+            }
+            Err(_) => panic!("Test failed"),
+        }
+    }
+
+    /// Check that a tx requiring more gas than the block limit causes a block rejection
+    #[test]
+    fn test_exceeding_max_block_gas_tx() {
+        let (mut shell, _) = test_utils::setup(1);
+
+        let block_gas_limit: u64 = shell
+            .read_storage_key(&parameters::storage::get_max_block_gas_key())
+            .expect("Missing max_block_gas parameter in storage");
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            (block_gas_limit + 1).into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::BlockGasLimit)
+                );
+            }
+        }
+    }
+
+// Check that a wrapper requiring more gas than its limit causes a block rejection
+    #[test]
+    fn test_exceeding_gas_limit_wrapper() {
+        let (mut shell, _) = test_utils::setup(1);
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::TxGasLimit)
+                );
+            }
+        }
+            }
 }

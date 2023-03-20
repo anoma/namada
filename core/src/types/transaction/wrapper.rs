@@ -4,6 +4,8 @@
 #[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
     use std::convert::TryFrom;
+    use std::num::ParseIntError;
+    use std::str::FromStr;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     pub use ark_ec::{AffineCurve, PairingEngine};
@@ -58,7 +60,7 @@ pub mod wrapper_tx {
         Deserialize,
     )]
     pub struct Fee {
-        /// amount of the fee
+        /// amount of fee per gas unit
         pub amount: Amount,
         /// address of the token
         pub token: Address,
@@ -148,6 +150,17 @@ pub mod wrapper_tx {
     impl From<GasLimit> for Amount {
         fn from(limit: GasLimit) -> Amount {
             Amount::from(limit.multiplier * GAS_LIMIT_RESOLUTION)
+        }
+    }
+
+    impl FromStr for GasLimit {
+        type Err = ParseIntError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            // Expect input to be the multiplier
+            Ok(Self {
+                multiplier: s.parse()?,
+            })
         }
     }
 

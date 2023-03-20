@@ -832,7 +832,7 @@ where
         let fee_payer = if wrapper.pk != address::masp_tx_key().ref_to() {
             wrapper.fee_payer()
         } else {
-            address::masp()
+            address::masp() //FIXME: here?
         };
 
         let balance_key = token::balance_key(&wrapper.fee.token, &fee_payer);
@@ -1794,16 +1794,12 @@ mod test_finalize_block {
             },
             &keypair,
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            0.into(),
             raw_tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed_wrapper = wrapper_tx
-            .sign(&keypair, shell.chain_id.clone(), None)
-            .unwrap()
-            .to_bytes();
 
         // Write inner hash in storage
         let inner_hash_key =
@@ -1826,30 +1822,101 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        let gas_limit =
-            u64::from(&wrapper_tx.gas_limit) - signed_wrapper.len() as u64;
+        let gas_limit = u64::from(&wrapper_tx.gas_limit);
         shell.enqueue_tx(wrapper_tx, gas_limit);
 
-        let _event = &shell
+        let event = &shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
                 ..Default::default()
             })
             .expect("Test failed")[0];
 
-        // FIXME: uncomment when proper gas metering is in place
-        // // Check inner tx hash has been removed from storage
-        // assert_eq!(event.event_type.to_string(), String::from("applied"));
-        // let code = event.attributes.get("code").expect("Test
-        // failed").as_str(); assert_eq!(code,
-        // String::from(ErrorCodes::WasmRuntimeError).as_str());
+        // Check inner tx hash has been removed from storage
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        // assert!(
-        //     !shell
-        //         .storage
-        //         .has_key(&inner_hash_key)
-        //         .expect("Test failed")
-        //         .0
+        assert!(!shell
+            .shell
+            .wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Test failed"))
+    }
+
+    /// Test that a wrapper transaction rejected by [`process_proposal`] because of gas,
+    /// still pays the fee
+    #[test]
+    fn test_rejected_wrapper_for_gas_pays_fee() {
+        let (mut shell, _) = setup(1);
+
+        let keypair = gen_keypair();
+        let address = Address::from(&keypair.to_public());
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code,
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 1.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            1.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+
+        let wrapper = wrapper_tx
+            .sign(&keypair, shell.chain_id.clone(), None)
+            .expect("Test failed");
+
+        let _processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::TxGasLimit.into(),
+                info: "".into(),
+            },
+        };
+
+        let initial_balance = Amount::whole(1_000_000);
+        let balance_key = token::balance_key(&wrapper_tx.fee.token, &address);
+        shell
+            .wl_storage
+            .storage
+            .write(&balance_key, initial_balance.try_to_vec().unwrap())
+            .unwrap();
+
+        //FIXME: uncomment when variable fees
+        // let event = &shell
+        //     .finalize_block(FinalizeBlock {
+        //         txs: vec![processed_tx],
+        //         ..Default::default()
+        //     })
+        //     .expect("Test failed")[0];
+
+        // assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        // let code = event.attributes.get("code").expect("Testfailed").as_str();
+        // assert_eq!(code, String::from(ErrorCodes::TxGasLimit).as_str());
+
+        // assert_eq!(
+        //     storage_api::token::read_balance(
+        //         &shell.wl_storage,
+        //         &wrapper_tx.fee.token,
+        //         &address
+        //     )
+        //     .unwrap(),
+        //     Amount::whole(1000)
         // )
     }
 }

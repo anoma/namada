@@ -131,7 +131,7 @@ pub enum ErrorCodes {
     Ok = 0,
     InvalidDecryptedChainId = 1,
     ExpiredDecryptedTx = 2,
-    DecryptedGasLimit = 3,
+    DecryptedTxGasLimit = 3,
     WasmRuntimeError = 4,
     InvalidTx = 5,
     InvalidSig = 6,
@@ -158,7 +158,7 @@ impl ErrorCodes {
             | InvalidDecryptedChainId
             | ExpiredDecryptedTx
             | WasmRuntimeError
-            | DecryptedGasLimit => true,
+            | DecryptedTxGasLimit => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
             | ExpiredTx | BlockGasLimit | TxGasLimit => false,
@@ -731,9 +731,7 @@ where
                 .read_storage_key(&parameters::storage::get_max_block_gas_key())
                 .expect("Missing max_block_gas parameter in storage");
             let mut block_gas_meter = BlockGasMeter::new(block_gas_limit);
-            if let Err(_) = block_gas_meter
-                .finalize_transaction(gas_meter.get_current_transaction_gas())
-            {
+            if let Err(_) = block_gas_meter.finalize_transaction(gas_meter) {
                 response.code = ErrorCodes::BlockGasLimit.into();
                 response.log =
                     "Wrapper transaction exceeds the maximum block gas limit"
@@ -819,6 +817,7 @@ where
     #[allow(dead_code)]
     /// Simulate validation and application of a transaction.
     fn dry_run_tx(&self, tx_bytes: &[u8]) -> response::Query {
+        //FIXME: should we simulate also the wrapper part for gas?
         let mut response = response::Query::default();
         let gas_table: BTreeMap<String, u64> = self
             .read_storage_key(&parameters::storage::get_gas_table_storage_key())
@@ -1056,7 +1055,8 @@ mod test_utils {
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-            let mut shell = Self {
+            (
+                Self {
                     shell: Shell::<MockDB, Sha256Hasher>::new(
                         config::Ledger::new(
                             base_dir,
@@ -1070,73 +1070,7 @@ mod test_utils {
                         tx_wasm_compilation_cache,
                         address::nam(),
                     ),
-                };
-
- // Initialize gas table
-            let mut checksums: BTreeMap<String, String> = serde_json::from_slice(
-                &std::fs::read("../wasm/checksums.json").unwrap(),
-            )
-            .unwrap();
-            // Extend gas table with test transactions and vps
-            checksums.extend(serde_json::from_slice::<BTreeMap<String, String>>(
-                &std::fs::read("../wasm_for_tests/checksums.json").unwrap(),
-            )
-            .unwrap().into_iter());
-
-            let gas_file: BTreeMap<String, u64> = serde_json::from_slice(
-                &std::fs::read("../wasm/gas.json").unwrap(),
-            )
-            .unwrap();
-
-            let mut gas_table = BTreeMap::<String, u64>::new();            
-
- for id in checksums.keys().chain(gas_file.keys()){
-                // Get tx/vp hash (or name if native)
-                let hash = match checksums.get(id.as_str()) {
-                    Some(v) => {
-v
-                    .split_once('.')
-                    .unwrap()
-                    .1
-                    .split_once('.')
-                    .unwrap()
-                    .0.to_owned()
-                    }
-                    None => {
-                        id.to_owned()
-                    }
-                };
-                let gas = gas_file.get(id).unwrap_or(&1_000).to_owned();
-                gas_table.insert(hash, gas);
-            }
-
- 
-            let gas_table_key = 
-                namada::core::ledger::parameters::storage::get_gas_table_storage_key();
-            shell.wl_storage
-                .storage
-                .write(&gas_table_key, 
-                namada::core::ledger::storage::types::encode(&gas_table))
-                .expect(
-                "Gas table parameter must be initialized in the genesis block",
-            );
-            
- let max_block_gas_key =
-                namada::core::ledger::parameters::storage::get_max_block_gas_key(
-                );
-            shell.wl_storage
-                .storage
-                .write(
-                    &max_block_gas_key,
-                    namada::core::ledger::storage::types::encode(
-                        &10_000_000_u64,
-                    ),
-                )
-                .expect(
-                    "Max block gas parameter must be initialized in storage",
-                );
-            (
-                shell,
+                },
                 receiver,
             )
         }
@@ -1291,7 +1225,7 @@ v
             },
             &keypair,
             Epoch(0),
-            1.into(),
+            0.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1347,9 +1281,6 @@ mod test_mempool_validate {
 
     use super::test_utils::TestShell;
     use super::{MempoolTxType, *};
-
-    
-const GAS_LIMIT_MULTIPLIER: u64 = 1; 
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
@@ -1530,7 +1461,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             },
             &keypair,
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            0.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1670,5 +1601,82 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
+    }
+
+    /// Check that a tx requiring more gas than the block limit gets rejected
+    #[test]
+    fn test_exceeding_max_block_gas_tx() {
+        let (shell, _) = test_utils::setup(1);
+
+        let block_gas_limit: u64 = shell
+            .read_storage_key(&parameters::storage::get_max_block_gas_key())
+            .expect("Missing max_block_gas parameter in storage");
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            (block_gas_limit + 1).into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::BlockGasLimit));
+    }
+
+    // Check that a tx requiring more gas than its limit gets rejected
+    #[test]
+    fn test_exceeding_gas_limit_tx() {
+        let (shell, _) = test_utils::setup(1);
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::TxGasLimit));
     }
 }

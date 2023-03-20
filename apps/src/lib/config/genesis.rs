@@ -961,7 +961,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         max_proposal_bytes: Default::default(),
-        max_block_gas: u64::MAX, //FIXME: adjust this value
+        max_block_gas: 100_000_000, //FIXME: adjust this value
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
@@ -972,7 +972,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
-        wrapper_tx_fees: Some(token::Amount::whole(0)),
+        wrapper_tx_fees: Some(token::Amount::whole(100)),
         gas_table: BTreeMap::default(),
     };
     let albert = EstablishedAccount {

@@ -14,7 +14,9 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, VpGasMeter, MIN_STORAGE_GAS};
+use crate::ledger::gas::{
+    self, VpGasMeter, MIN_STORAGE_GAS, WASM_VALIDATION_GAS_PER_BYTE,
+};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -28,9 +30,6 @@ use crate::types::storage::{BlockHeight, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
-
-const VERIFY_TX_SIG_GAS_COST: u64 = 1000;
-const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 /// These runtime errors will abort tx WASM execution immediately
 #[allow(missing_docs)]
@@ -1784,9 +1783,12 @@ where
     let sig: common::Signature = BorshDeserialize::try_from_slice(&sig)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
     let tx = unsafe { env.ctx.tx.get() };
-    Ok(HostEnvResult::from(tx.verify_sig(&pk, &sig).is_ok()).to_i64())
+
+    Ok(HostEnvResult::from(vp_host_fns::verify_tx_signature(
+        gas_meter, &tx, &pk, &sig,
+    )?)
+    .to_i64())
 }
 
 /// Verify a ShieldedTransaction.

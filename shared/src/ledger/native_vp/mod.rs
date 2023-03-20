@@ -537,7 +537,13 @@ where
         pk: &crate::types::key::common::PublicKey,
         sig: &crate::types::key::common::Signature,
     ) -> Result<bool, storage_api::Error> {
-        Ok(self.tx.verify_sig(pk, sig).is_ok())
+        vp_host_fns::verify_tx_signature(
+            &mut self.gas_meter.borrow_mut(),
+            self.tx,
+            pk,
+            sig,
+        )
+        .into_storage_result()
     }
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {

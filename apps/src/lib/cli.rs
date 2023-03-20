@@ -1702,12 +1702,12 @@ pub mod args {
     const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
-    const GAS_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
-    const GAS_LIMIT: ArgDefault<token::Amount> =
-        arg_default("gas-limit", DefaultFn(|| token::Amount::from(0)));
-    const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
+    const FEE_AMOUNT: ArgDefault<token::Amount> =
+        arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
+    const GAS_LIMIT: ArgDefault<GasLimit> =
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(10))); //FIXME: fix this default value
+    const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
     const HALT_ACTION: ArgFlag = flag("halt");
@@ -3024,7 +3024,7 @@ pub mod args {
         /// If any new account is initialized by the tx, use the given alias to
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
-        /// The amount being payed to include the transaction
+        /// The amount being payed (for gas unit) to include the transaction
         pub fee_amount: token::Amount,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
@@ -3066,13 +3066,13 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
-            .arg(GAS_AMOUNT.def().about(
+            .arg(FEE_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(GAS_TOKEN.def().about("The token for paying the gas"))
+            .arg(FEE_TOKEN.def().about("The token for paying the gas"))
             .arg(
                 GAS_LIMIT.def().about(
-                    "The maximum amount of gas needed to run transaction",
+                    "The multiplier of the gas limit resolution definying the maximum amount of gas needed to run transaction",
                 ),
             )
             .arg(EXPIRATION_OPT.def().about(
@@ -3109,9 +3109,9 @@ pub mod args {
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
-            let fee_amount = GAS_AMOUNT.parse(matches);
-            let fee_token = GAS_TOKEN.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).into();
+            let fee_amount = FEE_AMOUNT.parse(matches);
+            let fee_token = FEE_TOKEN.parse(matches);
+            let gas_limit = GAS_LIMIT.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
 
             let signing_key = SIGNING_KEY_OPT.parse(matches);

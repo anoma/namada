@@ -1,6 +1,7 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
+use namada::core::ledger::gas::TxGasMeter;
 use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
@@ -148,10 +149,16 @@ where
                     if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
                         if block_time > exp { return None }
                     }
-                    if let Ok(TxType::Wrapper(ref wrapper)) = process_tx(tx) {
+                    if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
 
-// Check tx gas limit
-                    if temp_block_gas_meter.try_finalize_transaction(wrapper.gas_limit.clone().into()).is_ok() {
+        // Check tx gas limit
+        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
+        if tx_gas_meter
+            .add_tx_size_gas(tx_bytes.len()).is_err() {
+                            return None;
+                        }
+
+                    if temp_block_gas_meter.try_finalize_transaction(tx_gas_meter).is_ok() {
                         return Some(tx_bytes.clone());
         }
                     }
@@ -473,5 +480,105 @@ mod test_prepare_proposal {
         let result = shell.prepare_proposal(req);
         eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
+    }
+
+    /// Check that a tx requiring more gas than the block limit is not included in the block
+    #[test]
+    fn test_exceeding_max_block_gas_tx() {
+        let (shell, _) = test_utils::setup(1);
+
+        let block_gas_limit: u64 = shell
+            .read_storage_key(&parameters::storage::get_max_block_gas_key())
+            .expect("Missing max_block_gas parameter in storage");
+        let keypair = gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            (block_gas_limit + 1).into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        #[cfg(feature = "abcipp")]
+        assert_eq!(
+            shell.prepare_proposal(req).tx_records,
+            vec![record::remove(wrapper.to_bytes())]
+        );
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let result = shell.prepare_proposal(req);
+            eprintln!("Proposal: {:?}", result.txs);
+            assert!(result.txs.is_empty());
+        }
+    }
+
+    // Check that a wrapper requiring more gas than its limit is not included in the block
+    #[test]
+    fn test_exceeding_gas_limit_wrapper() {
+        let (shell, _) = test_utils::setup(1);
+        let keypair = gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair, shell.chain_id.clone(), None)
+        .expect("Wrapper signing failed");
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        #[cfg(feature = "abcipp")]
+        assert_eq!(
+            shell.prepare_proposal(req).tx_records,
+            vec![record::remove(wrapper.to_bytes())]
+        );
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let result = shell.prepare_proposal(req);
+            eprintln!("Proposal: {:?}", result.txs);
+            assert!(result.txs.is_empty());
+        }
     }
 }
