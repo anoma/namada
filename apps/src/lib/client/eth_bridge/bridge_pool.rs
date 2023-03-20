@@ -45,11 +45,12 @@ pub async fn add_to_eth_bridge_pool(
     } = args;
     let tx_code = ctx.read_wasm(ADD_TRANSFER_WASM);
     let client = HttpClient::new(tx.ledger_address.clone()).unwrap();
-    if let Ok(Some(denom)) = RPC
+    if let Some(denom) = RPC
         .shell()
         .eth_bridge()
         .erc20_denomination(&client, &asset)
         .await
+        .unwrap()
     {
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {

@@ -827,7 +827,7 @@ where
                 "Found Ethereum height from which the Ethereum oracle should \
                  start"
             );
-            let whitelist_update: Vec<UpdateErc20> = self
+            let mut whitelist_update: Vec<UpdateErc20> = self
                 .wl_storage
                 .write_log
                 .iter_prefix_post(&wrapped_erc20s::prefix())
@@ -846,7 +846,16 @@ where
                     )
                 })
                 .collect();
-
+            let wnam = self
+                .wl_storage
+                .ethbridge_queries()
+                .get_wnam_address()
+                .expect(
+                    "The wNam address should be in storage if the Ethereum \
+                     bridge is active",
+                );
+            // this entry should always be in the whitelist.
+            whitelist_update.push(UpdateErc20::Add(wnam, 6));
             let config = namada::eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,

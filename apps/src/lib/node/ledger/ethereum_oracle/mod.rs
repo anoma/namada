@@ -320,8 +320,6 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             if let Some(new_config) = oracle.update_config() {
                 config = new_config;
                 // apply updates to the whitelist
-                // TODO: Actually send these updates on start up and when the
-                // TODO: whitelist is changed
                 for update in config.whitelist_update.drain(0..) {
                     match update {
                         UpdateErc20::Add(token, denom) => {
@@ -524,6 +522,7 @@ mod test_oracle {
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
         MockEventType, TestCmd, Web3,
     };
+    use crate::node::ledger::oracle::control::Command::UpdateConfig;
 
     /// The data returned from setting up a test
     struct TestPackage {
@@ -997,6 +996,173 @@ mod test_oracle {
             assert_eq!(block_processed, Uint256::from(height));
         }
 
+        drop(eth_recv);
+        oracle.await.expect("Test failed");
+    }
+
+    /// Test that whitelist updates are appropriately
+    /// applied.
+    #[tokio::test]
+    async fn test_whitelist_updates() {
+        let TestPackage {
+            oracle,
+            mut eth_recv,
+            admin_channel,
+            mut control_sender,
+            ..
+        } = setup();
+        let min_confirmations = 100;
+        let config = Config {
+            min_confirmations: NonZeroU64::try_from(min_confirmations)
+                .expect("Test wasn't set up correctly"),
+            whitelist_update: vec![
+                // this should cause the event to not decode correctly
+                UpdateErc20::Add(EthAddress([0; 20]), 6u8),
+                // this is silly, but it should be ignored.
+                UpdateErc20::Remove(EthAddress([0; 20])),
+                UpdateErc20::Add(EthAddress([1; 20]), 10u8),
+            ],
+            ..Config::default()
+        };
+        let oracle =
+            start_with_default_config(oracle, &mut control_sender, config)
+                .await;
+
+        // Increase height above the configured minimum confirmations
+        admin_channel
+            .send(TestCmd::NewHeight(min_confirmations.into()))
+            .expect("Test failed");
+
+        // confirmed after 100 blocks
+        let gas_payer = gen_established_address();
+        let mut event = RawTransfersToEthereum {
+            transfers: vec![TransferToEthereum {
+                amount: Erc20Amount::from_uint(Uint::from(0), 7),
+                asset: EthAddress([3; 20]),
+                sender: gas_payer.clone(),
+                receiver: EthAddress([1; 20]),
+                gas_amount: Default::default(),
+                gas_payer: gas_payer.clone(),
+            }],
+            relayer: gas_payer.clone(),
+            nonce: 1.into(),
+        };
+
+        // send in the events to the logs
+        let (sender, _seen) = channel();
+        admin_channel
+            .send(TestCmd::NewEvent {
+                event_type: MockEventType::TransferToEthereum,
+                data: event.clone().encode(),
+                height: 0,
+                seen: sender,
+            })
+            .expect("Test failed");
+        // increase block height so event is confirmed.
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(200u32)))
+            .expect("Test failed");
+        // check no events are received
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+
+        event.transfers[0].asset = EthAddress([1; 20]);
+        event.transfers[0].amount = Erc20Amount::from_uint(Uint::from(0), 10);
+        // send in the events to the logs
+        let (sender, _seen) = channel();
+        admin_channel
+            .send(TestCmd::NewEvent {
+                event_type: MockEventType::TransferToEthereum,
+                data: event.clone().encode(),
+                height: 1,
+                seen: sender,
+            })
+            .expect("Test failed");
+        // increase block height so event is confirmed.
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(201u32)))
+            .expect("Test failed");
+        // seen.try_recv().expect("Test failed");
+        // check the event is received
+        let received_event = eth_recv.recv().await.expect("Test failed");
+        if let EthereumEvent::TransfersToEthereum {
+            nonce,
+            transfers,
+            relayer,
+        } = received_event
+        {
+            assert_eq!(nonce, Uint::from(1));
+            assert_eq!(relayer, gas_payer);
+            assert_eq!(transfers, event.transfers);
+        } else {
+            panic!("Test failed")
+        }
+
+        // update the whitelist
+        control_sender
+            .try_send(UpdateConfig(Config {
+                whitelist_update: vec![
+                    UpdateErc20::Add(EthAddress([0; 20]), 7u8),
+                    UpdateErc20::Remove(EthAddress([1; 20])),
+                ],
+                ..Config::default()
+            }))
+            .expect("Test failed");
+
+        // send in the events to the logs
+        let (sender, _seen) = channel();
+        admin_channel
+            .send(TestCmd::NewEvent {
+                event_type: MockEventType::TransferToEthereum,
+                data: event.clone().encode(),
+                height: 2,
+                seen: sender,
+            })
+            .expect("Test failed");
+        // increase block height so event is confirmed.
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(202u32)))
+            .expect("Test failed");
+        // check no events are received
+        let mut time = std::time::Duration::from_secs(1);
+        while time > std::time::Duration::from_millis(10) {
+            assert!(eth_recv.try_recv().is_err());
+            time -= std::time::Duration::from_millis(10);
+        }
+
+        event.transfers[0].asset = EthAddress([0; 20]);
+        event.transfers[0].amount = Erc20Amount::from_uint(Uint::from(0), 7);
+        // send in the events to the logs
+        let (sender, _seen) = channel();
+        admin_channel
+            .send(TestCmd::NewEvent {
+                event_type: MockEventType::TransferToEthereum,
+                data: event.clone().encode(),
+                height: 103,
+                seen: sender,
+            })
+            .expect("Test failed");
+        // increase block height so event is confirmed.
+        admin_channel
+            .send(TestCmd::NewHeight(Uint256::from(203u32)))
+            .expect("Test failed");
+        // check the event is received
+        let received_event = eth_recv.recv().await.expect("Test failed");
+        if let EthereumEvent::TransfersToEthereum {
+            nonce,
+            transfers,
+            relayer,
+        } = received_event
+        {
+            assert_eq!(nonce, Uint::from(1));
+            assert_eq!(relayer, gas_payer);
+            assert_eq!(transfers, event.transfers);
+        } else {
+            panic!("Test failed")
+        }
         drop(eth_recv);
         oracle.await.expect("Test failed");
     }

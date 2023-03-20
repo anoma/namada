@@ -134,7 +134,7 @@ pub mod mock_web3_client {
 
         /// Gets the events (for the appropriate signature) that
         /// have been added from the command channel unless the
-        /// client has not been set to act unresponsive.
+        /// client has been set to act unresponsive.
         pub async fn check_for_events(
             &self,
             block_to_check: Uint256,
