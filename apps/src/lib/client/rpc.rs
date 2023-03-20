@@ -1401,20 +1401,25 @@ pub async fn query_and_print_unbonds(
 ) {
     let unbonds = query_unbond_with_slashing(client, source, validator).await;
     let current_epoch = query_epoch(client).await;
-    let (withdrawable, not_yet_withdrawable): (HashMap<_, _>, HashMap<_, _>) =
-        unbonds.into_iter().partition(|((_, withdraw_epoch), _)| {
-            withdraw_epoch <= &current_epoch
-        });
-    let total_withdrawable = withdrawable
-        .into_iter()
-        .fold(token::Amount::default(), |acc, (_, amount)| acc + amount);
+
+    let mut total_withdrawable = token::Amount::default();
+    let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        if withdraw_epoch <= current_epoch {
+            total_withdrawable += amount;
+        } else {
+            let withdrawable_amount =
+                not_yet_withdrawable.entry(withdraw_epoch).or_default();
+            *withdrawable_amount += amount;
+        }
+    }
     if total_withdrawable != token::Amount::default() {
         println!("Total withdrawable now: {total_withdrawable}.");
     }
     if !not_yet_withdrawable.is_empty() {
         println!("Current epoch: {current_epoch}.")
     }
-    for ((_start_epoch, withdraw_epoch), amount) in not_yet_withdrawable {
+    for (withdraw_epoch, amount) in not_yet_withdrawable {
         println!(
             "Amount {amount} withdrawable starting from epoch \
              {withdraw_epoch}."
