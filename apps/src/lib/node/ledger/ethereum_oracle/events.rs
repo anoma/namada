@@ -13,9 +13,6 @@ pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
 
-    use ethabi::decode;
-    #[cfg(test)]
-    use ethabi::encode;
     use ethabi::param_type::ParamType;
     use ethabi::token::Token;
     use ethbridge_bridge_events::{
@@ -63,37 +60,6 @@ pub mod eth_events {
         pub event: EthereumEvent,
     }
 
-    /// Event emitted with the validator set changes
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct ValidatorSetUpdate {
-        /// A monotonically increasing nonce
-        nonce: Uint,
-        /// Hash of the validators in the bridge contract
-        bridge_validator_hash: KeccakHash,
-        /// Hash of the validators in the governance contract
-        governance_validator_hash: KeccakHash,
-    }
-
-    /// Event indicating a new smart contract has been
-    /// deployed or upgraded on Ethereum
-    #[derive(Clone, Debug, PartialEq)]
-    pub(in super::super) struct ChangedContract {
-        /// Name of the contract
-        pub name: String,
-        /// Address of the contract on Ethereum
-        pub address: EthAddress,
-    }
-
-    /// Event for whitelisting new tokens and their
-    /// rate limits
-    #[derive(Clone, Debug, PartialEq)]
-    struct UpdateBridgeWhitelist {
-        /// A monotonically increasing nonce
-        nonce: Uint,
-        /// Tokens to be allowed to be transferred across the bridge
-        whitelist: Vec<TokenWhitelist>,
-    }
-
     impl PendingEvent {
         /// Decodes bytes into an [`EthereumEvent`] based on the signature.
         /// This is is turned into a [`PendingEvent`] along with the block
@@ -106,7 +72,7 @@ pub mod eth_events {
             signature_type: SigType,
             block_height: Uint256,
             log: &ethabi::RawLog,
-            min_confirmations: Uint256,
+            confirmations: Uint256,
         ) -> Result<Self> {
             let raw_event = match signature_type {
                 SigType::Bridge => RawEvents::Bridge(
@@ -118,7 +84,7 @@ pub mod eth_events {
                         .map_err(|e| Error::Decode(e.to_string()))?,
                 ),
             };
-            Ok(match raw_event {
+            let event = match raw_event {
                 RawEvents::Bridge(BridgeEvents::TransferToErcFilter(
                     TransferToErcFilter {
                         nonce: _,
@@ -140,6 +106,11 @@ pub mod eth_events {
                     todo!()
                 }
                 _ => todo!(),
+            };
+            Ok(PendingEvent {
+                confirmations,
+                block_height,
+                event,
             })
         }
 
@@ -147,319 +118,6 @@ pub mod eth_events {
         /// reached at the input block height.
         pub fn is_confirmed(&self, height: &Uint256) -> bool {
             self.confirmations <= height.clone() - self.block_height.clone()
-        }
-    }
-
-    /// A batch of [`TransferToNamada`] from an Ethereum event
-    #[derive(Clone, Debug, PartialEq)]
-    pub(super) struct RawTransfersToNamada {
-        /// A list of transfers
-        pub transfers: Vec<TransferToNamada>,
-        /// A monotonically increasing nonce
-        #[allow(dead_code)]
-        pub nonce: Uint,
-        /// The number of confirmations needed to consider this batch
-        /// finalized
-        pub confirmations: u32,
-    }
-
-    /// A batch of [`TransferToNamada`] from an Ethereum event
-    #[derive(Clone, Debug, PartialEq)]
-    pub(in super::super) struct RawTransfersToEthereum {
-        /// A list of transfers
-        pub transfers: Vec<TransferToEthereum>,
-        /// A monotonically increasing nonce
-        pub nonce: Uint,
-        /// The Namada address that receives the gas fees
-        /// for relaying a batch of transfers
-        pub relayer: Address,
-    }
-
-    impl RawTransfersToNamada {
-        /// Parse ABI serialized data from an Ethereum event into
-        /// an instance of [`RawTransfersToNamada`]
-        fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, transfers, confs]: [Token; 3] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::Array(Box::new(ParamType::Tuple(vec![
-                        ParamType::Address,
-                        ParamType::Uint(256),
-                        ParamType::String,
-                    ]))),
-                    ParamType::Uint(256),
-                ],
-                data,
-            )
-            .map_err(|err| Error::Decode(format!("{:#?}", err)))?
-            .try_into()
-            .map_err(|error| {
-                Error::Decode(format!(
-                    "TransferToNamada signature should contain three types: \
-                     {:?}",
-                    error
-                ))
-            })?;
-
-            Ok(Self {
-                transfers: transfers.parse_transfer_to_namada_array()?,
-                nonce: nonce.parse_uint256()?,
-                confirmations: confs.parse_u32()?,
-            })
-        }
-
-        /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
-        /// ABI serialization scheme.
-        #[cfg(test)]
-        fn encode(self) -> Vec<u8> {
-            let RawTransfersToNamada {
-                transfers,
-                nonce,
-                confirmations,
-            } = self;
-
-            let transfers = transfers
-                .into_iter()
-                .map(
-                    |TransferToNamada {
-                         asset,
-                         receiver,
-                         amount,
-                     }| {
-                        Token::Tuple(vec![
-                            Token::Address(asset.0.into()),
-                            Token::Uint(u64::from(amount).into()),
-                            Token::String(receiver.to_string()),
-                        ])
-                    },
-                )
-                .collect();
-
-            encode(&[
-                Token::Uint(nonce.into()),
-                Token::Array(transfers),
-                Token::Uint(confirmations.into()),
-            ])
-        }
-    }
-
-    impl RawTransfersToEthereum {
-        /// Parse ABI serialized data from an Ethereum event into
-        /// an instance of [`RawTransfersToEthereum`]
-        fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, transfers, relayer]: [Token; 3] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::Array(Box::new(ParamType::Tuple(vec![
-                        ParamType::Address,
-                        ParamType::Address,
-                        ParamType::String,
-                        ParamType::Uint(256),
-                        ParamType::String,
-                        ParamType::Uint(256),
-                    ]))),
-                    ParamType::String,
-                ],
-                data,
-            )
-            .map_err(|err| Error::Decode(format!("{:?}", err)))?
-            .try_into()
-            .map_err(|_| {
-                Error::Decode(
-                    "TransferToERC signature should contain five types"
-                        .to_string(),
-                )
-            })?;
-
-            let transfers = transfers.parse_transfer_to_eth_array()?;
-            Ok(Self {
-                transfers,
-                nonce: nonce.parse_uint256()?,
-                relayer: relayer.parse_address()?,
-            })
-        }
-
-        /// Serialize an instance [`RawTransfersToNamada`] using Ethereum's
-        /// ABI serialization scheme.
-        #[cfg(test)]
-        pub fn encode(self) -> Vec<u8> {
-            let RawTransfersToEthereum {
-                transfers,
-                nonce,
-                relayer,
-            } = self;
-
-            let transfers = transfers
-                .into_iter()
-                .map(
-                    |TransferToEthereum {
-                         amount,
-                         asset,
-                         sender,
-                         receiver,
-                         gas_amount,
-                         gas_payer,
-                     }| {
-                        Token::Tuple(vec![
-                            Token::Address(asset.0.into()),
-                            Token::Address(receiver.0.into()),
-                            Token::String(sender.to_string()),
-                            Token::Uint(u64::from(amount).into()),
-                            Token::String(gas_payer.to_string()),
-                            Token::Uint(u64::from(gas_amount).into()),
-                            Token::String(relayer.to_string()),
-                        ])
-                    },
-                )
-                .collect();
-            encode(&[
-                Token::Uint(nonce.into()),
-                Token::Array(transfers),
-                Token::String(relayer.to_string()),
-            ])
-        }
-    }
-
-    impl ValidatorSetUpdate {
-        /// Parse ABI serialized data from an Ethereum event into
-        /// an instance of [`ValidatorSetUpdate`]
-        fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, bridge_validator_hash, goverance_validator_hash]: [Token;
-                3] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::FixedBytes(32),
-                    ParamType::FixedBytes(32),
-                ],
-                data,
-            )
-                .map_err(|err| Error::Decode(format!("{:?}", err)))?
-                .try_into()
-                .map_err(|_| {
-                    Error::Decode(
-                        "ValidatorSetUpdate signature should contain three types"
-                            .into(),
-                    )
-                })?;
-
-            Ok(Self {
-                nonce: nonce.parse_uint256()?,
-                bridge_validator_hash: bridge_validator_hash.parse_keccak()?,
-                governance_validator_hash: goverance_validator_hash
-                    .parse_keccak()?,
-            })
-        }
-
-        /// Serialize an instance [`ValidatorSetUpdate`] using Ethereum's
-        /// ABI serialization scheme.
-        #[cfg(test)]
-        fn encode(self) -> Vec<u8> {
-            let ValidatorSetUpdate {
-                nonce,
-                bridge_validator_hash,
-                governance_validator_hash,
-            } = self;
-
-            encode(&[
-                Token::Uint(nonce.into()),
-                Token::FixedBytes(bridge_validator_hash.0.into()),
-                Token::FixedBytes(governance_validator_hash.0.into()),
-            ])
-        }
-    }
-
-    impl ChangedContract {
-        /// Parse ABI serialized data from an Ethereum event into
-        /// an instance of [`ChangedContract`]
-        fn decode(data: &[u8]) -> Result<Self> {
-            let [name, address]: [Token; 2] =
-                decode(&[ParamType::String, ParamType::Address], data)
-                    .map_err(|err| Error::Decode(format!("{:?}", err)))?
-                    .try_into()
-                    .map_err(|_| {
-                        Error::Decode(
-                            "ContractUpdate signature should contain two types"
-                                .into(),
-                        )
-                    })?;
-
-            Ok(Self {
-                name: name.parse_string()?,
-                address: address.parse_eth_address()?,
-            })
-        }
-
-        /// Serialize an instance [`ChangedContract`] using Ethereum's
-        /// ABI serialization scheme.
-        #[cfg(test)]
-        pub fn encode(self) -> Vec<u8> {
-            let ChangedContract { name, address } = self;
-            encode(&[Token::String(name), Token::Address(address.0.into())])
-        }
-    }
-
-    impl UpdateBridgeWhitelist {
-        /// Parse ABI serialized data from an Ethereum event into
-        /// an instance of [`UpdateBridgeWhitelist`]
-        fn decode(data: &[u8]) -> Result<Self> {
-            let [nonce, tokens, caps]: [Token; 3] = decode(
-                &[
-                    ParamType::Uint(256),
-                    ParamType::Array(Box::new(ParamType::Address)),
-                    ParamType::Array(Box::new(ParamType::Uint(256))),
-                ],
-                data,
-            )
-            .map_err(|err| Error::Decode(format!("{:?}", err)))?
-            .try_into()
-            .map_err(|_| {
-                Error::Decode(
-                    "UpdatedBridgeWhitelist signature should contain three \
-                     types"
-                        .into(),
-                )
-            })?;
-
-            let tokens = tokens.parse_eth_address_array()?;
-            let caps = caps.parse_amount_array()?;
-            if tokens.len() != caps.len() {
-                Err(Error::Decode(
-                    "UpdatedBridgeWhitelist received different number of \
-                     token address and token caps"
-                        .into(),
-                ))
-            } else {
-                Ok(Self {
-                    nonce: nonce.parse_uint256()?,
-                    whitelist: tokens
-                        .into_iter()
-                        .zip(caps.into_iter())
-                        .map(|(token, cap)| TokenWhitelist { token, cap })
-                        .collect(),
-                })
-            }
-        }
-
-        /// Serialize an instance [`UpdateBridgeWhitelist`] using Ethereum's
-        /// ABI serialization scheme.
-        #[cfg(test)]
-        fn encode(self) -> Vec<u8> {
-            let UpdateBridgeWhitelist { nonce, whitelist } = self;
-
-            let (tokens, caps): (Vec<Token>, Vec<Token>) = whitelist
-                .into_iter()
-                .map(|TokenWhitelist { token, cap }| {
-                    (
-                        Token::Address(token.0.into()),
-                        Token::Uint(u64::from(cap).into()),
-                    )
-                })
-                .unzip();
-            encode(&[
-                Token::Uint(nonce.into()),
-                Token::Array(tokens),
-                Token::Array(caps),
-            ])
         }
     }
 

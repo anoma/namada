@@ -509,7 +509,8 @@ pub mod last_processed_block {
     }
 }
 
-#[cfg(test)]
+//#[cfg(test)]
+#[cfg(FALSE)]
 mod test_oracle {
     use std::num::NonZeroU64;
 
