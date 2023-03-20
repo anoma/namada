@@ -27,6 +27,7 @@ pub mod eth_events {
         EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
         TransferToNamada, Uint,
     };
+    use namada::core::types::ethereum_structs;
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
     use num256::Uint256;
@@ -302,7 +303,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for Vec<ethbridge_structs::NamadaTransfer> {
+    impl Parse for Vec<ethereum_structs::NamadaTransfer> {
         fn parse_transfer_to_namada_array(
             self,
         ) -> Result<Vec<TransferToNamada>> {
@@ -313,7 +314,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for ethbridge_structs::NamadaTransfer {
+    impl Parse for ethereum_structs::NamadaTransfer {
         fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
             let asset = self.from.parse_eth_address()?;
             let amount = self.amount.parse_amount()?;
@@ -326,7 +327,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for Vec<ethbridge_structs::Erc20Transfer> {
+    impl Parse for Vec<ethereum_structs::Erc20Transfer> {
         fn parse_transfer_to_eth_array(
             self,
         ) -> Result<Vec<TransferToEthereum>> {
@@ -337,7 +338,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for ethbridge_structs::Erc20Transfer {
+    impl Parse for ethereum_structs::Erc20Transfer {
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
             let asset = self.from.parse_eth_address()?;
             let receiver = self.to.parse_eth_address()?;
