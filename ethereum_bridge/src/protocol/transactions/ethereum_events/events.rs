@@ -43,10 +43,17 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match &event {
-        // TODO: handle invalid transfs
-        EthereumEvent::TransfersToNamada { transfers, .. } => {
-            act_on_transfers_to_namada(wl_storage, transfers)
-        }
+        EthereumEvent::TransfersToNamada {
+            transfers,
+            valid_transfers_map,
+            ..
+        } => act_on_transfers_to_namada(
+            wl_storage,
+            transfers
+                .iter()
+                .zip(valid_transfers_map.iter())
+                .filter_map(|(transf, valid)| valid.then_some(transf)),
+        ),
         // TODO: handle invalid transfs
         EthereumEvent::TransfersToEthereum {
             transfers, relayer, ..
@@ -58,9 +65,9 @@ where
     }
 }
 
-fn act_on_transfers_to_namada<D, H>(
+fn act_on_transfers_to_namada<'tx, D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    transfers: &[TransferToNamada],
+    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
