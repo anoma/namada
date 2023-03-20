@@ -2268,6 +2268,9 @@ where
                     }
                     let change: token::Change =
                         BorshDeserialize::try_from_slice(&val_bytes).ok()?;
+                    if change == 0 {
+                        return None;
+                    }
                     return Some((bond_id, start, change));
                 }
             }
@@ -2381,6 +2384,7 @@ where
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()
+        .filter(|(_start, change)| *change > token::Change::default())
         .map(|(start, change)| {
             make_bond_details(
                 storage,
