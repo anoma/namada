@@ -23,6 +23,7 @@
     - [Testnet setup](./explore/design/testnet-setup.md)
     - [Testnet launch procedure](./explore/design/testnet-launch-procedure/README.md)
   - [Dev](./explore/dev/README.md)
+    - [Development considerations](./explore/dev/development-considerations.md)
     - [Storage API](./explore/dev/storage_api.md)
   - [Libraries & Tools](./explore/libraries/README.md)
     - [Cryptography]()
