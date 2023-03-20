@@ -467,6 +467,25 @@ fn process_queue(
     confirmed
 }
 
+/// Extra methods for [`web30::types::Log`] instances.
+trait Web30LogExt {
+    /// Convert a [`web30`] event log to the corresponding
+    /// [`ethabi`] type.
+    fn to_ethabi(self) -> ethabi::RawLog;
+}
+
+impl Web30LogExt for web30::types::Log {
+    fn to_ethabi(self) -> ethabi::RawLog {
+        let topics = self
+            .topics
+            .into_iter()
+            .map(|topic| ethabi::Hash::from_slice(topic.as_slice()))
+            .collect();
+        let data = self.data.0;
+        ethabi::RawLog { topics, data }
+    }
+}
+
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
     use namada::core::types::ethereum_structs;
