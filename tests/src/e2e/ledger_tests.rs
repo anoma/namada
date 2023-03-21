@@ -3331,6 +3331,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
     validator_0.exp_string("Namada ledger node started")?;
     validator_0.exp_string("This node is a validator")?;
+    validator_0.exp_string("Committed block hash")?;
     let _bg_validator_0 = validator_0.background();
     let mut validator_1 =
         run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
