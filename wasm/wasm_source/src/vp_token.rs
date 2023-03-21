@@ -108,4 +108,164 @@ fn token_checks(
     }
     Ok(change == 0)
 }
+
+#[cfg(test)]
+mod tests {
+    // Use this as `#[test]` annotation to enable logging
+    use namada::core::ledger::storage_api::token;
+    use namada_tests::log::test;
+    use namada_tests::tx::{self, TestTxEnv};
+    use namada_tests::vp::*;
+    use namada_vp_prelude::storage_api::StorageWrite;
+
+    use super::*;
+
+    #[test]
+    fn test_transfer_inputs_eq_outputs_is_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+        let token = address::nam();
+        let src = address::testing::established_address_1();
+        let dest = address::testing::established_address_2();
+        let total_supply = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&token, &src, &dest]);
+        token::credit_tokens(
+            &mut tx_env.wl_storage,
+            &token,
+            &src,
+            total_supply,
+        )
+        .unwrap();
+        // Commit the initial state
+        tx_env.commit_tx_and_block();
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
+            // Apply a transfer
+
+            let amount = token::Amount::from(100);
+            token::transfer(tx::ctx(), &token, &src, &dest, amount).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            !validate_tx(&CTX, tx_data, token, keys_changed, verifiers)
+                .unwrap(),
+            "Change of a `total_supply` value should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_transfer_inputs_neq_outputs_is_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+        let token = address::nam();
+        let src = address::testing::established_address_1();
+        let dest = address::testing::established_address_2();
+        let total_supply = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&token, &src, &dest]);
+        token::credit_tokens(
+            &mut tx_env.wl_storage,
+            &token,
+            &src,
+            total_supply,
+        )
+        .unwrap();
+        // Commit the initial state
+        tx_env.commit_tx_and_block();
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
+            // Apply a transfer
+
+            let amount_in = token::Amount::from(100);
+            let amount_out = token::Amount::from(900);
+
+            let src_key = token::balance_key(&token, &src);
+            let src_balance =
+                token::read_balance(tx::ctx(), &token, &src).unwrap();
+            let new_src_balance = src_balance + amount_out;
+            let dest_key = token::balance_key(&token, &dest);
+            let dest_balance =
+                token::read_balance(tx::ctx(), &token, &dest).unwrap();
+            let new_dest_balance = dest_balance + amount_in;
+            tx::ctx().write(&src_key, new_src_balance).unwrap();
+            tx::ctx().write(&dest_key, new_dest_balance).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            !validate_tx(&CTX, tx_data, token, keys_changed, verifiers)
+                .unwrap(),
+            "Change of a `total_supply` value should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_total_supply_change_is_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+        let token = address::nam();
+        let owner = address::testing::established_address_1();
+        let total_supply = token::Amount::from(10_098_123);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&token, &owner]);
+        token::credit_tokens(
+            &mut tx_env.wl_storage,
+            &token,
+            &owner,
+            total_supply,
+        )
+        .unwrap();
+        // Commit the initial state
+        tx_env.commit_tx_and_block();
+
+        let total_supply_key = token::total_supply_key(&token);
+
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(token.clone(), tx_env, |_address| {
+            // Try to change total supply from a tx
+
+            let current_supply = tx::ctx()
+                .read::<token::Amount>(&total_supply_key)
+                .unwrap()
+                .unwrap_or_default();
+            tx::ctx()
+                .write(
+                    &total_supply_key,
+                    current_supply + token::Amount::from(1),
+                )
+                .unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let tx_data: Vec<u8> = vec![];
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        assert!(
+            !validate_tx(&CTX, tx_data, token, keys_changed, verifiers)
+                .unwrap(),
+            "Change of a `total_supply` value should be rejected"
+        );
+    }
 }
