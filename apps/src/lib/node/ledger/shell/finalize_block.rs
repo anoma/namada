@@ -1,5 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use namada::eth_bridge::storage::bridge_pool;
+use namada::ledger::eth_bridge::EthBridgeQueries;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::protocol;
@@ -76,6 +78,8 @@ where
 
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
+
+        let mut increment_bp_nonce = false;
 
         // Tracks the accepted transactions
         self.wl_storage.storage.block.results = BlockResults::default();
@@ -355,6 +359,15 @@ where
                                 );
                             }
                         }
+                        // should we update the bridge pool nonce?
+                        if !increment_bp_nonce
+                            && result
+                                .changed_keys
+                                .iter()
+                                .any(bridge_pool::is_pending_transfer_key)
+                        {
+                            increment_bp_nonce = true;
+                        }
                     } else {
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
@@ -388,6 +401,10 @@ where
             response.events.push(tx_event);
         }
 
+        if increment_bp_nonce {
+            self.increment_bp_nonce();
+        }
+
         stats.set_tx_cache_size(
             self.tx_wasm_cache.get_size(),
             self.tx_wasm_cache.get_cache_size(),
@@ -416,6 +433,25 @@ where
         tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
 
         Ok(response)
+    }
+
+    /// Increment bridge pool's sequence number.
+    ///
+    /// This method can crash the ledger, if we run out of sequence
+    /// numbers. Given we have 256 bits of storage at our disposal,
+    /// it is unlikely this will happen before the heat death of the
+    /// Universe.
+    fn increment_bp_nonce(&mut self) {
+        use namada::ledger::storage_api::StorageWrite;
+        let next_nonce = self
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_pool_nonce()
+            .checked_increment()
+            .expect("Bridge pool nonce has overflowed");
+        self.wl_storage
+            .write(&bridge_pool::get_nonce_key(), next_nonce)
+            .expect("Writing the bridge pool nonce to storage should not fail");
     }
 
     /// Sets the metadata necessary for a new block, including
@@ -515,7 +551,7 @@ mod test_finalize_block {
         get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
     use namada::eth_bridge::storage::min_confirmations_key;
-    use namada::ledger::eth_bridge::{EthBridgeQueries, MinimumConfirmations};
+    use namada::ledger::eth_bridge::MinimumConfirmations;
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::native_vp::parameters::ParametersVp;
     use namada::ledger::native_vp::NativeVp;
