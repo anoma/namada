@@ -64,16 +64,12 @@ where
             let key_type = KeyType::from_key(key, &native_token);
 
             let result: Result<bool> = match key_type {
-                KeyType::BALANCE => {
-                    self.is_valid_transfer(verifiers, &native_token)
-                }
+                KeyType::BALANCE => self.is_valid_transfer(verifiers),
                 KeyType::SPENT_AMOUNT => {
                     self.is_valid_spent_amount(key, &native_token)
                 }
                 KeyType::CANDIDACY => self.is_valid_candidacy(key, verifiers),
-                KeyType::RECEIPIENTS => {
-                    self.is_valid_project(verifiers, &native_token)
-                }
+                KeyType::RECEIPIENTS => self.is_valid_project(verifiers),
                 KeyType::UNKNOWN_PGF => Ok(false),
                 KeyType::UNKNOWN => Ok(true),
             };
@@ -139,7 +135,6 @@ where
     pub fn is_valid_transfer(
         &self,
         verifiers: &BTreeSet<Address>,
-        native_token: &Address,
     ) -> Result<bool> {
         self.is_signed_by_active_counsil(verifiers)
     }
@@ -211,11 +206,7 @@ where
     }
 
     // Validate project key
-    fn is_valid_project(
-        &self,
-        verifiers: &BTreeSet<Address>,
-        native_token: &Address,
-    ) -> Result<bool> {
+    fn is_valid_project(&self, verifiers: &BTreeSet<Address>) -> Result<bool> {
         self.is_signed_by_active_counsil(verifiers)
     }
 

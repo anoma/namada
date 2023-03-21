@@ -6,7 +6,7 @@ pub use dev::{
     christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
     validator_address, validator_keypair, validator_keys,
 };
-use namada::ledger::{eth_bridge, governance, pgf, pos};
+use namada::ledger::{eth_bridge, governance, pgf, pgf_treasury, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
 
@@ -22,6 +22,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("governance".into(), governance::ADDRESS),
         ("eth_bridge".into(), eth_bridge::vp::ADDRESS),
         ("pgf".into(), pgf::ADDRESS),
+        ("pgf_counsil_treasury".into(), pgf_treasury::ADDRESS),
     ];
     // Genesis validators
     let validator_addresses =

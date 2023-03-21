@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
-use rust_decimal::Decimal;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::{ledger::storage_api::token, types::address::Address};
+use crate::ledger::storage_api::token;
+use crate::types::address::Address;
 
 /// List of pgf counsil members
 pub type PgfCounsilMembers = BTreeSet<CounsilMemberReward>;
@@ -27,11 +28,15 @@ pub struct CounsilMemberReward {
     /// The counsil member address
     pub address: Address,
     /// The reward expresses as percentage
-    pub reward: Decimal
+    pub reward: Decimal,
 }
 
 impl CounsilMemberReward {
-    pub fn compute_reward_amount(&self, total_amount: token::Amount) -> Option<token::Amount> {
-        return total_amount.checked_mul(self.reward.into())
+    /// Compute the member reward in [`token::Amount`]
+    pub fn compute_reward_amount(
+        &self,
+        total_amount: token::Amount,
+    ) -> Option<token::Amount> {
+        total_amount.checked_mul(self.reward.into())
     }
 }

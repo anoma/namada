@@ -72,7 +72,7 @@ mod internal {
     pub const PGF: &str = 
         "ano::Public Goods Funding                    ";
     pub const PGF_COUNCIL_TREASURY: &str =
-        "ano::PGF Council Treasusy                    ";
+        "ano::Public Goods Funding Counsil Treasury   ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -260,6 +260,9 @@ impl Address {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
                 internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
+                internal::PGF_COUNCIL_TREASURY => {
+                    Ok(Address::Internal(InternalAddress::PgfCouncilTreasury))
+                }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -514,7 +517,8 @@ impl Display for InternalAddress {
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::Pgf => "PublicGoodsFunding".to_string(),
-                Self::PgfCouncilTreasury => "PGFCouncilTreasury".to_string(),
+                Self::PgfCouncilTreasury =>
+                    "PublicGoodsFundingCouncilTreasury".to_string(),
             }
         )
     }
@@ -800,7 +804,8 @@ pub mod testing {
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
             InternalAddress::Pgf => {}
-            InternalAddress::PgfCouncilTreasury => {} /* Add new addresses in the
+            InternalAddress::PgfCouncilTreasury => {} /* Add new addresses in
+                                                       * the
                                                        * `prop_oneof` below. */
         };
         prop_oneof![

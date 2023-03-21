@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::ops::Deref;
+use std::ops::{Add, Deref};
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -56,6 +56,7 @@ use namada::types::time::DateTimeUtc;
 use namada::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
+use namada::types::transaction::counsil_treasury::PgfCounsilMembers;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -85,6 +86,7 @@ use crate::node::ledger::tendermint_node;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_COUNSIL: &str = "tx_init_counsil.wasm";
+const TX_INIT_COUNSIL_MEMBERS: &str = "tx_init_counsil_members.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
@@ -1965,10 +1967,7 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
 
     let signer = WalletAddress::new(proposal.clone().author.to_string());
     let governance_parameters = rpc::get_governance_parameters(&client).await;
-    let current_epoch = rpc::query_and_print_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let current_epoch = rpc::query_epoch(&client).await;
 
     if proposal.voting_start_epoch <= current_epoch
         || proposal.voting_start_epoch.0
@@ -2605,12 +2604,12 @@ async fn filter_delegations(
 
 pub async fn submit_init_counsil(
     ctx: Context,
-    args::CreateCouncil {
+    args::InitCounsil {
         tx: tx_args,
         address,
         spending_cap,
         data,
-    }: args::CreateCouncil,
+    }: args::InitCounsil,
 ) {
     let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
     let counsil_address = ctx.get(&address);
@@ -2670,6 +2669,67 @@ pub async fn submit_init_counsil(
 
     let tx = Tx::new(tx_code, Some(data));
     let (_ctx, _initialized_accounts) = process_tx(
+        ctx,
+        &tx_args,
+        tx,
+        pks_map,
+        vec![TxSigningKey::WalletAddress(address)],
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+}
+
+pub async fn submit_counsil_members(
+    ctx: Context,
+    args::InitCounsilMembers {
+        tx: tx_args,
+        address,
+        data_path,
+    }: args::InitCounsilMembers,
+) {
+    let client = HttpClient::new(tx_args.ledger_address.clone()).unwrap();
+
+    let file = File::open(data_path).expect("File must exist.");
+    let pgf_counsil_members: PgfCounsilMembers =
+        serde_json::from_reader(file).expect("JSON was not well-formatted");
+
+    let counsil_address = ctx.get(&address);
+    let active_counsil_address = rpc::pgf_counsil(&client).await;
+
+    if let Some(counsil) = active_counsil_address {
+        if !counsil.address.eq(&counsil_address) {
+            eprintln!(
+                "The selected counsil address doesn't corresponde with the \
+                 active counsil address."
+            );
+            safe_exit(1)
+        }
+    } else {
+        eprintln!("There is no active counsil yet.");
+    }
+
+    let sum_members_rewards = pgf_counsil_members
+        .iter()
+        .fold(Decimal::from(0), |acc, member_data| {
+            acc.add(member_data.reward)
+        });
+    if sum_members_rewards == Decimal::from(0)
+        || sum_members_rewards > Decimal::from(1)
+    {
+        eprintln!("Members reward sum must be greater than 0 and below 1.");
+        safe_exit(1)
+    }
+
+    let data = pgf_counsil_members
+        .try_to_vec()
+        .expect("Encoding proposal data shouldn't fail");
+    let tx_code = ctx.read_wasm(TX_INIT_COUNSIL_MEMBERS);
+    let tx = Tx::new(tx_code, Some(data));
+
+    let pks_map = rpc::get_address_pks_map(&client, &counsil_address).await;
+
+    process_tx(
         ctx,
         &tx_args,
         tx,

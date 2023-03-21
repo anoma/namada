@@ -69,8 +69,6 @@ where
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key(key, &native_token);
 
-            println!("KEY TYPE: {:?}", key_type);
-
             let result = match (key_type, proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
                     self.is_valid_vote_key(proposal_id, key, verifiers)

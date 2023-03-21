@@ -1,5 +1,7 @@
 //! Types that are used in transactions.
 
+/// txs to manage pgf treasury counsil
+pub mod counsil_treasury;
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
@@ -15,7 +17,6 @@ pub mod pos;
 pub mod protocol;
 /// wrapper txs with encrypted payloads
 pub mod wrapper;
-pub mod counsil_treasury;
 
 use std::collections::BTreeSet;
 use std::fmt;

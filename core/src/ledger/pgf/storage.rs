@@ -101,7 +101,7 @@ pub fn get_candidate_address(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Get PGF candidate address
+/// Get PGF spending cap
 pub fn get_candidate_spending_cap(key: &Key) -> Option<Amount> {
     println!("{:?}", key);
     match key.get_at(3) {

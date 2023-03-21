@@ -13,11 +13,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         .wrap_err("failed to decode token::Transfer")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
 
-    match pgf::pgf_transfer(ctx, transfer) {
-        Ok(Some(counsil_address)) => ctx.insert_verifier(&counsil_address),
-        _ => {
+    let counsil = pgf::get_current_counsil(ctx)?;
+    match counsil {
+        Some(counsil) => {
+            pgf::pgf_transfer(ctx, transfer);
+            ctx.insert_verifier(&counsil.address)?;
+            debug_log!("Pgf transfer executed.");
+        }
+        None => {
             debug_log!("Invalid pgf transfer.");
             panic!()
         }
     }
+    Ok(())
 }

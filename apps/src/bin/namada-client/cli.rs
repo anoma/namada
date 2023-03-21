@@ -39,9 +39,6 @@ pub async fn main() -> Result<()> {
                 Sub::TxRevealPk(TxRevealPk(args)) => {
                     tx::submit_reveal_pk(ctx, args).await;
                 }
-                Sub::TxPgfReceipients(TxPgfReceipients(args)) => {
-                    tx::submit_pgf_receipients(ctx, args).await;
-                }
                 Sub::Bond(Bond(args)) => {
                     tx::submit_bond(ctx, args).await;
                 }
@@ -51,8 +48,14 @@ pub async fn main() -> Result<()> {
                 Sub::Withdraw(Withdraw(args)) => {
                     tx::submit_withdraw(ctx, args).await;
                 }
-                Sub::TxCreateCouncil(TxCreateCouncil(args)) => {
+                Sub::TxInitCounsil(TxInitCounsil(args)) => {
                     tx::submit_init_counsil(ctx, args).await;
+                }
+                Sub::TxInitCounsilMembers(TxInitCounsilMembers(args)) => {
+                    tx::submit_counsil_members(ctx, args).await;
+                }
+                Sub::TxPgfReceipients(TxPgfReceipients(args)) => {
+                    tx::submit_pgf_receipients(ctx, args).await;
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(args)) => {

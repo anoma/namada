@@ -10,7 +10,7 @@ struct Keys {
     counsil_members: &'static str,
 }
 
-// Returns if the key is a pgf counsil treasury key.
+/// Returns if the key is a pgf counsil treasury key.
 pub fn is_counsil_treasury_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
 }
@@ -27,8 +27,8 @@ pub fn is_active_counsil_key(key: &Key) -> bool {
 pub fn is_counsil_members_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
         DbKeySeg::AddressSeg(addr),
-        DbKeySeg::StringSeg(active_counsil),
-    ] if addr == &ADDRESS && active_counsil == Keys::VALUES.counsil_members)
+        DbKeySeg::StringSeg(counsil_members),
+    ] if addr == &ADDRESS && counsil_members == Keys::VALUES.counsil_members)
 }
 
 /// Storage key used for active_counsil.
@@ -41,12 +41,12 @@ pub fn get_counsil_address_key() -> Key {
     }
 }
 
-/// Storage key used for ounsil_reward_addresses.
+/// Storage key used for counsil_members.
 pub fn get_counsil_members_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(Keys::VALUES.active_counsil.to_string()),
+            DbKeySeg::StringSeg(Keys::VALUES.counsil_members.to_string()),
         ],
     }
 }

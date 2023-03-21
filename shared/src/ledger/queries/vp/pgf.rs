@@ -1,6 +1,7 @@
 use namada_core::ledger::storage_api::pgf::{
-    get_candidates, get_current_counsil, get_receipients,
+    get_candidates, get_counsil_members, get_current_counsil, get_receipients,
 };
+use namada_core::types::transaction::counsil_treasury::PgfCounsilMembers;
 use namada_core::types::transaction::pgf::{
     Candidate, Counsil, PgfReceipients,
 };
@@ -13,6 +14,7 @@ router! {PGF,
     ( "current_counsil" ) -> Option<Counsil> = current_counsil,
     ( "candidates"  ) -> Vec<Candidate> = candidates,
     ( "receipients"  ) -> Option<PgfReceipients> = receipients,
+    ( "members"  ) -> Option<PgfCounsilMembers> = counsil_members,
 }
 
 /// Get the current counsil info
@@ -46,4 +48,15 @@ where
     H: 'static + StorageHasher + Sync,
 {
     get_receipients(ctx.wl_storage)
+}
+
+/// Get the counsil treasury members
+fn counsil_members<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<Option<PgfCounsilMembers>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    get_counsil_members(ctx.wl_storage)
 }

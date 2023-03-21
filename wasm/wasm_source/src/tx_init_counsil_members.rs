@@ -20,10 +20,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
         Some(counsil) => {
             pgf::update_pgf_counsil_treasury_members(ctx, tx_data)?;
             ctx.insert_verifier(&counsil.address)?;
-            debug_log!("Pgf counsil treasury members updated");
+            debug_log!("Pgf counsil treasury members updated.");
         }
         None => {
-            debug_log!("Error while updating Pgf counsil treasury members");
+            debug_log!("Error while updating Pgf counsil treasury members.");
             panic!()
         }
     }

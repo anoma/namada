@@ -2,8 +2,8 @@
 
 use super::token::Amount;
 use super::Error;
-use crate::ledger::pgf::{storage as pgf_storage, CounsilData};
 use crate::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
+use crate::ledger::pgf::{storage as pgf_storage, CounsilData};
 use crate::ledger::storage_api::token::transfer as token_transfer;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
@@ -110,7 +110,6 @@ where
         .read(&candidates_expiration_key)?
         .expect("Expiration key should be initialized.");
     let candidates_prefix_key = pgf_storage::candidates_prefix_key();
-
     let iter = storage_api::iter_prefix::<CounsilData>(
         storage,
         &candidates_prefix_key,
@@ -153,27 +152,37 @@ pub fn get_receipients<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let receipients = pgf_storage::get_cpgf_recipient_key();
-    storage.read(&receipients)
+    let receipients_key = pgf_storage::get_cpgf_recipient_key();
+    storage.read(&receipients_key)
+}
+
+/// Get the counsil treasury members
+pub fn get_counsil_members<S>(
+    storage: &S,
+) -> storage_api::Result<Option<PgfCounsilMembers>>
+where
+    S: StorageRead + StorageWrite,
+{
+    let counsil_members_key =
+        pgf_counsil_treasury_storage::get_counsil_members_key();
+    storage.read(&counsil_members_key)
 }
 
 /// Transfer some token from pgf address to an anddress
 pub fn pgf_transfer<S>(
     storage: &mut S,
     transfer: Transfer,
-) -> storage_api::Result<Option<Address>>
+) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let pgf_active_counsil = get_current_counsil_address(storage)?;
     let spent_amount = get_current_spent_amount(storage)?;
-    let (counsil_address, spent_amount) =
-        match (pgf_active_counsil, spent_amount) {
-            (Some(address), Some(amount)) => (address, amount),
-            _ => {
-                return Err(Error::SimpleMessage("There is no active counsil"));
-            }
-        };
+    let spent_amount = match spent_amount {
+        Some(amount) => amount,
+        _ => {
+            return Err(Error::SimpleMessage("There is no active counsil"));
+        }
+    };
 
     let token::Transfer {
         source,
@@ -190,7 +199,7 @@ where
     let spent_amount_key = pgf_storage::get_spent_amount_key();
     storage.write(&spent_amount_key, spent_amount + amount)?;
 
-    Ok(Some(counsil_address))
+    Ok(())
 }
 
 /// A pgf transaction to update the pgf counsil treasury members.
@@ -200,7 +209,8 @@ pub fn update_pgf_counsil_treasury_members<S>(
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
-{ 
-    let pgf_counsil_treasury_members_key = pgf_counsil_treasury_storage::get_counsil_members_key();
+{
+    let pgf_counsil_treasury_members_key =
+        pgf_counsil_treasury_storage::get_counsil_members_key();
     storage.write(&pgf_counsil_treasury_members_key, data)
 }

@@ -9,14 +9,13 @@ use std::ops::{Index, IndexMut};
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
+use super::pgf_treasury::utils::PgfCounsilTrasuryEvent;
 use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::ledger::pgf::utils::PgfEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
-
-use super::pgf_treasury::utils::PgfCounsilTrasuryEvent;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -26,8 +25,8 @@ pub enum EventLevel {
     Block,
     /// Indicates an event is to do with an individual transaction.
     Tx,
-    ///Indicates an event is to do with a finalized block on epoch change
-    Epoch
+    /// Indicates an event is to do with a finalized block on epoch change
+    Epoch,
 }
 
 /// Custom events that can be queried from Tendermint
@@ -57,7 +56,7 @@ pub enum EventType {
     /// The Pgf transfer that has been executed
     Pgf,
     /// A transfer from PgfCounsilTreasury to a counsil member
-    PgfCounsilTreasury
+    PgfCounsilTreasury,
 }
 
 impl Display for EventType {

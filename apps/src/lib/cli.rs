@@ -166,7 +166,8 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 // Pgf transactions
-                .subcommand(TxCreateCouncil::def().display_order(3))
+                .subcommand(TxInitCounsil::def().display_order(3))
+                .subcommand(TxInitCounsilMembers::def().display_order(3))
                 .subcommand(TxPgfReceipients::def().display_order(3))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(4))
@@ -206,8 +207,9 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
-            let tx_counsil_crate =
-                Self::parse_with_ctx(matches, TxCreateCouncil);
+            let tx_init_counsil = Self::parse_with_ctx(matches, TxInitCounsil);
+            let tx_init_counsil_members =
+                Self::parse_with_ctx(matches, TxInitCounsilMembers);
             let tx_pgf_receipients =
                 Self::parse_with_ctx(matches, TxPgfReceipients);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -248,7 +250,8 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
-                .or(tx_counsil_crate)
+                .or(tx_init_counsil)
+                .or(tx_init_counsil_members)
                 .or(tx_pgf_receipients)
                 .or(bond)
                 .or(unbond)
@@ -315,7 +318,8 @@ pub mod cmds {
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
-        TxCreateCouncil(TxCreateCouncil),
+        TxInitCounsil(TxInitCounsil),
+        TxInitCounsilMembers(TxInitCounsilMembers),
         TxPgfReceipients(TxPgfReceipients),
         TxRevealPk(TxRevealPk),
         Bond(Bond),
@@ -1507,24 +1511,49 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxCreateCouncil(pub args::CreateCouncil);
+    pub struct TxInitCounsil(pub args::InitCounsil);
 
-    impl SubCmd for TxCreateCouncil {
+    impl SubCmd for TxInitCounsil {
         const CMD: &'static str = "init-counsil";
 
         fn parse(matches: &ArgMatches) -> Option<Self>
         where
             Self: Sized,
         {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                TxCreateCouncil(args::CreateCouncil::parse(matches))
-            })
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxInitCounsil(args::InitCounsil::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Submit a tx to create a new pgf counsil.")
-                .add_args::<args::CreateCouncil>()
+                .add_args::<args::InitCounsil>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxInitCounsilMembers(pub args::InitCounsilMembers);
+
+    impl SubCmd for TxInitCounsilMembers {
+        const CMD: &'static str = "init-counsil-members";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxInitCounsilMembers(args::InitCounsilMembers::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Submit a tx to set the counsil members for reward \
+                     payments.",
+                )
+                .add_args::<args::InitCounsilMembers>()
         }
     }
 
@@ -2671,7 +2700,7 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct CreateCouncil {
+    pub struct InitCounsil {
         /// Common tx arguments
         pub tx: Tx,
         /// The enstablished address of the candidate counsil
@@ -2682,7 +2711,7 @@ pub mod args {
         pub data: Option<String>,
     }
 
-    impl Args for CreateCouncil {
+    impl Args for InitCounsil {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let address = ADDRESS.parse(matches);
@@ -2708,6 +2737,42 @@ pub mod args {
                 .arg(PGF_COUNSIL_DATA.def().about(
                     "Some arbitrary data to attach to the candidacy. Limited \
                      to 4096 characters.",
+                ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitCounsilMembers {
+        /// Common tx arguments
+        pub tx: Tx,
+        /// The enstablished address of the candidate counsil
+        pub address: WalletAddress,
+        /// Path to a json file containing the relations counsil member address
+        /// - reward percentage (from 0 to 1)
+        pub data_path: PathBuf,
+    }
+
+    impl Args for InitCounsilMembers {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let address = ADDRESS.parse(matches);
+            let data_path = DATA_PATH.parse(matches);
+
+            Self {
+                tx,
+                address,
+                data_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(ADDRESS.def().about(
+                    "The enstablished address of the new counsil candidate.",
+                ))
+                .arg(DATA_PATH.def().about(
+                    "Path to the json file containing the relation between \
+                     counsil member address - reward percentage (from 0 to 1).",
                 ))
         }
     }

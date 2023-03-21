@@ -1,16 +1,17 @@
 //! PGF council treasury VP
 
+use std::collections::BTreeSet;
+
 use namada_core::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::token;
+use thiserror::Error;
+
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::{native_vp, storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
-use std::collections::BTreeSet;
-use thiserror::Error;
-
 
 /// PGF council treasury NativeVP error
 pub type Result<T> = std::result::Result<T, Error>;
@@ -22,7 +23,7 @@ pub enum Error {
     NativeVpError(#[from] native_vp::Error),
 }
 
-/// PGFi CouncilTreasury VP
+/// PGF CouncilTreasury VP
 pub struct PgfCouncilTreasuryVp<'a, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -56,13 +57,21 @@ where
 
             let result: Result<bool> = match key_type {
                 KeyType::COUNSIL_MEMBER_REWARD_ADDRESS => {
+                    println!("gesu");
                     self.is_signed_by_active_counsil(verifiers)
                 }
                 KeyType::BALANCE => {
+                    println!("cane");
                     self.is_signed_by_active_counsil(verifiers)
                 }
-                KeyType::UNKNOWN_PGF_COUNSIL_TREASURY => Ok(false),
-                KeyType::UNKNOWN => Ok(true),
+                KeyType::UNKNOWN_PGF_COUNSIL_TREASURY => {
+                    println!("morto");
+                    Ok(false)
+                }
+                KeyType::UNKNOWN => {
+                    println!("gg");
+                    Ok(true)
+                }
             };
             result.unwrap_or(false)
         });
@@ -81,7 +90,8 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let active_counsil_address_key = pgf_counsil_treasury_storage::get_counsil_address_key();
+        let active_counsil_address_key =
+            pgf_counsil_treasury_storage::get_counsil_address_key();
         let active_counsil_address: Option<Address> =
             self.ctx.pre().read(&active_counsil_address_key)?;
         match active_counsil_address {

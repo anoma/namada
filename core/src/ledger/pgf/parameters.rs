@@ -3,7 +3,6 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage as pgf_storage;
-use crate::ledger::storage::types::encode;
 use crate::ledger::storage_api::{self, StorageWrite};
 
 #[derive(
@@ -49,6 +48,6 @@ impl PgfParams {
 
         let candidaci_expiraton_key =
             pgf_storage::get_candidacy_expiration_key();
-        storage.write(&candidaci_expiraton_key, encode(&candidacy_expiration))
+        storage.write(&candidaci_expiraton_key, candidacy_expiration)
     }
 }

@@ -21,6 +21,8 @@ use masp_primitives::primitives::ViewingKey;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::ledger::pgf::parameters::PgfParams;
+use namada::core::ledger::pgf::storage as pgf_storage;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::core::types::key;
@@ -48,6 +50,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
 use namada::types::token::{balance_key, Transfer};
+use namada::types::transaction::counsil_treasury::PgfCounsilMembers;
 use namada::types::transaction::pgf::{Candidate, Counsil, PgfReceipients};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
@@ -1380,7 +1383,10 @@ pub async fn query_protocol_parameters(
     let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     let gov_parameters = get_governance_parameters(&client).await;
-    println!("Governance Parameters\n {:4}", gov_parameters);
+    println!("Governance Parameters\n{:4}", gov_parameters);
+
+    let pgf_parameters = get_pgf_parameters(&client).await;
+    println!("PGF Parameters\n {:4}", pgf_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
@@ -1458,6 +1464,7 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
     let counsil_data = pgf_counsil(&client).await;
 
     let receipients = pgf_receipients(&client).await;
+    let counsil_members = pgf_counsil_members(&client).await;
 
     match counsil_data {
         Some(counsil) => {
@@ -1475,7 +1482,19 @@ pub async fn query_pgf_counsil(_ctx: Context, args: args::QueryPgfCounsil) {
                     );
                 }
             } else {
-                println!("{:8} No pgf receipients present.", "")
+                println!("{:8} No pgf receipients present.", "");
+            }
+            if let Some(counsil_members) = counsil_members {
+                println!("{:4}Counsil Treasury Members:", "");
+                for member in counsil_members {
+                    println!(
+                        "{:8}Counsil member with address {} is founded with \
+                         {}% every epoch",
+                        "", member.address, member.reward
+                    );
+                }
+            } else {
+                println!("{:8} No pgf counsil treasury members present.", "");
             }
         }
         None => {
@@ -1544,6 +1563,12 @@ pub async fn pgf_counsil(client: &HttpClient) -> Option<Counsil> {
 
 pub async fn pgf_receipients(client: &HttpClient) -> Option<PgfReceipients> {
     unwrap_client_response(RPC.vp().pgf().receipients(client).await)
+}
+
+pub async fn pgf_counsil_members(
+    client: &HttpClient,
+) -> Option<PgfCounsilMembers> {
+    unwrap_client_response(RPC.vp().pgf().counsil_members(client).await)
 }
 
 pub async fn pgf_candidates(client: &HttpClient) -> Vec<Candidate> {
@@ -2812,6 +2837,17 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
+    }
+}
+
+pub async fn get_pgf_parameters(client: &HttpClient) -> PgfParams {
+    let key = pgf_storage::get_candidacy_expiration_key();
+    let candidacy_expiration = query_storage_value::<u64>(client, &key)
+        .await
+        .expect("Parameter should be definied.");
+
+    PgfParams {
+        candidacy_expiration,
     }
 }
 

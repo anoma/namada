@@ -92,6 +92,7 @@ impl Amount {
             .map(|result| Self { micro: result })
     }
 
+    /// Checked multiplication. Returns `None` on overflow
     pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
         self.micro
             .checked_mul(amount.micro)
@@ -353,11 +354,11 @@ pub fn is_balance_key<'a>(
     key: &'a Key,
 ) -> Option<&'a Address> {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::AddressSeg(owner)]
-            if key == BALANCE_STORAGE_KEY && addr == token_addr =>
-        {
-            Some(owner)
-        }
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::AddressSeg(owner),
+        ] if key == BALANCE_STORAGE_KEY && addr == token_addr => Some(owner),
         _ => None,
     }
 }
@@ -366,11 +367,11 @@ pub fn is_balance_key<'a>(
 /// is, returns the owner.
 pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(_), DbKeySeg::StringSeg(prefix), DbKeySeg::AddressSeg(owner)]
-            if prefix == BALANCE_STORAGE_KEY =>
-        {
-            Some(owner)
-        }
+        [
+            DbKeySeg::AddressSeg(_),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(owner),
+        ] if prefix == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
     }
 }
@@ -426,9 +427,11 @@ fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
         return None;
     }
     match &key.segments[..] {
-        [.., DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
-            if balance == BALANCE_STORAGE_KEY =>
-        {
+        [
+            ..,
+            DbKeySeg::StringSeg(balance),
+            DbKeySeg::AddressSeg(owner),
+        ] if balance == BALANCE_STORAGE_KEY => {
             let sub_prefix = Key {
                 segments: key.segments[1..(len - 2)].to_vec(),
             };

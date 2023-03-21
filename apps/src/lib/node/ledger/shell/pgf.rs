@@ -23,14 +23,15 @@ where
     // Read recipients map from storage
     let recipients_key = pgf_storage::get_cpgf_recipient_key();
 
-    let recipients: PgfReceipients =
-        match shell.read_storage_key(&recipients_key) {
-            Some(recipients) => recipients,
-            None => {
-                tracing::info!("No PGF active payment needs to be performed");
-                return Ok(());
-            }
-        };
+    let recipients: PgfReceipients = match shell
+        .read_storage_key(&recipients_key)
+    {
+        Some(recipients) => recipients,
+        None => {
+            tracing::info!("No countrinous PGF transfer needs to be performed");
+            return Ok(());
+        }
+    };
 
     // Spending cap
     let spending_cap: Amount = shell
@@ -164,7 +165,8 @@ where
                 .into();
                 response.events.push(event);
                 tracing::info!(
-                    "PGF counsil treasury transfer with amount {} has been sent to {}.",
+                    "PGF counsil treasury transfer with amount {} has been \
+                     sent to {}.",
                     reward_amount,
                     member.address,
                 );
