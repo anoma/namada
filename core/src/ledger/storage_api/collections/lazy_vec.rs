@@ -471,6 +471,23 @@ where
         storage.read(&self.get_data_key(index))
     }
 
+    /// Read the first element
+    pub fn front<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        self.get(storage, 0)
+    }
+
+    /// Read the last element
+    pub fn back<S>(&self, storage: &S) -> Result<Option<T>>
+    where
+        S: StorageRead,
+    {
+        let len = self.len(storage)?;
+        self.get(storage, len - 1)
+    }
+
     /// An iterator visiting all elements. The iterator element type is
     /// `Result<T>`, because iterator's call to `next` may fail with e.g. out of
     /// gas or data decoding error.

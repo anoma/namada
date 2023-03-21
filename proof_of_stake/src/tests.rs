@@ -39,14 +39,14 @@ use crate::{
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set,
+    insert_validator_into_validator_set, process_slashes, reactivate_validator,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
-    read_validator_delta_value, read_validator_stake, staking_token_address,
-    total_deltas_handle, unbond_handle, unbond_tokens, update_validator_deltas,
-    update_validator_set, validator_consensus_key_handle,
-    validator_set_update_tendermint, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash,
+    read_validator_delta_value, read_validator_stake, slash,
+    staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
+    update_validator_deltas, update_validator_set,
+    validator_consensus_key_handle, validator_set_update_tendermint,
+    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
 };
 
 proptest! {
@@ -1662,7 +1662,7 @@ fn arb_genesis_validators(
                 let consensus_key = consensus_sk.to_public();
 
                 let commission_rate = Decimal::new(5, 2);
-                let max_commission_rate_change = Decimal::new(1, 3);
+                let max_commission_rate_change = Decimal::new(1, 2);
                 GenesisValidator {
                     address,
                     tokens,
