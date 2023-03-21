@@ -396,7 +396,9 @@ pub struct BondDetails {
 }
 
 /// Unbond with all its details
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
+)]
 pub struct UnbondDetails {
     /// The first epoch in which the source bond of this unbond contributed to
     /// a stake
