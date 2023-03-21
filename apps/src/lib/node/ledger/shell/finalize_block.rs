@@ -108,7 +108,7 @@ where
         if new_epoch {
             self.process_slashes();
         }
-        
+
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
@@ -547,7 +547,7 @@ where
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
     fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
-        let last_epoch = current_epoch - 1;
+        let last_epoch = current_epoch.prev();
         // Get input values needed for the PD controller for PoS and MASP.
         // Run the PD controllers to calculate new rates.
         //

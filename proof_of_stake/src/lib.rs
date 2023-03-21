@@ -1223,7 +1223,7 @@ pub fn copy_validator_sets_and_positions<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let prev_epoch = target_epoch - 1;
+    let prev_epoch = target_epoch.prev();
 
     let (consensus, below_capacity) = (
         consensus_validator_set.at(&prev_epoch),
@@ -1885,7 +1885,7 @@ where
         return Ok(());
     }
     let rate_before_pipeline = commission_handle
-        .get(storage, pipeline_epoch - 1, &params)?
+        .get(storage, pipeline_epoch.prev(), &params)?
         .expect("Could not find a rate in given epoch");
     let change_from_prev = new_rate - rate_before_pipeline;
     if change_from_prev.abs() > max_change.unwrap() {
