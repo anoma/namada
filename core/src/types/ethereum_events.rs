@@ -57,6 +57,12 @@ impl Uint {
         ethUint(self.0).to_little_endian(&mut bytes);
         bytes
     }
+
+    /// Try to increment this [`Uint`], whilst checking
+    /// for overflows.
+    pub fn checked_increment(self) -> Option<Self> {
+        ethUint::from(self).checked_add(1.into()).map(Self::from)
+    }
 }
 
 impl Display for Uint {
