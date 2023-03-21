@@ -172,7 +172,11 @@ impl DB for MockDB {
         }
     }
 
-    fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
+    fn write_block(
+        &mut self,
+        state: BlockStateWrite,
+        _is_full_commit: bool,
+    ) -> Result<()> {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
@@ -310,7 +314,7 @@ impl DB for MockDB {
     fn read_merkle_tree_stores(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<MerkleTreeStoresRead>> {
+    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let height_key = Key::from(height.to_db_key());
         let tree_key = height_key
@@ -342,7 +346,7 @@ impl DB for MockDB {
                 None => return Ok(None),
             }
         }
-        Ok(Some(merkle_tree_stores))
+        Ok(Some((height, merkle_tree_stores)))
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
@@ -454,6 +458,16 @@ impl<'iter> DBIter<'iter> for MockDB {
         let prefix = "results".to_owned();
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+    }
+
+    fn iter_old_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+        // Mock DB can read only the latest value for now
+        unimplemented!()
+    }
+
+    fn iter_new_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+        // Mock DB can read only the latest value for now
+        unimplemented!()
     }
 }
 
