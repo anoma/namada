@@ -55,11 +55,11 @@ pub mod eth_events {
         pub fn decode(
             event_code: &'static dyn EventCodec,
             block_height: Uint256,
-            encoded_event: &[u8],
+            log: &ethabi::RawLog,
             confirmations: Uint256,
         ) -> Result<Self> {
             let raw_event = event_code
-                .decode(encoded_event)
+                .decode(log)
                 .map_err(|e| Error::Decode(e.to_string()))?;
             let event = match raw_event {
                 RawEvents::Bridge(BridgeEvents::TransferToErcFilter(

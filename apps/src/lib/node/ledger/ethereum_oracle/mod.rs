@@ -399,11 +399,12 @@ async fn process(
                 )
             }
             logs.into_iter()
+                .map(Web30LogExt::into_ethabi)
                 .filter_map(|log| {
                     match PendingEvent::decode(
                         codec,
                         block_to_process.clone().into(),
-                        &log.data,
+                        &log,
                         u64::from(config.min_confirmations).into(),
                     ) {
                         Ok(event) => Some(event),
@@ -470,6 +471,25 @@ fn process_queue(
         }
     }
     confirmed
+}
+
+/// Extra methods for [`web30::types::Log`] instances.
+trait Web30LogExt {
+    /// Convert a [`web30`] event log to the corresponding
+    /// [`ethabi`] type.
+    fn into_ethabi(self) -> ethabi::RawLog;
+}
+
+impl Web30LogExt for web30::types::Log {
+    fn into_ethabi(self) -> ethabi::RawLog {
+        let topics = self
+            .topics
+            .iter()
+            .map(|topic| ethabi::Hash::from_slice(topic.as_slice()))
+            .collect();
+        let data = self.data.0;
+        ethabi::RawLog { topics, data }
+    }
 }
 
 pub mod last_processed_block {
