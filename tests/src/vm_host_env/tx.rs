@@ -117,6 +117,8 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
+        parameters::update_max_pk_per_account(&mut self.wl_storage, 50)
+            .unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.

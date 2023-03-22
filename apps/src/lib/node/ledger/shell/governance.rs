@@ -1,6 +1,5 @@
 use namada::core::ledger::counsil_treasury::storage as pgf_counsil_treasury_storage;
 use namada::core::ledger::pgf::storage as pgf_storage;
-use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::address::InternalAddress;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
@@ -90,7 +89,7 @@ where
                 response.events.push(proposal_event);
                 if successful_execution {
                     proposals_result.passed.push(id);
-                    shell
+                    let proposer_address = shell
                         .read_storage_key::<Address>(
                             &gov_storage::get_author_key(id),
                         )
@@ -99,10 +98,11 @@ where
                                 id,
                                 "Invalid proposal author.".to_string(),
                             )
-                        })?
+                        })?;
+                    Some(proposer_address)
                 } else {
                     proposals_result.rejected.push(id);
-                    slash_fund_address
+                    None
                 }
             }
             TallyResult::Rejected => {
@@ -117,23 +117,27 @@ where
                 response.events.push(proposal_event);
                 proposals_result.rejected.push(id);
 
-                slash_fund_address
+                None
             }
         };
 
         let native_token = shell.wl_storage.storage.native_token.clone();
-        // transfer proposal locked funds
-        token::transfer(
-            &mut shell.wl_storage,
-            &native_token,
-            &gov_address,
-            &transfer_address,
-            funds,
-        )
-        .expect(
-            "Must be able to transfer governance locked funds after proposal \
-             has been tallied",
-        );
+        // transfer proposal locked funds or burn
+        if let Some(transfer_address) = transfer_address {
+            token::transfer(
+                &mut shell.wl_storage,
+                &native_token,
+                &gov_address,
+                &transfer_address,
+                funds,
+            )
+            .expect(
+                "Must be able to transfer governance locked funds after \
+                 proposal has been tallied",
+            );
+        } else {
+            // TODO: burn funds
+        }
     }
 
     Ok(proposals_result)

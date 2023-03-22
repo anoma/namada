@@ -3,7 +3,6 @@
 
 pub mod governance;
 pub mod parameters;
-pub mod slash_fund;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;

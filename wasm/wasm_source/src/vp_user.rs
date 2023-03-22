@@ -338,6 +338,7 @@ mod tests {
     fn test_signed_debit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -474,6 +475,7 @@ mod tests {
 
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -631,6 +633,7 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
             let keypair = key::testing::keypair_1();
             let public_key = keypair.ref_to();
@@ -914,6 +917,99 @@ mod tests {
         );
     }
 
+    // ---- vp_user::tests::test_multisignature_accept stdout ----
+    // vp_user called with user addr:
+    // atest1v4ehgw36xserxsfsxu6yzdjxgv6n2sfcx4prxwz9g4zrwdzpg9pyzwpjxy6rq3fkg4qnxs2pf6n4vn,
+    // key_changed: {Key { segments: [AddressSeg(Established:
+    // atest1v4ehgw36xserxsfsxu6yzdjxgv6n2sfcx4prxwz9g4zrwdzpg9pyzwpjxy6rq3fkg4qnxs2pf6n4vn),
+    // StringSeg("7Xdr9m0E6_THB"), StringSeg("AGDv_78")] }}, verifiers: {}
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("2L_xlSA9oi61"), AddressSeg(Established:
+    // atest1v4ehgw36xqenjdpex3rr23jpxc6rgs35xqens3zzgge5g33k8pzrzwfsxu6yz3jpxep5yd6ymc7e2y),
+    // StringSeg("2R")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/2L_xlSA9oi61/#atest1v4ehgw36xqenjdpex3rr23jpxc6rgs35xqens3zzgge5g33k8pzrzwfsxu6yz3jpxep5yd6ymc7e2y/2R modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // note: run with `RUST_BACKTRACE=1` environment variable to display a
+    // backtrace vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // AddressSeg(Established:
+    // atest1v4ehgw36xqenjdpex3rr23jpxc6rgs35xqens3zzgge5g33k8pzrzwfsxu6yz3jpxep5yd6ymc7e2y),
+    // StringSeg("2R")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/#atest1v4ehgw36xqenjdpex3rr23jpxc6rgs35xqens3zzgge5g33k8pzrzwfsxu6yz3jpxep5yd6ymc7e2y/2R modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("2R")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/2R modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("R")] }}, verifiers: {} vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("2R")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/2R modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("2")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/2 modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("1")] }}, verifiers: {}
+    // key #atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd/1 modification failed vp
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at
+    // 'assertion failed: validate_tx(&CTX, tx_data, vp_owner, keys_changed,
+    // verifiers).unwrap()', wasm_source/src/vp_user.rs:990:13
+    // vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("0")] }}, verifiers: {} vp_user called with user addr:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // key_changed: {Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("1")] }}, verifiers: {}
+    // thread 'vp_user::tests::test_multisignature_accept' panicked at 'Test
+    // failed: assertion failed: validate_tx(&CTX, tx_data, vp_owner,
+    // keys_changed, verifiers).unwrap(); minimal failing input: (vp_owner,
+    // storage_key) = (Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd,
+    // Key { segments: [AddressSeg(Implicit:
+    // atest1d9khqw36xg652335xucnw3fnxuurqv35gy6rx3pcg4prv32zg56ygves89pygde5ggmngsf3zljfhd),
+    // StringSeg("1")] }), storage_value = Some([107, 36, 98, 213, 171, 199, 74,
+    // 98, 147, 27, 213, 55, 59, 82, 239, 130, 199, 63, 67, 86, 110, 164, 120,
+    // 62, 80, 114, 156, 204, 40, 152, 101, 62, 24, 63, 238, 179, 149, 184, 141,
+    // 79, 134, 177, 37, 47, 198, 60, 232, 137, 210, 92, 232, 155, 245, 151, 21,
+    // 9, 35, 225, 90, 229, 80, 147, 90, 93, 34, 153, 191, 183, 48, 157, 140,
+    // 66, 231, 172, 226, 165, 119, 145, 29, 5, 171, 214, 58, 101, 194]),
+    // signers_total = 39
+
     proptest! {
         /// Test that a signed tx that performs arbitrary storage writes or
         /// deletes to the account is accepted.
@@ -927,8 +1023,9 @@ mod tests {
             let mut random = rand::thread_rng();
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
-            let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
+            let keypairs: Vec<common::SecretKey> = (1..=signers_total).map(|_| {
                 common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
             }).collect();
 
@@ -986,6 +1083,7 @@ mod tests {
             let mut random = rand::thread_rng();
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
             let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
                 common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()

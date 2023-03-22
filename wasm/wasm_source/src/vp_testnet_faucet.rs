@@ -219,6 +219,8 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
+
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
         let public_key = &keypair.ref_to();
@@ -375,6 +377,7 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();

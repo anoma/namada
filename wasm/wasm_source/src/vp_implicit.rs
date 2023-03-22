@@ -455,6 +455,8 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
 
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
+
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
@@ -552,6 +554,8 @@ mod tests {
     fn test_signed_debit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -714,6 +718,12 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+
+            tx_env.init_parameters(
+                None,
+                Some(vec![]),
+                Some(vec![]),
+            );
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
