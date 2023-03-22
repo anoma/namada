@@ -442,6 +442,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    tracing::info!("Updating the Ethereum bridge whitelist.");
     let mut changed_keys = BTreeSet::new();
     // first clear out the old whitelist.
     for (key, _, _) in
@@ -490,7 +491,7 @@ where
         changed_keys.insert(cap_key);
         changed_keys.insert(denom_key);
     }
-
+    tracing::info!("Changed keys: {:?}", changed_keys);
     changed_keys
 }
 

@@ -400,11 +400,11 @@ where
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
 
+        // send the latest oracle configs, if any exist. These may have changed
+        // due to governance.
+        self.update_eth_oracle(new_epoch);
         if new_epoch {
             self.update_epoch(&mut response);
-            // send the latest oracle configs. These may have changed due to
-            // governance.
-            self.update_eth_oracle();
         }
 
         let _ = self

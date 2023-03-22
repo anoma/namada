@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use namada::eth_bridge::oracle;
+use namada::eth_bridge::oracle::config::UpdateErc20;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
     UpgradeableContract,
@@ -18,15 +19,16 @@ use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::erc20tokens::Erc20Amount;
 use namada_core::types::ethereum_events::{
-    EthereumEvent, TransferToEthereum, TransferToNamada,
+    EthereumEvent, TokenWhitelist, TransferToEthereum, TransferToNamada,
 };
-use namada_core::types::token::Amount;
+use namada_core::types::token::{Amount, TokenAmount};
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::eth_bridge_tests::helpers::{
     attempt_wrapped_erc20_transfer, find_wrapped_erc20_balance,
     send_transfer_to_namada_event, setup_single_validator_test,
-    EventsEndpointClient, DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR,
+    whitelist_erc20_token, EventsEndpointClient,
+    DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR,
 };
 use crate::e2e::helpers::{
     find_address, find_balance, get_actor_rpc, init_established_account,
@@ -225,7 +227,7 @@ async fn test_bridge_pool_e2e() {
         BERTHA,
         "--signer",
         BERTHA,
-        "--amount",
+        "--token-amount",
         "100",
         "--erc20",
         &wnam_address,
@@ -519,7 +521,6 @@ fn test_configure_oracle_from_storage() -> Result<()> {
 
     ledger.exp_string("Namada ledger node started")?;
     ledger.exp_string("This node is a validator")?;
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     // check that the oracle has been configured with the values from storage
     let initial_config = oracle::config::Config {
         min_confirmations: ethereum_bridge_params.min_confirmations.into(),
@@ -529,7 +530,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
             .governance
             .address,
         start_block: 0.into(),
-        whitelist_update: vec![],
+        whitelist_update: vec![UpdateErc20::Add(EthAddress([1; 20]), 6)],
     };
     ledger.exp_string(&format!(
         "Oracle received initial configuration - {:?}",
@@ -543,12 +544,20 @@ fn test_configure_oracle_from_storage() -> Result<()> {
 async fn test_dai_transfer_implicit() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
-    let transfer_amount = token::Amount::from(10_000_000);
+    let transfer_amount = Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
+
     // [`ALBERT`] is a pre-existing implicit address in our wallet
     let albert_addr = find_address(&test, ALBERT)?;
-
     let dai_transfer = TransferToNamada {
-        amount: transfer_amount.to_owned().into(),
+        amount: transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -582,11 +591,17 @@ async fn test_dai_transfer_established() -> Result<()> {
         established_alias,
     )?;
     let established_addr = find_address(&test, established_alias)?;
-
-    let transfer_amount = token::Amount::from(10_000_000);
-
+    let transfer_amount = Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
     let dai_transfer = TransferToNamada {
-        amount: transfer_amount.to_owned().into(),
+        amount: transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: established_addr.to_owned(),
     };
@@ -611,11 +626,21 @@ async fn test_dai_transfer_established() -> Result<()> {
 async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
-    let initial_transfer_amount = token::Amount::from(10_000_000);
+    let initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
+
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned().into(),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -641,7 +666,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &Erc20Amount::from_int(10_000u64, 10).unwrap(),
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -665,8 +690,16 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
 #[tokio::test]
 async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
-
-    let initial_transfer_amount = token::Amount::from(10_000_000);
+    let initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
     let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
@@ -681,7 +714,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         find_address(&test, albert_established_alias)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned().into(),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };
@@ -707,7 +740,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::Amount::from(10_000),
+        &Erc20Amount::from_int(10_000u64, 10).unwrap(),
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -730,12 +763,21 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
 #[tokio::test]
 async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
+    let mut initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
 
-    let initial_transfer_amount = token::Amount::from(10_000_000);
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned().into(),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -753,7 +795,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
     let bertha_addr = find_address(&test, BERTHA)?;
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = Erc20Amount::from_int(10_000u64, 10).unwrap();
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -773,10 +815,8 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
-    assert_eq!(
-        albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
-    );
+    initial_transfer_amount.spend(&second_transfer_amount);
+    assert_eq!(albert_wdai_balance, initial_transfer_amount);
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -792,12 +832,21 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
 #[tokio::test]
 async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
+    let mut initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
 
-    let initial_transfer_amount = token::Amount::from(10_000_000);
     let albert_addr = find_address(&test, ALBERT)?;
 
     let dai_transfer = TransferToNamada {
-        amount: Erc20Amount::from(initial_transfer_amount),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_addr.to_owned(),
     };
@@ -809,12 +858,8 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
-    )?
-    .into();
-    assert_eq!(
-        albert_wdai_balance,
-        Erc20Amount::from(initial_transfer_amount)
-    );
+    )?;
+    assert_eq!(albert_wdai_balance, initial_transfer_amount,);
 
     // create an established account that Bertha controls
     let bertha_established_alias = "bertha-established";
@@ -831,7 +876,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = Erc20Amount::from_int(10_000u64, 10).unwrap();
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -851,10 +896,9 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
-    assert_eq!(
-        albert_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
-    );
+
+    initial_transfer_amount.spend(&second_transfer_amount);
+    assert_eq!(albert_wdai_balance, initial_transfer_amount,);
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -883,10 +927,19 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
     )?;
     let albert_established_addr =
         find_address(&test, albert_established_alias)?;
+    let mut initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
 
-    let initial_transfer_amount = token::Amount::from(10_000_000);
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned().into(),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };
@@ -905,7 +958,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = Erc20Amount::from_int(10_000u64, 10).unwrap();
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -925,10 +978,8 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
-    assert_eq!(
-        albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
-    );
+    initial_transfer_amount.spend(&second_transfer_amount);
+    assert_eq!(albert_established_wdai_balance, initial_transfer_amount,);
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -959,10 +1010,19 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     )?;
     let albert_established_addr =
         find_address(&test, albert_established_alias)?;
+    let mut initial_transfer_amount =
+        Erc20Amount::from_int(1_000_000u64, 10).unwrap();
+    let bg_ledger = whitelist_erc20_token(
+        bg_ledger,
+        TokenWhitelist {
+            token: DAI_ERC20_ETH_ADDRESS,
+            cap: Erc20Amount::from_int(10_000_000u64, 10).unwrap(),
+        },
+    )
+    .await?;
 
-    let initial_transfer_amount = token::Amount::from(10_000_000);
     let dai_transfer = TransferToNamada {
-        amount: initial_transfer_amount.to_owned().into(),
+        amount: initial_transfer_amount,
         asset: DAI_ERC20_ETH_ADDRESS,
         receiver: albert_established_addr.to_owned(),
     };
@@ -991,7 +1051,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = token::Amount::from(10_000);
+    let second_transfer_amount = Erc20Amount::from_int(10_000u64, 10).unwrap();
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1011,10 +1071,9 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
-    assert_eq!(
-        albert_established_wdai_balance,
-        initial_transfer_amount - second_transfer_amount
-    );
+
+    initial_transfer_amount.spend(&second_transfer_amount);
+    assert_eq!(albert_established_wdai_balance, initial_transfer_amount,);
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
         &test,

@@ -323,10 +323,24 @@ async fn run_oracle_aux(mut oracle: Oracle) {
                 for update in config.whitelist_update.drain(0..) {
                     match update {
                         UpdateErc20::Add(token, denom) => {
-                            oracle.erc20_tokens.insert(token, denom)
+                            if oracle
+                                .erc20_tokens
+                                .insert(token, denom)
+                                .is_none()
+                            {
+                                tracing::info!(
+                                    "Adding token {:?} to the whitelist",
+                                    token
+                                );
+                            }
                         }
                         UpdateErc20::Remove(token) => {
-                            oracle.erc20_tokens.remove(&token)
+                            if oracle.erc20_tokens.remove(&token).is_some() {
+                                tracing::info!(
+                                    "Removing token {:?} from the whitelist",
+                                    token
+                                );
+                            }
                         }
                     };
                 }

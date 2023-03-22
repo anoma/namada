@@ -23,9 +23,13 @@ pub async fn serve(
     mut control_recv: oracle::control::Receiver,
     abort_recv: Receiver<Sender<()>>,
 ) {
-    let listen_addr: SocketAddr = listen_addr
-        .parse()
-        .expect("Failed to parse the events endpoint listen address");
+    let listen_addr: SocketAddr = listen_addr.parse().unwrap_or_else(|_| {
+        panic!(
+            "Failed to parse the events endpoint listen address: received \
+             input {}",
+            listen_addr
+        )
+    });
     tracing::info!(?listen_addr, "Ethereum event endpoint is starting");
     let eth_events = warp::post()
         .and(warp::path(EVENTS_POST_ENDPOINT))

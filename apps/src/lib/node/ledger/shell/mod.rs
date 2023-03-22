@@ -503,7 +503,7 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
-        shell.update_eth_oracle();
+        shell.update_eth_oracle(true);
         shell
     }
 
@@ -772,13 +772,18 @@ where
 
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
     /// to send it an updated configuration, using an initial configuration
-    /// based on Ethereum bridge parameters in blockchain storage.
+    /// based on Ethereum bridge parameters in blockchain storage and storage
+    /// value.
+    ///
+    /// This method has a `must_send` parameter as on startup, initialization,
+    /// and at epoch boundaries, we should pass the latest contract addresses.
+    /// Otherwise, we only send updates if the whitelist has changed.
     ///
     /// This method must be safe to call even before ABCI `InitChain` has been
     /// called (i.e. when storage is empty), as we may want to do this check
     /// every time the shell starts up (including the first time ever at which
     /// time storage will be empty).
-    fn update_eth_oracle(&mut self) {
+    fn update_eth_oracle(&mut self, must_send: bool) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
             ..
@@ -798,35 +803,12 @@ where
                      in storage or not",
                 );
             if !has_key {
-                tracing::info!(
-                    "Not starting oracle yet as storage has not been \
-                     initialized"
-                );
                 return;
             }
             if !self.wl_storage.ethbridge_queries().is_bridge_active() {
-                tracing::info!(
-                    "Not starting oracle as the Ethereum bridge is disabled"
-                );
                 return;
             }
-            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
-                tracing::info!(
-                    "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
-                );
-                return;
-            };
-            let start_block = self
-                .wl_storage
-                .storage
-                .ethereum_height
-                .clone()
-                .unwrap_or_default();
-            tracing::info!(
-                ?start_block,
-                "Found Ethereum height from which the Ethereum oracle should \
-                 start"
-            );
+
             let mut whitelist_update: Vec<UpdateErc20> = self
                 .wl_storage
                 .write_log
@@ -846,6 +828,26 @@ where
                     )
                 })
                 .collect();
+            // there are no pressing updates to process.
+            if whitelist_update.is_empty() && !must_send {
+                return;
+            }
+
+            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
+                return;
+            };
+
+            let start_block = self
+                .wl_storage
+                .storage
+                .ethereum_height
+                .clone()
+                .unwrap_or_default();
+            tracing::info!(
+                ?start_block,
+                "Found Ethereum height from which the Ethereum oracle should \
+                 start"
+            );
             let wnam = self
                 .wl_storage
                 .ethbridge_queries()
@@ -865,7 +867,7 @@ where
             };
             tracing::info!(
                 ?config,
-                "Starting the Ethereum oracle using values from block storage"
+                "Updating the Ethereum oracle using values from block storage"
             );
             if let Err(error) = control_sender
                 .try_send(oracle::control::Command::UpdateConfig(config))

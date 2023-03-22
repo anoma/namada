@@ -7,6 +7,7 @@ use data_encoding::HEXLOWER;
 use eyre::{eyre, Context, Result};
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Method, Request, StatusCode};
+use namada::eth_bridge::oracle::config::UpdateErc20;
 use namada::ledger::eth_bridge::{
     wrapped_erc20s, ContractVersion, Contracts, EthereumBridgeConfig,
     MinimumConfirmations, UpgradeableContract,
@@ -15,7 +16,10 @@ use namada::types::address::{wnam, Address};
 use namada::types::ethereum_events::EthAddress;
 use namada_apps::config::ethereum_bridge;
 use namada_core::ledger::eth_bridge;
-use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
+use namada_core::types::erc20tokens::Erc20Amount;
+use namada_core::types::ethereum_events::{
+    EthereumEvent, TokenWhitelist, TransferToNamada,
+};
 use namada_core::types::token;
 use rand::Rng;
 
@@ -114,7 +118,7 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
         &test.net.chain_id,
         &Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
-        None,
+        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
@@ -126,6 +130,29 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
     let bg_ledger = ledger.background();
 
     Ok((test, bg_ledger))
+}
+
+pub async fn whitelist_erc20_token(
+    bg_ledger: NamadaBgCmd,
+    white_list: TokenWhitelist,
+) -> Result<NamadaBgCmd> {
+    let whitelist = EthereumEvent::UpdateBridgeWhitelist {
+        nonce: Default::default(),
+        whitelist: vec![white_list.clone()],
+    };
+    const ETHEREUM_EVENTS_ENDPOINT: &str = "http://0.0.0.0:3030/eth_events";
+    let mut client =
+        EventsEndpointClient::new(ETHEREUM_EVENTS_ENDPOINT.to_string());
+    client.send(&whitelist).await?;
+
+    // wait until the whitelist update is definitely processed
+    let mut ledger = bg_ledger.foreground();
+
+    ledger.exp_string(&format!(
+        "{:?}",
+        UpdateErc20::Add(white_list.token, white_list.cap.denomination())
+    ))?;
+    Ok(ledger.background())
 }
 
 /// Sends a fake Ethereum event to a Namada node representing a transfer of
@@ -171,7 +198,7 @@ pub fn attempt_wrapped_erc20_transfer(
     from: &str,
     to: &str,
     signer: &str,
-    amount: &token::Amount,
+    amount: &Erc20Amount,
 ) -> Result<NamadaCmd> {
     let ledger_address = get_actor_rpc(test, node);
 
@@ -191,7 +218,7 @@ pub fn attempt_wrapped_erc20_transfer(
         to,
         "--signer",
         signer,
-        "--amount",
+        "--token-amount",
         &amount,
         "--ledger-address",
         &ledger_address,
@@ -207,7 +234,7 @@ pub fn find_wrapped_erc20_balance(
     node: &Who,
     asset: &EthAddress,
     owner: &Address,
-) -> Result<token::Amount> {
+) -> Result<Erc20Amount> {
     let ledger_address = get_actor_rpc(test, node);
 
     let sub_prefix = wrapped_erc20s::sub_prefix(asset);
@@ -234,7 +261,7 @@ pub fn find_wrapped_erc20_balance(
         .1[2..]
         .to_string();
     let amount =
-        token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
+        Erc20Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
     bytes.assert_success();
     Ok(amount)
 }

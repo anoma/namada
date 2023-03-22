@@ -770,7 +770,7 @@ mod test_vote_extensions {
             &mut tx_wasm_cache,
         )
         .expect("Test failed");
-        shell.update_eth_oracle();
+        shell.update_eth_oracle(false);
         let Command::UpdateConfig(config) =
             oracle_command.recv().await.expect("Test failed");
         let expected = HashSet::from([

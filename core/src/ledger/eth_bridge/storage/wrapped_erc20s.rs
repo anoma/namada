@@ -31,7 +31,7 @@ pub struct Keys {
 }
 
 impl Keys {
-    /// Get the `balance` key for a specific owner - there should be a
+    /// Get the `cap` key for the token - there should be a
     /// [`crate::types::erc20tokens::Erc20Amount`] stored here
     pub fn cap(&self) -> storage::Key {
         self.prefix
@@ -126,9 +126,18 @@ impl From<&Key> for storage::Key {
     }
 }
 
+/// Determine if a key belongs to an ERC20 token.
 fn has_erc20_segment(key: &storage::Key) -> bool {
     matches!(
         key.segments.get(1),
+        Some(segment) if segment == &DbKeySeg::StringSeg(MULTITOKEN_KEY_SEGMENT.to_owned()),
+    )
+}
+
+/// Determine if a key sub-prefix belongs to an ERC20 token.
+pub fn is_erc20_subprefix(key: &storage::Key) -> bool {
+    matches!(
+        key.segments.get(0),
         Some(segment) if segment == &DbKeySeg::StringSeg(MULTITOKEN_KEY_SEGMENT.to_owned()),
     )
 }
