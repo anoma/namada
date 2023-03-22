@@ -16,7 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Vec<u8>) -> TxResult {
     let counsil = pgf::get_current_counsil(ctx)?;
     match counsil {
         Some(counsil) => {
-            pgf::pgf_transfer(ctx, transfer);
+            pgf::pgf_transfer(ctx, transfer)?;
             ctx.insert_verifier(&counsil.address)?;
             debug_log!("Pgf transfer executed.");
         }

@@ -2313,8 +2313,6 @@ fn proposal_submission() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    println!("\nDELEGATING SOME TOKENS\n");
-
     // 1.1 Delegate some token
     let tx_args = vec![
         "bond",
@@ -2336,8 +2334,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
-
-    println!("\nSUBMIT VALID PROPOSAL FROM ALBERT\n");
 
     // 2. Submit valid proposal
     let albert = find_address(&test, ALBERT)?;
@@ -2361,8 +2357,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    println!("\nQUERY ALBERT'S VALID PROPOSAL\n");
-
     // 3. Query the proposal
     let proposal_query_args = vec![
         "query-proposal",
@@ -2375,8 +2369,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("Proposal: 0")?;
     client.assert_success();
-
-    println!("\nQUERY ALBERT TOKENS\n");
 
     // 4. Query token balance proposal author (submitted funds)
     let query_balance_args = vec![
@@ -2393,8 +2385,6 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("NAM: 999500")?;
     client.assert_success();
 
-    println!("\nQUERY GOV ADDRESS TOKENS\n");
-
     // 5. Query token balance governance
     let query_balance_args = vec![
         "balance",
@@ -2409,8 +2399,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
     client.exp_string("NAM: 500")?;
     client.assert_success();
-
-    println!("\nSUBMIT INVALID PROPOSAL FROM ALBERT\n");
 
     // 6. Submit an invalid proposal
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
@@ -2474,8 +2462,6 @@ fn proposal_submission() -> Result<()> {
     )?;
     client.assert_failure();
 
-    println!("\nCHECK INVALID PROPOSAL WAS NOT ACCEPTED\n");
-
     // 7. Check invalid proposal was not accepted
     let proposal_query_args = vec![
         "query-proposal",
@@ -2488,8 +2474,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
     client.exp_string("No valid proposal was found with id 1")?;
     client.assert_success();
-
-    println!("\nQUERY ALBERT TOKENS\n");
 
     // 8. Query token balance (funds shall not be submitted)
     let query_balance_args = vec![
@@ -2584,8 +2568,6 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    println!("\nQUERY PROPOSAL AND CHECK RESULT\n");
-
     let query_proposal = vec![
         "query-proposal-result",
         "--proposal-id",
@@ -2605,8 +2587,6 @@ fn proposal_submission() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    println!("\nQUERY ALBERT TOKENS\n");
-
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -2620,8 +2600,6 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
     client.exp_string("NAM: 1000000")?;
     client.assert_success();
-
-    println!("\nQUERY GOV ADDRESS TOKENS\n");
 
     // 13. Check if governance funds are 0
     let query_balance_args = vec![
@@ -2638,9 +2616,7 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("NAM: 0")?;
     client.assert_success();
 
-    println!("\nQUERY PROTOCOL PARAMS\n");
-
-    // // 14. Query parameters
+    // 14. Query parameters
     let query_protocol_parameters = vec![
         "query-protocol-parameters",
         "--ledger-address",
@@ -2668,7 +2644,7 @@ fn eth_governance_proposal() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(7),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 3,
+                min_num_of_blocks: 4,
                 max_expected_time_per_block: 2,
                 ..genesis.parameters
             };
@@ -2827,7 +2803,7 @@ fn eth_governance_proposal() -> Result<()> {
         "yay",
         "--eth",
         &vote_arg,
-        "--signer",
+        "--signers",
         "validator-0",
         "--address",
         "validator-0",

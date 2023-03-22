@@ -9,7 +9,7 @@
     "tx_init_validator.wasm": "tx_init_validator.5edc7452b30b3710fcee457c4929d8bd655167d9c473ad6d9bb23273c334f7ad.wasm",
     "tx_reveal_pk.wasm": "tx_reveal_pk.9e9ebe94d970f751030f74b0760fe41caf60016c73878fc8d9a095a479b5d937.wasm",
     "tx_transfer.wasm": "tx_transfer.0d0328f953cae7586cabbf33c2b382b78eba46987652b82a9c55b5b58af7c520.wasm",
-    "tx_transfer_pgf.wasm": "tx_transfer_pgf.58c3339c474cb4ed8843fe202b5eecb199263e8bb99cd1886a40b181e8a3c24b.wasm",
+    "tx_transfer_pgf.wasm": "tx_transfer_pgf.d8e79c36a6d6641613bb1b822e28b3cfa90f76cbd16fd611f0b7a64bef6d6e08.wasm",
     "tx_unbond.wasm": "tx_unbond.6eaa07a738715db2c1eed0e9ccbab043dbc4df00b6409c8097234e8831a45f54.wasm",
     "tx_update_pgf_projects.wasm": "tx_update_pgf_projects.c381cc0bbad714eeb056b99044ace4b1769b041f5c87e6ceea3248b9015362eb.wasm",
     "tx_update_vp.wasm": "tx_update_vp.df4f9391a5b37beae4d122012b806cf8fa5ca80180b8374a410c91a520fb94fb.wasm",
