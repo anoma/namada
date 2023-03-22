@@ -6,6 +6,7 @@ use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
 
 use clarity::Address;
+use ethbridge_events::{event_codecs, EventKind};
 use eyre::eyre;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
@@ -20,7 +21,7 @@ use tokio::time::Instant;
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 
-use self::events::{signatures, PendingEvent};
+use self::events::PendingEvent;
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
@@ -351,18 +352,16 @@ async fn process(
     );
     // check for events in Ethereum blocks that have reached the minimum number
     // of confirmations
-    let bridge_signatures = ethbridge_bridge_events::abi_signatures()
-        .into_iter()
-        .map(|sig| (sig, signatures::SigType::Bridge));
-    let gov_signatures = ethbridge_governance_events::abi_signatures()
-        .into_iter()
-        .map(|sig| (sig, signatures::SigType::Governance));
-    for (sig, sig_type) in bridge_signatures.chain(gov_signatures) {
-        let addr: Address = match sig_type {
-            signatures::SigType::Bridge => config.bridge_contract.0.into(),
-            signatures::SigType::Governance => {
-                config.governance_contract.0.into()
-            }
+    for codec in event_codecs().iter().copied() {
+        let sig = match codec.event_signature() {
+            ::std::borrow::Cow::Borrowed(s) => s,
+            _ => unreachable!(
+                "All Ethereum events should have a static ABI signature"
+            ),
+        };
+        let addr: Address = match codec.kind() {
+            EventKind::Bridge => config.bridge_contract.0.into(),
+            EventKind::Governance => config.governance_contract.0.into(),
         };
         tracing::debug!(
             ?block_to_process,
@@ -400,12 +399,11 @@ async fn process(
                 )
             }
             logs.into_iter()
-                .map(Web30LogExt::into_ethabi)
                 .filter_map(|log| {
                     match PendingEvent::decode(
-                        sig_type,
+                        codec,
                         block_to_process.clone().into(),
-                        &log,
+                        &log.data,
                         u64::from(config.min_confirmations).into(),
                     ) {
                         Ok(event) => Some(event),
@@ -472,25 +470,6 @@ fn process_queue(
         }
     }
     confirmed
-}
-
-/// Extra methods for [`web30::types::Log`] instances.
-trait Web30LogExt {
-    /// Convert a [`web30`] event log to the corresponding
-    /// [`ethabi`] type.
-    fn into_ethabi(self) -> ethabi::RawLog;
-}
-
-impl Web30LogExt for web30::types::Log {
-    fn into_ethabi(self) -> ethabi::RawLog {
-        let topics = self
-            .topics
-            .iter()
-            .map(|topic| ethabi::Hash::from_slice(topic.as_slice()))
-            .collect();
-        let data = self.data.0;
-        ethabi::RawLog { topics, data }
-    }
 }
 
 pub mod last_processed_block {

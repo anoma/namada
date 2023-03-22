@@ -1,13 +1,3 @@
-pub mod signatures {
-    /// Used to determine which smart contract address
-    /// a signature belongs to
-    #[derive(Copy, Clone)]
-    pub enum SigType {
-        Bridge,
-        Governance,
-    }
-}
-
 pub mod eth_events {
     use std::fmt::Debug;
     use std::str::FromStr;
@@ -15,12 +5,13 @@ pub mod eth_events {
     use ethbridge_bridge_events::{
         BridgeEvents, TransferToErcFilter, TransferToNamadaFilter,
     };
+    use ethbridge_events::{EventCodec, Events as RawEvents};
     use ethbridge_governance_events::{
         GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
         UpgradedContractFilter, ValidatorSetUpdateFilter,
     };
     use namada::core::types::ethereum_structs;
-    use namada::eth_bridge::ethers::contract::{EthEvent, EthLogDecode};
+    use namada::eth_bridge::ethers::contract::EthEvent;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
@@ -31,8 +22,6 @@ pub mod eth_events {
     use num256::Uint256;
     use thiserror::Error;
 
-    pub use super::signatures::SigType;
-
     #[derive(Error, Debug)]
     pub enum Error {
         #[error("Could not decode Ethereum event: {0}")]
@@ -42,14 +31,6 @@ pub mod eth_events {
     }
 
     pub type Result<T> = std::result::Result<T, Error>;
-
-    /// Storage enum for events decoded with `ethbridge-rs`.
-    pub enum RawEvents {
-        /// Events emitted by the Bridge contract.
-        Bridge(BridgeEvents),
-        /// Events emitted by the Governance contract.
-        Governance(GovernanceEvents),
-    }
 
     #[derive(Clone, Debug, PartialEq)]
     /// An event waiting for a certain number of confirmations
@@ -72,21 +53,14 @@ pub mod eth_events {
         /// this is passed to the corresponding [`PendingEvent`] field,
         /// otherwise a default is used.
         pub fn decode(
-            signature_type: SigType,
+            event_code: &'static dyn EventCodec,
             block_height: Uint256,
-            log: &ethabi::RawLog,
+            encoded_event: &[u8],
             confirmations: Uint256,
         ) -> Result<Self> {
-            let raw_event = match signature_type {
-                SigType::Bridge => RawEvents::Bridge(
-                    BridgeEvents::decode_log(log)
-                        .map_err(|e| Error::Decode(e.to_string()))?,
-                ),
-                SigType::Governance => RawEvents::Governance(
-                    GovernanceEvents::decode_log(log)
-                        .map_err(|e| Error::Decode(e.to_string()))?,
-                ),
-            };
+            let raw_event = event_code
+                .decode(encoded_event)
+                .map_err(|e| Error::Decode(e.to_string()))?;
             let event = match raw_event {
                 RawEvents::Bridge(BridgeEvents::TransferToErcFilter(
                     TransferToErcFilter {
