@@ -7,6 +7,7 @@ nightly := $(shell cat ../../rust-nightly-version)
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_bond
 wasms += tx_bridge_pool
+wasms += tx_erc20_transfer
 wasms += tx_ibc
 wasms += tx_init_account
 wasms += tx_init_validator

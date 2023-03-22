@@ -10,6 +10,7 @@ use namada::types::transaction::GasLimit;
 use namada::types::{key, token};
 
 use super::rpc;
+use crate::cli::args::TxAmount;
 use crate::cli::{args, Context};
 use crate::client::tx::Conversions;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -52,7 +53,7 @@ pub struct ParsedTxTransferArgs {
     /// Transferred token address
     pub token: Address,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: TxAmount,
 }
 
 #[async_trait(?Send)]

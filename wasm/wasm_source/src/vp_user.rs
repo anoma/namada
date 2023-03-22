@@ -10,10 +10,12 @@
 
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::KeySeg;
+use namada_vp_prelude::token::TokenAmount;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
+    Erc20Token(&'a Address),
     Token(&'a Address),
     PoS,
     Vp(&'a Address),
@@ -24,7 +26,9 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = token::is_any_token_balance_key(key) {
+        if let Some(address) = wrapped_erc20s::is_erc20_token_balance_key(key) {
+            Self::Erc20Token(address)
+        } else if let Some(address) = token::is_any_token_balance_key(key) {
             Self::Token(address)
         } else if let Some((_, address)) =
             token::is_any_multitoken_balance_key(key)
@@ -90,6 +94,35 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
+            KeyType::Erc20Token(owner) => {
+                if owner == &addr {
+                    let post: Erc20Amount = ctx.read_post(key)?.unwrap();
+                    let pre: Erc20Amount =
+                        ctx.read_pre(key)?.unwrap_or_else(|| post.zero());
+                    // debit has to signed, credit doesn't
+                    let valid = post.checked_sub(&pre).is_some() || *valid_sig;
+                    debug_log!(
+                        "token key: {}, post: {}, pre: {} valid_sig: {}, \
+                         valid modification: {}",
+                        key,
+                        post,
+                        pre,
+                        *valid_sig,
+                        valid
+                    );
+                    valid
+                } else {
+                    debug_log!(
+                        "This address ({}) is not of owner ({}) of token key: \
+                         {}",
+                        addr,
+                        owner,
+                        key
+                    );
+                    // If this is not the owner, allow any change
+                    true
+                }
+            }
             KeyType::Token(owner) => {
                 if owner == &addr {
                     let pre: token::Amount =

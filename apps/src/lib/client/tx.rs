@@ -30,12 +30,14 @@ use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
+use namada::core::types::erc20tokens::Erc20Amount;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
 use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
+use namada::ledger::eth_bridge::wrapped_erc20s;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
@@ -52,7 +54,7 @@ use namada::types::storage::{
 use namada::types::time::DateTimeUtc;
 use namada::types::token;
 use namada::types::token::{
-    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
+    TokenAmount, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -66,6 +68,7 @@ use tokio::time::{Duration, Instant};
 
 use super::rpc;
 use super::types::ShieldedTransferContext;
+use crate::cli::args::TxAmount;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{query_conversion, query_storage_value};
@@ -78,6 +81,7 @@ use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
 
+const TX_ERC20_TRANSFER_WASM: &str = "tx_erc20_transfer.wasm";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -1390,13 +1394,22 @@ where
     let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
     // Context required for storing which notes are in the source's possesion
     let consensus_branch_id = BranchId::Sapling;
-    let amt: u64 = args.amount.into();
+    let tx_amount = match args.amount {
+        TxAmount::Native(amt) => amt,
+        _ => {
+            tracing::error!(
+                "Shielded transfers use native amounts, not ERC20 amounts"
+            );
+            safe_exit(1);
+        }
+    };
+    let amt: u64 = tx_amount.into();
     let memo: Option<Memo> = None;
 
     // Now we build up the transaction within this object
     let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
     // Convert transaction amount into MASP types
-    let (asset_type, amount) = convert_amount(epoch, &args.token, args.amount);
+    let (asset_type, amount) = convert_amount(epoch, &args.token, tx_amount);
 
     // Transactions with transparent input and shielded output
     // may be affected if constructed close to epoch boundary
@@ -1514,7 +1527,7 @@ where
             replay_builder.set_fee(Amount::zero())?;
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
             let (new_asset_type, _) =
-                convert_amount(new_epoch, &args.token, args.amount);
+                convert_amount(new_epoch, &args.token, tx_amount);
             replay_builder.add_sapling_output(
                 ovk_opt,
                 payment_address.unwrap().into(),
@@ -1608,134 +1621,218 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         }
         None => (None, token::balance_key(&parsed_args.token, &source)),
     };
+
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
-    {
-        Some(balance) => {
-            if balance < args.amount {
-                eprintln!(
-                    "The balance of the source {} of token {} is lower than \
-                     the amount to be transferred. Amount to transfer is {} \
-                     and the balance is {}.",
-                    source, parsed_args.token, args.amount, balance
-                );
-                if !args.tx.force {
-                    safe_exit(1)
+    let tx = match args.amount {
+        TxAmount::Native(amt) => {
+            match rpc::query_storage_value::<token::Amount>(
+                &client,
+                &balance_key,
+            )
+            .await
+            {
+                Some(balance) => {
+                    if balance < amt {
+                        eprintln!(
+                            "The balance of the source {} of token {} is \
+                             lower than the amount to be transferred. Amount \
+                             to transfer is {} and the balance is {}.",
+                            source, parsed_args.token, amt, balance
+                        );
+                        if !args.tx.force {
+                            safe_exit(1)
+                        }
+                    }
                 }
-            }
+                None => {
+                    eprintln!(
+                        "No balance found for the source {} of token {}",
+                        source, parsed_args.token
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            };
+            let masp_addr = masp();
+            // For MASP sources, use a special sentinel key recognized by VPs as
+            // default signer. Also, if the transaction is shielded,
+            // redact the amount and token types by setting the
+            // transparent value to 0 and token type to a constant.
+            // This has no side-effect because transaction is to self.
+            let (default_signer, amount, token) =
+                if source == masp_addr && target == masp_addr {
+                    // TODO Refactor me, we shouldn't rely on any specific token
+                    // here.
+                    (
+                        TxSigningKey::SecretKey(masp_tx_key()),
+                        0.into(),
+                        ctx.native_token.clone(),
+                    )
+                } else if source == masp_addr {
+                    (
+                        TxSigningKey::SecretKey(masp_tx_key()),
+                        amt,
+                        parsed_args.token.clone(),
+                    )
+                } else {
+                    (
+                        TxSigningKey::WalletAddress(args.source.to_address()),
+                        amt,
+                        parsed_args.token.clone(),
+                    )
+                };
+            // If our chosen signer is the MASP sentinel key, then our shielded
+            // inputs will need to cover the gas fees.
+            let chosen_signer =
+                tx_signer(&mut ctx, &args.tx, default_signer.clone())
+                    .await
+                    .ref_to();
+            let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
+            // Determine whether to pin this transaction to a storage key
+            let key = match ctx.get(&args.target) {
+                TransferTarget::PaymentAddress(pa) if pa.is_pinned() => {
+                    Some(pa.hash())
+                }
+                _ => None,
+            };
+
+            let transfer = token::Transfer {
+                source: source.clone(),
+                target,
+                token,
+                sub_prefix,
+                amount,
+                key,
+                shielded: {
+                    let spending_key = parsed_args.source.spending_key();
+                    let payment_address = parsed_args.target.payment_address();
+                    // No shielded components are needed when neither source nor
+                    // destination are shielded
+                    if spending_key.is_none() && payment_address.is_none() {
+                        None
+                    } else {
+                        // We want to fund our transaction solely from supplied
+                        // spending key
+                        let spending_key = spending_key.map(|x| x.into());
+                        let spending_keys: Vec<_> =
+                            spending_key.into_iter().collect();
+                        // Load the current shielded context given the spending
+                        // key we possess
+                        let _ = ctx.shielded.load();
+                        ctx.shielded
+                            .fetch(&args.tx.ledger_address, &spending_keys, &[])
+                            .await;
+                        // Save the update state so that future fetches can be
+                        // short-circuited
+                        let _ = ctx.shielded.save();
+                        let stx_result = gen_shielded_transfer(
+                            &mut ctx,
+                            &parsed_args,
+                            shielded_gas,
+                        )
+                        .await;
+                        match stx_result {
+                            Ok(stx) => stx.map(|x| x.0),
+                            Err(builder::Error::ChangeIsNegative(_)) => {
+                                eprintln!(
+                                    "The balance of the source {} is lower \
+                                     than the amount to be transferred and \
+                                     fees. Amount to transfer is {} {} and \
+                                     fees are {} {}.",
+                                    parsed_args.source,
+                                    amt,
+                                    parsed_args.token,
+                                    args.tx.fee_amount,
+                                    parsed_args.tx.fee_token,
+                                );
+                                safe_exit(1)
+                            }
+                            Err(err) => panic!("{}", err),
+                        }
+                    }
+                },
+            };
+            tracing::debug!("Transfer data {:?}", transfer);
+            let data = transfer
+                .try_to_vec()
+                .expect("Encoding tx data shouldn't fail");
+            let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
+            Tx::new(tx_code, Some(data))
         }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, parsed_args.token
-            );
-            if !args.tx.force {
+        TxAmount::Erc20(amt) => {
+            if !sub_prefix
+                .as_ref()
+                .map(wrapped_erc20s::is_erc20_subprefix)
+                .unwrap_or(false)
+            {
+                eprintln!(
+                    "An ERC20 amount should only be given if transferring \
+                     ERC20 tokens."
+                );
                 safe_exit(1)
             }
+            let amount = match rpc::query_storage_value::<Erc20Amount>(
+                &client,
+                &balance_key,
+            )
+            .await
+            {
+                Some(balance) => {
+                    let amount = match Erc20Amount::from_decimal(
+                        amt,
+                        balance.denomination(),
+                    ) {
+                        Ok(amt) => amt,
+                        Err(e) => {
+                            eprintln!(
+                                "Encountered error parsing the input ERC20 \
+                                 amount:\n {:?}",
+                                e
+                            );
+                            safe_exit(1);
+                        }
+                    };
+                    if balance.checked_sub(&amount).is_some() {
+                        amount
+                    } else {
+                        eprintln!(
+                            "The balance of the source {} of token {} is \
+                             lower than the amount to be transferred. Amount \
+                             to transfer is {} and the balance is {}.",
+                            source, parsed_args.token, amount, balance
+                        );
+                        if !args.tx.force { safe_exit(1) } else { amount }
+                    }
+                }
+                None => {
+                    eprintln!(
+                        "No balance found for the source {} of token {}",
+                        source, parsed_args.token
+                    );
+                    safe_exit(1)
+                }
+            };
+            let transfer = token::Erc20Transfer {
+                source: source.clone(),
+                target,
+                token: parsed_args.token,
+                sub_prefix: sub_prefix.unwrap(),
+                amount,
+            };
+            tracing::debug!("Transfer data {:?}", transfer);
+            let data = transfer
+                .try_to_vec()
+                .expect("Encoding tx data shouldn't fail");
+            let tx_code = ctx.read_wasm(TX_ERC20_TRANSFER_WASM);
+            Tx::new(tx_code, Some(data))
         }
     };
 
-    let masp_addr = masp();
-    // For MASP sources, use a special sentinel key recognized by VPs as default
-    // signer. Also, if the transaction is shielded, redact the amount and token
-    // types by setting the transparent value to 0 and token type to a constant.
-    // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) =
-        if source == masp_addr && target == masp_addr {
-            // TODO Refactor me, we shouldn't rely on any specific token here.
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                0.into(),
-                ctx.native_token.clone(),
-            )
-        } else if source == masp_addr {
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        } else {
-            (
-                TxSigningKey::WalletAddress(args.source.to_address()),
-                args.amount,
-                parsed_args.token.clone(),
-            )
-        };
-    // If our chosen signer is the MASP sentinel key, then our shielded inputs
-    // will need to cover the gas fees.
-    let chosen_signer = tx_signer(&mut ctx, &args.tx, default_signer.clone())
-        .await
-        .ref_to();
-    let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
-    // Determine whether to pin this transaction to a storage key
-    let key = match ctx.get(&args.target) {
-        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
-        _ => None,
-    };
-
+    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet =
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
-
-    let transfer = token::Transfer {
-        source,
-        target,
-        token,
-        sub_prefix,
-        amount,
-        key,
-        shielded: {
-            let spending_key = parsed_args.source.spending_key();
-            let payment_address = parsed_args.target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                None
-            } else {
-                // We want to fund our transaction solely from supplied spending
-                // key
-                let spending_key = spending_key.map(|x| x.into());
-                let spending_keys: Vec<_> = spending_key.into_iter().collect();
-                // Load the current shielded context given the spending key we
-                // possess
-                let _ = ctx.shielded.load();
-                ctx.shielded
-                    .fetch(&args.tx.ledger_address, &spending_keys, &[])
-                    .await;
-                // Save the update state so that future fetches can be
-                // short-circuited
-                let _ = ctx.shielded.save();
-                let stx_result =
-                    gen_shielded_transfer(&mut ctx, &parsed_args, shielded_gas)
-                        .await;
-                match stx_result {
-                    Ok(stx) => stx.map(|x| x.0),
-                    Err(builder::Error::ChangeIsNegative(_)) => {
-                        eprintln!(
-                            "The balance of the source {} is lower than the \
-                             amount to be transferred and fees. Amount to \
-                             transfer is {} {} and fees are {} {}.",
-                            parsed_args.source,
-                            args.amount,
-                            parsed_args.token,
-                            args.tx.fee_amount,
-                            parsed_args.tx.fee_token,
-                        );
-                        safe_exit(1)
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-        },
-    };
-    tracing::debug!("Transfer data {:?}", transfer);
-    let data = transfer
-        .try_to_vec()
-        .expect("Encoding tx data shouldn't fail");
-    let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let tx = Tx::new(tx_code, Some(data));
-    let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
-
     process_tx(
         ctx,
         &args.tx,

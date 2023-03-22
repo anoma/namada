@@ -1996,6 +1996,7 @@ pub mod args {
     const ALIAS: Arg<String> = arg("alias");
     const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     const AMOUNT: Arg<token::Amount> = arg("amount");
+    const AMOUNT_OPT: ArgOpt<token::Amount> = arg_opt("amount");
     const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     const BASE_DIR: ArgDefault<PathBuf> = arg_default(
@@ -2107,6 +2108,7 @@ pub mod args {
     const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     const TOKEN: Arg<WalletAddress> = arg("token");
     const TOKEN_AMOUNT: Arg<Decimal> = arg("token-amount");
+    const TOKEN_AMOUNT_OPT: ArgOpt<Decimal> = arg_opt("token-amount");
     const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     const TX_HASH: Arg<String> = arg("tx-hash");
@@ -2714,6 +2716,48 @@ pub mod args {
         }
     }
 
+    /// The two different types of amounts
+    /// that a token transfer may occur in.
+    #[derive(Debug, Copy, Clone)]
+    pub enum TxAmount {
+        /// An amount of ERC20 tokens
+        Erc20(Decimal),
+        /// An amount of native tokens
+        Native(Amount),
+    }
+
+    impl Args for TxAmount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let erc20_amount = TOKEN_AMOUNT_OPT.parse(matches);
+            let amount = AMOUNT_OPT.parse(matches);
+            if let Some(amt) = erc20_amount {
+                Self::Erc20(amt)
+            } else if let Some(amt) = amount {
+                Self::Native(amt)
+            } else {
+                panic!("No amount provided")
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                AMOUNT_OPT
+                    .def()
+                    .about("The amount of the transfer (if not an ERC20)."),
+            )
+            .arg(
+                TOKEN_AMOUNT_OPT
+                    .def()
+                    .about("The amount of ERC20 tokens in a transfer."),
+            )
+            .group(
+                ArgGroup::new("amount_types")
+                    .args(&[AMOUNT_OPT.name, TOKEN_AMOUNT_OPT.name])
+                    .required(true),
+            )
+        }
+    }
+
     /// Transfer transaction arguments
     #[derive(Clone, Debug)]
     pub struct TxTransfer {
@@ -2728,7 +2772,7 @@ pub mod args {
         /// Transferred token address
         pub sub_prefix: Option<String>,
         /// Transferred token amount
-        pub amount: token::Amount,
+        pub amount: TxAmount,
     }
 
     impl TxTransfer {
@@ -2753,7 +2797,7 @@ pub mod args {
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let sub_prefix = SUB_PREFIX.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = TxAmount::parse(matches);
             Self {
                 tx,
                 source,
@@ -2766,6 +2810,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx>()
+                .add_args::<TxAmount>()
                 .arg(TRANSFER_SOURCE.def().about(
                     "The source account address. The source's key may be used \
                      to produce the signature.",
@@ -2776,7 +2821,6 @@ pub mod args {
                 ))
                 .arg(TOKEN.def().about("The transfer token."))
                 .arg(SUB_PREFIX.def().about("The token's sub prefix."))
-                .arg(AMOUNT.def().about("The amount to transfer in decimal."))
         }
     }
 

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::erc20tokens::Erc20Amount;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Amount in micro units. For different granularity another representation
@@ -509,6 +510,33 @@ pub struct Transfer {
     pub key: Option<String>,
     /// Shielded transaction part
     pub shielded: Option<Transaction>,
+}
+
+/// A simple bilateral token transfer of wrapped ERC20 tokens
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct Erc20Transfer {
+    /// Source address will spend the tokens
+    pub source: Address,
+    /// Target address will receive the tokens
+    pub target: Address,
+    /// Token's address
+    pub token: Address,
+    /// Source token's sub prefix
+    pub sub_prefix: Key,
+    /// The amount of tokens
+    pub amount: Erc20Amount,
 }
 
 #[allow(missing_docs)]

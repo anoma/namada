@@ -142,6 +142,25 @@ pub fn is_erc20_subprefix(key: &storage::Key) -> bool {
     )
 }
 
+/// Checks if a key is an ERC20 token balance key
+/// and returns the owner.
+pub fn is_erc20_token_balance_key(key: &storage::Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            ..,
+            DbKeySeg::StringSeg(multi_toke_pre),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(balance),
+            DbKeySeg::AddressSeg(owner),
+        ] if multi_toke_pre == MULTITOKEN_KEY_SEGMENT
+            && balance == BALANCE_KEY_SEGMENT =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
+}
+
 /// Checks if a key is the key for an ERC20 denomination
 /// and returns the address of the asset if so.
 pub fn is_erc20_denomination_key(key: &storage::Key) -> Option<EthAddress> {
@@ -487,5 +506,20 @@ mod test {
             .expect("Should be able to construct key for test");
 
         assert!(has_erc20_segment(&key));
+    }
+
+    /// Check that we correctly identify ERC20 token balance keys
+    /// and return the owner.
+    #[test]
+    fn test_is_balance_key() {
+        use FromStr;
+        let key = storage::Key::from_str("#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/ERC20/0x6b175474e89094c44da98b954eedeac495271d0f/balance/#atest1v4ehgw36gycrwsejgeqnsdpcxucrgveeg4zr2df58qc5gsjyxv6ny3j9xsunzd3nggmyxv6ymynpes")
+            .expect("Test failed");
+        let owner = is_erc20_token_balance_key(&key)
+            .expect("Test failed")
+            .clone();
+        let expected = Address::decode("atest1v4ehgw36gycrwsejgeqnsdpcxucrgveeg4zr2df58qc5gsjyxv6ny3j9xsunzd3nggmyxv6ymynpes")
+            .expect("Test failed");
+        assert_eq!(owner, expected)
     }
 }

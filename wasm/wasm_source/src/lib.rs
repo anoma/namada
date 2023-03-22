@@ -4,6 +4,8 @@ pub mod tx_bond;
 pub mod tx_bridge_pool;
 #[cfg(feature = "tx_change_validator_commission")]
 pub mod tx_change_validator_commission;
+#[cfg(feature = "tx_erc20_transfer")]
+pub mod tx_erc20_transfer;
 #[cfg(feature = "tx_ibc")]
 pub mod tx_ibc;
 #[cfg(feature = "tx_init_account")]

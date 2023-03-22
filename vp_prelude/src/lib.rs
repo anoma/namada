@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use namada_core::ledger::eth_bridge::storage::wrapped_erc20s::{self, *};
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
@@ -27,6 +28,7 @@ pub use namada_core::ledger::{parameters, testnet_pow};
 pub use namada_core::proto::{Signed, SignedTxData};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
+pub use namada_core::types::erc20tokens::*;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::key::*;
