@@ -7,12 +7,13 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Token;
 use eyre::eyre;
 
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::{nam, Address, InternalAddress};
 use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::storage::{BlockHeight, DbKeySeg, Key, KeySeg};
+use crate::types::token;
 
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
@@ -73,6 +74,12 @@ pub fn is_pending_transfer_key(key: &Key) -> bool {
     is_bridge_pool_key(key)
         && *key != get_signed_root_key()
         && *key != get_nonce_key()
+}
+
+/// Check if the bridge pool's NAM escrow was updated.
+pub fn was_escrow_updated(changed_keys: &BTreeSet<Key>) -> bool {
+    let pool_balance_key = token::balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+    changed_keys.iter().any(|key| key == &pool_balance_key)
 }
 
 /// A simple Merkle tree for the Ethereum bridge pool
