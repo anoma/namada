@@ -288,8 +288,12 @@ pub trait DB: std::fmt::Debug {
         key: &Key,
     ) -> Result<i64>;
 
-    /// Prune old Merkle tree stores
-    fn prune_merkle_tree_stores(&mut self, height: BlockHeight) -> Result<()>;
+    /// Prune Merkle tree stores at the given epoch
+    fn prune_merkle_tree_stores(
+        &mut self,
+        pruned_epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -913,16 +917,15 @@ where
             if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
                 if epoch.0 == 0 {
                     return Ok(());
-                }
-                // get the start height of the previous epoch because the Merkle
-                // tree stores at the starting height of the epoch would be used
-                // to restore stores at a height (> min_height) in the epoch
-                if let Some(pruned_height) = self
-                    .block
-                    .pred_epochs
-                    .get_start_height_of_epoch(epoch.prev())
-                {
-                    self.db.prune_merkle_tree_stores(pruned_height)?;
+                } else {
+                    // get the start height of the previous epoch because the
+                    // Merkle tree stores at the starting
+                    // height of the epoch would be used
+                    // to restore stores at a height (> min_height) in the epoch
+                    self.db.prune_merkle_tree_stores(
+                        epoch.prev(),
+                        &self.block.pred_epochs,
+                    )?;
                 }
             }
         }
