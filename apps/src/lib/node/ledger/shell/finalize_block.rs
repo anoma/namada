@@ -8,7 +8,7 @@ use namada::ledger::protocol;
 use namada::ledger::storage_api::StorageRead;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
-use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
 use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
@@ -306,6 +306,14 @@ where
                 },
             };
 
+            let is_eth_event_tx = matches!(
+                &tx_type,
+                TxType::Protocol(ProtocolTx {
+                    tx: ProtocolTxType::EthEventsVext(_),
+                    ..
+                }),
+            );
+
             match protocol::dispatch_tx(
                 tx_type,
                 tx_length,
@@ -361,10 +369,10 @@ where
                         }
                         // should we update the bridge pool nonce?
                         if !increment_bp_nonce
-                            && result
-                                .changed_keys
-                                .iter()
-                                .any(bridge_pool::is_pending_transfer_key)
+                            && is_eth_event_tx
+                            && bridge_pool::was_escrow_updated(
+                                &result.changed_keys,
+                            )
                         {
                             increment_bp_nonce = true;
                         }
@@ -547,6 +555,7 @@ mod test_finalize_block {
     use std::num::NonZeroU64;
     use std::str::FromStr;
 
+    use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::eth_bridge::storage::bridge_pool::{
         get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -559,7 +568,9 @@ mod test_finalize_block {
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::types::ethereum_events::{EthAddress, Uint};
+    use namada::types::ethereum_events::{
+        EthAddress, TransferToEthereum, Uint,
+    };
     use namada::types::governance::ProposalVote;
     use namada::types::keccak::KeccakHash;
     use namada::types::storage::Epoch;
@@ -569,7 +580,6 @@ mod test_finalize_block {
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::types::vote_extensions::ethereum_events;
-    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
     use crate::node::ledger::oracle::control::Command;
@@ -1093,11 +1103,19 @@ mod test_finalize_block {
         assert!(shell.new_ethereum_events().is_empty());
     }
 
+    /// Actions to perform in `test_bp`.
+    enum TestBpAction {
+        /// The tested unit correctly signed over the bridge pool root.
+        VerifySignedRoot,
+        /// The tested unit correctly incremented the bridge pool's nonce.
+        CheckNonceIncremented,
+    }
+
     /// Helper function for testing the relevant protocol tx
     /// for signing bridge pool roots and nonces
-    fn test_bp_roots<F>(craft_tx: F)
+    fn test_bp<F>(craft_tx: F)
     where
-        F: FnOnce(&TestShell) -> Tx,
+        F: FnOnce(&mut TestShell) -> (Tx, TestBpAction),
     {
         let (mut shell, _, _, _) = setup_at_height(3u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
@@ -1121,7 +1139,7 @@ mod test_finalize_block {
                 Uint::from(1).try_to_vec().expect("Test failed"),
             )
             .expect("Test failed");
-        let tx = craft_tx(&shell);
+        let (tx, action) = craft_tx(&mut shell);
         let processed_tx = ProcessedTx {
             tx: tx.to_bytes(),
             result: TxResult {
@@ -1139,23 +1157,118 @@ mod test_finalize_block {
             .expect("Reading signed Bridge pool root shouldn't fail.");
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");
-        let (root, _) = shell
-            .wl_storage
-            .ethbridge_queries()
-            .get_signed_bridge_pool_root()
-            .expect("Test failed");
-        assert_eq!(root.data.0, KeccakHash([1; 32]));
-        assert_eq!(root.data.1, Uint::from(1));
+        shell.wl_storage.commit_block().unwrap();
+        match action {
+            TestBpAction::VerifySignedRoot => {
+                let (root, _) = shell
+                    .wl_storage
+                    .ethbridge_queries()
+                    .get_signed_bridge_pool_root()
+                    .expect("Test failed");
+                assert_eq!(root.data.0, KeccakHash([1; 32]));
+                assert_eq!(root.data.1, Uint::from(1));
+            }
+            TestBpAction::CheckNonceIncremented => {
+                let nonce = shell
+                    .wl_storage
+                    .ethbridge_queries()
+                    .get_bridge_pool_nonce();
+                assert_eq!(nonce, Uint::from(2));
+            }
+        }
+    }
+
+    #[test]
+    /// Test that adding a new erc20 transfer to the bridge pool
+    /// increments the pool's nonce.
+    fn test_bp_nonce_is_incremented() {
+        test_bp(|shell: &mut TestShell| {
+            let asset = EthAddress([0xff; 20]);
+            let receiver = EthAddress([0xaa; 20]);
+            let bertha = crate::wallet::defaults::bertha_address();
+            // add `asset` to bertha's balance
+            {
+                let asset_key = wrapped_erc20s::Keys::from(&asset);
+                let owner_key = asset_key.balance(&bertha);
+                let amt: Amount = 999_999_u64.into();
+                shell
+                    .wl_storage
+                    .write(&owner_key, amt)
+                    .expect("Test failed");
+            }
+            // add NAM to bertha's balance
+            {
+                let amt: Amount = 999_999_u64.into();
+                let owner_key =
+                    token::balance_key(&namada::types::address::nam(), &bertha);
+                shell
+                    .wl_storage
+                    .write(&owner_key, amt)
+                    .expect("Test failed");
+            }
+            // add some tokens to the pool
+            {
+                use crate::node::ledger::shell::address::nam;
+                let amt: Amount = 999_999_u64.into();
+                let pool_balance_key = token::balance_key(
+                    &nam(),
+                    &bridge_pool::BRIDGE_POOL_ADDRESS,
+                );
+                shell
+                    .wl_storage
+                    .write(&pool_balance_key, amt)
+                    .expect("Test failed");
+            }
+            // write transfer to storage
+            let transfer = {
+                use namada::core::types::eth_bridge_pool::PendingTransfer;
+                let transfer = TransferToEthereum {
+                    amount: 10u64.into(),
+                    asset,
+                    receiver,
+                    gas_amount: 10u64.into(),
+                    sender: bertha.clone(),
+                    gas_payer: bertha.clone(),
+                };
+                let pending = PendingTransfer::from(&transfer);
+                shell
+                    .wl_storage
+                    .write(&bridge_pool::get_pending_key(&pending), pending)
+                    .expect("Test failed");
+                transfer
+            };
+            let ethereum_event = EthereumEvent::TransfersToEthereum {
+                nonce: 1u64.into(),
+                transfers: vec![transfer],
+                relayer: bertha,
+            };
+            let (protocol_key, _, _) =
+                crate::wallet::defaults::validator_keys();
+            let validator_addr = crate::wallet::defaults::validator_address();
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr,
+                    block_height: shell.wl_storage.storage.last_height,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = ProtocolTxType::EthEventsVext(ext).sign(&protocol_key);
+            (tx, TestBpAction::CheckNonceIncremented)
+        });
     }
 
     #[test]
     /// Test that the generated protocol tx passes Finalize Block
     /// and effects the expected storage changes.
     fn test_bp_roots_protocol_tx() {
-        test_bp_roots(|shell: &TestShell| {
+        test_bp(|shell: &mut TestShell| {
             let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-            ProtocolTxType::BridgePoolVext(vext)
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+            let tx = ProtocolTxType::BridgePoolVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"));
+            (tx, TestBpAction::VerifySignedRoot)
         });
     }
 
