@@ -8,8 +8,8 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use async_std::io;
 use async_std::io::prelude::WriteExt;
-use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use itertools::Either::*;
@@ -42,7 +42,7 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
-use namada::types::address::{masp, masp_tx_key, Address};
+use namada::types::address::{masp, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
 };
@@ -71,7 +71,7 @@ use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::{
     query_conversion, query_epoch, query_storage_value, query_wasm_code_hash,
 };
-use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
+use crate::client::signing::{find_keypair, sign_tx, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -1361,7 +1361,6 @@ pub async fn gen_shielded_transfer<CLIENT>(
     ctx: &mut Context,
     client: &CLIENT,
     args: &args::TxTransfer,
-    shielded_gas: bool,
 ) -> Result<Option<(Transaction, TransactionMetadata, Epoch)>, builder::Error>
 where
     CLIENT: namada::ledger::queries::Client + Sync,
@@ -1399,27 +1398,18 @@ where
     let (asset_type, amount) =
         convert_amount(epoch, &ctx.get(&args.token), args.amount);
 
+    // Fees are always paid outside of MASP
+    builder.set_fee(Amount::zero())?;
+
     // If there are shielded inputs
     if let Some(sk) = spending_key {
-        // Transaction fees need to match the amount in the wrapper Transfer
-        // when MASP source is used
-        let (_, fee) = convert_amount(
-            epoch,
-            &ctx.get(&args.tx.fee_token),
-            args.tx.fee_amount,
-        );
-        builder.set_fee(fee.clone())?;
-        // FIXME: fix gas here?
-        // If the gas is coming from the shielded pool, then our shielded inputs
-        // must also cover the gas fee
-        let required_amt = if shielded_gas { amount + fee } else { amount };
         // Locate unspent notes that can help us meet the transaction amount
         let (_, unspent_notes, used_convs) = ctx
             .shielded
             .collect_unspent_notes(
                 client,
                 &to_viewing_key(&sk).vk,
-                required_amt,
+                amount,
                 epoch,
             )
             .await;
@@ -1438,10 +1428,6 @@ where
             }
         }
     } else {
-        // No transfer fees come from the shielded transaction for non-MASP
-        // sources
-        //FIXME: fix gas here?
-        builder.set_fee(Amount::zero())?;
         // We add a dummy UTXO to our transaction, but only the source of the
         // parent Transfer object is used to validate fund availability
         let secp_sk =
@@ -1590,37 +1576,15 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     };
 
     let masp_addr = masp();
-    // For MASP sources, use a special sentinel key recognized by VPs as default
-    // signer. Also, if the transaction is shielded, redact the amount and token
+    // For MASP sources, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (default_signer, amount, token) =
-        if source == masp_addr && target == masp_addr {
-            // TODO Refactor me, we shouldn't rely on any specific token here.
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                0.into(),
-                ctx.native_token.clone(),
-            )
-        } else if source == masp_addr {
-            (
-                TxSigningKey::SecretKey(masp_tx_key()),
-                args.amount,
-                token.clone(),
-            )
-        } else {
-            (
-                TxSigningKey::WalletAddress(args.source.to_address()),
-                args.amount,
-                token,
-            )
-        };
-    // If our chosen signer is the MASP sentinel key, then our shielded inputs
-    // will need to cover the gas fees.
-    let chosen_signer = tx_signer(&mut ctx, &args.tx, default_signer.clone())
-        .await
-        .ref_to();
-    let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
+    let (amount, token) = if source == masp_addr && target == masp_addr {
+        // TODO Refactor me, we shouldn't rely on any specific token here.
+        (0.into(), token)
+    } else {
+        (args.amount, token)
+    };
     // Determine whether to pin this transaction to a storage key
     let key = match ctx.get(&args.target) {
         TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
@@ -1640,8 +1604,7 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     // Loop twice in case the first submission attempt fails
     for _ in 0..2 {
         // Construct the shielded part of the transaction, if any
-        let stx_result =
-            gen_shielded_transfer(&mut ctx, &client, &args, shielded_gas).await;
+        let stx_result = gen_shielded_transfer(&mut ctx, &client, &args).await;
 
         let (shielded, shielded_tx_epoch) = match stx_result {
             Ok(stx) => unzip_option(stx.map(|x| (x.0, x.2))),

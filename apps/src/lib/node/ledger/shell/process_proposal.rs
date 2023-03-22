@@ -559,18 +559,9 @@ where
                         .write(&wrapper_hash_key, vec![])
                         .expect("Couldn't write wrapper tx hash to write log");
 
-                    // If the public key corresponds to the MASP sentinel
-                    // transaction key, then the fee payer is effectively
-                    // the MASP, otherwise derive
-                    // they payer from public key.
-                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                        wrapper.fee_payer()
-                    } else {
-                        masp()
-                    };
-                    // check that the fee payer has sufficient balance
-                    let balance =
-                        self.get_balance(&wrapper.fee.token, &fee_payer);
+                        // check that the fee payer has sufficient balance
+                        let balance =
+                            self.get_balance(&wrapper.fee.token, &wrapper.fee_payer());
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW

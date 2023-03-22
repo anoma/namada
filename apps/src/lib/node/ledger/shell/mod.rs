@@ -36,13 +36,13 @@ use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, parameters, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
-use namada::types::address::{masp, masp_tx_key, Address};
+use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token::{self};
+use namada::types::token;
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
@@ -779,14 +779,9 @@ where
                 return response;
             }
 
-            // Check balance for fee
-            let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                wrapper.fee_payer()
-            } else {
-                masp()
-            };
             // check that the fee payer has sufficient balance
-            let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+            let balance =
+                self.get_balance(&wrapper.fee.token, &wrapper.fee_payer());
 
             // In testnets with a faucet, tx is allowed to skip fees if
             // it includes a valid PoW
@@ -1225,7 +1220,7 @@ mod test_utils {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            1.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1443,8 +1438,7 @@ mod test_mempool_validate {
     /// transactions
     #[test]
     fn test_replay_attack() {
-        let (mut shell, _) = TestShell::new();
-
+        let (mut shell, _) = test_utils::setup(1);
         let keypair = super::test_utils::gen_keypair();
 
         let tx = Tx::new(
@@ -1461,7 +1455,7 @@ mod test_mempool_validate {
             },
             &keypair,
             Epoch(0),
-            0.into(),
+            1.into(),
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]

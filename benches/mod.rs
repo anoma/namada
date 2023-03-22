@@ -590,12 +590,7 @@ impl BenchShieldedCtx {
             &[],
         ));
         let shielded = async_runtime
-            .block_on(gen_shielded_transfer(
-                &mut self.ctx,
-                &self.shell,
-                &args,
-                false,
-            ))
+            .block_on(gen_shielded_transfer(&mut self.ctx, &self.shell, &args))
             .unwrap()
             .map(|x| x.0);
 

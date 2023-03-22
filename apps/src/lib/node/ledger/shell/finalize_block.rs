@@ -829,13 +829,8 @@ where
         #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Result<()> {
         // Charge fee
-        let fee_payer = if wrapper.pk != address::masp_tx_key().ref_to() {
-            wrapper.fee_payer()
-        } else {
-            address::masp() //FIXME: here?
-        };
-
-        let balance_key = token::balance_key(&wrapper.fee.token, &fee_payer);
+        let balance_key =
+            token::balance_key(&wrapper.fee.token, &wrapper.fee_payer());
         let balance: token::Amount = self
             .wl_storage
             .read(&balance_key)
