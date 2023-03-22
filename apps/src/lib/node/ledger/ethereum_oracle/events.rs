@@ -53,12 +53,12 @@ pub mod eth_events {
         /// this is passed to the corresponding [`PendingEvent`] field,
         /// otherwise a default is used.
         pub fn decode(
-            event_code: &'static dyn EventCodec,
+            event_codec: &'static dyn EventCodec,
             block_height: Uint256,
             log: &ethabi::RawLog,
             confirmations: Uint256,
         ) -> Result<Self> {
-            let raw_event = event_code
+            let raw_event = event_codec
                 .decode(log)
                 .map_err(|e| Error::Decode(e.to_string()))?;
             let event = match raw_event {
