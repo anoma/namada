@@ -485,7 +485,10 @@ impl Web30LogExt for web30::types::Log {
         let topics = self
             .topics
             .iter()
-            .map(|topic| ethabi::Hash::from_slice(topic.as_slice()))
+            .filter_map(|topic| {
+                (topic.len() == 32)
+                    .then(|| ethabi::Hash::from_slice(topic.as_slice()))
+            })
             .collect();
         let data = self.data.0;
         ethabi::RawLog { topics, data }
