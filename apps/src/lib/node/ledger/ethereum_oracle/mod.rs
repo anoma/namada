@@ -508,20 +508,21 @@ pub mod last_processed_block {
     }
 }
 
-//#[cfg(test)]
-#[cfg(FALSE)]
+#[cfg(test)]
 mod test_oracle {
     use std::num::NonZeroU64;
 
+    use ethbridge_bridge_events::TransferToErcFilter;
+    use ethbridge_governance_events::NewContractFilter;
+    use namada::eth_bridge::ethers::abi::AbiEncode;
+    use namada::eth_bridge::ethers::types::{H160, H256};
+    use namada::eth_bridge::structs::Erc20Transfer;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
     use super::*;
-    use crate::node::ledger::ethereum_oracle::events::{
-        ChangedContract, RawTransfersToEthereum,
-    };
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
         TestCmd, Web3,
     };
@@ -662,9 +663,9 @@ mod test_oracle {
             .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
-        let new_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let new_event = NewContractFilter {
+            name: str_to_h256("Test"),
+            addr: H160([0; 20]),
         }
         .encode();
         let (sender, _) = channel();
@@ -716,9 +717,9 @@ mod test_oracle {
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
         // send a new event to the oracle
-        let new_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let new_event = NewContractFilter {
+            name: str_to_h256("Test"),
+            addr: H160([0; 20]),
         }
         .encode();
         let (sender, mut seen) = channel();
@@ -775,24 +776,25 @@ mod test_oracle {
             .expect("Test failed");
 
         // confirmed after 100 blocks
-        let first_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let first_event = NewContractFilter {
+            name: str_to_h256("Test"),
+            addr: H160([0; 20]),
         }
         .encode();
 
         // confirmed after 125 blocks
         let gas_payer = gen_established_address();
-        let second_event = RawTransfersToEthereum {
-            transfers: vec![TransferToEthereum {
-                amount: Default::default(),
-                asset: EthAddress([0; 20]),
-                sender: gas_payer.clone(),
-                receiver: EthAddress([1; 20]),
-                gas_amount: Default::default(),
-                gas_payer: gas_payer.clone(),
+        let second_event = TransferToErcFilter {
+            transfers: vec![Erc20Transfer {
+                amount: 0.into(),
+                from: H160([0; 20]),
+                sender: gas_payer.to_string(),
+                to: H160([1; 20]),
+                fee: 0.into(),
+                fee_from: gas_payer.to_string(),
             }],
-            relayer: gas_payer.clone(),
+            valid_map: vec![true],
+            relayer_address: gas_payer.to_string(),
             nonce: 1.into(),
         }
         .encode();
@@ -999,5 +1001,13 @@ mod test_oracle {
 
         drop(eth_recv);
         oracle.await.expect("Test failed");
+    }
+
+    fn str_to_h256(s: &str) -> H256 {
+        use std::io::Write;
+        assert!(s.len() <= 32);
+        let mut h = [0; 32];
+        _ = h.as_mut_slice().write(s.as_bytes());
+        H256(h)
     }
 }
