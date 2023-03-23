@@ -379,7 +379,7 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
-            if self.last_epoch.0 > 1 {
+            if self.last_epoch.0 > 0 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
