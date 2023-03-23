@@ -1088,6 +1088,21 @@ mod tests {
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
+        // Check the balance
+        tx_host_env::set(env);
+        let balance_key = token::balance_key(&token, &sender);
+        let balance: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&balance_key).expect("read error")
+        });
+        assert_eq!(balance, Some(Amount::whole(0)));
+        let escrow_key = token::balance_key(
+            &token,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
+        );
+        let escrow: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&escrow_key).expect("read error")
+        });
+        assert_eq!(escrow, Some(Amount::whole(100)));
     }
 
     #[test]
@@ -1106,9 +1121,9 @@ mod tests {
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let key_prefix = ibc_storage::ibc_token_prefix(&denom).unwrap();
-        let key = token::multitoken_balance_key(&key_prefix, &sender);
-        let init_bal = Amount::from(1_000_000_000u64);
-        writes.insert(key, init_bal.try_to_vec().unwrap());
+        let balance_key = token::multitoken_balance_key(&key_prefix, &sender);
+        let init_bal = Amount::whole(100);
+        writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
         // original denom
         let hash = ibc_storage::calc_hash(&denom);
         let denom_key = ibc_storage::ibc_denom_key(&hash);
@@ -1154,6 +1169,20 @@ mod tests {
         );
         let result = ibc::validate_token_vp_from_tx(&env, &tx, &burn);
         assert!(result.expect("token validation failed unexpectedly"));
+        // Check the balance
+        tx_host_env::set(env);
+        let balance: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&balance_key).expect("read error")
+        });
+        assert_eq!(balance, Some(Amount::whole(0)));
+        let burn_key = token::balance_key(
+            &token,
+            &address::Address::Internal(address::InternalAddress::IbcBurn),
+        );
+        let burn: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&burn_key).expect("read error")
+        });
+        assert_eq!(burn, Some(Amount::whole(100)));
     }
 
     #[test]
@@ -1169,12 +1198,6 @@ mod tests {
         let (port_id, channel_id, channel_writes) =
             ibc::prepare_opened_channel(&conn_id, false);
         writes.extend(channel_writes);
-        // the origin-specific token
-        let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let key_prefix = ibc_storage::ibc_token_prefix(denom).unwrap();
-        let key = token::multitoken_balance_key(&key_prefix, &receiver);
-        let init_bal = Amount::from(1_000_000_000u64);
-        writes.insert(key, init_bal.try_to_vec().unwrap());
 
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -1187,8 +1210,8 @@ mod tests {
 
         // packet
         let packet = ibc::received_packet(
-            port_id,
-            channel_id,
+            port_id.clone(),
+            channel_id.clone(),
             ibc::Sequence::from(1),
             token.to_string(),
             &receiver,
@@ -1220,6 +1243,14 @@ mod tests {
         );
         let result = ibc::validate_token_vp_from_tx(&env, &tx, &mint);
         assert!(result.expect("token validation failed unexpectedly"));
+        // Check the balance
+        tx_host_env::set(env);
+        let denom = format!("{}/{}/{}", port_id, channel_id, token);
+        let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
+        let balance: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&key).expect("read error")
+        });
+        assert_eq!(balance, Some(Amount::whole(100)));
     }
 
     #[test]
@@ -1244,21 +1275,21 @@ mod tests {
             });
         });
         // escrow in advance
-        let escrow = token::balance_key(
+        let escrow_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let val = Amount::from(1_000_000_000u64).try_to_vec().unwrap();
+        let val = Amount::whole(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
-                .write(&escrow, &val)
+                .write(&escrow_key, &val)
                 .expect("write error");
         });
 
         // Set this chain as the source zone
         let counterparty = ibc::dummy_channel_counterparty();
-        let token = format!(
+        let denom = format!(
             "{}/{}/{}",
             counterparty.port_id().clone(),
             counterparty.channel_id().unwrap().clone(),
@@ -1269,7 +1300,7 @@ mod tests {
             port_id,
             channel_id,
             ibc::Sequence::from(1),
-            token,
+            denom,
             &receiver,
         );
 
@@ -1293,8 +1324,112 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was unescrowed
-        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow_key);
         assert!(result.expect("token validation failed unexpectedly"));
+        // Check the balance
+        tx_host_env::set(env);
+        let key = token::balance_key(&token, &receiver);
+        let balance: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&key).expect("read error")
+        });
+        assert_eq!(balance, Some(Amount::whole(200)));
+        let escrow: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&escrow_key).expect("read error")
+        });
+        assert_eq!(escrow, Some(Amount::whole(0)));
+    }
+
+    #[test]
+    fn test_ibc_unescrow_received_token() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        // Set the initial state before starting transactions
+        let (token, receiver) = ibc::init_storage();
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id, false);
+        writes.extend(channel_writes);
+        writes.into_iter().for_each(|(key, val)| {
+            tx_host_env::with(|env| {
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
+            });
+        });
+        // escrow in advance
+        let escrow_key = token::balance_key(
+            &token,
+            &address::Address::Internal(address::InternalAddress::IbcEscrow),
+        );
+        let val = Amount::whole(100).try_to_vec().unwrap();
+        tx_host_env::with(|env| {
+            env.wl_storage
+                .storage
+                .write(&escrow_key, &val)
+                .expect("write error");
+        });
+
+        // Set this chain as the source zone
+        let counterparty = ibc::dummy_channel_counterparty();
+        let dummy_src_port = "dummy_transfer";
+        let dummy_src_channel = "channel_42";
+        let denom = format!(
+            "{}/{}/{}/{}/{}",
+            counterparty.port_id().clone(),
+            counterparty.channel_id().unwrap().clone(),
+            dummy_src_port,
+            dummy_src_channel,
+            token
+        );
+        // packet
+        let packet = ibc::received_packet(
+            port_id,
+            channel_id,
+            ibc::Sequence::from(1),
+            denom,
+            &receiver,
+        );
+
+        // Start a transaction to receive a packet
+        let msg = ibc::msg_packet_recv(packet);
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx = Tx {
+            code: vec![],
+            data: Some(tx_data.clone()),
+            timestamp: DateTimeUtc::now(),
+        }
+        .sign(&key::testing::keypair_1());
+        // receive a packet with the message
+        tx_host_env::ibc::ibc_actions(tx::ctx())
+            .execute(&tx_data)
+            .expect("receiving a token failed");
+
+        // Check
+        let env = tx_host_env::take();
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(result.expect("validation failed unexpectedly"));
+        // Check if the token was unescrowed
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow_key);
+        assert!(result.expect("token validation failed unexpectedly"));
+        // Check the balance
+        tx_host_env::set(env);
+        // without the source trace path
+        let denom =
+            format!("{}/{}/{}", dummy_src_port, dummy_src_channel, token);
+        let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
+        let balance: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&key).expect("read error")
+        });
+        assert_eq!(balance, Some(Amount::whole(100)));
+        let escrow: Option<Amount> = tx_host_env::with(|env| {
+            env.wl_storage.read(&escrow_key).expect("read error")
+        });
+        assert_eq!(escrow, Some(Amount::whole(0)));
     }
 
     #[test]

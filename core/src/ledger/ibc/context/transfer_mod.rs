@@ -447,6 +447,7 @@ where
         let (token, amount) = get_token_amount(coin)?;
 
         let src = if coin.denom.trace_path.is_empty()
+            || *from == Address::Internal(InternalAddress::IbcEscrow)
             || *from == Address::Internal(InternalAddress::IbcMint)
         {
             token::balance_key(&token, from)
@@ -458,7 +459,18 @@ where
             token::multitoken_balance_key(&prefix, from)
         };
 
-        let dest = token::balance_key(&token, to);
+        let dest = if coin.denom.trace_path.is_empty()
+            || *to == Address::Internal(InternalAddress::IbcEscrow)
+            || *to == Address::Internal(InternalAddress::IbcBurn)
+        {
+            token::balance_key(&token, to)
+        } else {
+            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
+                .map_err(|_| TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?;
+            token::multitoken_balance_key(&prefix, to)
+        };
 
         self.ctx
             .borrow_mut()

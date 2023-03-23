@@ -61,8 +61,9 @@ pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
     client_state_key, client_type_key, client_update_height_key,
     client_update_timestamp_key, commitment_key, connection_counter_key,
-    connection_key, consensus_state_key, next_sequence_ack_key,
-    next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
+    connection_key, consensus_state_key, ibc_token_prefix,
+    next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+    port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
     get_dummy_header as tm_dummy_header, Ibc, IbcToken,
@@ -216,7 +217,7 @@ pub fn init_storage() -> (Address, Address) {
     // initialize an account
     let account = tx::ctx().init_account(code).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::from(1_000_000_000u64);
+    let init_bal = Amount::whole(100);
     let bytes = init_bal.try_to_vec().expect("encoding failed");
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
@@ -726,4 +727,9 @@ pub fn packet_from_message(
         timeout_height_on_b: msg.timeout_height_on_b,
         timeout_timestamp_on_b: msg.timeout_timestamp_on_b,
     }
+}
+
+pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
+    let prefix = ibc_token_prefix(denom).expect("invalid denom");
+    token::multitoken_balance_key(&prefix, owner)
 }
