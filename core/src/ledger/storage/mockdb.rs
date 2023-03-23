@@ -16,7 +16,8 @@ use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -440,6 +441,37 @@ impl DB for MockDB {
             Some(value) => value.len() as i64,
             None => 0,
         })
+    }
+
+    fn prune_merkle_tree_stores(
+        &mut self,
+        epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()> {
+        match pred_epochs.get_start_height_of_epoch(epoch) {
+            Some(height) => {
+                let prefix_key = Key::from(height.to_db_key())
+                    .push(&"tree".to_owned())
+                    .map_err(Error::KeyError)?;
+                for st in StoreType::iter() {
+                    if *st != StoreType::Base {
+                        let prefix_key = prefix_key
+                            .push(&st.to_string())
+                            .map_err(Error::KeyError)?;
+                        let root_key = prefix_key
+                            .push(&"root".to_owned())
+                            .map_err(Error::KeyError)?;
+                        self.0.borrow_mut().remove(&root_key.to_string());
+                        let store_key = prefix_key
+                            .push(&"store".to_owned())
+                            .map_err(Error::KeyError)?;
+                        self.0.borrow_mut().remove(&store_key.to_string());
+                    }
+                }
+                Ok(())
+            }
+            None => Ok(()),
+        }
     }
 }
 

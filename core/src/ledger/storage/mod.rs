@@ -90,6 +90,8 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// How many block heights in the past can the storage be queried
+    pub storage_read_past_height_limit: Option<u64>,
 }
 
 /// The block storage data
@@ -285,6 +287,13 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64>;
+
+    /// Prune Merkle tree stores at the given epoch
+    fn prune_merkle_tree_stores(
+        &mut self,
+        pruned_epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -334,6 +343,7 @@ where
         chain_id: ChainId,
         native_token: Address,
         cache: Option<&D::Cache>,
+        storage_read_past_height_limit: Option<u64>,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -360,6 +370,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
             native_token,
+            storage_read_past_height_limit,
         }
     }
 
@@ -454,6 +465,10 @@ where
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
+        if is_full_commit {
+            // prune old merkle tree stores
+            self.prune_merkle_tree_stores()?;
+        }
         Ok(())
     }
 
@@ -855,6 +870,34 @@ where
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
     }
+
+    // Prune merkle tree stores. Use after updating self.block.height in the
+    // commit.
+    fn prune_merkle_tree_stores(&mut self) -> Result<()> {
+        if let Some(limit) = self.storage_read_past_height_limit {
+            if self.last_height.0 <= limit {
+                return Ok(());
+            }
+
+            let min_height = (self.last_height.0 - limit).into();
+            if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
+                if epoch.0 == 0 {
+                    return Ok(());
+                } else {
+                    // get the start height of the previous epoch because the
+                    // Merkle tree stores at the starting
+                    // height of the epoch would be used
+                    // to restore stores at a height (> min_height) in the epoch
+                    self.db.prune_merkle_tree_stores(
+                        epoch.prev(),
+                        &self.block.pred_epochs,
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MerkleTreeError> for Error {
@@ -910,6 +953,7 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+                storage_read_past_height_limit: Some(1000),
             }
         }
     }
