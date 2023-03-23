@@ -61,6 +61,10 @@ pub mod eth_events {
             let raw_event = event_codec
                 .decode(log)
                 .map_err(|e| Error::Decode(e.to_string()))?;
+            // NOTE: **DO NOT** do any partial pattern matches
+            // on the generated structs. destructuring will help
+            // us to find bugs, if the representation of Ethereum
+            // events changes between `ethbridge-rs` versions
             let event = match raw_event {
                 RawEvents::Bridge(BridgeEvents::TransferToErcFilter(
                     TransferToErcFilter {
