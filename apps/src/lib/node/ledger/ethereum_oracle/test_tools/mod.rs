@@ -2,9 +2,12 @@ pub mod events_endpoint;
 
 #[cfg(test)]
 pub mod mock_web3_client {
+    use std::borrow::Cow;
     use std::cell::RefCell;
     use std::fmt::Debug;
+    use std::marker::PhantomData;
 
+    use ethbridge_events::EventCodec;
     use num256::Uint256;
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,
@@ -164,6 +167,19 @@ pub mod mock_web3_client {
             } else {
                 Err(eyre::eyre!("Uh oh, I'm not responding"))
             }
+        }
+    }
+
+    /// Get the signature of the given Ethereum event.
+    pub fn event_signature<C>() -> &'static str
+    where
+        PhantomData<C>: EventCodec,
+    {
+        match PhantomData::<C>.event_signature() {
+            Cow::Borrowed(s) => s,
+            _ => unreachable!(
+                "All Ethereum events should have a static ABI signature"
+            ),
         }
     }
 }
