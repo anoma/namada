@@ -2404,6 +2404,17 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         }
     }
 
+    // Query the unbonds before submitting the tx
+    let unbonds =
+        rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
+            .await;
+    let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
+    for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
+        let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
+        *to_withdraw += amount;
+    }
+    let latest_withdrawal_pre = withdrawable.into_iter().last();
+
     let data = pos::Unbond {
         validator: validator.clone(),
         amount: args.amount,
@@ -2424,6 +2435,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     )
     .await;
 
+    // Query the unbonds post-tx
     let unbonds =
         rpc::query_unbond_with_slashing(&client, &bond_source, &validator)
             .await;
@@ -2432,14 +2444,41 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
         *to_withdraw += amount;
     }
-    let (withdraw_epoch, withdraw_amount) = withdrawable.iter().last().unwrap();
-    debug_assert!(args.amount <= *withdraw_amount);
-    println!(
-        "Amount {} withdrawable starting from epoch {}",
-        args.amount, *withdraw_epoch
-    );
+    let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
+        withdrawable.into_iter().last().unwrap();
 
-    rpc::query_and_print_unbonds(&client, &bond_source, &validator).await;
+    if let Some((latest_withdraw_epoch_pre, latest_withdraw_amount_pre)) =
+        latest_withdrawal_pre
+    {
+        match latest_withdraw_epoch_post.cmp(&latest_withdraw_epoch_pre) {
+            std::cmp::Ordering::Less => {
+                eprintln!(
+                    "Unexpected behavior reading the unbonds data has occurred"
+                );
+                if !args.tx.force {
+                    safe_exit(1)
+                }
+            }
+            std::cmp::Ordering::Equal => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    latest_withdraw_amount_post - latest_withdraw_amount_pre,
+                    latest_withdraw_epoch_post
+                );
+            }
+            std::cmp::Ordering::Greater => {
+                println!(
+                    "Amount {} withdrawable starting from epoch {}",
+                    latest_withdraw_amount_post, latest_withdraw_epoch_post
+                );
+            }
+        }
+    } else {
+        println!(
+            "Amount {} withdrawable starting from epoch {}",
+            latest_withdraw_amount_post, latest_withdraw_epoch_post
+        );
+    }
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
