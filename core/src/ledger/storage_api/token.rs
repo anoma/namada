@@ -1,6 +1,6 @@
 //! Token storage_api functions
 
-use super::{Error, StorageRead, StorageWrite};
+use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;

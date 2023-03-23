@@ -2873,7 +2873,6 @@ fn pgf_governance_proposal() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(7),
-                max_proposal_bytes: Default::default(),
                 min_num_of_blocks: 4,
                 max_expected_time_per_block: 2,
                 ..genesis.parameters
