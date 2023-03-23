@@ -527,7 +527,7 @@ mod test_oracle {
 
     use super::*;
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
-        TestCmd, Web3,
+        event_signature, TestCmd, Web3,
     };
 
     /// The data returned from setting up a test
@@ -674,7 +674,7 @@ mod test_oracle {
         let (sender, _) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: "NewContract",
+                event_type: event_signature::<NewContractFilter>(),
                 data: new_event,
                 height: 101,
                 seen: sender,
@@ -728,7 +728,7 @@ mod test_oracle {
         let (sender, mut seen) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: "NewContract",
+                event_type: event_signature::<NewContractFilter>(),
                 data: new_event,
                 height: 150,
                 seen: sender,
@@ -806,7 +806,7 @@ mod test_oracle {
         let (sender, seen_second) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: "TransferToEthereum",
+                event_type: event_signature::<TransferToErcFilter>(),
                 data: second_event,
                 height: 125,
                 seen: sender,
@@ -815,7 +815,7 @@ mod test_oracle {
         let (sender, _recv) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: "NewContract",
+                event_type: event_signature::<NewContractFilter>(),
                 data: first_event,
                 height: 100,
                 seen: sender,
