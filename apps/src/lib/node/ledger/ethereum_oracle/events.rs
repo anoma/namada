@@ -158,60 +158,32 @@ pub mod eth_events {
         }
     }
 
+    macro_rules! parse_method {
+        ($name:ident -> $type:ty) => {
+            fn $name(self) -> Result<$type> {
+                unimplemented!()
+            }
+        };
+    }
+
     /// Trait to add parsing methods to foreign types.
     trait Parse: Sized {
-        fn parse_eth_address(self) -> Result<EthAddress> {
-            unimplemented!()
-        }
-        fn parse_address(self) -> Result<Address> {
-            unimplemented!()
-        }
-        fn parse_amount(self) -> Result<Amount> {
-            unimplemented!()
-        }
-        fn parse_u32(self) -> Result<u32> {
-            unimplemented!()
-        }
-        fn parse_uint256(self) -> Result<Uint> {
-            unimplemented!()
-        }
-        fn parse_bool(self) -> Result<bool> {
-            unimplemented!()
-        }
-        fn parse_string(self) -> Result<String> {
-            unimplemented!()
-        }
-        fn parse_keccak(self) -> Result<KeccakHash> {
-            unimplemented!()
-        }
-        fn parse_amount_array(self) -> Result<Vec<Amount>> {
-            unimplemented!()
-        }
-        fn parse_eth_address_array(self) -> Result<Vec<EthAddress>> {
-            unimplemented!()
-        }
-        fn parse_address_array(self) -> Result<Vec<Address>> {
-            unimplemented!()
-        }
-        fn parse_string_array(self) -> Result<Vec<String>> {
-            unimplemented!()
-        }
-        fn parse_transfer_to_namada_array(
-            self,
-        ) -> Result<Vec<TransferToNamada>> {
-            unimplemented!()
-        }
-        fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
-            unimplemented!()
-        }
-        fn parse_transfer_to_eth_array(
-            self,
-        ) -> Result<Vec<TransferToEthereum>> {
-            unimplemented!()
-        }
-        fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
-            unimplemented!()
-        }
+        parse_method! { parse_eth_address -> EthAddress }
+        parse_method! { parse_address -> Address }
+        parse_method! { parse_amount -> Amount }
+        parse_method! { parse_u32 -> u32 }
+        parse_method! { parse_uint256 -> Uint }
+        parse_method! { parse_bool -> bool }
+        parse_method! { parse_string -> String }
+        parse_method! { parse_keccak -> KeccakHash }
+        parse_method! { parse_amount_array -> Vec<Amount> }
+        parse_method! { parse_eth_address_array -> Vec<EthAddress> }
+        parse_method! { parse_address_array -> Vec<Address> }
+        parse_method! { parse_string_array -> Vec<String> }
+        parse_method! { parse_transfer_to_namada_array -> Vec<TransferToNamada> }
+        parse_method! { parse_transfer_to_namada -> TransferToNamada }
+        parse_method! { parse_transfer_to_eth_array -> Vec<TransferToEthereum> }
+        parse_method! { parse_transfer_to_eth -> TransferToEthereum }
     }
 
     impl Parse for ethabi::Address {
