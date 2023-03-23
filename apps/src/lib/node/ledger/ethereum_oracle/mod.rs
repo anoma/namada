@@ -515,10 +515,11 @@ pub mod last_processed_block {
 mod test_oracle {
     use std::num::NonZeroU64;
 
-    use ethbridge_bridge_events::TransferToErcFilter;
-    use ethbridge_governance_events::NewContractFilter;
+    use ethbridge_bridge_events::{
+        TransferToErcFilter, TransferToNamadaFilter,
+    };
     use namada::eth_bridge::ethers::abi::AbiEncode;
-    use namada::eth_bridge::ethers::types::{H160, H256};
+    use namada::eth_bridge::ethers::types::H160;
     use namada::eth_bridge::structs::Erc20Transfer;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
@@ -666,15 +667,17 @@ mod test_oracle {
             .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
-        let new_event = NewContractFilter {
-            name: str_to_h256("Test"),
-            addr: H160([0; 20]),
+        let new_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
         let (sender, _) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: event_signature::<NewContractFilter>(),
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: new_event,
                 height: 101,
                 seen: sender,
@@ -720,15 +723,17 @@ mod test_oracle {
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
         // send a new event to the oracle
-        let new_event = NewContractFilter {
-            name: str_to_h256("Test"),
-            addr: H160([0; 20]),
+        let new_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
         let (sender, mut seen) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: event_signature::<NewContractFilter>(),
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: new_event,
                 height: 150,
                 seen: sender,
@@ -779,9 +784,11 @@ mod test_oracle {
             .expect("Test failed");
 
         // confirmed after 100 blocks
-        let first_event = NewContractFilter {
-            name: str_to_h256("Test"),
-            addr: H160([0; 20]),
+        let first_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
 
@@ -815,7 +822,7 @@ mod test_oracle {
         let (sender, _recv) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: event_signature::<NewContractFilter>(),
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: first_event,
                 height: 100,
                 seen: sender,
@@ -829,9 +836,15 @@ mod test_oracle {
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.recv().await.expect("Test failed");
-        if let EthereumEvent::NewContract { name, address } = event {
-            assert_eq!(name.as_str(), "Test");
-            assert_eq!(address, EthAddress([0; 20]));
+        if let EthereumEvent::TransfersToNamada {
+            nonce,
+            transfers,
+            valid_transfers_map: valid_map,
+        } = event
+        {
+            assert_eq!(nonce, 1337.into());
+            assert!(transfers.is_empty());
+            assert!(valid_map.is_empty());
         } else {
             panic!("Test failed, {:?}", event);
         }
@@ -1004,13 +1017,5 @@ mod test_oracle {
 
         drop(eth_recv);
         oracle.await.expect("Test failed");
-    }
-
-    fn str_to_h256(s: &str) -> H256 {
-        use std::io::Write;
-        assert!(s.len() <= 32);
-        let mut h = [0; 32];
-        _ = h.as_mut_slice().write(s.as_bytes());
-        H256(h)
     }
 }
