@@ -210,7 +210,7 @@ max_proposal_period = 27
 # maximum number of characters in the proposal content
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
-min_proposal_grace_epochs = 6
+min_proposal_grace_epochs = 0
 
 # Pgf parameters.
 [pgf_params]

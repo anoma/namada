@@ -2873,7 +2873,7 @@ fn pgf_governance_proposal() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(7),
-                min_num_of_blocks: 4,
+                min_num_of_blocks: 6,
                 max_expected_time_per_block: 2,
                 ..genesis.parameters
             };
@@ -2901,6 +2901,13 @@ fn pgf_governance_proposal() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    // 0 - Candidate two councils with different spending caps
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 < 1 {
+        sleep_milliseconds(500);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
     // Delegate some token
     let tx_args = vec![
         "bond",
@@ -2924,8 +2931,8 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // 0 - Candidate two councils with different spending caps
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 < 2 {
+    epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 < 3 {
         sleep_milliseconds(500);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -2948,7 +2955,7 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 < 3 {
+    while epoch.0 < 4 {
         sleep_milliseconds(500);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
@@ -4073,7 +4080,7 @@ fn prepare_proposal_data(
             "author": source,
             "voting_start_epoch": 12_u64,
             "voting_end_epoch": 24_u64,
-            "grace_epoch": 30_u64,
+            "grace_epoch": 25_u64,
             "type": proposal_type
         }
     );
