@@ -11,11 +11,6 @@ mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;
-<<<<<<< HEAD
-=======
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
->>>>>>> dfd135938 (write Merkle tree stores less often)
 
 use merkle_tree::StorageBytes;
 pub use merkle_tree::{
@@ -94,6 +89,8 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// How many block heights in the past can the storage be queried
+    pub storage_read_past_height_limit: Option<u64>,
 }
 
 /// The block storage data
@@ -213,7 +210,8 @@ pub trait DB: std::fmt::Debug {
     /// Read the last committed block's metadata
     fn read_last_block(&mut self) -> Result<Option<BlockStateRead>>;
 
-    /// Write block's metadata
+    /// Write block's metadata. Merkle tree sub-stores are committed only when
+    /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
     fn write_block(
         &mut self,
         state: BlockStateWrite,
@@ -288,6 +286,13 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64>;
+
+    /// Prune Merkle tree stores at the given epoch
+    fn prune_merkle_tree_stores(
+        &mut self,
+        pruned_epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -337,6 +342,7 @@ where
         chain_id: ChainId,
         native_token: Address,
         cache: Option<&D::Cache>,
+        storage_read_past_height_limit: Option<u64>,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -363,6 +369,7 @@ where
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
             native_token,
+            storage_read_past_height_limit,
         }
     }
 
@@ -393,7 +400,14 @@ where
             self.next_epoch_min_start_height = next_epoch_min_start_height;
             self.next_epoch_min_start_time = next_epoch_min_start_time;
             self.address_gen = address_gen;
+<<<<<<< HEAD
+            // Rebuild Merkle tree
+            self.block.tree = MerkleTree::new(merkle_tree_stores)
+                .or_else(|_| self.get_merkle_tree(height))?;
             if self.last_epoch.0 > 1 {
+=======
+            if self.last_epoch.0 > 0 {
+>>>>>>> 4f5310542 (Now load conversions from storage even for epoch 1.)
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
@@ -410,8 +424,6 @@ where
                 )
                 .expect("unable to decode conversion state")
             }
-            self.block.tree = MerkleTree::new(merkle_tree_stores)
-                .or_else(|_| self.get_merkle_tree(height))?;
             #[cfg(feature = "ferveo-tpke")]
             {
                 self.tx_queue = tx_queue;
@@ -460,6 +472,10 @@ where
         self.last_height = self.block.height;
         self.last_epoch = self.block.epoch;
         self.header = None;
+        if is_full_commit {
+            // prune old merkle tree stores
+            self.prune_merkle_tree_stores()?;
+        }
         Ok(())
     }
 
@@ -629,12 +645,10 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<MerkleTree<H>> {
-        let (stored_height, stores) =
-            self.db.read_merkle_tree_stores(height)?.unwrap_or((
-                // restore from the first height
-                BlockHeight::default(),
-                MerkleTreeStoresRead::default(),
-            ));
+        let (stored_height, stores) = self
+            .db
+            .read_merkle_tree_stores(height)?
+            .ok_or(Error::NoMerkleTree { height })?;
         // Restore the tree state with diffs
         let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
         let mut target_height = stored_height;
@@ -652,7 +666,8 @@ where
                             .expect("the key should be parsable");
                         let new_key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
-                        match old_key.cmp(&new_key) {
+                        // compare keys as String
+                        match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
                                 tree.update(&new_key, new.1.clone())?;
@@ -859,6 +874,34 @@ where
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
     }
+
+    // Prune merkle tree stores. Use after updating self.block.height in the
+    // commit.
+    fn prune_merkle_tree_stores(&mut self) -> Result<()> {
+        if let Some(limit) = self.storage_read_past_height_limit {
+            if self.last_height.0 <= limit {
+                return Ok(());
+            }
+
+            let min_height = (self.last_height.0 - limit).into();
+            if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
+                if epoch.0 == 0 {
+                    return Ok(());
+                } else {
+                    // get the start height of the previous epoch because the
+                    // Merkle tree stores at the starting
+                    // height of the epoch would be used
+                    // to restore stores at a height (> min_height) in the epoch
+                    self.db.prune_merkle_tree_stores(
+                        epoch.prev(),
+                        &self.block.pred_epochs,
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MerkleTreeError> for Error {
@@ -914,6 +957,7 @@ pub mod testing {
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 native_token: address::nam(),
+                storage_read_past_height_limit: Some(1000),
             }
         }
     }
