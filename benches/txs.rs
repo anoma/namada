@@ -14,6 +14,7 @@ use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
+use namada::ledger::storage_api::StorageRead;
 use namada::types::transaction::pos::{Bond, CommissionChange, Withdraw};
 use namada::types::transaction::EllipticCurve;
 use namada::types::transaction::{InitAccount, InitValidator, UpdateVp};
@@ -365,12 +366,15 @@ fn init_proposal(c: &mut Criterion) {
         governance::storage::get_max_proposal_code_size_key();
                             let max_proposal_content_key =
         governance::storage::get_max_proposal_content_key();
-                            let max_code_size = shell
-                                .read_storage_key(&max_code_size_key)
-                                .unwrap();
-                            let max_proposal_content_size = shell
-                                .read_storage_key(&max_proposal_content_key)
-                                .unwrap();
+                            let max_code_size = 
+                shell.wl_storage
+                    .read(&max_code_size_key)
+                    .expect("Error while reading from storage")
+                    .expect("Missing max_code_size parameter in storage");
+                            let max_proposal_content_size =                 shell.wl_storage
+                    .read(&max_proposal_content_key)
+                    .expect("Error while reading from storage")
+                    .expect("Missing max_proposal_content parameter in storage");
 
                             generate_tx(
                                 TX_INIT_PROPOSAL_WASM,

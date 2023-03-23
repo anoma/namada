@@ -142,15 +142,16 @@ where
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
-        let mut temp_block_gas_meter =
-            BlockGasMeter::new(
-                self.read_storage_key(
-                    &parameters::storage::get_max_block_gas_key(),
-                )
+        let mut temp_block_gas_meter = BlockGasMeter::new(
+            self.wl_storage
+                .read(&parameters::storage::get_max_block_gas_key())
+                .expect("Error while reading from storage")
                 .expect("Missing max_block_gas parameter in storage"),
-            );
+        );
         let gas_table: BTreeMap<String, u64> = self
-            .read_storage_key(&parameters::storage::get_gas_table_storage_key())
+            .wl_storage
+            .read(&parameters::storage::get_gas_table_storage_key())
+            .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
 
         let mut wrapper_index = 0;
@@ -373,13 +374,21 @@ where
                                 };
                                     let tx_gas = match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
                                         Some(gas) => gas.to_owned(),
-        #[cfg(any(test, feature = "testing"))]
-        None => 1000, 
-        #[cfg(not(any(test, feature = "testing")))]
-                                        None => return TxResult {
-                                            // Tx is not whitelisted
-                                          code: ErrorCodes::Undecryptable.into(),
-                                            info: "Tx is not whitelisted".to_string()   
+                                        #[cfg(any(test, feature = "testing"))]
+                                        None => 1_000,
+                                        #[cfg(not(any(
+                                            test,
+                                            feature = "testing"
+                                        )))]
+                                        None => {
+                                            return TxResult {
+                                                // Tx is not whitelisted
+                                                code:
+                                                    ErrorCodes::DecryptedTxGasLimit
+                                                        .into(),
+                                                info: "Tx is not whitelisted"
+                                                    .to_string(),
+                                            };
                                         }
                                     };
                                     let inner_tx_gas_limit = temp_wl_storage.storage.tx_queue.get(tx_index).map_or(0, |wrapper| wrapper.gas);
@@ -416,12 +425,17 @@ where
                     },
                 }}
                 TxType::Wrapper(wrapper) => {
-                    // Account for gas. This is done even if the transaction is later deemed invalid, to incentivize the proposer to
-                    // include only valid transaction and avoid wasting block gas limit
-                    let mut tx_gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
-                    if let Err(_) =  tx_gas_meter.add_tx_size_gas(tx_bytes.len()) {
-                        // Add the declared tx gas limit to the block gas meter even in case of an error
-                        let _ = temp_block_gas_meter.finalize_transaction(tx_gas_meter);
+                    // Account for gas. This is done even if the transaction is
+                    // later deemed invalid, to incentivize the proposer to
+                    // include only valid transaction and avoid wasting block
+                    // gas limit (ABCI)
+                    let mut tx_gas_meter =
+                        TxGasMeter::new(u64::from(&wrapper.gas_limit));
+                    if tx_gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
+                        // Add the declared tx gas limit to the block gas meter
+                        // even in case of an error
+                        let _ = temp_block_gas_meter
+                            .finalize_transaction(tx_gas_meter);
 
                         return TxResult {
                             code: ErrorCodes::TxGasLimit.into(),
@@ -612,6 +626,7 @@ where
 mod test_process_proposal {
     use borsh::BorshDeserialize;
     use namada::ledger::parameters::storage::get_wrapper_tx_fees_key;
+    use namada::ledger::storage_api::StorageWrite;
     use namada::proto::SignedTxData;
     use namada::types::hash::Hash;
     use namada::types::key::*;
@@ -791,8 +806,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         );
         shell
             .wl_storage
-            .storage
-            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(99))
             .unwrap();
 
         let tx = Tx::new(
@@ -851,8 +865,7 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         );
         shell
             .wl_storage
-            .write_log
-            .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
+            .write(&balance_key, Amount::whole(99))
             .unwrap();
         shell
             .wl_storage
@@ -1785,7 +1798,9 @@ const GAS_LIMIT_MULTIPLIER: u64 = 1;
         let (mut shell, _) = test_utils::setup(1);
 
         let block_gas_limit: u64 = shell
-            .read_storage_key(&parameters::storage::get_max_block_gas_key())
+            .wl_storage
+            .read(&parameters::storage::get_max_block_gas_key())
+            .expect("Error while reading from storage")
             .expect("Missing max_block_gas parameter in storage");
         let keypair = super::test_utils::gen_keypair();
 

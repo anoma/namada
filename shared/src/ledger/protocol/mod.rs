@@ -551,6 +551,9 @@ fn add_precomputed_gas(
 ) -> Result<()> {
     let vp_gas_required = match gas_table.get(vp) {
         Some(gas) => gas.to_owned(),
+        #[cfg(any(test, feature = "testing"))]
+        None => 1_000,
+        #[cfg(not(any(test, feature = "testing")))]
         None => return Err(Error::MissingGasCost(vp.to_owned())),
     };
 

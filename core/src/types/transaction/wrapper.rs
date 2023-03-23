@@ -124,14 +124,6 @@ pub mod wrapper_tx {
         }
     }
 
-    /// Round the input number up to the next highest multiple
-    /// of GAS_LIMIT_RESOLUTION
-    impl From<Amount> for GasLimit {
-        fn from(amount: Amount) -> GasLimit {
-            GasLimit::from(u64::from(amount))
-        }
-    }
-
     /// Get back the gas limit as a raw number
     impl From<&GasLimit> for u64 {
         fn from(limit: &GasLimit) -> u64 {
@@ -143,13 +135,6 @@ pub mod wrapper_tx {
     impl From<GasLimit> for u64 {
         fn from(limit: GasLimit) -> u64 {
             limit.multiplier * GAS_LIMIT_RESOLUTION
-        }
-    }
-
-    /// Get back the gas limit as a raw number, viewed as an Amount
-    impl From<GasLimit> for Amount {
-        fn from(limit: GasLimit) -> Amount {
-            Amount::from(limit.multiplier * GAS_LIMIT_RESOLUTION)
         }
     }
 

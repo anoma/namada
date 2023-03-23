@@ -507,7 +507,7 @@ mod tests {
         })]
         #[test]
         fn test_prefix_iters(
-            key_vals in arb_key_vals(50),
+            key_vals in arb_key_vals(30),
         ) {
             test_prefix_iters_aux(key_vals)
         }

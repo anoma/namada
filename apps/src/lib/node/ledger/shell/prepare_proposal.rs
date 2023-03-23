@@ -6,6 +6,7 @@ use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proof_of_stake::pos_queries::PosQueries;
+use namada::ledger::storage_api::StorageRead;
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
 use namada::types::time::DateTimeUtc;
@@ -131,12 +132,11 @@ where
             // valid because of mempool check
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
-        let mut temp_block_gas_meter =
-            BlockGasMeter::new(
-                self.read_storage_key(
-                    &parameters::storage::get_max_block_gas_key(),
-                )
-                .expect("Missing max_block_gas parameter in storage"),
+            let mut temp_block_gas_meter = BlockGasMeter::new(
+                self.wl_storage
+                    .read(&parameters::storage::get_max_block_gas_key())
+                    .expect("Error while reading from storage")
+                    .expect("Missing max_block_gas parameter in storage"),
             );
 
         let txs = txs
@@ -488,7 +488,9 @@ mod test_prepare_proposal {
         let (shell, _) = test_utils::setup(1);
 
         let block_gas_limit: u64 = shell
-            .read_storage_key(&parameters::storage::get_max_block_gas_key())
+            .wl_storage
+            .read(&parameters::storage::get_max_block_gas_key())
+            .expect("Error while reading from storage")
             .expect("Missing max_block_gas parameter in storage");
         let keypair = gen_keypair();
 

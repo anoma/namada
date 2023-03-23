@@ -16,6 +16,5 @@
     "vp_testnet_faucet.wasm": 0,
     "vp_token.wasm": 1,
     "vp_user.wasm": 1,
-    "vp_validator.wasm": 1,
-    "single_signature": 1
+    "vp_validator.wasm": 1
 }

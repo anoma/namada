@@ -82,7 +82,9 @@ where
              {new_epoch}."
         );
         let gas_table: BTreeMap<String, u64> = self
-            .read_storage_key(&parameters::storage::get_gas_table_storage_key())
+            .wl_storage
+            .read(&parameters::storage::get_gas_table_storage_key())
+            .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
 
         if new_epoch {
@@ -197,11 +199,13 @@ where
                         .storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
-                } else if let TxType::Wrapper(wrapper) = &tx_type {
-                    // Charge fee if needed
-                    if ErrorCodes::from_u32(processed_tx.result.code)
-                        .unwrap()
-                        .charges_fee()
+                }
+
+                #[cfg(not(feature = "abcipp"))]
+                if let TxType::Wrapper(wrapper) = &tx_type {
+                    // Charge fee if wrapper transaction went out of gas
+                    if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
+                        == ErrorCodes::TxGasLimit
                     {
                         #[cfg(not(feature = "mainnet"))]
                         let has_valid_pow =
@@ -213,6 +217,7 @@ where
                         );
                     }
                 }
+
                 continue;
             }
 
@@ -1833,7 +1838,6 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
         assert!(!shell
-            .shell
             .wl_storage
             .has_key(&inner_hash_key)
             .expect("Test failed"))

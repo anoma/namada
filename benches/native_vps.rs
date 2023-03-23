@@ -21,6 +21,7 @@ use namada::ledger::ibc::vp::{Ibc, IbcToken};
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::slash_fund::SlashFundVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
+use namada::ledger::storage_api::StorageRead;
 use namada::proto::Tx;
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
@@ -132,10 +133,18 @@ fn governance(c: &mut Criterion) {
                     governance::storage::get_max_proposal_code_size_key();
                 let max_proposal_content_key =
                     governance::storage::get_max_proposal_content_key();
-                let max_code_size =
-                    shell.read_storage_key(&max_code_size_key).unwrap();
-                let max_proposal_content_size =
-                    shell.read_storage_key(&max_proposal_content_key).unwrap();
+                let max_code_size = shell
+                    .wl_storage
+                    .read(&max_code_size_key)
+                    .expect("Error while reading from storage")
+                    .expect("Missing max_code_size parameter in storage");
+                let max_proposal_content_size = shell
+                    .wl_storage
+                    .read(&max_proposal_content_key)
+                    .expect("Error while reading from storage")
+                    .expect(
+                        "Missing max_proposal_content parameter in storage",
+                    );
 
                 generate_tx(
                     TX_INIT_PROPOSAL_WASM,

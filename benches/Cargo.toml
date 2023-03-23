@@ -44,7 +44,6 @@ masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6af
 namada = {path = "../shared" }
 namada_apps = {path = "../apps", features = ["dev"]}
 namada_test_utils = {path = "../test_utils"}
-namada_tx_prelude = {path = "../tx_prelude", default-features = false}
 prost = "0.9.0"
 rand = "0.8"
 rand_core = "0.6"

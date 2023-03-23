@@ -3067,7 +3067,7 @@ pub mod args {
                  address joined with a number.",
             ))
             .arg(FEE_AMOUNT.def().about(
-                "The amount being paid for the inclusion of this transaction",
+                "The amount being paid, per gas unit, for the inclusion of this transaction",
             ))
             .arg(FEE_TOKEN.def().about("The token for paying the gas"))
             .arg(
