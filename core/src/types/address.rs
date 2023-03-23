@@ -44,6 +44,8 @@ pub const POS: Address = Address::Internal(InternalAddress::PoS);
 /// Internal PoS slash pool address
 pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
+/// Internal Governance address
+pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 
 /// Raw strings used to produce internal addresses. All the strings must begin
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
