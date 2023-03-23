@@ -1,6 +1,6 @@
 //! Token storage_api functions
 
-use super::{StorageRead, StorageWrite};
+use super::{Error, StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
@@ -87,6 +87,6 @@ where
     if let Some(new_balance) = new_balance {
         storage.write(&key, new_balance)
     } else {
-        Ok(())
+        storage.write(&key, token::Amount::from(0))
     }
 }
