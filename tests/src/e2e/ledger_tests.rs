@@ -2672,6 +2672,13 @@ fn eth_governance_proposal() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    // 0 - Candidate two councils with different spending caps
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 < 1 {
+        sleep_milliseconds(500);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
     // Delegate some token
     let tx_args = vec![
         "bond",
@@ -2755,7 +2762,7 @@ fn eth_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // 2 - Vote with delegator and check failure
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
         sleep(1);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
