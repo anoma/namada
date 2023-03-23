@@ -133,10 +133,18 @@ where
             )
             .expect(
                 "Must be able to transfer governance locked funds after \
-                 proposal has been tallied",
+                 proposal has passed",
             );
         } else {
-            // TODO: burn funds
+            token::burn_tokens(
+                &mut shell.wl_storage,
+                &native_token,
+                &gov_address,
+                funds
+            ).expect(
+                "Must be able to burn governance locked funds after \
+                proposal has been rejected",
+            );
         }
     }
 

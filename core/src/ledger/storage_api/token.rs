@@ -70,3 +70,23 @@ where
     let new_balance = read_balance(storage, token, dest)? + amount;
     storage.write(&key, new_balance)
 }
+
+/// Burn tokens to an account, to be used only by protocol. In transactions,
+/// this would get rejected by the default `vp_token`.
+pub fn burn_tokens<S>(
+    storage: &mut S,
+    token: &Address,
+    dest: &Address,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = token::balance_key(token, dest);
+    let new_balance = read_balance(storage, token, dest)?.checked_sub(amount);
+    if let Some(new_balance) = new_balance {
+        storage.write(&key, new_balance)
+    } else {
+        Ok(())
+    }
+}
