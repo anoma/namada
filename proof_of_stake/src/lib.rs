@@ -2962,7 +2962,22 @@ where
             }
         }
         ValidatorState::BelowCapacity => {
-            todo!();
+            // Remove from the below-capacity set
+            for epoch in
+                Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch)
+            {
+                let amount_pre = validator_deltas_handle(validator)
+                    .get_sum(storage, epoch, params)?
+                    .unwrap_or_default();
+                let val_position = validator_set_positions_handle()
+                    .at(&epoch)
+                    .get(storage, validator)?
+                    .expect("Could not find validator's position in storage.");
+                let _ = below_capacity_validator_set_handle()
+                    .at(&epoch)
+                    .at(&token::Amount::from_change(amount_pre).into())
+                    .remove(storage, &val_position)?;
+            }
         }
         _ => {
             // TODO: get rid of this eventually
@@ -2973,12 +2988,14 @@ where
         }
     }
     println!("\nWRITING VALIDATOR STATE AS JAILED IN EPOCH {current_epoch}\n");
-    validator_state_handle(validator).set(
-        storage,
-        ValidatorState::Jailed,
-        current_epoch,
-        0,
-    )?;
+    for offset in 0..=params.pipeline_len {
+        validator_state_handle(validator).set(
+            storage,
+            ValidatorState::Jailed,
+            current_epoch,
+            offset,
+        )?;
+    }
 
     // No other actions are performed here until the epoch in which the slash is
     // processed.
