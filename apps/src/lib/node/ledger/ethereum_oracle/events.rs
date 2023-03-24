@@ -460,19 +460,13 @@ pub mod eth_events {
                     if confirmations == higher_than_min_confirmations.into()
             );
         }
-    }
 
-    //#[cfg(test)]
-    #[cfg(FALSE)]
-    mod test_events {
-        use assert_matches::assert_matches;
-
-        use super::*;
-
-        /// For each of the basic types, test that roundtrip
-        /// encoding - decoding is a no-op
+        /// For each of the basic constituent types of Namada's
+        /// [`EthereumEvent`] enum variants, test that roundtrip
+        /// decoding from/to [`ethabi`] types works as expected.
         #[test]
-        fn test_round_trips() {
+        fn test_decoding_roundtrips() {
+            use ethabi::ethereum_types::{H160, U256};
             let erc = EthAddress([1; 20]);
             let address = Address::from_str("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90")
                 .expect("Test failed");
@@ -483,78 +477,44 @@ pub mod eth_events {
             let string = String::from("test");
             let keccak = KeccakHash([2; 32]);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::Address],
-                encode(&[Token::Address(erc.0.into())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_eth_address().expect("Test failed"), erc);
+            let test_case = H160(erc.0);
+            assert_eq!(
+                test_case.parse_eth_address().expect("Test failed"),
+                erc
+            );
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::String],
-                encode(&[Token::String(address.to_string())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_address().expect("Test failed"), address);
+            let test_case = address.to_string();
+            assert_eq!(
+                test_case.parse_address().expect("Test failed"),
+                address
+            );
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::Uint(64)],
-                encode(&[Token::Uint(u64::from(amount).into())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_amount().expect("Test failed"), amount);
+            let test_case: U256 = u64::from(amount).into();
+            assert_eq!(test_case.parse_amount().expect("Test failed"), amount);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::Uint(32)],
-                encode(&[Token::Uint(confs.into())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_u32().expect("Test failed"), confs);
+            let test_case = U256::from(confs);
+            assert_eq!(test_case.parse_u32().expect("Test failed"), confs);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::Uint(256)],
-                encode(&[Token::Uint(uint.clone().into())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_uint256().expect("Test failed"), uint);
+            let test_case = U256::from(uint.clone());
+            assert_eq!(test_case.parse_uint256().expect("Test failed"), uint);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::Bool],
-                encode(&[Token::Bool(boolean)]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_bool().expect("Test failed"), boolean);
+            let test_case = boolean;
+            assert_eq!(test_case.parse_bool().expect("Test failed"), boolean);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::String],
-                encode(&[Token::String(string.clone())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_string().expect("Test failed"), string);
+            let test_case = string.clone();
+            assert_eq!(test_case.parse_string().expect("Test failed"), string);
 
-            let [token]: [Token; 1] = decode(
-                &[ParamType::FixedBytes(32)],
-                encode(&[Token::FixedBytes(keccak.0.to_vec())]).as_slice(),
-            )
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-            assert_eq!(token.parse_keccak().expect("Test failed"), keccak);
+            let test_case = keccak.0;
+            assert_eq!(test_case.parse_keccak().expect("Test failed"), keccak);
         }
+    }
+
+    //#[cfg(test)]
+    #[cfg(FALSE)]
+    mod test_events {
+        use assert_matches::assert_matches;
+
+        use super::*;
 
         /// Test that serialization and deserialization of
         /// complex composite types is a no-op
