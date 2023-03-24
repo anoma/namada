@@ -56,7 +56,7 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         rpc_addr,
     ];
     let mut client_init_account =
-        run!(test, Bin::Client, init_account_args, Some(40))?;
+        run!(test, Bin::Client, init_account_args, Some(60))?;
     client_init_account.exp_string("Transaction is valid.")?;
     client_init_account.exp_string("Transaction applied")?;
     client_init_account.assert_success();

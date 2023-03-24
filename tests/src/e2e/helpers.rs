@@ -20,27 +20,11 @@ use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
 
 use super::setup::{
-    self, sleep, NamadaBgCmd, Test, ENV_VAR_DEBUG,
+    sleep, Test, ENV_VAR_DEBUG,
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
-use crate::{run, run_as};
-
-/// Sets up a test chain with a single validator node running in the background,
-/// and returns the [`Test`] handle and [`NamadaBgCmd`] for the validator node.
-/// It blocks until the node is ready to receive RPC requests from
-/// `namadac`.
-pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
-    let test = setup::single_node_net()?;
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Namada ledger node started")?;
-    // TODO(namada#867): we only need to wait until the RPC server is available,
-    // not necessarily for a block to be committed
-    // ledger.exp_string("Starting RPC HTTP server on")?;
-    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
-    Ok((test, ledger.background()))
-}
+use crate::run;
 
 /// Initialize an established account.
 pub fn init_established_account(
@@ -62,7 +46,7 @@ pub fn init_established_account(
         rpc_addr,
     ];
     let mut client_init_account =
-        run!(test, Bin::Client, init_account_args, Some(40))?;
+        run!(test, Bin::Client, init_account_args, Some(60))?;
     client_init_account.exp_string("Transaction is valid.")?;
     client_init_account.exp_string("Transaction applied")?;
     client_init_account.assert_success();

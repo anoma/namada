@@ -4,15 +4,27 @@ use namada_core::types::token;
 
 use super::helpers::get_actor_rpc;
 use super::setup::constants::{ALBERT, BERTHA, CHRISTEL};
-use super::setup::{self, Who};
-use crate::e2e;
+use super::setup::{self, Bin, Who};
 use crate::e2e::setup::constants::{ALBERT_KEY, BERTHA_KEY};
+use crate::{e2e, run_as};
 
 mod helpers;
 
 #[test]
 fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
-    let (test, _ledger) = e2e::helpers::setup_single_node_test()?;
+    let test = setup::network(
+        |mut genesis| {
+            genesis.parameters.tx_whitelist = None;
+            genesis
+        },
+        None,
+    )?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let _ledger = ledger.background();
 
     let rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
     let multitoken_alias = helpers::init_multitoken_vp(&test, &rpc_addr)?;
@@ -91,7 +103,20 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
 
 #[test]
 fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
-    let (test, _ledger) = e2e::helpers::setup_single_node_test()?;
+    let test = setup::network(
+        |mut genesis| {
+            genesis.parameters.tx_whitelist = None;
+            genesis
+        },
+        None,
+    )?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let _ledger = ledger.background();
+
 
     let rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
     let multitoken_alias = helpers::init_multitoken_vp(&test, &rpc_addr)?;
@@ -177,7 +202,19 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
 
 #[test]
 fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
-    let (test, _ledger) = e2e::helpers::setup_single_node_test()?;
+    let test = setup::network(
+        |mut genesis| {
+            genesis.parameters.tx_whitelist = None;
+            genesis
+        },
+        None,
+    )?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let _ledger = ledger.background();
 
     let rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
     let multitoken_alias = helpers::init_multitoken_vp(&test, &rpc_addr)?;
@@ -261,7 +298,19 @@ fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
 
 #[test]
 fn test_multitoken_transfer_established_to_established() -> Result<()> {
-    let (test, _ledger) = e2e::helpers::setup_single_node_test()?;
+    let test = setup::network(
+        |mut genesis| {
+            genesis.parameters.tx_whitelist = None;
+            genesis
+        },
+        None,
+    )?;
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
+    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string("This node is a validator")?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let _ledger = ledger.background();
 
     let rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
     let multitoken_alias = helpers::init_multitoken_vp(&test, &rpc_addr)?;
