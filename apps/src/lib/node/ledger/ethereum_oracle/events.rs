@@ -329,7 +329,11 @@ pub mod eth_events {
     #[cfg(test)]
     mod test_events {
         use assert_matches::assert_matches;
-        use ethbridge_events::TRANSFER_TO_NAMADA_CODEC;
+        use ethabi::ethereum_types::{H160, U256};
+        use ethbridge_events::{
+            TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
+            UPDATE_BRIDGE_WHITELIST_CODEC, VALIDATOR_SET_UPDATE_CODEC,
+        };
         use namada::eth_bridge::ethers::abi::AbiEncode;
 
         use super::*;
@@ -466,7 +470,6 @@ pub mod eth_events {
         /// decoding from/to [`ethabi`] types works as expected.
         #[test]
         fn test_decoding_roundtrips() {
-            use ethabi::ethereum_types::{H160, U256};
             let erc = EthAddress([1; 20]);
             let address = Address::from_str("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90")
                 .expect("Test failed");
@@ -507,92 +510,107 @@ pub mod eth_events {
             let test_case = keccak.0;
             assert_eq!(test_case.parse_keccak().expect("Test failed"), keccak);
         }
-    }
-
-    //#[cfg(test)]
-    #[cfg(FALSE)]
-    mod test_events {
-        use assert_matches::assert_matches;
-
-        use super::*;
 
         /// Test that serialization and deserialization of
         /// complex composite types is a no-op
         #[test]
         fn test_complex_round_trips() {
-            let address = Address::from_str("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90")
-                .expect("Test failed");
-            let nam_transfers = RawTransfersToNamada {
+            let address: String =
+                "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
+                    .into();
+            let nam_transfers = TransferToNamadaFilter {
                 transfers: vec![
-                    TransferToNamada {
-                        amount: Default::default(),
-                        asset: EthAddress([0; 20]),
-                        receiver: address.clone(),
+                    ethereum_structs::NamadaTransfer {
+                        amount: 0u64.into(),
+                        from: H160([0; 20]),
+                        to: address.clone(),
                     };
                     2
                 ],
-                nonce: Uint::from(1),
-                confirmations: 0,
+                valid_map: vec![true; 2],
+                nonce: 1u64.into(),
+                confirmations: 0u64.into(),
             };
-            let eth_transfers = RawTransfersToEthereum {
+            let eth_transfers = TransferToErcFilter {
                 transfers: vec![
-                    TransferToEthereum {
-                        amount: Default::default(),
-                        asset: EthAddress([1; 20]),
+                    ethereum_structs::Erc20Transfer {
+                        from: H160([1; 20]),
+                        to: H160([2; 20]),
                         sender: address.clone(),
-                        receiver: EthAddress([2; 20]),
-                        gas_amount: Default::default(),
-                        gas_payer: address.clone(),
+                        amount: 0u64.into(),
+                        fee_from: address.clone(),
+                        fee: 0u64.into(),
                     };
                     2
                 ],
-                nonce: Uint::from(1),
-                relayer: address,
+                valid_map: vec![true; 2],
+                nonce: 1u64.into(),
+                relayer_address: address,
             };
-            let update = ValidatorSetUpdate {
-                nonce: Uint::from(1),
-                bridge_validator_hash: KeccakHash([1; 32]),
-                governance_validator_hash: KeccakHash([2; 32]),
+            let update = ValidatorSetUpdateFilter {
+                validator_set_nonce: 1u64.into(),
+                bridge_validator_set_hash: [1; 32],
+                governance_validator_set_hash: [2; 32],
             };
-            let changed = ChangedContract {
-                name: "Test".to_string(),
-                address: EthAddress([0; 20]),
-            };
-            let whitelist = UpdateBridgeWhitelist {
-                nonce: Uint::from(1),
-                whitelist: vec![
-                    TokenWhitelist {
-                        token: EthAddress([0; 20]),
-                        cap: Amount::from(1000),
-                    };
-                    2
-                ],
+            let whitelist = UpdateBridgeWhitelistFilter {
+                nonce: 1u64.into(),
+                tokens: vec![H160([0; 20]); 2],
+                token_cap: vec![0u64.into(); 2],
             };
             assert_eq!(
-                RawTransfersToNamada::decode(&nam_transfers.clone().encode())
-                    .expect("Test failed"),
+                {
+                    let decoded: TransferToNamadaFilter =
+                        TRANSFER_TO_NAMADA_CODEC
+                            .decode(&get_log(nam_transfers.clone().encode()))
+                            .expect("Test failed")
+                            .try_into()
+                            .expect("Test failed");
+                    decoded
+                },
                 nam_transfers
             );
             assert_eq!(
-                RawTransfersToEthereum::decode(&eth_transfers.clone().encode())
-                    .expect("Test failed"),
+                {
+                    let decoded: TransferToErcFilter = TRANSFER_TO_ERC_CODEC
+                        .decode(&get_log(eth_transfers.clone().encode()))
+                        .expect("Test failed")
+                        .try_into()
+                        .expect("Test failed");
+                    decoded
+                },
                 eth_transfers
             );
             assert_eq!(
-                ValidatorSetUpdate::decode(&update.clone().encode())
-                    .expect("Test failed"),
+                {
+                    let decoded: ValidatorSetUpdateFilter =
+                        VALIDATOR_SET_UPDATE_CODEC
+                            .decode(&get_log(update.clone().encode()))
+                            .expect("Test failed")
+                            .try_into()
+                            .expect("Test failed");
+                    decoded
+                },
                 update
             );
             assert_eq!(
-                ChangedContract::decode(&changed.clone().encode())
-                    .expect("Test failed"),
-                changed
-            );
-            assert_eq!(
-                UpdateBridgeWhitelist::decode(&whitelist.clone().encode())
-                    .expect("Test failed"),
+                {
+                    let decoded: UpdateBridgeWhitelistFilter =
+                        UPDATE_BRIDGE_WHITELIST_CODEC
+                            .decode(&get_log(whitelist.clone().encode()))
+                            .expect("Test failed")
+                            .try_into()
+                            .expect("Test failed");
+                    decoded
+                },
                 whitelist
             );
+        }
+
+        fn get_log(data: Vec<u8>) -> ethabi::RawLog {
+            ethabi::RawLog {
+                data,
+                topics: vec![],
+            }
         }
     }
 }
