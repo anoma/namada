@@ -365,7 +365,7 @@ where
                                     match Hash::try_from(tx.code_or_hash.as_slice()) {
                                         Ok(hash) => hash,
                                         Err(_) => return TxResult {
-                                            code: ErrorCodes::Undecryptable.into(),
+                                            code: ErrorCodes::DecryptedTxGasLimit.into(),
                                             info: format!("Failed conversion of transaction's hash")
                                         }
                                     }
@@ -374,22 +374,12 @@ where
                                 };
                                     let tx_gas = match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
                                         Some(gas) => gas.to_owned(),
-                                        #[cfg(any(test, feature = "testing"))]
+                                        #[cfg(test)]
                                         None => 1_000,
-                                        #[cfg(not(any(
-                                            test,
-                                            feature = "testing"
-                                        )))]
-                                        None => {
-                                            return TxResult {
-                                                // Tx is not whitelisted
-                                                code:
-                                                    ErrorCodes::DecryptedTxGasLimit
-                                                        .into(),
-                                                info: "Tx is not whitelisted"
-                                                    .to_string(),
-                                            };
-                                        }
+                                        #[cfg(not(
+                                            test
+                                        ))]
+                                            None => 0, // VPs will rejected the non-whitelisted tx
                                     };
                                     let inner_tx_gas_limit = temp_wl_storage.storage.tx_queue.get(tx_index).map_or(0, |wrapper| wrapper.gas);
                                     let mut tx_gas_meter = TxGasMeter::new(inner_tx_gas_limit);

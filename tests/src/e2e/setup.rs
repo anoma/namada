@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
@@ -127,6 +127,7 @@ pub fn network(
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
     genesis.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
+    genesis.parameters.gas_table = Some(get_gas_checksums(&working_dir));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -906,4 +907,10 @@ pub fn get_all_wasms_hashes(
             }
         })
         .collect()
+}
+
+pub fn get_gas_checksums(working_dir: &Path) -> BTreeMap<String, u64> {
+    let gas_checksums_path = working_dir.join("wasm/gas_checksums.json");
+    serde_json::from_reader(fs::File::open(gas_checksums_path).unwrap())
+        .unwrap()
 }

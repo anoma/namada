@@ -245,6 +245,7 @@ fn withdraw(c: &mut Criterion) {
                     };
 
                     shell.execute_tx(&unbond_tx);
+                    shell.wl_storage.commit_tx();
 
                     // Advance Epoch for pipeline and unbonding length
                     let params =

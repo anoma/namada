@@ -195,6 +195,7 @@ impl BenchShell {
         bench_shell.wl_storage.commit_tx();
         bench_shell.commit();
 
+        // Advance epoch for pos benches
         for _ in 0..=12 {
             bench_shell.advance_epoch();
         }

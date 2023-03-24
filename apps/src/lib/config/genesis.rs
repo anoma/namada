@@ -273,7 +273,7 @@ pub mod genesis_config {
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
         /// Gas table
-        pub gas_table: BTreeMap<String, u64>,
+        pub gas_table: Option<BTreeMap<String, u64>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -597,6 +597,7 @@ pub mod genesis_config {
 
         let min_duration: i64 =
             60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
+
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: parameters.min_num_of_blocks,
@@ -622,8 +623,24 @@ pub mod genesis_config {
             staked_ratio: Decimal::ZERO,
             pos_inflation_amount: 0,
             wrapper_tx_fees: parameters.wrapper_tx_fees,
-            gas_table: parameters.gas_table,
+            gas_table: parameters.gas_table.unwrap_or_default(),
         };
+
+        // Check validity of gas table
+        if parameters.gas_table.len()
+            != parameters.tx_whitelist.len() + parameters.vp_whitelist.len()
+        {
+            panic!("Mismatching length of gas table and txs/vps whitelists");
+        }
+        for hash in parameters
+            .tx_whitelist
+            .iter()
+            .chain(parameters.vp_whitelist.iter())
+        {
+            if !parameters.gas_table.contains_key(&hash.to_lowercase()) {
+                panic!("Missing gas cost for hash {}", hash);
+            }
+        }
 
         let GovernanceParamsConfig {
             min_proposal_fund,

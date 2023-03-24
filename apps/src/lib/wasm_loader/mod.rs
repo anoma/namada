@@ -326,23 +326,3 @@ async fn download_wasm(url: String) -> Result<Vec<u8>, Error> {
         Err(e) => Err(Error::Download(url, e)),
     }
 }
-
-/// Read the json file containing the gas costs for the whitelisted vps and txsi from
-/// the default "gas.json" file in the given directory
-pub fn read_gas_file(wasm_directory: impl AsRef<Path>) -> HashMap<String, u64> {
-    let gas_path = wasm_directory.as_ref().join("gas.json");
-
-    match fs::File::open(&gas_path) {
-        Ok(file) => match serde_json::from_reader(file) {
-            Ok(result) => result,
-            Err(_) => {
-                eprintln!("Can't read gas from {}", gas_path.to_string_lossy());
-                safe_exit(1);
-            }
-        },
-        Err(_) => {
-            eprintln!("Can't find gas at {}", gas_path.to_string_lossy());
-            safe_exit(1);
-        }
-    }
-}

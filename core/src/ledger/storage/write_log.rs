@@ -7,6 +7,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
+use crate::ledger::gas::STORAGE_WRITE_GAS_PER_BYTE;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::hash::Hash;
@@ -191,7 +192,7 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
-        Ok((gas as _, size_diff))
+        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
     /// Write a key and a value.
@@ -557,7 +558,10 @@ mod tests {
         // insert a value
         let inserted = "inserted".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, inserted.clone()).unwrap();
-        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + inserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, inserted.len() as i64);
 
         // read the value
@@ -573,7 +577,10 @@ mod tests {
         // update the value
         let updated = "updated".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, updated.clone()).unwrap();
-        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, updated.len() as i64 - inserted.len() as i64);
 
         // delete the key
@@ -597,7 +604,10 @@ mod tests {
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, reinserted.clone()).unwrap();
-        assert_eq!(gas, (key.len() + reinserted.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + reinserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, reinserted.len() as i64);
     }
 

@@ -147,6 +147,10 @@ impl Parameters {
 
         // write gas table
         let gas_table_key = storage::get_gas_table_storage_key();
+        let gas_table = gas_table
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), *v))
+            .collect::<BTreeMap<String, u64>>();
         storage.write(&gas_table_key, gas_table)?;
 
         // write vp whitelist parameter
