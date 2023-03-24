@@ -19,10 +19,7 @@ use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::{Config, TendermintMode};
 
-use super::setup::{
-    sleep, Test, ENV_VAR_DEBUG,
-    ENV_VAR_USE_PREBUILT_BINARIES,
-};
+use super::setup::{sleep, Test, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES};
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::run;
 

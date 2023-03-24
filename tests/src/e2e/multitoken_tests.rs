@@ -117,7 +117,6 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let _ledger = ledger.background();
 
-
     let rpc_addr = get_actor_rpc(&test, &Who::Validator(0));
     let multitoken_alias = helpers::init_multitoken_vp(&test, &rpc_addr)?;
 

@@ -441,7 +441,7 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
-                amount: 100.into(),
+                amount: Amount::from(100).into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
