@@ -4,7 +4,10 @@ use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
-pub use crate::types::token::{Amount, Change};
+pub use crate::types::token::{
+    balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
+    Change,
+};
 
 /// Read the balance of a given token and owner.
 pub fn read_balance<S>(
