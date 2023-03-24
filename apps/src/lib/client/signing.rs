@@ -11,12 +11,14 @@ use data_encoding::HEXLOWER;
 use namada::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proto::Tx;
+use namada::proto::SignedTxData;
 use namada::types::address::{tokens, Address, ImplicitAddress};
 use namada::types::ibc::data::IbcMessage;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::{Amount, Transfer};
+use namada::types::transaction::TxType;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -274,21 +276,17 @@ pub async fn sign_wrapper(
         }
     };
     // This object governs how the payload will be processed
-    let wrapper_tx = {
-        WrapperTx::new(
-            Fee {
-                amount: fee_amount,
-                token: fee_token,
-            },
-            keypair,
-            epoch,
-            args.gas_limit.clone(),
-            #[cfg(not(feature = "mainnet"))]
-            pow_solution,
-        )
-        // Bind the inner transaction to the wrapper
-        .bind(tx.clone())
-    };
+    let wrapper_tx = WrapperTx::new(
+        Fee {
+            amount: fee_amount,
+            token: fee_token,
+        },
+        keypair,
+        epoch,
+        args.gas_limit.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        pow_solution,
+    );
 
     // Attempt to decode the construction
     if let Ok(path) = env::var(ENV_VAR_TEST_VECTOR_PATH) {
@@ -297,6 +295,70 @@ pub async fn sign_wrapper(
             .signing_tx()
             .encode(&mut unsigned_tx_bytes)
             .expect("failed to serialize transaction");
+
+        let payload = (unsigned_tx_bytes.clone(), wrapper_tx.clone())
+            .try_to_vec()
+            .expect("failed to serialize transaction");
+        println!("Step 0 (Entire payload sent to ledger): {}", HEXLOWER.encode(&payload));
+        println!("Step 1 (Extract Unsigned Inner Tx Bytes from Payload): {}", HEXLOWER.encode(&unsigned_tx_bytes));
+        let tx_hash = hash_tx(&unsigned_tx_bytes).0;
+        println!("Step 2 (SHA256 Hash of Step 1): {}", HEXLOWER.encode(&tx_hash));
+        println!("Step 3 (Signing Key, 1st byte == 00 => Ed25519 key): {}", keypair);
+        let sig = common::SigScheme::sign(keypair, tx_hash);
+        let sig_bytes = sig.try_to_vec().expect("Failed to encode signature");
+        println!("Step 3 (Signature from Step 2&3, 1st byte == 00 => Ed25519 signature): {}", HEXLOWER.encode(&sig_bytes));
+        let signed_tx_data =
+            SignedTxData { data: unsigned_tx.data, sig: sig.clone() }
+        .try_to_vec()
+            .expect("Encoding transaction data shouldn't fail");
+        println!("Step 4 (Concatenate data field of step 1 and signature from step 3): {}", HEXLOWER.encode(&signed_tx_data));
+        let signed_inner_tx = Tx {
+            code: unsigned_tx.code,
+            data: Some(signed_tx_data),
+            extra: unsigned_tx.extra,
+            timestamp: unsigned_tx.timestamp,
+            inner_tx: unsigned_tx.inner_tx,
+        };
+        let mut signed_inner_tx_bytes = vec![];
+        signed_inner_tx
+            .signing_tx()
+            .encode(&mut signed_inner_tx_bytes)
+            .expect("failed to serialize transaction");
+        println!("Step 5 (Signed Inner Tx Bytes): {}", HEXLOWER.encode(&signed_inner_tx_bytes));
+
+        let unbound_wrapper_tx_bytes = wrapper_tx
+            .try_to_vec()
+            .expect("Encoding transaction data shouldn't fail");
+        println!("Step 0 (Extract Unbound Wrapper Tx Bytes from Payload): {}", HEXLOWER.encode(&unbound_wrapper_tx_bytes));
+        let tx_hash = hash_tx(&signed_inner_tx_bytes).0;
+        println!("Step 2 (Signed Inner Tx Bytes SHA256 Hash): {}", HEXLOWER.encode(&tx_hash));
+        let bound_wrapper_tx_bytes = wrapper_tx
+            .clone()
+            .bind(tx.clone())
+            .try_to_vec()
+            .expect("Encoding transaction data shouldn't fail");
+        println!("Step 2 (Bound Wrapper Tx Bytes): {}", HEXLOWER.encode(&bound_wrapper_tx_bytes));
+        let wrapped_bound_wrapper_tx_bytes = TxType::Wrapper(
+            wrapper_tx
+                .clone()
+                .bind(tx.clone()))
+            .try_to_vec()
+            .expect("Encoding transaction data shouldn't fail");
+        println!("Step 3&4 (Wrapped Bound Wrapper Tx Bytes): {}",
+                 HEXLOWER.encode(&wrapped_bound_wrapper_tx_bytes));
+        let mut outer_tx_bytes = vec![];
+        Tx::new(vec![], Some(wrapped_bound_wrapper_tx_bytes.clone()))
+            .signing_tx()
+            .encode(&mut outer_tx_bytes)
+            .expect("Encoding transaction data shouldn't fail");
+        println!("Step 5 (Outer Tx Bytes): {}", HEXLOWER.encode(&outer_tx_bytes));
+        let outer_tx_hash = hash_tx(&outer_tx_bytes).0;
+        println!("Step 6 (Outer Tx SHA256 Hash): {}", HEXLOWER.encode(&outer_tx_hash));
+        println!("Step 6 (Signing Key, 1st byte == 00 => Ed25519 key): {}", keypair);
+        let outer_sig = common::SigScheme::sign(keypair, outer_tx_hash);
+        let outer_sig_bytes = outer_sig.try_to_vec().expect("Failed to encode signature");
+        println!("Step 6 (Outer Tx Signature, 1st byte == 00 => Ed25519 signature): {}", HEXLOWER.encode(&outer_sig_bytes));
+        
         let decoding = decode_tx(
             ctx,
             &(unsigned_tx_bytes, wrapper_tx.clone())
@@ -314,6 +376,9 @@ pub async fn sign_wrapper(
         writeln!(f, "{},", output)
             .expect("unable to write test vector to file");
     }
+
+    // Bind the inner transaction to the wrapper
+    let wrapper_tx = wrapper_tx.bind(tx.clone());
 
     // Then sign over the bound wrapper
     let mut stx = wrapper_tx
