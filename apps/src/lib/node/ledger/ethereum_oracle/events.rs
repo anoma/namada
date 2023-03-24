@@ -56,7 +56,7 @@ pub mod eth_events {
             event_codec: DynEventCodec,
             block_height: Uint256,
             log: &ethabi::RawLog,
-            confirmations: Uint256,
+            mut confirmations: Uint256,
         ) -> Result<Self> {
             let raw_event = event_codec
                 .decode(log)
@@ -84,13 +84,21 @@ pub mod eth_events {
                         nonce,
                         transfers,
                         valid_map,
-                        confirmations: _,
+                        confirmations: requested_confirmations,
                     },
-                )) => EthereumEvent::TransfersToNamada {
-                    nonce: nonce.parse_uint256()?,
-                    transfers: transfers.parse_transfer_to_namada_array()?,
-                    valid_transfers_map: valid_map,
-                },
+                )) => {
+                    confirmations = confirmations.max({
+                        let mut num_buf = [0; 32];
+                        requested_confirmations.to_little_endian(&mut num_buf);
+                        Uint256::from_bytes_le(&num_buf)
+                    });
+                    EthereumEvent::TransfersToNamada {
+                        nonce: nonce.parse_uint256()?,
+                        transfers: transfers
+                            .parse_transfer_to_namada_array()?,
+                        valid_transfers_map: valid_map,
+                    }
+                }
                 RawEvents::Governance(GovernanceEvents::NewContractFilter(
                     NewContractFilter { name: _, addr: _ },
                 )) => {
