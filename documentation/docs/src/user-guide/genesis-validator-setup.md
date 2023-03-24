@@ -35,7 +35,7 @@ Note that the wallet containing your private keys will also be written into this
 Once the network is finalized, a new chain ID will be created and released on [anoma-network-config/releases](https://github.com/heliaxdev/namada-network-config/releases) (a custom configs URL can be used instead with `NAMADA_NETWORK_CONFIGS_SERVER` env var). You can use it to setup your genesis validator node for the `--chain-id` argument in the command below.
 
 ```shell
-export CHAIN_ID="public-testnet-4.0.16a35d789f4"
+export CHAIN_ID="public-testnet-5.0.d25aa64ace6"
 namada client utils join-network \
     --chain-id $CHAIN_ID \
     --genesis-validator $ALIAS
