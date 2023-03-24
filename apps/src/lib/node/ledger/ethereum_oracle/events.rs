@@ -423,14 +423,6 @@ pub mod eth_events {
                 }]
             )
         }
-    }
-
-    //#[cfg(test)]
-    #[cfg(FALSE)]
-    mod test_events {
-        use assert_matches::assert_matches;
-
-        use super::*;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, the custom number is used if it is
@@ -439,27 +431,43 @@ pub mod eth_events {
         fn test_custom_confirmations_used() {
             let arbitrary_block_height: Uint256 = 123u64.into();
             let min_confirmations: Uint256 = 100u64.into();
-            let higher_than_min_confirmations = 200;
+            let higher_than_min_confirmations = 200u64;
 
-            let (sig, event) = (
-                signatures::TRANSFER_TO_NAMADA_SIG,
-                RawTransfersToNamada {
+            let (codec, event) = (
+                TRANSFER_TO_NAMADA_CODEC,
+                TransferToNamadaFilter {
                     transfers: vec![],
-                    nonce: 0.into(),
-                    confirmations: higher_than_min_confirmations,
+                    valid_map: vec![],
+                    nonce: 0u64.into(),
+                    confirmations: higher_than_min_confirmations.into(),
                 },
             );
-            let data = event.encode();
+            let log = ethabi::RawLog {
+                data: event.encode(),
+                topics: vec![],
+            };
             let pending_event = PendingEvent::decode(
-                sig,
+                codec,
                 arbitrary_block_height,
-                &data,
+                &log,
                 min_confirmations,
             )
             .unwrap();
 
-            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == higher_than_min_confirmations.into());
+            assert_matches!(
+                pending_event,
+                PendingEvent { confirmations, .. }
+                    if confirmations == higher_than_min_confirmations.into()
+            );
         }
+    }
+
+    //#[cfg(test)]
+    #[cfg(FALSE)]
+    mod test_events {
+        use assert_matches::assert_matches;
+
+        use super::*;
 
         /// For each of the basic types, test that roundtrip
         /// encoding - decoding is a no-op
