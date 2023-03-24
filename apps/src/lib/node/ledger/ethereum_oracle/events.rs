@@ -357,14 +357,10 @@ pub mod eth_events {
                     confirmations: lower_than_min_confirmations.into(),
                 },
             );
-            let log = ethabi::RawLog {
-                data: event.encode(),
-                topics: vec![],
-            };
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &log,
+                &get_log(event.encode()),
                 min_confirmations.clone(),
             )?;
 
@@ -409,11 +405,9 @@ pub mod eth_events {
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 1,
             ];
-            let topics = vec![];
 
-            let log = ethabi::RawLog { data, topics };
             let raw: TransferToNamadaFilter = TRANSFER_TO_NAMADA_CODEC
-                .decode(&log)
+                .decode(&get_log(data))
                 .expect("Test failed")
                 .try_into()
                 .expect("Test failed");
@@ -446,14 +440,10 @@ pub mod eth_events {
                     confirmations: higher_than_min_confirmations.into(),
                 },
             );
-            let log = ethabi::RawLog {
-                data: event.encode(),
-                topics: vec![],
-            };
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &log,
+                &get_log(event.encode()),
                 min_confirmations,
             )
             .unwrap();
@@ -606,6 +596,8 @@ pub mod eth_events {
             );
         }
 
+        /// Return an Ethereum events log, from the given encoded event
+        /// data.
         fn get_log(data: Vec<u8>) -> ethabi::RawLog {
             ethabi::RawLog {
                 data,
