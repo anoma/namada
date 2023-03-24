@@ -233,6 +233,11 @@ where
             })
         }
         (None, _gas) => {
+            tracing::info!(
+                "No value at request height {}. Last committed height {}.",
+                request.height,
+                ctx.wl_storage.storage.last_height
+            );
             let proof = if request.prove {
                 let proof = ctx
                     .wl_storage

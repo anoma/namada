@@ -1924,6 +1924,7 @@ where
         ) {
             Some(unit)
         } else {
+            println!("storage_has_key = false");
             None
         };
     }
