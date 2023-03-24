@@ -1746,8 +1746,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.15.1"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.15.1#9bde2a82f3370119737e2e7bb2df7ea95cf6ba63"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
  "ethabi",
  "ethers",
