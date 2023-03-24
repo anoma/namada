@@ -319,8 +319,8 @@ impl AbciService {
         match req {
             Req::PrepareProposal(req) => Some(CheckAction::Check(req.height)),
             Req::ProcessProposal(req) => Some(CheckAction::Check(req.height)),
-            Req::EndBlock(_)
-            | Req::BeginBlock(_)
+            Req::EndBlock(req) => Some(CheckAction::Check(req.height)),
+            Req::BeginBlock(_)
             | Req::DeliverTx(_)
             | Req::InitChain(_)
             | Req::CheckTx(_)
