@@ -25,7 +25,9 @@ use rust_decimal::prelude::Decimal;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+use crate::facade::tendermint_proto::abci::{
+    Misbehavior as Evidence, VoteInfo,
+};
 use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::node::ledger::shell::stats::InternalStats;
 
@@ -848,6 +850,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
