@@ -5,7 +5,7 @@ pub mod eth_events {
     use ethbridge_bridge_events::{
         BridgeEvents, TransferToErcFilter, TransferToNamadaFilter,
     };
-    use ethbridge_events::{EventCodec, Events as RawEvents};
+    use ethbridge_events::{DynEventCodec, Events as RawEvents};
     use ethbridge_governance_events::{
         GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
         UpgradedContractFilter, ValidatorSetUpdateFilter,
@@ -53,7 +53,7 @@ pub mod eth_events {
         /// this is passed to the corresponding [`PendingEvent`] field,
         /// otherwise a default is used.
         pub fn decode(
-            event_codec: &'static dyn EventCodec,
+            event_codec: DynEventCodec,
             block_height: Uint256,
             log: &ethabi::RawLog,
             confirmations: Uint256,
@@ -318,52 +318,13 @@ pub mod eth_events {
         }
     }
 
-    //#[cfg(test)]
-    #[cfg(FALSE)]
+    #[cfg(test)]
     mod test_events {
         use assert_matches::assert_matches;
+        use ethbridge_events::TRANSFER_TO_NAMADA_CODEC;
+        use namada::eth_bridge::ethers::abi::AbiEncode;
 
         use super::*;
-
-        #[test]
-        fn test_transfer_to_namada_decode() {
-            let data: Vec<u8> = vec![
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 95, 189, 178, 49, 86, 120, 175, 236, 179, 103, 240,
-                50, 217, 63, 100, 47, 100, 24, 10, 163, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 84, 97, 116, 101, 115, 116, 49, 118, 52, 101, 104,
-                103, 119, 51, 54, 120, 117, 117, 110, 119, 100, 54, 57, 56, 57,
-                112, 114, 119, 100, 102, 107, 120, 113, 109, 110, 118, 115,
-                102, 106, 120, 115, 54, 110, 118, 118, 54, 120, 120, 117, 99,
-                114, 115, 51, 102, 51, 120, 99, 109, 110, 115, 51, 102, 99,
-                120, 100, 122, 114, 118, 118, 122, 57, 120, 118, 101, 114, 122,
-                118, 122, 114, 53, 54, 108, 101, 56, 102, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0,
-            ];
-
-            let raw = RawTransfersToNamada::decode(&data);
-
-            let raw = raw.unwrap();
-            assert_eq!(
-                raw.transfers,
-                vec![TransferToNamada {
-                    amount: Amount::from(100),
-                    asset: EthAddress::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
-                    receiver: Address::decode("atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f").unwrap(),
-                }]
-            )
-        }
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the
@@ -373,28 +334,95 @@ pub mod eth_events {
         fn test_min_confirmations_enforced() -> Result<()> {
             let arbitrary_block_height: Uint256 = 123u64.into();
             let min_confirmations: Uint256 = 100u64.into();
-            let lower_than_min_confirmations = 5;
+            let lower_than_min_confirmations = 5u64;
 
-            let (sig, event) = (
-                signatures::TRANSFER_TO_NAMADA_SIG,
-                RawTransfersToNamada {
+            let (codec, event) = (
+                TRANSFER_TO_NAMADA_CODEC,
+                TransferToNamadaFilter {
                     transfers: vec![],
+                    valid_map: vec![],
                     nonce: 0.into(),
-                    confirmations: lower_than_min_confirmations,
+                    confirmations: lower_than_min_confirmations.into(),
                 },
             );
-            let data = event.encode();
+            let log = ethabi::RawLog {
+                data: event.encode(),
+                topics: vec![],
+            };
             let pending_event = PendingEvent::decode(
-                sig,
+                codec,
                 arbitrary_block_height,
-                &data,
+                &log,
                 min_confirmations.clone(),
             )?;
 
-            assert_matches!(pending_event, PendingEvent { confirmations, .. } if confirmations == min_confirmations);
+            assert_matches!(
+                pending_event,
+                PendingEvent { confirmations, .. }
+                    if confirmations == min_confirmations
+            );
 
             Ok(())
         }
+
+        /// Test decoding a [`TransferToNamadaFilter`] Ethereum event.
+        #[test]
+        fn test_transfer_to_namada_decode() {
+            let data = vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 160, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 95, 189,
+                178, 49, 86, 120, 175, 236, 179, 103, 240, 50, 217, 63, 100,
+                47, 100, 24, 10, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84,
+                97, 116, 101, 115, 116, 49, 118, 52, 101, 104, 103, 119, 51,
+                54, 120, 117, 117, 110, 119, 100, 54, 57, 56, 57, 112, 114,
+                119, 100, 102, 107, 120, 113, 109, 110, 118, 115, 102, 106,
+                120, 115, 54, 110, 118, 118, 54, 120, 120, 117, 99, 114, 115,
+                51, 102, 51, 120, 99, 109, 110, 115, 51, 102, 99, 120, 100,
+                122, 114, 118, 118, 122, 57, 120, 118, 101, 114, 122, 118, 122,
+                114, 53, 54, 108, 101, 56, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 1,
+            ];
+            let topics = vec![];
+
+            let log = ethabi::RawLog { data, topics };
+            let raw: TransferToNamadaFilter = TRANSFER_TO_NAMADA_CODEC
+                .decode(&log)
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
+
+            assert_eq!(
+                raw.transfers,
+                vec![ethereum_structs::NamadaTransfer {
+                    amount: 100u64.into(),
+                    from: ethabi::Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
+                    to: "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f".into(),
+                }]
+            )
+        }
+    }
+
+    //#[cfg(test)]
+    #[cfg(FALSE)]
+    mod test_events {
+        use assert_matches::assert_matches;
+
+        use super::*;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, the custom number is used if it is

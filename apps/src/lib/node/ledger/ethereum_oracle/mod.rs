@@ -352,7 +352,7 @@ async fn process(
     );
     // check for events in Ethereum blocks that have reached the minimum number
     // of confirmations
-    for codec in event_codecs().iter().copied() {
+    for codec in event_codecs() {
         let sig = match codec.event_signature() {
             ::std::borrow::Cow::Borrowed(s) => s,
             _ => unreachable!(
