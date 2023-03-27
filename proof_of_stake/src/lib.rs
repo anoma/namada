@@ -2876,7 +2876,7 @@ pub fn slash<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    println!("SLASHING ON NEW EVIDENCE");
+    println!("SLASHING ON NEW EVIDENCE FROM {}", validator);
 
     let evidence_block_height: u64 = evidence_block_height.into();
     let slash = Slash {
@@ -2996,6 +2996,19 @@ where
             offset,
         )?;
     }
+
+    dbg!(read_consensus_validator_set_addresses_with_stake(
+        storage,
+        current_epoch
+    ));
+    dbg!(read_consensus_validator_set_addresses_with_stake(
+        storage,
+        current_epoch.next()
+    ));
+    dbg!(read_consensus_validator_set_addresses_with_stake(
+        storage,
+        current_epoch + params.pipeline_len
+    ));
 
     // No other actions are performed here until the epoch in which the slash is
     // processed.

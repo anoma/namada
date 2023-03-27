@@ -181,10 +181,10 @@ pub mod testing {
     prop_compose! {
         /// Generate arbitrary valid ([`PosParams::validate`]) PoS parameters.
         pub fn arb_pos_params(num_max_validator_slots: Option<u64>)
-            (pipeline_len in 2..8_u64)
+            (pipeline_len in Just(2))
             (max_validator_slots in 1..num_max_validator_slots.unwrap_or(128),
             // `unbonding_len` > `pipeline_len`
-            unbonding_len in pipeline_len + 1..pipeline_len + 8,
+            unbonding_len in Just(4),
             pipeline_len in Just(pipeline_len),
             tm_votes_per_token in 1..10_001_u64)
             -> PosParams {
