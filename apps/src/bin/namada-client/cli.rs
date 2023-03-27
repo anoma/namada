@@ -11,8 +11,6 @@ use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient};
 use tokio::time::sleep;
 
-const WAIT_FOR_LEDGER_SYNC: u64 = 5;
-
 pub async fn main() -> Result<()> {
     match cli::namada_client_cli()? {
         cli::NamadaClient::WithContext(cmd_box) => {
@@ -168,7 +166,8 @@ pub async fn main() -> Result<()> {
 async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
     let client = HttpClient::new(ledger_address.clone()).unwrap();
     let height_one = Height::try_from(1_u64).unwrap();
-    let mut try_count = 0;
+    let mut try_count = 0_u64;
+    const MAX_TRIES: u64 = 5;
 
     loop {
         let node_status = client.status().await;
@@ -187,8 +186,17 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                         );
                         safe_exit(1)
                     } else {
-                        println!("Waiting for node to sync...");
-                        sleep(Duration::from_secs(try_count.pow(try_count)))
+                        println!(
+                            " Waiting for {} ({}/{} tries)...",
+                            if is_at_least_height_one {
+                                "a first block"
+                            } else {
+                                "node to sync"
+                            },
+                            try_count + 1,
+                            MAX_TRIES
+                        );
+                        sleep(Duration::from_secs((try_count + 1).pow(2)))
                             .await;
                     }
                     try_count += 1;
