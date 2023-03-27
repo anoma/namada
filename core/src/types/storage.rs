@@ -1142,6 +1142,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::address::testing::arb_address;
 
     proptest! {
         /// Tests that any key that doesn't contain reserved prefixes is valid.
@@ -1298,6 +1299,48 @@ mod tests {
         assert_eq!(epochs.get_epoch(BlockHeight(500)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
         assert_eq!(epochs.get_epoch(BlockHeight(600)), Some(Epoch(8)));
+    }
+
+    proptest! {
+        /// Ensure that addresses in storage keys preserve the order of the
+        /// addresses.
+        #[test]
+        fn test_address_in_storage_key_order(
+            addr1 in arb_address(),
+            addr2 in arb_address(),
+        ) {
+            test_address_in_storage_key_order_aux(addr1, addr2)
+        }
+    }
+
+    fn test_address_in_storage_key_order_aux(addr1: Address, addr2: Address) {
+        println!("addr1 {addr1}");
+        println!("addr2 {addr2}");
+        let expected_order = addr1.cmp(&addr2);
+
+        // Turn the addresses into strings
+        let str1 = addr1.to_string();
+        let str2 = addr2.to_string();
+        println!("addr1 str {str1}");
+        println!("addr1 str {str2}");
+        let order = str1.cmp(&str2);
+        assert_eq!(order, expected_order);
+
+        // Turn the addresses into storage keys
+        let key1 = Key::from(addr1.to_db_key());
+        let key2 = Key::from(addr2.to_db_key());
+        println!("addr1 key {key1}");
+        println!("addr2 key {key2}");
+        let order = key1.cmp(&key2);
+        assert_eq!(order, expected_order);
+
+        // Turn the addresses into raw storage keys (formatted to strings)
+        let raw1 = addr1.raw();
+        let raw2 = addr2.raw();
+        println!("addr 1 raw {raw1}");
+        println!("addr 2 raw {raw2}");
+        let order = raw1.cmp(&raw2);
+        assert_eq!(order, expected_order);
     }
 }
 
