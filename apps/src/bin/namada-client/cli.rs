@@ -189,8 +189,7 @@ async fn wait_until_node_is_synched(ledger_address: &TendermintAddress) {
                     } else {
                         println!("Waiting for node to sync...");
                         sleep(Duration::from_secs(
-                            WAIT_FOR_LEDGER_SYNC * try_count
-                                + WAIT_FOR_LEDGER_SYNC,
+                            WAIT_FOR_LEDGER_SYNC * try_count,
                         ))
                         .await;
                     }
