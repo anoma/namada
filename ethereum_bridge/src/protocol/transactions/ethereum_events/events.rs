@@ -54,7 +54,7 @@ where
                 .zip(valid_transfers_map.iter())
                 .filter_map(|(transf, valid)| valid.then_some(transf)),
         ),
-        // TODO: handle invalid transfs
+        // TODO(namada:#1257): handle invalid transfer to Ethereum events
         EthereumEvent::TransfersToEthereum {
             transfers, relayer, ..
         } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
