@@ -51,7 +51,10 @@ fn new_blake2b() -> Blake2b {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use namada::ledger::storage::{types, WlStorage};
+    use namada::ledger::storage::write_log::WriteLog;
+    use namada::ledger::storage::{
+        types, update_allowed_conversions, WlStorage,
+    };
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
@@ -133,11 +136,11 @@ mod tests {
             .expect("write failed");
         storage.commit_block().expect("commit failed");
 
-        // save the last state and drop the storage
-        let root = storage.merkle_root().0;
-        let hash = storage.get_block_hash().0;
-        let address_gen = storage.address_gen.clone();
-        drop(storage);
+        // save the last state and the storage
+        let root = wl_storage.storage.merkle_root().0;
+        let hash = wl_storage.storage.get_block_hash().0;
+        let address_gen = wl_storage.storage.address_gen.clone();
+        drop(wl_storage);
 
         // load the last state
         let mut storage = PersistentStorage::open(

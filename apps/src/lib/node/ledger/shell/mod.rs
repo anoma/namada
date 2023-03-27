@@ -770,14 +770,11 @@ mod test_utils {
     use std::path::PathBuf;
 
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
-    use namada::types::address::EstablishedAddressGen;
+    use namada::ledger::storage::{update_allowed_conversions, Sha256Hasher};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::types::storage::{
-        BlockHash, BlockResults, Epoch, Epochs, Header,
-    };
+    use namada::types::storage::{BlockHash, Epoch, Epochs, Header};
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
@@ -995,6 +992,11 @@ mod test_utils {
             tx_wasm_compilation_cache,
             native_token.clone(),
         );
+        shell
+            .wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(1))
+            .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let tx = Tx::new(
@@ -1021,9 +1023,6 @@ mod test_utils {
         });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
-        let merkle_tree = MerkleTree::<Sha256Hasher>::default();
-        let stores = merkle_tree.stores();
-        let hash = BlockHash([0; 32]);
         let mut pred_epochs: Epochs = Default::default();
         pred_epochs.new_epoch(BlockHeight(1), 1000);
         let address_gen = EstablishedAddressGen::new("test");
