@@ -2,6 +2,7 @@ pub mod control;
 pub mod events;
 pub mod test_tools;
 
+use std::borrow::Cow;
 use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
 
@@ -354,7 +355,7 @@ async fn process(
     // of confirmations
     for codec in event_codecs() {
         let sig = match codec.event_signature() {
-            ::std::borrow::Cow::Borrowed(s) => s,
+            Cow::Borrowed(s) => s,
             _ => unreachable!(
                 "All Ethereum events should have a static ABI signature"
             ),
