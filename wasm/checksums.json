@@ -10,7 +10,7 @@
     "tx_unbond.wasm": "tx_unbond.8c63c856db5b608b44179abf29ec8996005d5a5e5467b11b1afad09b9052e69a.wasm",
     "tx_update_vp.wasm": "tx_update_vp.287a8dde719b278b10c63384adbeacf40906b40e173b3ab0d0fac659e323951a.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.f86a66ce7c96be2ed4ee6b8d1fa0186264749ef88ec22575bf2c31ca82341c3e.wasm",
-    "tx_withdraw.wasm": "tx_withdraw.c9d451ccf7561db4a1113fa5c4c9d8266f185030c3ceb57e0204707de1489792.wasm",
+    "tx_withdraw.wasm": "tx_withdraw.64ee2eee069ceced66757dedfd9d6f1fc334cea1fa1c82acfb0f4eb0e6207bb0.wasm",
     "vp_implicit.wasm": "vp_implicit.03f75fbf6a2a4b343ba0d5691d381e643af1e592ed6dcc7f65b5554caf2f52df.wasm",
     "vp_masp.wasm": "vp_masp.013f6e673ad10fcf233f1cda940fea7042c2ba4ac79b30c4fd9dc6cfa60a6080.wasm",
     "vp_testnet_faucet.wasm": "vp_testnet_faucet.a9bbcb7fbc484fe703e0bf18661701302bf2cc9425f4e8bcc8becc8ecc58a51c.wasm",
