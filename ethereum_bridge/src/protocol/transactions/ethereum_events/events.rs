@@ -54,10 +54,17 @@ where
                 .zip(valid_transfers_map.iter())
                 .filter_map(|(transf, valid)| valid.then_some(transf)),
         ),
-        // TODO(namada:#1257): handle invalid transfer to Ethereum events
         EthereumEvent::TransfersToEthereum {
-            transfers, relayer, ..
-        } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
+            transfers,
+            relayer,
+            valid_transfers_map,
+            ..
+        } => act_on_transfers_to_eth(
+            wl_storage,
+            transfers,
+            valid_transfers_map,
+            relayer,
+        ),
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(BTreeSet::default())
@@ -209,6 +216,7 @@ where
 fn act_on_transfers_to_eth<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     transfers: &[TransferToEthereum],
+    valid_transfers: &[bool],
     relayer: &Address,
 ) -> Result<BTreeSet<Key>>
 where
@@ -229,10 +237,25 @@ where
     let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
     let relayer_rewards_key = balance_key(&nam(), relayer);
     // Remove the completed transfers from the bridge pool
-    for event in transfers {
+    for (event, is_valid) in
+        transfers.iter().zip(valid_transfers.iter().copied())
+    {
         let pending_transfer = event.into();
         let key = get_pending_key(&pending_transfer);
         if likely(wl_storage.has_key(&key)?) {
+            if likely(is_valid) {
+                tracing::debug!(
+                    ?pending_transfer,
+                    "Valid transfer to Ethereum detected, compensating the \
+                     relayer"
+                );
+            } else {
+                tracing::debug!(
+                    ?pending_transfer,
+                    "Invalid transfer to Ethereum detected, but the relayer \
+                     will be compensated anyway"
+                );
+            }
             // give the relayer the gas fee for this transfer.
             update::amount(wl_storage, &relayer_rewards_key, |balance| {
                 balance.receive(&pending_transfer.gas_fee.amount);
