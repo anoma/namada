@@ -11,8 +11,12 @@ use namada::ledger::pos::{
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::ledger::{inflation, protocol};
+use namada::proof_of_stake::storage::is_validator_state_key;
+use namada::proof_of_stake::types::ValidatorState;
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
+    read_below_capacity_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses_with_stake,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
     read_validator_stake, rewards_accumulator_handle,
     validator_commission_rate_handle, validator_rewards_products_handle,
@@ -20,7 +24,7 @@ use namada::proof_of_stake::{
 };
 use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
-use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
+use namada::types::storage::{BlockHash, BlockResults, Epoch, Header, KeySeg};
 use namada::types::token::{total_supply_key, Amount};
 use rust_decimal::prelude::Decimal;
 
@@ -93,6 +97,7 @@ where
             // new_epoch + pipeline_len
             let pos_params =
                 namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
+            dbg!(pos_params.max_validator_slots);
             namada_proof_of_stake::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
                 current_epoch,
@@ -107,6 +112,70 @@ where
         self.record_slashes_from_evidence();
         if new_epoch {
             self.process_slashes();
+        }
+
+        let params = namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
+        dbg!(current_epoch);
+        dbg!(read_consensus_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch
+        )?);
+        dbg!(read_consensus_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch.next()
+        )?);
+        dbg!(read_below_capacity_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch
+        )?);
+        dbg!(read_below_capacity_validator_set_addresses_with_stake(
+            &self.wl_storage,
+            current_epoch.next()
+        )?);
+        let mut set_vals = HashSet::<Address>::new();
+
+        let prefix = Key::from(namada::proof_of_stake::ADDRESS.to_db_key())
+            .push(&"validator".to_owned())
+            .expect("Cannot obtain a storage key");
+
+        storage_api::iter_prefix_bytes(&self.wl_storage, &prefix)?.for_each(
+            |f| {
+                if let Ok((key, val_bytes)) = f {
+                    // dbg!(&key);
+                    if let Some(val) = is_validator_state_key(&key) {
+                        // dbg!(&key);
+                        set_vals.insert(val.clone());
+                        let state: ValidatorState =
+                            BorshDeserialize::try_from_slice(&val_bytes)
+                                .ok()
+                                .unwrap();
+
+                        // println!("State of validator {} is {:?}", val,
+                        // state);
+                    }
+                }
+            },
+        );
+        for vld in set_vals.into_iter() {
+            for epoch in Epoch::iter_bounds_inclusive(
+                current_epoch,
+                current_epoch + params.pipeline_len,
+            ) {
+                let state = namada_proof_of_stake::validator_state_handle(&vld)
+                    .get(&self.wl_storage, epoch, &params)?
+                    .unwrap();
+                let stake =
+                    namada_proof_of_stake::validator_deltas_handle(&vld)
+                        .get_sum(&self.wl_storage, epoch, &params)?
+                        .unwrap_or_default();
+                println!(
+                    "Validator {} state in epoch {} = {:?}, stake = {}",
+                    vld.clone(),
+                    epoch,
+                    state,
+                    stake
+                );
+            }
         }
 
         let wrapper_fees = self.get_wrapper_tx_fees();

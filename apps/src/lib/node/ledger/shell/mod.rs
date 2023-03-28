@@ -423,6 +423,7 @@ where
             println!("BYZANTINE VALIDATORS NOT EMPTY");
             let byzantine_validators =
                 mem::take(&mut self.byzantine_validators);
+            println!("There are {} misbehaviors", byzantine_validators.len());
             // TODO: resolve this unwrap() better
             let pos_params = read_pos_params(&self.wl_storage).unwrap();
             let current_epoch = self.wl_storage.storage.block.epoch;

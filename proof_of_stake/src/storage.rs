@@ -263,9 +263,14 @@ pub fn is_validator_state_key(key: &Key) -> Option<&Address> {
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::AddressSeg(validator),
             DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(_epoch),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_STATE_STORAGE_KEY =>
+            && key == VALIDATOR_STATE_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
         {
             Some(validator)
         }

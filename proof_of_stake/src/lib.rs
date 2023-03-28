@@ -891,7 +891,23 @@ where
     bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
 
     // Update the validator set
-    update_validator_set(storage, &params, validator, amount, current_epoch)?;
+    // We allow bonding if the validator is jailed, however if jailed, there
+    // must be no changes to the validator set. Check at the pipeline epoch.
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle
+            .get(storage, pipeline_epoch, &params)?
+            .unwrap(),
+        ValidatorState::Jailed
+    );
+    if !is_jailed_at_pipeline {
+        update_validator_set(
+            storage,
+            &params,
+            validator,
+            amount,
+            current_epoch,
+        )?;
+    }
 
     // Update the validator and total deltas
     update_validator_deltas(
@@ -2662,6 +2678,7 @@ where
 {
     // The votes correspond to the last committed block (n-1 if we are
     // finalizing block n)
+    println!("Logging Block Rewards");
 
     let epoch: Epoch = epoch.into();
     let params = read_pos_params(storage)?;
@@ -2675,8 +2692,9 @@ where
                 key: amount,
                 nested_sub_key: _,
             },
-            _address,
+            address,
         ) = validator?;
+        println!("Consensus validator {}", address);
         total_consensus_stake += u64::from(amount);
     }
 
@@ -2876,7 +2894,7 @@ pub fn slash<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    println!("SLASHING ON NEW EVIDENCE FROM {}", validator);
+    println!("SLASHING ON NEW EVIDENCE");
 
     let evidence_block_height: u64 = evidence_block_height.into();
     let slash = Slash {
@@ -2985,9 +3003,13 @@ where
                 "Already jailed or in 'Pending' state which will prob be \
                  removed"
             );
+            return Ok(());
         }
     }
-    println!("\nWRITING VALIDATOR STATE AS JAILED IN EPOCH {current_epoch}\n");
+    println!(
+        "\nWRITING VALIDATOR {} STATE AS JAILED STARTING IN EPOCH {}\n",
+        validator, current_epoch
+    );
     for offset in 0..=params.pipeline_len {
         validator_state_handle(validator).set(
             storage,
@@ -2996,19 +3018,6 @@ where
             offset,
         )?;
     }
-
-    dbg!(read_consensus_validator_set_addresses_with_stake(
-        storage,
-        current_epoch
-    ));
-    dbg!(read_consensus_validator_set_addresses_with_stake(
-        storage,
-        current_epoch.next()
-    ));
-    dbg!(read_consensus_validator_set_addresses_with_stake(
-        storage,
-        current_epoch + params.pipeline_len
-    ));
 
     // No other actions are performed here until the epoch in which the slash is
     // processed.
@@ -3046,6 +3055,8 @@ where
     let cubic_slash_rate =
         compute_cubic_slash_rate(storage, &params, infraction_epoch)?;
 
+    dbg!(&cubic_slash_rate);
+
     // Collect the slashes to be processed, updating their rates
     let mut validators_and_slashes: HashMap<Address, Vec<Slash>> =
         HashMap::new();
@@ -3066,6 +3077,7 @@ where
                 cubic_slash_rate,
             ),
         );
+        println!("Slash rate = {slash_rate}");
         let updated_slash = Slash {
             epoch: enqueued_slash.epoch,
             block_height: enqueued_slash.block_height,
@@ -3194,6 +3206,8 @@ where
             }
         }
     }
+    dbg!(&total_slashed);
+    dbg!(&deltas_for_update);
     // Update the deltas in storage
     for (validator, epoch, delta) in deltas_for_update {
         // TODO: may need to amend this function to take the offset as a param
@@ -3213,6 +3227,8 @@ where
         &ADDRESS,
         &SLASH_POOL_ADDRESS,
     )?;
+
+    println!("Finished processing slashes");
 
     Ok(())
 }

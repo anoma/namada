@@ -68,6 +68,12 @@ where
         let parameters =
             parameters::read(self).expect("Couldn't read protocol parameters");
 
+        dbg!(
+            height,
+            self.storage.next_epoch_min_start_height,
+            time,
+            self.storage.next_epoch_min_start_time
+        );
         match self.storage.update_epoch_blocks_delay.as_mut() {
             None => {
                 // Check if the new epoch minimum start height and start time
