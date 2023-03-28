@@ -66,6 +66,8 @@ pretty_assertions = "0.7.2"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
 rand = "0.8"
 toml = "0.5.9"
+gjson = "0.8"
+test-case = "3.0"
 
 # This is used to enable logging from tests
 [package.metadata.cargo-udeps.ignore]
