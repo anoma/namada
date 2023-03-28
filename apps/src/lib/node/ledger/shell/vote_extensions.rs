@@ -61,8 +61,6 @@ pub enum VoteExtensionError {
          not active"
     )]
     EthereumBridgeInactive,
-    #[error("A vote extension for the Ethereum bridge is missing")]
-    MissingBridgeVext,
 }
 
 impl<D, H> Shell<D, H>
