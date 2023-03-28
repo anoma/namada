@@ -7,7 +7,7 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage::BlockHeight;
+use namada::types::storage::{BlockHeight, Epoch};
 use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
@@ -107,25 +107,9 @@ where
             tracing::debug!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
-        // verify if we have any duplicate Ethereum events,
-        // and if these are sorted in ascending order
-        let have_dupes_or_non_sorted = {
-            !ext.data
-                .ethereum_events
-                // TODO: move to `array_windows` when it reaches Rust stable
-                .windows(2)
-                .all(|evs| evs[0] < evs[1])
-        };
-        let validator = &ext.data.validator_addr;
-        if have_dupes_or_non_sorted {
-            tracing::debug!(
-                %validator,
-                "Found duplicate or non-sorted Ethereum events in a vote extension from \
-                 some validator"
-            );
-            return Err(VoteExtensionError::HaveDupesOrNonSorted);
-        }
+        self.validate_eth_events(ext_height_epoch, &ext.data)?;
         // get the public key associated with this validator
+        let validator = &ext.data.validator_addr;
         let (voting_power, pk) = self
             .wl_storage
             .pos_queries()
@@ -153,6 +137,33 @@ where
                 VoteExtensionError::VerifySigFailed
             })
             .map(|_| (voting_power, ext))
+    }
+
+    /// Validate a batch of Ethereum events contained in
+    /// an [`ethereum_events::Vext`].
+    fn validate_eth_events(
+        &self,
+        _epoch: Epoch,
+        ext: &ethereum_events::Vext,
+    ) -> std::result::Result<(), VoteExtensionError> {
+        // verify if we have any duplicate Ethereum events,
+        // and if these are sorted in ascending order
+        let have_dupes_or_non_sorted = {
+            !ext.ethereum_events
+                // TODO: move to `array_windows` when it reaches Rust stable
+                .windows(2)
+                .all(|evs| evs[0] < evs[1])
+        };
+        let validator = &ext.validator_addr;
+        if have_dupes_or_non_sorted {
+            tracing::debug!(
+                %validator,
+                "Found duplicate or non-sorted Ethereum events in a vote extension from \
+                 some validator"
+            );
+            return Err(VoteExtensionError::HaveDupesOrNonSorted);
+        }
+        Ok(())
     }
 
     /// Checks the channel from the Ethereum oracle monitoring
