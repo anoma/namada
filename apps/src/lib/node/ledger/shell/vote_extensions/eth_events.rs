@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use namada::ledger::eth_bridge::EthBridgeQueries;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -162,18 +163,35 @@ where
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
-        ext.ethereum_events.iter().try_for_each(|event| {
-            self.validate_eth_event(ext.block_height, event)
-        })
+        ext.ethereum_events
+            .iter()
+            .try_for_each(|event| self.validate_eth_event(event))
     }
 
-    /// Valdidate an [`EthereumEvent`] at the given [`BlockHeight`].
+    /// Valdidate an [`EthereumEvent`].
     pub fn validate_eth_event(
         &self,
-        _height: BlockHeight,
-        _event: &EthereumEvent,
+        event: &EthereumEvent,
     ) -> std::result::Result<(), VoteExtensionError> {
-        todo!()
+        match event {
+            EthereumEvent::TransfersToEthereum {
+                nonce: ext_nonce, ..
+            } => {
+                let current_bp_nonce =
+                    self.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+                if &current_bp_nonce != ext_nonce {
+                    return Err(VoteExtensionError::OutdatedBpNonce);
+                }
+            }
+            EthereumEvent::ValidatorSetUpdate { .. } => {
+                // no validation required. this is only here
+                // to stop clippy from complaining about not
+                // using the `if-let` destructuring pattern
+            }
+            // consider other ethereum event kinds valid
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Checks the channel from the Ethereum oracle monitoring
