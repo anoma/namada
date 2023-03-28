@@ -210,6 +210,7 @@ where
     /// For any of these events to be considered valid, the
     /// whitelist update nonce in storage must match the nonce
     /// in the event.
+    // TODO: change transfers to namada checking docstr
     pub fn validate_eth_event(
         &self,
         event: &EthereumEvent,
@@ -264,12 +265,11 @@ where
                     .wl_storage
                     .ethbridge_queries()
                     .get_namada_transfers_nonce();
-                if &current_nam_nonce != ext_nonce {
+                if &current_nam_nonce > ext_nonce {
                     tracing::debug!(
+                        ?event,
                         %current_nam_nonce,
-                        %ext_nonce,
-                        "The Ethereum events vote extension's transfer to \
-                         Namada nonce is invalid"
+                        "Attempt to replay a transfer to Namada event"
                     );
                     return Err(VoteExtensionError::InvalidNamNonce);
                 }
