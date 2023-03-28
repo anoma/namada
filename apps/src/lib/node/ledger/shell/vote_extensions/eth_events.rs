@@ -191,6 +191,25 @@ where
     /// In case the nonces are different, we reject the event, and
     /// thus the inclusion of its container Ethereum events vote
     /// extension.
+    ///
+    /// Additionally, the length of the transfers array and their
+    /// respective validity map must match, for the event to be
+    /// considered valid.
+    ///
+    /// ## Transfers to Namada
+    ///
+    /// For a transfers to Namada event to be considered valid,
+    /// much like a transfers to Ethereum, the nonce of this
+    /// kind of event must match the one stored in Namada.
+    ///
+    /// In this case, the length of the transfers array and their
+    /// respective validity map must also match.
+    ///
+    /// ## Whitelist updates
+    ///
+    /// For any of these events to be considered valid, the
+    /// whitelist update nonce in storage must match the nonce
+    /// in the event.
     pub fn validate_eth_event(
         &self,
         event: &EthereumEvent,
