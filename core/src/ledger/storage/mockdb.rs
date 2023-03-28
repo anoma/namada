@@ -16,7 +16,8 @@ use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, Epochs, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -172,7 +173,11 @@ impl DB for MockDB {
         }
     }
 
-    fn write_block(&mut self, state: BlockStateWrite) -> Result<()> {
+    fn write_block(
+        &mut self,
+        state: BlockStateWrite,
+        _is_full_commit: bool,
+    ) -> Result<()> {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
@@ -310,7 +315,7 @@ impl DB for MockDB {
     fn read_merkle_tree_stores(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<MerkleTreeStoresRead>> {
+    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let height_key = Key::from(height.to_db_key());
         let tree_key = height_key
@@ -342,7 +347,7 @@ impl DB for MockDB {
                 None => return Ok(None),
             }
         }
-        Ok(Some(merkle_tree_stores))
+        Ok(Some((height, merkle_tree_stores)))
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
@@ -437,6 +442,37 @@ impl DB for MockDB {
             None => 0,
         })
     }
+
+    fn prune_merkle_tree_stores(
+        &mut self,
+        epoch: Epoch,
+        pred_epochs: &Epochs,
+    ) -> Result<()> {
+        match pred_epochs.get_start_height_of_epoch(epoch) {
+            Some(height) => {
+                let prefix_key = Key::from(height.to_db_key())
+                    .push(&"tree".to_owned())
+                    .map_err(Error::KeyError)?;
+                for st in StoreType::iter() {
+                    if *st != StoreType::Base {
+                        let prefix_key = prefix_key
+                            .push(&st.to_string())
+                            .map_err(Error::KeyError)?;
+                        let root_key = prefix_key
+                            .push(&"root".to_owned())
+                            .map_err(Error::KeyError)?;
+                        self.0.borrow_mut().remove(&root_key.to_string());
+                        let store_key = prefix_key
+                            .push(&"store".to_owned())
+                            .map_err(Error::KeyError)?;
+                        self.0.borrow_mut().remove(&store_key.to_string());
+                    }
+                }
+                Ok(())
+            }
+            None => Ok(()),
+        }
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
@@ -454,6 +490,16 @@ impl<'iter> DBIter<'iter> for MockDB {
         let prefix = "results".to_owned();
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+    }
+
+    fn iter_old_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+        // Mock DB can read only the latest value for now
+        unimplemented!()
+    }
+
+    fn iter_new_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+        // Mock DB can read only the latest value for now
+        unimplemented!()
     }
 }
 
