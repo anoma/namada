@@ -7,7 +7,8 @@ use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints::likely;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_pending_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
+    get_nonce_key, get_pending_key, is_pending_transfer_key,
+    BRIDGE_POOL_ADDRESS,
 };
 use namada_core::ledger::eth_bridge::storage::{
     self as bridge_storage, wrapped_erc20s,
@@ -30,6 +31,7 @@ use namada_core::types::token::{
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -273,6 +275,9 @@ where
         _ = changed_keys.insert(key);
     }
     if !transfers.is_empty() {
+        let nonce_key = get_nonce_key();
+        increment_bp_nonce(&nonce_key, wl_storage)?;
+        changed_keys.insert(nonce_key);
         changed_keys.insert(relayer_rewards_key);
         changed_keys.insert(pool_balance_key);
     }
@@ -303,6 +308,23 @@ where
     }
 
     Ok(changed_keys)
+}
+
+fn increment_bp_nonce<D, H>(
+    nonce_key: &Key,
+    wl_storage: &mut WlStorage<D, H>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let next_nonce = wl_storage
+        .ethbridge_queries()
+        .get_bridge_pool_nonce()
+        .checked_increment()
+        .expect("Bridge pool nonce has overflowed");
+    wl_storage.write(nonce_key, next_nonce)?;
+    Ok(())
 }
 
 fn refund_transfer<D, H>(
