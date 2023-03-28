@@ -183,10 +183,9 @@ where
                         what = Next::ReturnStorage;
                     }
                     (Some((storage_key, _, _)), Some((wl_key, _))) => {
-                        let wl_key = wl_key.to_string();
-                        if &wl_key <= storage_key {
+                        if wl_key <= storage_key {
                             what = Next::ReturnWl {
-                                advance_storage: &wl_key == storage_key,
+                                advance_storage: wl_key == storage_key,
                             };
                         } else {
                             what = Next::ReturnStorage;
