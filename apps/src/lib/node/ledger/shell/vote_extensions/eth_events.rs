@@ -204,15 +204,18 @@ where
                 if &current_bp_nonce != ext_nonce {
                     return Err(VoteExtensionError::OutdatedBpNonce);
                 }
-
-                // TODO: check if token is not whitelisted
+                // TODO: maybe perform additional checks:
+                // - some token asset is not whitelisted
+                // - do we have enough balance for the transfer
             }
             EthereumEvent::TransfersToNamada { .. } => {
-                // TODO: check if token is not whitelisted
-
                 // TODO: check nonce of transfers to namada;
                 // for this, we need to store the nonce of
                 // these transfers somewhere
+
+                // TODO: maybe perform additional checks:
+                // - some token asset is not whitelisted
+                // - do we have enough balance for the transfer
             }
             EthereumEvent::UpdateBridgeWhitelist { .. } => {
                 // TODO: check nonce of whitelist update;
