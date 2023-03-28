@@ -197,8 +197,20 @@ where
     ) -> std::result::Result<(), VoteExtensionError> {
         match event {
             EthereumEvent::TransfersToEthereum {
-                nonce: ext_nonce, ..
+                nonce: ext_nonce,
+                transfers,
+                valid_transfers_map,
+                ..
             } => {
+                if transfers.len() != valid_transfers_map.len() {
+                    tracing::debug!(
+                        transfers_len = transfers.len(),
+                        valid_transfers_map_len = valid_transfers_map.len(),
+                        "{}",
+                        VoteExtensionError::TransfersLenMismatch
+                    );
+                    return Err(VoteExtensionError::TransfersLenMismatch);
+                }
                 let current_bp_nonce =
                     self.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
                 if &current_bp_nonce != ext_nonce {
@@ -215,8 +227,20 @@ where
                 // - do we have enough balance for the transfer
             }
             EthereumEvent::TransfersToNamada {
-                nonce: ext_nonce, ..
+                nonce: ext_nonce,
+                transfers,
+                valid_transfers_map,
+                ..
             } => {
+                if transfers.len() != valid_transfers_map.len() {
+                    tracing::debug!(
+                        transfers_len = transfers.len(),
+                        valid_transfers_map_len = valid_transfers_map.len(),
+                        "{}",
+                        VoteExtensionError::TransfersLenMismatch
+                    );
+                    return Err(VoteExtensionError::TransfersLenMismatch);
+                }
                 let current_nam_nonce = self
                     .wl_storage
                     .ethbridge_queries()
