@@ -2,7 +2,7 @@
 1. Wait for the genesis file to be ready, you will receive a `$CHAIN_ID`.
 2. Join the network with the `CHAIN_ID`
 ```bash
-  export CHAIN_ID="public-testnet-5.0.d25aa64ace6"
+  export CHAIN_ID="TBD"
   namada client utils join-network --chain-id $CHAIN_ID
   ```
 3. Start your node and sync
