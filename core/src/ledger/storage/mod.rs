@@ -404,7 +404,7 @@ where
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.get_merkle_tree(height))?;
-            if self.last_epoch.0 > 1 {
+            if self.last_epoch.0 > 0 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
