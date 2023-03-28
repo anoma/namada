@@ -7,7 +7,7 @@ use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage::{BlockHeight, Epoch};
+use namada::types::storage::BlockHeight;
 use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
@@ -107,7 +107,7 @@ where
             tracing::debug!("Dropping vote extension issued at genesis");
             return Err(VoteExtensionError::UnexpectedBlockHeight);
         }
-        self.validate_eth_events(ext_height_epoch, &ext.data)?;
+        self.validate_eth_events(&ext.data)?;
         // get the public key associated with this validator
         let validator = &ext.data.validator_addr;
         let (voting_power, pk) = self
@@ -141,9 +141,8 @@ where
 
     /// Validate a batch of Ethereum events contained in
     /// an [`ethereum_events::Vext`].
-    fn validate_eth_events(
+    pub fn validate_eth_events(
         &self,
-        _epoch: Epoch,
         ext: &ethereum_events::Vext,
     ) -> std::result::Result<(), VoteExtensionError> {
         // verify if we have any duplicate Ethereum events,
@@ -163,7 +162,18 @@ where
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
-        Ok(())
+        ext.ethereum_events.iter().try_for_each(|event| {
+            self.validate_eth_event(ext.block_height, event)
+        })
+    }
+
+    /// Valdidate an [`EthereumEvent`] at the given [`BlockHeight`].
+    pub fn validate_eth_event(
+        &self,
+        _height: BlockHeight,
+        _event: &EthereumEvent,
+    ) -> std::result::Result<(), VoteExtensionError> {
+        todo!()
     }
 
     /// Checks the channel from the Ethereum oracle monitoring
