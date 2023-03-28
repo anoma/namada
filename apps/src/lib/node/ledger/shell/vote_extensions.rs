@@ -28,8 +28,10 @@ const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
 /// The error yielded from validating faulty vote extensions in the shell
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
-    #[error("The bridge pool nonce in the vote extension is outdated")]
-    OutdatedBpNonce,
+    #[error("The bridge pool nonce in the vote extension is invalid")]
+    InvalidBpNonce,
+    #[error("The transfer to Namada nonce in the vote extension is invalid")]
+    InvalidNamNonce,
     #[error("The vote extension was issued for an unexpected block height")]
     UnexpectedBlockHeight,
     #[error("The vote extension was issued for an unexpected epoch")]
