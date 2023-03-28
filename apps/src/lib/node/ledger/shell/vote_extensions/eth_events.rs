@@ -206,11 +206,15 @@ where
             }
             EthereumEvent::TransfersToNamada { .. } => {
                 // TODO: check if token is not whitelisted
+
+                // TODO: check nonce of transfers to namada;
+                // for this, we need to store the nonce of
+                // these transfers somewhere
             }
-            EthereumEvent::ValidatorSetUpdate { .. } => {
-                // no validation required. this is only here
-                // to stop clippy from complaining about not
-                // using the `if-let` destructuring pattern
+            EthereumEvent::UpdateBridgeWhitelist { .. } => {
+                // TODO: check nonce of whitelist update;
+                // for this, we need to store the nonce of
+                // whitelist updates somewhere
             }
             // consider other ethereum event kinds valid
             _ => {}
