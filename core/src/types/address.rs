@@ -100,15 +100,7 @@ pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
+    Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Hash,
 )]
 pub enum Address {
     /// An established address is generated on-chain
@@ -117,6 +109,21 @@ pub enum Address {
     Implicit(ImplicitAddress),
     /// An internal address represents a module with a native VP
     Internal(InternalAddress),
+}
+
+// We're using the string format of addresses (bech32m) for ordering to ensure
+// that addresses as strings, storage keys and storage keys as strings preserve
+// the order.
+impl PartialOrd for Address {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.encode().partial_cmp(&other.encode())
+    }
+}
+
+impl Ord for Address {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.encode().cmp(&other.encode())
+    }
 }
 
 impl Address {
