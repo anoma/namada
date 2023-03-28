@@ -201,6 +201,11 @@ where
                 if &current_bp_nonce != ext_nonce {
                     return Err(VoteExtensionError::OutdatedBpNonce);
                 }
+
+                // TODO: check if token is not whitelisted
+            }
+            EthereumEvent::TransfersToNamada { .. } => {
+                // TODO: check if token is not whitelisted
             }
             EthereumEvent::ValidatorSetUpdate { .. } => {
                 // no validation required. this is only here
