@@ -143,6 +143,9 @@ where
     /// Validate a batch of Ethereum events contained in
     /// an [`ethereum_events::Vext`].
     ///
+    /// The supplied Ethereum events must be ordered in
+    /// ascending ordering, and must not contain any dupes.
+    ///
     /// A detailed description of the validation applied
     /// to each event kind can be found in the docstring
     /// of [`Shell::validate_eth_event`].
