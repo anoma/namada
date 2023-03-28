@@ -14,7 +14,7 @@ use crate::types::hash::Hash;
 use crate::types::key::common::{self, Signature};
 use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
-use crate::types::token::SCALE;
+use crate::types::token::NATIVE_SCALE;
 
 /// Type alias for vote power
 pub type VotePower = u128;
@@ -111,8 +111,8 @@ impl Display for ProposalResult {
             f,
             "{} with {} yay votes over {} ({:.2}%)",
             self.result,
-            self.total_yay_power / SCALE as u128,
-            self.total_voting_power / SCALE as u128,
+            self.total_yay_power / NATIVE_SCALE as u128,
+            self.total_voting_power / NATIVE_SCALE as u128,
             percentage.checked_mul(100.into()).unwrap_or_default()
         )
     }

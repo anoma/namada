@@ -20,6 +20,19 @@ where
     Ok(balance)
 }
 
+/// Read the denomination of a given token, if any.
+pub fn read_denom<S>(
+    storage: &S,
+    token: &Address,
+) -> storage_api::Result<Option<token::Denom>>
+where
+    S: StorageRead,
+{
+    let key = token::denom_key(token);
+    let denom = storage.read::<u8>(&key)?;
+    Ok(denom)
+}
+
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
 /// only happen if the total supply does't fit in `token::Amount`).
