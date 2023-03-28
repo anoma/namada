@@ -142,6 +142,10 @@ where
 
     /// Validate a batch of Ethereum events contained in
     /// an [`ethereum_events::Vext`].
+    ///
+    /// A detailed description of the validation applied
+    /// to each event kind can be found in the docstring
+    /// of [`Shell::validate_eth_event`].
     pub fn validate_eth_events(
         &self,
         ext: &ethereum_events::Vext,
@@ -168,7 +172,22 @@ where
             .try_for_each(|event| self.validate_eth_event(event))
     }
 
-    /// Valdidate an [`EthereumEvent`].
+    /// Valdidate an [`EthereumEvent`] against the current state
+    /// of the ledger.
+    ///
+    /// # Event kinds
+    ///
+    /// In this section, we shall describe the checks perform for
+    /// each kind of relevant Ethereum event.
+    ///
+    /// ## Transfers to Ethereum
+    ///
+    /// We need to check if the nonce in the event corresponds to
+    /// the most recent bridge pool nonce. Unless the nonces match,
+    /// no state updates derived from the event should be applied.
+    /// In case the nonces are different, we reject the event, and
+    /// thus the inclusion of its container Ethereum events vote
+    /// extension.
     pub fn validate_eth_event(
         &self,
         event: &EthereumEvent,
