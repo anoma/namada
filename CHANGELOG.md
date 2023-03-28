@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v0.14.3
+
+Namada 0.14.3 is a bugfix release addressing mainly disk usage
+inefficiencies.
+
+### BUG FIXES
+
+- Check if validators are valid in pre-genesis setup.
+  ([#1140](https://github.com/anoma/namada/pull/1140))
+- Now load conversions from storage even for epoch 1.
+  ([\#1244](https://github.com/anoma/namada/pull/1244))
+
+### IMPROVEMENTS
+
+- Write Merkle tree stores only when a new epoch
+  ([#1113](https://github.com/anoma/namada/issues/1113))
+- Prune old Merkle tree stores.
+  ([#1237](https://github.com/anoma/namada/pull/1237))
+
+### TESTING
+
+- Fixed run_ledger_load_state_and_reset test in debug build.
+  ([#1131](https://github.com/anoma/namada/pull/1131))
+
 ## v0.14.2
 
 Namada 0.14.2 is a maintenance release addressing issues with
