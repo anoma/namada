@@ -23,66 +23,76 @@ Namada groups public goods into four categories, with earmarked pools of funding
   _Engineering_ covers funding for engineering projects related to Namada and Namada, including libraries, optimisations, tooling, alternative interfaces, alternative implementations, integrations, etc. Possible funding forms could include independent developer grants, institutional funding, funding for bug bounties, funding for prizes (e.g. practical performance optimisations), and similar.
 - Social research, art, and philosophy
   _Social research, art, and philosophy_ covers funding for artistic expression, philosophical investigation, and social/community research (_not_ marketing) exploring the relationship between humans and technology. Possible funding forms could include independent artist grants, institutional funding, funding for specific research resources (e.g. travel expenses to a location to conduct a case study), and similar.
+- Education
+  _Education_ covers the funding for open and free to use knowledge, compiled and/or produced by educators in various forms. This can include authors of books, blog-posts, podcasts websites and other educational materials.
+
 - External public goods
   _External public goods_ covers funding for public goods explicitly external to the Namada and Namada ecosystem, including carbon sequestration, independent journalism, direct cash transfers, legal advocacy, etc. Possible funding forms could include direct purchase of tokenised assets such as carbon credits, direct cash transfers (e.g. GiveDirectly), institutional funding (e.g. Wikileaks), and similar.
 
-### Funding amounts
+## The Public Goods Stewards
 
-In Namada, up to 10% inflation per annum of the NAM token is directed to this public goods mechanism. The further division of these funds is entirely up to the discretion of the elected PGF council.
+The funding of public goods on Namada will be conducted through a structure we call "Public Goods Stewards".
 
-Namada encourages the public goods council to adopt a default social consensus of an equal split between categories, meaning 1.25% per annum inflation for each category (e.g. 1.25% for technical research continuous funding, 1.25% for technical research retroactive PGF). If no qualified recipients are available, funds may be redirected or burnt.
+Stewards are elected by governance through a governance proposal. Each Steward will be specialised in funding a subset of categories, which they specify during their election. Stewards can then "propose" funding of various public goods, which will pass by default. However, Governance retains the power to veto any proposal, which would result in the Steward being removed from the set of Stewards.
 
-The Namada PGF council is also granted a 5% income as a reward for conducting PGF activities (5% * 10% = 0.05% of total inflation). This will be a governance parameter subject to change.
+## Voting for the Steward
 
-## Voting for the Council
-
-### Constructing the council
-All valid PGF councils will be established multisignature account addresses. These must be created by the intdended parties that wish to create a council. The council will therefore have the discretion to decide what threshold will be required for their multisig (i.e the "k" in the "k out of n").
+### What is a Steward (technically)?
+All valid PGF stewards will be established multisignature account addresses. These must be created by the intdended parties (which may very well be just one person, but could be more) that wish to represent the stewards entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity.
 
 
-### Proposing Candidacy
-The council will be responsible to publish this address to voters and express their desired `spending_cap`.
+### Becoming a Steward
+The first step towards becoming a Steward is to instantiate a multisignature account. This is done through the CLI.
 
-The `--spending-cap` argument is an `Amount`, which indicates the maximum amount of NAM available to the PGF council that the PGF council is able to spend during their term. If the spending cap is greater than the total balance available to the council, the council will be able to spend up to the full amount of NAM allocated to them (i.e the spending cap can not increase their allowance).
+In order to propose candidacy as a PGF Steward, the Steward must initiate a custom governance proposal. At the cost of deposited NAM, the governance proposal is broadcasted on-chain and governance is able to vote on whether the Steward-applicant will be accepted or not. Together with this proposal, the applicant is encouraged to provide a motivational statement as to why they should be entrusted with the responsibility of proposing public goods candidates. This will also include a commitment to at least one of the categories of public goods funding that social consensus has established (or propose their own category, which would inherintly introduce a new category into social consensus, should the proposal be accepted).
 
-A council consisting of the same members should also be able to propose multiple spending caps (with the same multisig address). These will be voted on as separate councils and votes counted separately.
+Proposing candidacy as a PGF Steward is something that is done at any time.
 
-Proposing candidacy as a PGF council is something that is done at any time. This simply signals to the rest of governance that a given established multisignature account address is willing to be voted on during a PGF council election in the future.
+### Losing Stewardship Status
 
-Candidacy proposals last a default of 30 epochs. There is no limit to the number of times a council can be proposed for candidacy. This helps ensure that no PGF council is elected that does not intend to become one.
+There are 3 ways that a Steward be removed from the Steward Set:
 
-The structure of the candidacy proposal should be 
+1. Resign as a steward
+2. Have a failed funding proposal
+3. Become voted out through a governance proposal
 
-```rust 
-  Map< epoch: Epoch, (council: Council, attestation: Url)>
-```
+Resigning as a Steward is straight-forward. A simple CLI is implemented to allow for this so that the established account representing the Steward loses their priveleges as a PG Steward.
+
+When a Steward's funding proposal is rejected (remember that the threshold for this to occur is at lest $\frac{2/3}$), then the proposal does not pass. In addition to this, it is likely that there would only be such wide-speread disagreement if the proposal was misaligned with the users the Stewards is attempting to cater to. This is described in more detail under [its section](#proposing-funding).
+
+Finally, the Steward can be "voted-out" from its responsibility through a custom governance proposal similar to the one used to elect the Steward in the first place!
+
+#### "Voting-out" the Steward
+
+In the same way that a Steward can be voted in by Namada governance through a custom proposal, the equal and opposite force exists. Hence, any governance member (validator or delegate), is able to initiate a vote (for the relevant cost) in order to remove an arbitrary number of current PGF Stewards. If this proposal passes, it signals that the Steward has not fulfilled their duty, as the public, which the Steward is meant to serve (hence the name), is unhappy with the Steward's service.
+
 
 ### Initiating the vote
 
-Before a new PGF council can be elected, a governance proposal that suggests a new PGF council must pass. This vote is handled by the governancea proposal type `PgfProposal`.
+Before a new PGF Steward can either be elected or removed, a governance proposal that specifies this objective must pass. The voting on this proposal is handled by the governance proposal type `CustomProposal`.
 
-The the struct of `PgfProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
+The struct of `PgfProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
 
 ```rust
-struct PgfProposal{
+struct CustomProposal{
   id: u64
   content: Vec<u8>,
   author: Address,
-  r#type: PGFCouncil,
+  r#type: PGFSteward,
   votingStartEpoch: Epoch,
   votingEndEpoch: Epoch,
   graceEpoch: Epoch,
 }
 ```
 
-The above proposal type exists in order to determine *whether* a new PGF council will be elected. In order for a new PGF council to be elected (and hence halting the previous council's power), $\frac{1}{3}$ of validating power must vote on the `PgfProposal` and more than half of the votes must be in favor. If more than half of the votes are against no council is elected and the previous council's ability to spend funds (if applicable) is revoked. [Approval voting](https://en.wikipedia.org/wiki/Approval_voting#:~:text=Approval%20voting%20allows%20voters%20to,consider%20to%20be%20reasonable%20choices.) is employed in order to elect the new PGF council, *whilst* the `PgfProposal` is active. In other words, voters may vote for multiple PGF councils, and the council & spending cap pair with the greatest proportion of votes will be elected.
+ In order for a new PGF Steward to be elected (or removed), $\frac{2}{3}$ of validating power must vote on the `CustomProposal` and more than half of the votes must be in favor. If more than half of the votes are against the proposal, the Steward set is kept the same, and the proposer of the proposal loses their escrowed funds.
 
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
-### Voting on the council
-After the `PgfProposal` has been submitted, and once the council has been constructed and broadcast, the council address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+### Voting on the Steward
+After the `CustomProposal` has been submitted, and once the Steward's address has been constructed and broadcasted, the Steward address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
-The vote for a set of PGF council addresses will be constructed as follows.
+The vote for a Steward addresses's membership will be constructed as follows:
 
 Each participant submits a vote through governance:
 ```rust
@@ -93,24 +103,18 @@ struct OnChainVote {
 }
 ```
 
-In turn, the proposal vote will include the structure:
+Where the proposalVote is simply an enum dictating whether the voter voted `Yay` or `Nay` to the proposed candidate change.
 
-```rust
-HashSet<(address: Address, spending_cap: Amount)>
-```
-
-The structure contains all the counsils voted, where each cousil is specified as a pair `Address` (the enstablished address of the multisig account) and `Amount` (spending cap).
-
-These votes will then be used in order to vote for various PGF councils. Multiple councils can be voted on through a vector as represented above.
 
 #### Dealing with ties
-In the rare occurance of a tie, the council with the lower spending_cap will win the tiebreak.
+In the rare occurance of a tie, the Steward retains membership by default.
 
-In the case of equal tiebreaks, the addresses with lower alphabetical order will be chosen. This is very arbitrary due to the expected low frequency.
 
 ### Electing the council
 
-Once the elected council has been decided upon, the established address corresponding to the multisig is added to the `PGF` internal address, and the `spending_cap` variable is stored. The variable `amount_spent` is also reset from the previous council, which is a variable in storage meant to track the spending of the active PGF council.
+Once the decision has been made on whether to elect (or remove) the intended Steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
+
+Do we want to keep track of the Stewards' spendings (so that one doesn't simply steamroll the others)? 
 
 ### Example
 
@@ -119,25 +123,24 @@ The below example hopefully demonstrates the mechanism more clearly.
 ````admonish note
 The governance set consists of Alice, Bob, Charlie, Dave, and Elsa. Each member has 20% voting power.
 
-The current PGF council consits of Dave and Elsa.
+The current PGF Stewards are Dave and Elsa.
 
-- At epoch 42, Alice proposes the `PgfProposal` with the following struct:
+- At epoch 42, Bob and Charlie decide to put themselves forward as a joint PGF Steward. They construct a multisig with address `0xBobCharlieMultisig`. 
+- At epoch 42, Bob proposes his and Charlie's candidacy through a `CustomProposal`:
 
 ```rust
-struct PgfProposal{
+struct CustomProposal{
   id: 2
   content: Vec<32,54,01,24,13,37>, // (Just the byte representation of the content (description) of the proposal)
-  author: 0xalice,
-  r#type: PGFCouncil,
+  author: 0xCharlie,
+  r#type: CustomProposal,
   votingStartEpoch: Epoch(45),
   votingEndEpoch: Epoch(54),
   graceEpoch: Epoch(57),
 }
 ```
 
-- At epoch 47, after seeing this proposal go live, Bob and Charlie decide to put themselves forward as a PGF council. They construct a multisig with address `0xBobCharlieMultisig` and broadcast it on Namada using the CLI. They set their `spending_cap` to `1_000_000`. (They could have done this before the proposal went live as well).
-
-- At epoch 48, Elsa broadcasts a multisig PGF council address which includes herself and her sister. They set their `spending_cap: 500_000`, meaning they restrict themselves to spending 500,000 NAM.
+This proposal proposes the candidate 0xBobCharlieMultisig as a Steward. 
 
 - At epoch 49, Alice submits the vote:
 
@@ -148,29 +151,22 @@ struct OnChainVote {
     yay: proposalVote,
 }
 ```
+Where the proposalVote is simply `Yay` with an empty memo field.
 
-Whereby the `proposalVote` includes
-```rust
-HashSet<(address: 0xBobCharlieMultisig, spending_cap: 1_000_000)>
-```
-
-- At epoch 49, Bob submits an identical transaction.
+- At epoch 49, Bob and Elsa submit an identical transaction.
 
 - At epoch 50, Dave votes `Nay` on the proposal.
 
-- At epoch 51, Elsa votes `Yay` but on the Councils `(address: 0xElsaAndSisterMultisig, spending_cap: 1_000_000)`  AND `(address: 0xBobCharlieMultisig, spending_cap: 1_000_000)`.
+- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 66% of the voting power voted on this proposal (everyone except Charlie, who forgot to vote on her own proposal), the intitial condition is passed and the Proposal is active. Further, because out of the total votes, most were `Yay`, (75% > 50% threshold), the new Steward consisting of Bob and Charlie will be added to the Steward set. 
 
-- At epoch 54, the voting period ends and the votes are tallied. Since 80% > 33% of the voting power voted on this proposal (everyone except Charlie), the intitial condition is passed and the Proposal is active. Further, because out of the total votes, most were `Yay`, (75% > 50% threshold), a new council will be elected. The council that received the most votes, in this case `0xBobCharlieMultisig` is elected the new PGF council. The Council `(address: 0xElsaAndSisterMultisig, spending_cap: 50)` actually received 0 votes because Elsa's vote included the wrong spending_cap.
-
-- At epoch 57, Bob and Charlie have the effective power to carry out Public Goods Funding transactions.
+- At epoch 57, Bob and Charlie have the effective power to propose Public Goods Funding transactions (that may or may not be vetoed).
 ````
 
 ## Mechanism
 
-Once elected and instantiated, members of the PGF council will then unilaterally be able to propose and sign transactions for this purpose. The PGF council multisig will have an "allowance" to spend up to the `PGF` internal address's balance multiplied by the `spending_cap` variable.  Consensus on these transactions, in addition to motivation behind them will be handled off-chain, and should be recorded for the purposes of the "End of Term Summary".
+Once elected and instantiated, PGF Stewards will then unilaterally be able to propose and sign transactions that propose either RPGF or CPGF funding. The PGF Stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
 
-
-### PGF council transactions
+### Proposing Funding
 The PGF council members will be responsible for collecting signatures offline. One member will then be responsinble for submitting a transaction containing at least $k $ out of the signatures.
 
 The collecting member of the council will then be responsible for submitting this tx through the multisig. The multisig will only accept the tx if this is true.
