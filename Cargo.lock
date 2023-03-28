@@ -2423,8 +2423,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.5.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.5.0#0e54d07745366435a54379d863e68c027f0087f1"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -2434,18 +2434,30 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.5.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.5.0#0e54d07745366435a54379d863e68c027f0087f1"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
+ "ethabi",
  "ethbridge-structs",
  "ethers",
  "ethers-contract",
 ]
 
 [[package]]
+name = "ethbridge-events"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
+dependencies = [
+ "ethbridge-bridge-events",
+ "ethbridge-governance-events",
+ "ethers",
+ "smallvec 1.10.0",
+]
+
+[[package]]
 name = "ethbridge-governance-contract"
-version = "0.5.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.5.0#0e54d07745366435a54379d863e68c027f0087f1"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
  "ethbridge-governance-events",
  "ethbridge-structs",
@@ -2455,9 +2467,10 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-events"
-version = "0.5.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.5.0#0e54d07745366435a54379d863e68c027f0087f1"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
+ "ethabi",
  "ethbridge-structs",
  "ethers",
  "ethers-contract",
@@ -2465,11 +2478,12 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.5.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.5.0#0e54d07745366435a54379d863e68c027f0087f1"
+version = "0.17.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.17.0#da943c4723fb41fcae650e3fc4c0a8888f36e647"
 dependencies = [
  "ethabi",
  "ethers",
+ "ethers-contract",
 ]
 
 [[package]]
@@ -4776,7 +4790,10 @@ dependencies = [
  "ed25519-consensus",
  "ethabi",
  "ethbridge-bridge-contract",
+ "ethbridge-bridge-events",
+ "ethbridge-events",
  "ethbridge-governance-contract",
+ "ethbridge-governance-events",
  "eyre",
  "ferveo",
  "ferveo-common",

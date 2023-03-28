@@ -1130,6 +1130,7 @@ mod test_ethbridge_router {
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
             transfers: vec![event_transfer.clone()],
+            valid_transfers_map: vec![true],
             relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);

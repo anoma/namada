@@ -338,6 +338,7 @@ async fn test_bridge_pool_e2e() {
             sender: berthas_addr.clone(),
             gas_payer: berthas_addr.clone(),
         }],
+        valid_transfers_map: vec![true],
         relayer: berthas_addr,
     };
 
@@ -437,6 +438,7 @@ async fn test_wnam_transfer() -> Result<()> {
     let transfers = EthereumEvent::TransfersToNamada {
         nonce: 1.into(),
         transfers: vec![wnam_transfer.clone()],
+        valid_transfers_map: vec![true],
     };
 
     let mut client = EventsEndpointClient::default();

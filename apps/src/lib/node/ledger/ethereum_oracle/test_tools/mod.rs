@@ -2,9 +2,12 @@ pub mod events_endpoint;
 
 #[cfg(test)]
 pub mod mock_web3_client {
+    use std::borrow::Cow;
     use std::cell::RefCell;
     use std::fmt::Debug;
+    use std::marker::PhantomData;
 
+    use ethbridge_events::EventCodec;
     use num256::Uint256;
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,
@@ -13,7 +16,6 @@ pub mod mock_web3_client {
     use web30::types::Log;
 
     use super::super::super::ethereum_oracle::Error;
-    use super::super::events::signatures::*;
     use crate::node::ledger::ethereum_oracle::SyncStatus;
 
     /// Commands we can send to the mock client
@@ -31,15 +33,7 @@ pub mod mock_web3_client {
     }
 
     /// The type of events supported
-    #[derive(Debug, PartialEq)]
-    pub enum MockEventType {
-        TransferToNamada,
-        TransferToEthereum,
-        ValSetUpdate,
-        NewContract,
-        UpgradedContract,
-        BridgeWhitelist,
-    }
+    pub type MockEventType = &'static str;
 
     /// A pointer to a mock Web3 client. The
     /// reason is for interior mutability.
@@ -140,23 +134,11 @@ pub mod mock_web3_client {
             block_to_check: Uint256,
             _: Option<Uint256>,
             _: impl Debug,
-            mut events: Vec<&str>,
+            mut events: Vec<MockEventType>,
         ) -> eyre::Result<Vec<Log>> {
             self.check_cmd_channel();
             if self.0.borrow().active {
-                let ty = match events.remove(0) {
-                    TRANSFER_TO_NAMADA_SIG => MockEventType::TransferToNamada,
-                    TRANSFER_TO_ETHEREUM_SIG => {
-                        MockEventType::TransferToEthereum
-                    }
-                    VALIDATOR_SET_UPDATE_SIG => MockEventType::ValSetUpdate,
-                    NEW_CONTRACT_SIG => MockEventType::NewContract,
-                    UPGRADED_CONTRACT_SIG => MockEventType::UpgradedContract,
-                    UPDATE_BRIDGE_WHITELIST_SIG => {
-                        MockEventType::BridgeWhitelist
-                    }
-                    _ => return Ok(vec![]),
-                };
+                let ty = events.remove(0);
                 let mut logs = vec![];
                 let mut events = vec![];
                 let mut client = self.0.borrow_mut();
@@ -185,6 +167,19 @@ pub mod mock_web3_client {
             } else {
                 Err(eyre::eyre!("Uh oh, I'm not responding"))
             }
+        }
+    }
+
+    /// Get the signature of the given Ethereum event.
+    pub fn event_signature<C>() -> &'static str
+    where
+        PhantomData<C>: EventCodec,
+    {
+        match PhantomData::<C>.event_signature() {
+            Cow::Borrowed(s) => s,
+            _ => unreachable!(
+                "All Ethereum events should have a static ABI signature"
+            ),
         }
     }
 }

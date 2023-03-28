@@ -74,7 +74,7 @@ data-encoding = "2.3.2"
 derivative = "2.2.0"
 ed25519-consensus = "1.2.0"
 ethabi = "18.0.0"
-ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.5.0" }
+ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.17.0" }
 eyre = "0.6.8"
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "9e5e91c954158e7cff45c483fd06cd649a81553f"}

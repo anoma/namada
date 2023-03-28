@@ -2,10 +2,12 @@ pub mod control;
 pub mod events;
 pub mod test_tools;
 
+use std::borrow::Cow;
 use std::ops::{ControlFlow, Deref};
 use std::time::Duration;
 
 use clarity::Address;
+use ethbridge_events::{event_codecs, EventKind};
 use eyre::eyre;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::oracle::config::Config;
@@ -20,7 +22,7 @@ use tokio::time::Instant;
 use web30::client::Web3;
 use web30::jsonrpc::error::Web3Error;
 
-use self::events::{signatures, PendingEvent};
+use self::events::PendingEvent;
 #[cfg(test)]
 use self::test_tools::mock_web3_client::Web3;
 use super::abortable::AbortableSpawner;
@@ -351,12 +353,16 @@ async fn process(
     );
     // check for events in Ethereum blocks that have reached the minimum number
     // of confirmations
-    for sig in signatures::SIGNATURES {
-        let addr: Address = match signatures::SigType::from(sig) {
-            signatures::SigType::Bridge => config.bridge_contract.0.into(),
-            signatures::SigType::Governance => {
-                config.governance_contract.0.into()
-            }
+    for codec in event_codecs() {
+        let sig = match codec.event_signature() {
+            Cow::Borrowed(s) => s,
+            _ => unreachable!(
+                "All Ethereum events should have a static ABI signature"
+            ),
+        };
+        let addr: Address = match codec.kind() {
+            EventKind::Bridge => config.bridge_contract.0.into(),
+            EventKind::Governance => config.governance_contract.0.into(),
         };
         tracing::debug!(
             ?block_to_process,
@@ -394,11 +400,12 @@ async fn process(
                 )
             }
             logs.into_iter()
+                .map(Web30LogExt::into_ethabi)
                 .filter_map(|log| {
                     match PendingEvent::decode(
-                        sig,
+                        codec,
                         block_to_process.clone().into(),
-                        log.data.0.as_slice(),
+                        &log,
                         u64::from(config.min_confirmations).into(),
                     ) {
                         Ok(event) => Some(event),
@@ -467,6 +474,28 @@ fn process_queue(
     confirmed
 }
 
+/// Extra methods for [`web30::types::Log`] instances.
+trait Web30LogExt {
+    /// Convert a [`web30`] event log to the corresponding
+    /// [`ethabi`] type.
+    fn into_ethabi(self) -> ethabi::RawLog;
+}
+
+impl Web30LogExt for web30::types::Log {
+    fn into_ethabi(self) -> ethabi::RawLog {
+        let topics = self
+            .topics
+            .iter()
+            .filter_map(|topic| {
+                (topic.len() == 32)
+                    .then(|| ethabi::Hash::from_slice(topic.as_slice()))
+            })
+            .collect();
+        let data = self.data.0;
+        ethabi::RawLog { topics, data }
+    }
+}
+
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
     use namada::core::types::ethereum_structs;
@@ -487,17 +516,20 @@ pub mod last_processed_block {
 mod test_oracle {
     use std::num::NonZeroU64;
 
+    use ethbridge_bridge_events::{
+        TransferToErcFilter, TransferToNamadaFilter,
+    };
+    use namada::eth_bridge::ethers::abi::AbiEncode;
+    use namada::eth_bridge::ethers::types::H160;
+    use namada::eth_bridge::structs::Erc20Transfer;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
     use super::*;
-    use crate::node::ledger::ethereum_oracle::events::{
-        ChangedContract, RawTransfersToEthereum,
-    };
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
-        MockEventType, TestCmd, Web3,
+        event_signature, TestCmd, Web3,
     };
 
     /// The data returned from setting up a test
@@ -636,15 +668,17 @@ mod test_oracle {
             .send(TestCmd::NewHeight(min_confirmations.into()))
             .expect("Test failed");
 
-        let new_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let new_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
         let (sender, _) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: new_event,
                 height: 101,
                 seen: sender,
@@ -690,15 +724,17 @@ mod test_oracle {
             .send(TestCmd::Unresponsive)
             .expect("Test failed");
         // send a new event to the oracle
-        let new_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let new_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
         let (sender, mut seen) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: new_event,
                 height: 150,
                 seen: sender,
@@ -749,24 +785,27 @@ mod test_oracle {
             .expect("Test failed");
 
         // confirmed after 100 blocks
-        let first_event = ChangedContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let first_event = TransferToNamadaFilter {
+            nonce: 1337.into(),
+            transfers: vec![],
+            valid_map: vec![],
+            confirmations: 100.into(),
         }
         .encode();
 
         // confirmed after 125 blocks
         let gas_payer = gen_established_address();
-        let second_event = RawTransfersToEthereum {
-            transfers: vec![TransferToEthereum {
-                amount: Default::default(),
-                asset: EthAddress([0; 20]),
-                sender: gas_payer.clone(),
-                receiver: EthAddress([1; 20]),
-                gas_amount: Default::default(),
-                gas_payer: gas_payer.clone(),
+        let second_event = TransferToErcFilter {
+            transfers: vec![Erc20Transfer {
+                amount: 0.into(),
+                from: H160([0; 20]),
+                sender: gas_payer.to_string(),
+                to: H160([1; 20]),
+                fee: 0.into(),
+                fee_from: gas_payer.to_string(),
             }],
-            relayer: gas_payer.clone(),
+            valid_map: vec![true],
+            relayer_address: gas_payer.to_string(),
             nonce: 1.into(),
         }
         .encode();
@@ -775,7 +814,7 @@ mod test_oracle {
         let (sender, seen_second) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::TransferToEthereum,
+                event_type: event_signature::<TransferToErcFilter>(),
                 data: second_event,
                 height: 125,
                 seen: sender,
@@ -784,7 +823,7 @@ mod test_oracle {
         let (sender, _recv) = channel();
         admin_channel
             .send(TestCmd::NewEvent {
-                event_type: MockEventType::NewContract,
+                event_type: event_signature::<TransferToNamadaFilter>(),
                 data: first_event,
                 height: 100,
                 seen: sender,
@@ -798,9 +837,15 @@ mod test_oracle {
             .expect("Test failed");
         // check the correct event is received
         let event = eth_recv.recv().await.expect("Test failed");
-        if let EthereumEvent::NewContract { name, address } = event {
-            assert_eq!(name.as_str(), "Test");
-            assert_eq!(address, EthAddress([0; 20]));
+        if let EthereumEvent::TransfersToNamada {
+            nonce,
+            transfers,
+            valid_transfers_map: valid_map,
+        } = event
+        {
+            assert_eq!(nonce, 1337.into());
+            assert!(transfers.is_empty());
+            assert!(valid_map.is_empty());
         } else {
             panic!("Test failed, {:?}", event);
         }

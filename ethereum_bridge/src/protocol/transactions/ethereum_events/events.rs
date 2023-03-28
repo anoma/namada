@@ -43,9 +43,18 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match &event {
-        EthereumEvent::TransfersToNamada { transfers, .. } => {
-            act_on_transfers_to_namada(wl_storage, transfers)
-        }
+        EthereumEvent::TransfersToNamada {
+            transfers,
+            valid_transfers_map,
+            ..
+        } => act_on_transfers_to_namada(
+            wl_storage,
+            transfers
+                .iter()
+                .zip(valid_transfers_map.iter())
+                .filter_map(|(transf, valid)| valid.then_some(transf)),
+        ),
+        // TODO(namada:#1257): handle invalid transfer to Ethereum events
         EthereumEvent::TransfersToEthereum {
             transfers, relayer, ..
         } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
@@ -56,9 +65,9 @@ where
     }
 }
 
-fn act_on_transfers_to_namada<D, H>(
+fn act_on_transfers_to_namada<'tx, D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    transfers: &[TransferToNamada],
+    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -491,6 +500,7 @@ mod tests {
             EthereumEvent::TransfersToEthereum {
                 nonce: arbitrary_nonce(),
                 transfers: vec![],
+                valid_transfers_map: vec![],
                 relayer: gen_implicit_address(),
             },
             EthereumEvent::UpdateBridgeWhitelist {
@@ -536,6 +546,7 @@ mod tests {
         }];
         let event = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
+            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
         };
 
@@ -605,6 +616,7 @@ mod tests {
         }
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
+            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
             relayer: relayer.clone(),
         };
@@ -687,6 +699,7 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers: vec![],
+            valid_transfers_map: vec![],
             relayer: gen_implicit_address(),
         };
         let _ = act_on(&mut wl_storage, &event).unwrap();

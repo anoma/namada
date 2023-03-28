@@ -139,6 +139,7 @@ pub async fn send_transfer_to_namada_event(
     let transfers = EthereumEvent::TransfersToNamada {
         nonce: nonce.into(),
         transfers: vec![transfer.clone()],
+        valid_transfers_map: vec![true],
     };
 
     // TODO(namada#1055): right now, we use a hardcoded Ethereum events endpoint
