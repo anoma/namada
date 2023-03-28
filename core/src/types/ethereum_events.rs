@@ -1,93 +1,19 @@
 //! Types representing data intended for Namada via Ethereum events
 
-use std::fmt::{Display, Formatter};
-use std::ops::Add;
+use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types::H160;
-use ethabi::{Token, Uint as ethUint};
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
+use super::uint::Uint;
 use crate::types::address::Address;
-use crate::types::eth_abi::Encode;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::token::Amount;
-
-/// Namada native type to replace the ethabi::Uint type
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-pub struct Uint(pub [u64; 4]);
-
-impl Uint {
-    /// Convert to a little endian byte representation of
-    /// a uint256.
-    pub fn to_bytes(self) -> [u8; 32] {
-        let mut bytes = [0; 32];
-        ethUint::from(self).to_little_endian(&mut bytes);
-        bytes
-    }
-}
-
-impl Display for Uint {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        ethUint::from(self).fmt(f)
-    }
-}
-
-impl Encode<1> for Uint {
-    fn tokenize(&self) -> [Token; 1] {
-        [Token::Uint(self.into())]
-    }
-}
-
-impl From<ethUint> for Uint {
-    fn from(value: ethUint) -> Self {
-        Self(value.0)
-    }
-}
-
-impl From<Uint> for ethUint {
-    fn from(value: Uint) -> Self {
-        Self(value.0)
-    }
-}
-
-impl From<&Uint> for ethUint {
-    fn from(value: &Uint) -> Self {
-        Self(value.0)
-    }
-}
-
-impl From<u64> for Uint {
-    fn from(value: u64) -> Self {
-        ethUint::from(value).into()
-    }
-}
-
-impl Add<u64> for Uint {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        (ethUint::from(self) + rhs).into()
-    }
-}
 
 /// Representation of address on Ethereum. The inner value is the last 20 bytes
 /// of the public key that controls the account.
@@ -424,7 +350,7 @@ pub mod testing {
     }
 
     pub fn arbitrary_nonce() -> Uint {
-        123.into()
+        123_u64.into()
     }
 
     pub fn arbitrary_keccak_hash() -> KeccakHash {
