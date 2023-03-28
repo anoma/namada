@@ -202,17 +202,34 @@ where
                 let current_bp_nonce =
                     self.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
                 if &current_bp_nonce != ext_nonce {
-                    return Err(VoteExtensionError::OutdatedBpNonce);
+                    tracing::debug!(
+                        %current_bp_nonce,
+                        %ext_nonce,
+                        "The Ethereum events vote extension's BP nonce is \
+                         invalid"
+                    );
+                    return Err(VoteExtensionError::InvalidBpNonce);
                 }
                 // TODO: maybe perform additional checks:
                 // - some token asset is not whitelisted
                 // - do we have enough balance for the transfer
             }
-            EthereumEvent::TransfersToNamada { .. } => {
-                // TODO: check nonce of transfers to namada;
-                // for this, we need to store the nonce of
-                // these transfers somewhere
-
+            EthereumEvent::TransfersToNamada {
+                nonce: ext_nonce, ..
+            } => {
+                let current_nam_nonce = self
+                    .wl_storage
+                    .ethbridge_queries()
+                    .get_namada_transfers_nonce();
+                if &current_nam_nonce != ext_nonce {
+                    tracing::debug!(
+                        %current_nam_nonce,
+                        %ext_nonce,
+                        "The Ethereum events vote extension's transfer to \
+                         Namada nonce is invalid"
+                    );
+                    return Err(VoteExtensionError::InvalidNamNonce);
+                }
                 // TODO: maybe perform additional checks:
                 // - some token asset is not whitelisted
                 // - do we have enough balance for the transfer
