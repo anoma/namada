@@ -1,12 +1,13 @@
 //! Types representing data intended for Namada via Ethereum events
 
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use ethabi::ethereum_types::H160;
-use ethabi::{Token, Uint as ethUint};
+use ethabi::ethereum_types::{H160, U256 as ethUint};
+use ethabi::Token;
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
@@ -25,8 +26,6 @@ use crate::types::token::Amount;
     Hash,
     PartialEq,
     Eq,
-    PartialOrd,
-    Ord,
     Serialize,
     Deserialize,
     BorshSerialize,
@@ -34,6 +33,20 @@ use crate::types::token::Amount;
     BorshSchema,
 )]
 pub struct Uint(pub [u64; 4]);
+
+impl PartialOrd for Uint {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        ethUint(self.0).partial_cmp(&ethUint(other.0))
+    }
+}
+
+impl Ord for Uint {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        ethUint(self.0).cmp(&ethUint(other.0))
+    }
+}
 
 impl Uint {
     /// Convert to a little endian byte representation of
