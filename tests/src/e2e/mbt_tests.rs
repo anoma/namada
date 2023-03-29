@@ -63,7 +63,7 @@ impl NamadaBlockchain {
                 .unwrap_or(20);
 
             let test = setup::network(
-                |genesis| {
+                |mut genesis| {
                     let parameters = ParametersConfig {
                         // min num of blocks per epoch
                         min_num_of_blocks: 2,
@@ -78,6 +78,14 @@ impl NamadaBlockchain {
                         unbonding_len: UNBONDING_LEN,
                         ..genesis.pos_params
                     };
+
+                    let tla_init_bond = state
+                        .get(&format!("totalDelegated.\\#map.#(0=\"val\").1"))
+                        .i64() as u64;
+
+                    let validator_0 =
+                        genesis.validator.get_mut("validator-0").unwrap();
+                    validator_0.tokens = Some(tla_init_bond);
 
                     setup::set_validators(
                         num_of_validators,
