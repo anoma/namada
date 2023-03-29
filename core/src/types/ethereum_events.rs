@@ -53,14 +53,14 @@ impl Uint {
     /// a uint256.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
-        ethUint::from(self).to_little_endian(&mut bytes);
+        ethUint(self.0).to_little_endian(&mut bytes);
         bytes
     }
 }
 
 impl Display for Uint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        ethUint::from(self).fmt(f)
+        ethUint(self.0).fmt(f)
     }
 }
 
@@ -98,7 +98,7 @@ impl Add<u64> for Uint {
     type Output = Self;
 
     fn add(self, rhs: u64) -> Self::Output {
-        (ethUint::from(self) + rhs).into()
+        (ethUint(self.0) + rhs).into()
     }
 }
 
