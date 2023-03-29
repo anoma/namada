@@ -24,7 +24,10 @@ Namada groups public goods into four categories, with earmarked pools of funding
 - Social research, art, and philosophy
   _Social research, art, and philosophy_ covers funding for artistic expression, philosophical investigation, and social/community research (_not_ marketing) exploring the relationship between humans and technology. Possible funding forms could include independent artist grants, institutional funding, funding for specific research resources (e.g. travel expenses to a location to conduct a case study), and similar.
 - Education
-  _Education_ covers the funding for open and free to use knowledge, compiled and/or produced by educators in various forms. This can include authors of books, blog-posts, podcasts websites and other educational materials.
+  _Education_ covers the funding for open and free to use knowledge, compiled and/or produced by educators in various forms. This can include authors of books, blog-posts, podcasts websites and other educational materials. In a sense, this is a type of *meta public good*, as open knowledge often sparks more open knowledge, although not necessarily
+
+- Meta Public Goods
+_Meta public goods_ covers funding for any good that increases the production or existence of other public goods. The management of forums, libraries, quadratic funding protocols, dominant assurance contracts, etc. are good examples of this.
 
 - External public goods
   _External public goods_ covers funding for public goods explicitly external to the Namada and Namada ecosystem, including carbon sequestration, independent journalism, direct cash transfers, legal advocacy, etc. Possible funding forms could include direct purchase of tokenised assets such as carbon credits, direct cash transfers (e.g. GiveDirectly), institutional funding (e.g. Wikileaks), and similar.
@@ -114,8 +117,6 @@ In the rare occurance of a tie, the Steward retains membership by default.
 
 Once the decision has been made on whether to elect (or remove) the intended Steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
 
-Do we want to keep track of the Stewards' spendings (so that one doesn't simply steamroll the others)? 
-
 ### Example
 
 The below example hopefully demonstrates the mechanism more clearly.
@@ -151,7 +152,7 @@ struct OnChainVote {
     yay: proposalVote,
 }
 ```
-Where the proposalVote is simply `Yay` with an empty memo field.
+Where the proposalVote is simply the enum `Yay` with an empty memo field.
 
 - At epoch 49, Bob and Elsa submit an identical transaction.
 
@@ -164,12 +165,18 @@ Where the proposalVote is simply `Yay` with an empty memo field.
 
 ## Mechanism
 
-Once elected and instantiated, PGF Stewards will then unilaterally be able to propose and sign transactions that propose either RPGF or CPGF funding. The PGF Stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
+Once elected and instantiated, PGF Stewards will then unilaterally be able to sign transactions that propose either RPGF or CPGF funding. The PGF Stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
 
 ### Proposing Funding
-The PGF council members will be responsible for collecting signatures offline. One member will then be responsinble for submitting a transaction containing at least $k $ out of the signatures.
+In order to propose funding, any Steward will be able to sign a transaction that creates the governance proposal. 
 
-The collecting member of the council will then be responsible for submitting this tx through the multisig. The multisig will only accept the tx if this is true.
+This governance proposal will be such that it passes by default **unless** the following conditions are met:
+
+Conditions to veto a PGF proposal:
+1. At least $\frac{1}{3}$ of voting power voted on the proposal
+2. Out of the votes, more than $50\%$ voted `Nay` on the proposal
+  - Further, if at least $\frac{2}{3}$ of voting power voted on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
+
 
 The PGF council should be able to make both retroactive and continuous public funding transactions. Retroactive public funding transactions should be straightforward and implement no additional logic to a normal transfer.
 
