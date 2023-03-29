@@ -482,8 +482,7 @@ mod test_process_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
-            let encrypted_tx =
-                EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
+            let encrypted_tx = tx.to_bytes();
             let wrapper = WrapperTx::new(
                 Fee {
                     amount: i.into(),
@@ -670,7 +669,7 @@ mod test_process_proposal {
         let pubkey = EncryptionKey::default();
         // not valid tx bytes
         let tx = "garbage data".as_bytes().to_owned();
-        let inner_tx = EncryptedTx::encrypt(&tx, pubkey);
+        let inner_tx = tx.clone();
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),

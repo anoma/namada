@@ -76,7 +76,7 @@ pub mod decrypted_tx {
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        inner_tx: Option<EncryptedTx>,
+        inner_tx: Option<Vec<u8>>,
     ) -> bool {
         match decrypted {
             // A tx is decryptable if it contains the literal code inside it

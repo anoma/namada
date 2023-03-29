@@ -565,7 +565,7 @@ mod test_finalize_block {
             Some(String::from("transaction data").as_bytes().to_owned()),
         );
         let encrypted_raw_tx =
-            EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
+            raw_tx.to_bytes();
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),
@@ -620,9 +620,7 @@ mod test_finalize_block {
         // not valid tx bytes
         let tx = "garbage data".as_bytes().to_owned();
         let inner_tx =
-            namada::types::transaction::encrypted::EncryptedTx::encrypt(
-                &tx, pubkey,
-            );
+            tx.clone();
         let wrapper = WrapperTx {
             fee: Fee {
                 amount: 0.into(),
@@ -701,7 +699,7 @@ mod test_finalize_block {
                 ),
             );
             let encrypted_raw_tx =
-                EncryptedTx::encrypt(&raw_tx.to_bytes(), Default::default());
+                raw_tx.to_bytes();
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: MIN_FEE.into(),

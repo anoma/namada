@@ -218,10 +218,10 @@ pub mod wrapper_tx {
         pub fn decrypt(
             &self,
             privkey: <EllipticCurve as PairingEngine>::G2Affine,
-            inner_tx: EncryptedTx,
+            inner_tx: Vec<u8>,
         ) -> Result<Tx, WrapperTxErr> {
             // decrypt the inner tx
-            let decrypted = inner_tx.decrypt(privkey);
+            let decrypted = inner_tx;
             // convert back to Tx type
             let decrypted_tx = Tx::try_from(decrypted.as_ref())
                 .map_err(|_| WrapperTxErr::InvalidTx)?;
@@ -469,10 +469,7 @@ pub mod wrapper_tx {
                 Tx::new("Give me all the money".as_bytes().to_owned(), None);
 
             // We replace the inner tx with a malicious one
-            let inner_tx = EncryptedTx::encrypt(
-                &malicious.to_bytes(),
-                EncryptionKey(pubkey),
-            );
+            let inner_tx = malicious.to_bytes();
 
             // We change the commitment appropriately
             wrapper.tx_hash = Hash(malicious.partial_hash());

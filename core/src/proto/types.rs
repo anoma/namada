@@ -148,9 +148,6 @@ pub struct Tx {
     pub timestamp: DateTimeUtc,
     pub extra: Vec<u8>,
     /// the encrypted inner transaction if data contains a WrapperTx
-    #[cfg(feature = "ferveo-tpke")]
-    pub inner_tx: Option<EncryptedTx>,
-    #[cfg(not(feature = "ferveo-tpke"))]
     pub inner_tx: Option<Vec<u8>>,
 }
 
@@ -379,28 +376,22 @@ impl Tx {
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
     }
 
+    #[cfg(feature = "ferveo-tpke")]
     /// Attach the given transaction to this one. Useful when the data field
     /// contains a WrapperTx and its tx_hash field needs a witness.
-    #[cfg(feature = "ferveo-tpke")]
     pub fn attach_inner_tx(
         mut self,
         tx: &Tx,
         encryption_key: EncryptionKey,
     ) -> Self {
-        let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
-        self.inner_tx = Some(inner_tx);
+        self.inner_tx = Some(tx.to_bytes());
         self
     }
 
     /// A validity check on the ciphertext.
     #[cfg(feature = "ferveo-tpke")]
     pub fn validate_ciphertext(&self) -> bool {
-        // Check the inner_tx ciphertext if it is there
-        self.inner_tx.as_ref().map(|inner_tx| {
-            inner_tx.0.check(&<EllipticCurve as PairingEngine>::G1Prepared::from(
-                -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-            ))
-        }).unwrap_or(true)
+        true
     }
 }
 

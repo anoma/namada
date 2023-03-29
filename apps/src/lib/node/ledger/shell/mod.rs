@@ -925,7 +925,7 @@ mod test_utils {
         pub fn enqueue_tx(
             &mut self,
             wrapper: WrapperTx,
-            inner_tx: Option<EncryptedTx>,
+            inner_tx: Option<Vec<u8>>,
         ) {
             self.shell.storage.tx_queue.push(TxInQueue {
                 tx: wrapper,
@@ -998,8 +998,7 @@ mod test_utils {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
-        let encrypted_tx =
-            EncryptedTx::encrypt(&tx.to_bytes(), Default::default());
+        let encrypted_tx = tx.to_bytes();
         let wrapper = WrapperTx::new(
             Fee {
                 amount: 0.into(),

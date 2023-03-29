@@ -57,7 +57,7 @@ mod tx_queue {
         /// Wrapper tx
         pub tx: crate::types::transaction::WrapperTx,
         /// the encrypted payload
-        pub inner_tx: Option<EncryptedTx>,
+        pub inner_tx: Option<Vec<u8>>,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet
         /// transactions.
