@@ -1151,6 +1151,14 @@ pub struct PrefixValue {
     pub value: Vec<u8>,
 }
 
+/// A queue of Ethereum events to be processed
+/// in order.
+#[derive(Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct EthEventsQueue {
+    // TODO: change this field to an actual queue
+    inner: (),
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;

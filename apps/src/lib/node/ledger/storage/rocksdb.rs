@@ -42,7 +42,8 @@ use namada::ledger::storage::{
 };
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, EthEventsQueue, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use rocksdb::{
@@ -401,6 +402,20 @@ impl DB for RocksDB {
             }
         };
 
+        let eth_events_queue: EthEventsQueue = match self
+            .0
+            .get("eth_events_queue")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load the eth events queue from the DB"
+                );
+                return Ok(None);
+            }
+        };
+
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let mut read_opts = ReadOptions::default();
@@ -493,6 +508,7 @@ impl DB for RocksDB {
                     address_gen,
                     tx_queue,
                     ethereum_height,
+                    eth_events_queue,
                 }))
             }
             _ => Err(Error::Temporary {
@@ -517,6 +533,7 @@ impl DB for RocksDB {
             address_gen,
             tx_queue,
             ethereum_height,
+            eth_events_queue,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -556,6 +573,7 @@ impl DB for RocksDB {
         }
         batch.put("tx_queue", types::encode(&tx_queue));
         batch.put("ethereum_height", types::encode(&ethereum_height));
+        batch.put("eth_events_queue", types::encode(&eth_events_queue));
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
@@ -1164,6 +1182,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
         let results = BlockResults::default();
+        let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -1177,6 +1196,7 @@ mod test {
             address_gen: &address_gen,
             tx_queue: &tx_queue,
             ethereum_height: None,
+            eth_events_queue: &eth_events_queue,
         };
 
         db.write_block(block).unwrap();

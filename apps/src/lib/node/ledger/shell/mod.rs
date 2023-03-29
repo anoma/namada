@@ -1584,6 +1584,7 @@ mod test_utils {
                     .storage
                     .ethereum_height
                     .as_ref(),
+                eth_events_queue: &shell.wl_storage.storage.eth_events_queue,
             })
             .expect("Test failed");
 
