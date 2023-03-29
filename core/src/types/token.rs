@@ -47,6 +47,7 @@ pub const NATIVE_MAX_DECIMAL_PLACES: u8 = 6;
 /// key.
 pub const NATIVE_SCALE: u64 = 1_000_000;
 
+/// A change in tokens amount
 pub type Change = SignedUint;
 
 impl Amount {
@@ -137,7 +138,7 @@ impl Amount {
         }
     }
 
-    /// Attempt to convert a float to an `Erc20Amount` with the specified
+    /// Attempt to convert a float to an `Amount` with the specified
     /// precision.
     pub fn from_float(
         float: impl Into<f64>,
@@ -149,7 +150,7 @@ impl Amount {
         }
     }
 
-    /// Attempt to convert an unsigned interger to an `Erc20Amount` with the
+    /// Attempt to convert an unsigned interger to an `Amount` with the
     /// specified precision.
     pub fn from_int(
         uint: impl Into<u64>,
@@ -204,7 +205,7 @@ impl From<Denomination> for u8 {
 pub struct DenominatedAmount {
     /// The mantissa
     pub amount: Amount,
-    /// The number of decimal plces in base ten.
+    /// The number of decimal places in base ten.
     pub denom: Denomination,
 }
 
@@ -234,12 +235,37 @@ impl FromStr for DenominatedAmount {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let decimal = Decimal::from_str(s)
-            .or_else(|err| Err(AmountParseError::InvalidDecimal(err)))?;
+            .map_err(AmountParseError::InvalidDecimal)?;
         let denom = Denomination(decimal.scale() as u8);
         Ok(Self {
             amount: Amount::from_decimal(decimal, denom)?,
             denom,
         })
+    }
+}
+
+impl serde::Serialize for Amount {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let amount_string = self.raw.to_string();
+        serde::Serialize::serialize(&amount_string, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Amount {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let amount_string: String =
+            serde::Deserialize::deserialize(deserializer)?;
+        Ok(Self{raw: Uint::from_str(&amount_string).map_err(D::Error::custom)?})
     }
 }
 

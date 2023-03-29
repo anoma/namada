@@ -6,7 +6,6 @@ use std::ops::{BitXor, Neg};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
@@ -33,7 +32,8 @@ impl Uint {
             self.0
                 .into_iter()
                 .map(|byte| byte.bitxor(u64::MAX))
-                .try_collect()
+                .collect::<Vec<_>>()
+                .try_into()
                 .expect("This cannot fail"),
         )
         .checked_add(Uint::from(1u64))
@@ -85,16 +85,7 @@ impl Neg for SignedUint {
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        Self(
-            self.0
-                .into_iter()
-                .map(|byte| byte.bitxor(u64::MAX))
-                .try_collect()
-                .expect("This cannot fail")
-                .0
-                .checked_add(Uint::from(1u64))
-                .unwrap(),
-        )
+        Self(self.0.negate().expect("This should not fail"))
     }
 }
 

@@ -90,7 +90,7 @@ pub mod wrapper_tx {
     impl GasLimit {
         /// We refund unused gas up to GAS_LIMIT_RESOLUTION
         pub fn refund_amount(&self, used_gas: u64) -> Amount {
-            if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
+            Amount::native_whole(if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
                 // we refund only up to GAS_LIMIT_RESOLUTION
                 GAS_LIMIT_RESOLUTION
             } else if used_gas >= u64::from(self) {
@@ -99,8 +99,7 @@ pub mod wrapper_tx {
             } else {
                 // compute refund
                 u64::from(self) - used_gas
-            }
-            .into()
+            })
         }
     }
 
@@ -108,8 +107,6 @@ pub mod wrapper_tx {
     /// of GAS_LIMIT_RESOLUTION
     impl From<u64> for GasLimit {
         fn from(amount: u64) -> GasLimit {
-            // we could use the ceiling function but this way avoids casts to
-            // floats
             if GAS_LIMIT_RESOLUTION * (amount / GAS_LIMIT_RESOLUTION) < amount {
                 GasLimit {
                     multiplier: (amount / GAS_LIMIT_RESOLUTION) + 1,
@@ -126,7 +123,7 @@ pub mod wrapper_tx {
     /// of GAS_LIMIT_RESOLUTION
     impl From<Amount> for GasLimit {
         fn from(amount: Amount) -> GasLimit {
-            GasLimit::from(u64::from(amount))
+            GasLimit::from(u128::from(amount) as u64)
         }
     }
 
@@ -147,7 +144,7 @@ pub mod wrapper_tx {
     /// Get back the gas limit as a raw number, viewed as an Amount
     impl From<GasLimit> for Amount {
         fn from(limit: GasLimit) -> Amount {
-            Amount::from(limit.multiplier * GAS_LIMIT_RESOLUTION)
+            Amount::native_whole(limit.multiplier * GAS_LIMIT_RESOLUTION)
         }
     }
 
