@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::time::Duration;
 
 pub use context::common::IbcCommonContext;
 pub use context::storage::{IbcStorageContext, ProofSpec};
@@ -25,12 +26,14 @@ use crate::ibc::applications::transfer::relay::send_transfer::{
 };
 use crate::ibc::core::context::Router;
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
-use crate::ibc::core::ics24_host::identifier::PortId;
+use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
+use crate::ibc::core::ics24_host::identifier::{ChainId as IbcChainId, PortId};
 use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
 use crate::ibc::core::ics26_routing::error::RouterError;
 use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
 use crate::ibc::core::{execute, validate};
 use crate::ibc_proto::google::protobuf::Any;
+use crate::types::chain::ChainId;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -51,6 +54,8 @@ pub enum Error {
     NoModule,
     #[error("Denom error: {0}")]
     Denom(String),
+    #[error("Invalid chain ID: {0}")]
+    ChainId(ChainId),
 }
 
 /// IBC actions to handle IBC operations
@@ -62,6 +67,7 @@ where
     ctx: Rc<RefCell<C>>,
     modules: HashMap<ModuleId, Rc<dyn ModuleWrapper + 'a>>,
     ports: HashMap<PortId, ModuleId>,
+    validation_params: ValidationParams,
 }
 
 impl<'a, C> IbcActions<'a, C>
@@ -74,7 +80,13 @@ where
             ctx,
             modules: HashMap::new(),
             ports: HashMap::new(),
+            validation_params: ValidationParams::default(),
         }
+    }
+
+    /// Set the validation parameters
+    pub fn set_validation_params(&mut self, params: ValidationParams) {
+        self.validation_params = params;
     }
 
     /// Add TokenTransfer route
@@ -212,4 +224,17 @@ where
             _ => validate(self, msg).map_err(Error::Validation),
         }
     }
+}
+
+#[derive(Debug, Default)]
+/// Parameters for validation
+pub struct ValidationParams {
+    /// Chain ID
+    pub chain_id: IbcChainId,
+    /// IBC proof specs
+    pub proof_specs: ProofSpecs,
+    /// Unbonding period
+    pub unbonding_period: Duration,
+    /// Upgrade path
+    pub upgrade_path: Vec<String>,
 }

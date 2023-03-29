@@ -64,13 +64,17 @@ use namada::ibc::core::ics24_host::identifier::PortChannelId as IbcPortChannelId
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ledger::ibc::storage::*;
+use namada::ledger::parameters::{storage as param_storage, EpochDuration};
+use namada::ledger::pos::{self, PosParams};
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
 use namada::types::token::Amount;
-use namada_apps::client::rpc::query_storage_value_bytes;
+use namada_apps::client::rpc::{
+    query_storage_value, query_storage_value_bytes,
+};
 use namada_apps::client::utils::id_from_pk;
 use prost::Message;
 use setup::constants::*;
@@ -199,19 +203,37 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 }
 
 fn make_client_state(test: &Test, height: Height) -> TmClientState {
-    let unbonding_period = Duration::new(1814400, 0);
+    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
+    let client = HttpClient::new(ledger_address).unwrap();
+
+    let key = pos::params_key();
+    let pos_params = Runtime::new()
+        .unwrap()
+        .block_on(query_storage_value::<PosParams>(&client, &key))
+        .unwrap();
+    let pipeline_len = pos_params.pipeline_len;
+
+    let key = param_storage::get_epoch_duration_storage_key();
+    let epoch_duration = Runtime::new()
+        .unwrap()
+        .block_on(query_storage_value::<EpochDuration>(&client, &key))
+        .unwrap();
+    let unbonding_period = pipeline_len * epoch_duration.min_duration.0;
+
     let trusting_period = 2 * unbonding_period / 3;
     let max_clock_drift = Duration::new(60, 0);
     let chain_id = ChainId::from_str(test.net.chain_id.as_str()).unwrap();
+
     TmClientState::new(
         chain_id,
         TrustThreshold::default(),
-        trusting_period,
-        unbonding_period,
+        Duration::from_secs(trusting_period),
+        Duration::from_secs(unbonding_period),
         max_clock_drift,
         height,
         ibc_proof_specs::<Sha256Hasher>().into(),
-        vec!["upgrade".to_string(), "upgradedIBCState".to_string()],
+        vec![],
         AllowUpdate {
             after_expiry: true,
             after_misbehaviour: true,
@@ -1020,10 +1042,7 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
         .1
         .replace(['"', ','], "");
     if code != "0" {
-        return Err(eyre!(
-            "The IBC transfer transaction failed: unread {}",
-            unread
-        ));
+        return Err(eyre!("The IBC transaction failed: unread {}", unread));
     }
 
     // wait for the next block to use the app hash

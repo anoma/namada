@@ -3,16 +3,13 @@
 use prost::Message;
 
 use super::super::{IbcActions, IbcCommonContext};
-use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::client_state::{
-    downcast_client_state, ClientState,
-};
+#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+use crate::ibc::core::ics02_client::client_state::downcast_client_state;
+use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
-use crate::ibc::core::ics02_client::trust_threshold::TrustThreshold;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics03_connection::error::ConnectionError;
 use crate::ibc::core::ics04_channel::channel::ChannelEnd;
 use crate::ibc::core::ics04_channel::commitment::{
     AcknowledgementCommitment, PacketCommitment,
@@ -20,12 +17,16 @@ use crate::ibc::core::ics04_channel::commitment::{
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
+use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
+use crate::ibc::core::ics24_host::identifier::{
+    ChainId, ClientId, ConnectionId,
+};
 use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::{ContextError, ValidationContext};
+use crate::ibc::hosts::tendermint::ValidateSelfClientContext;
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::MockClientState;
 use crate::ibc::timestamp::Timestamp;
@@ -257,89 +258,25 @@ where
         &self,
         counterparty_client_state: Any,
     ) -> Result<(), ContextError> {
-        let client_state = self
-            .decode_client_state(counterparty_client_state)
-            .map_err(|_| ConnectionError::Other {
-                description: "Decoding the client state failed".to_string(),
-            })?;
-
         #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Some(_mock) =
-            downcast_client_state::<MockClientState>(client_state.as_ref())
         {
-            return Ok(());
-        }
-
-        let client_state =
-            downcast_client_state::<TmClientState>(client_state.as_ref())
-                .ok_or_else(|| ConnectionError::Other {
-                    description: "The client state is not for Tendermint"
-                        .to_string(),
+            let client_state = self
+                .decode_client_state(counterparty_client_state.clone())
+                .map_err(|_| ClientError::Other {
+                    description: "Decoding the client state failed".to_string(),
                 })?;
 
-        if client_state.is_frozen() {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: "The client is frozen".to_string(),
-            }));
-        }
-
-        let chain_id = self.ctx.borrow().get_chain_id().map_err(|_| {
-            ConnectionError::Other {
-                description: "Getting the chain ID failed".to_string(),
+            if let Some(_mock) =
+                downcast_client_state::<MockClientState>(client_state.as_ref())
+            {
+                return Ok(());
             }
-        })?;
-        if client_state.chain_id().to_string() != chain_id {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "The chain ID mismatched: in the client state {}",
-                    client_state.chain_id()
-                ),
-            }));
         }
 
-        if client_state.chain_id().version() != 0 {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "The chain ID revision is not zero: {}",
-                    client_state.chain_id()
-                ),
-            }));
-        }
-
-        let height = self.ctx.borrow().get_height().map_err(|_| {
-            ConnectionError::Other {
-                description: "Getting the block height failed".to_string(),
-            }
-        })?;
-        if client_state.latest_height().revision_height() >= height.0 {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "The height of the client state is higher: Client state \
-                     height {}",
-                    client_state.latest_height()
-                ),
-            }));
-        }
-
-        // proof spec
-        let proof_specs = self.ctx.borrow().get_proof_specs();
-        if client_state.proof_specs != proof_specs.into() {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: "The proof specs mismatched".to_string(),
-            }));
-        }
-
-        let trust_level = client_state.trust_level.numerator()
-            / client_state.trust_level.denominator();
-        let min_level = TrustThreshold::ONE_THIRD;
-        let min_level = min_level.numerator() / min_level.denominator();
-        if trust_level < min_level {
-            return Err(ContextError::ClientError(ClientError::Other {
-                description: "The trust threshold is less 1/3".to_string(),
-            }));
-        }
-
-        Ok(())
+        ValidateSelfClientContext::validate_self_tendermint_client(
+            self,
+            counterparty_client_state,
+        )
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
@@ -558,5 +495,36 @@ where
             }
             _ => unreachable!("The parameter should be initialized"),
         }
+    }
+}
+
+impl<C> ValidateSelfClientContext for IbcActions<'_, C>
+where
+    C: IbcCommonContext,
+{
+    fn chain_id(&self) -> &ChainId {
+        &self.validation_params.chain_id
+    }
+
+    fn host_current_height(&self) -> Height {
+        let height = self
+            .ctx
+            .borrow()
+            .get_height()
+            .expect("The height should exist");
+        Height::new(0, height.0).expect("The conversion shouldn't fail")
+    }
+
+    fn proof_specs(&self) -> &ProofSpecs {
+        &self.validation_params.proof_specs
+    }
+
+    fn unbonding_period(&self) -> core::time::Duration {
+        self.validation_params.unbonding_period
+    }
+
+    /// Returns the host upgrade path. May be empty.
+    fn upgrade_path(&self) -> &[String] {
+        &self.validation_params.upgrade_path
     }
 }

@@ -90,14 +90,6 @@ impl IbcStorageContext for Ctx {
         self.get_block_header(height)
     }
 
-    fn get_chain_id(&self) -> Result<String, Self::Error> {
-        StorageRead::get_chain_id(self)
-    }
-
-    fn get_proof_specs(&self) -> Vec<ProofSpec> {
-        unimplemented!("Transaction doesn't need the proof specs")
-    }
-
     fn log_string(&self, message: String) {
         super::log_string(message);
     }

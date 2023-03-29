@@ -4,10 +4,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::ibc::storage::is_ibc_key;
-use namada_core::ledger::ibc::{
-    IbcCommonContext, IbcStorageContext, ProofSpec,
-};
-use namada_core::ledger::storage::ics23_specs::ibc_proof_specs;
+use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::ledger::storage_api::StorageRead;
@@ -177,14 +174,6 @@ where
             .map_err(Error::NativeVpError)
     }
 
-    fn get_chain_id(&self) -> Result<String, Self::Error> {
-        self.ctx.get_chain_id().map_err(Error::NativeVpError)
-    }
-
-    fn get_proof_specs(&self) -> Vec<ProofSpec> {
-        ibc_proof_specs::<H>()
-    }
-
     fn log_string(&self, message: String) {
         tracing::debug!("{} in the pseudo execution for IBC VP", message);
     }
@@ -282,15 +271,6 @@ where
         self.ctx
             .get_block_header(height)
             .map_err(Error::NativeVpError)
-    }
-
-    fn get_chain_id(&self) -> Result<String, Self::Error> {
-        self.ctx.get_chain_id().map_err(Error::NativeVpError)
-    }
-
-    /// Get the IBC proof specs
-    fn get_proof_specs(&self) -> Vec<ProofSpec> {
-        ibc_proof_specs::<H>()
     }
 
     /// Logging

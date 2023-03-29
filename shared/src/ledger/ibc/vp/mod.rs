@@ -7,22 +7,25 @@ mod token;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::rc::Rc;
+use std::time::Duration;
 
 use borsh::BorshDeserialize;
 use context::{PseudoExecutionContext, VpValidationContext};
 use namada_core::ledger::ibc::storage::{is_ibc_denom_key, is_ibc_key};
 use namada_core::ledger::ibc::{
-    Error as ActionError, IbcActions, TransferModule,
+    Error as ActionError, IbcActions, TransferModule, ValidationParams,
 };
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::SignedTxData;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
+use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
 pub use token::{Error as IbcTokenError, IbcToken};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
+use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -148,9 +151,29 @@ where
         let ctx = Rc::new(RefCell::new(validation_ctx));
 
         let mut actions = IbcActions::new(ctx.clone());
+        actions.set_validation_params(self.validation_params()?);
+
         let module = TransferModule::new(ctx);
         actions.add_transfer_route(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
+    }
+
+    fn validation_params(&self) -> VpResult<ValidationParams> {
+        let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
+        let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
+        let pos_params =
+            read_pos_params(&self.ctx.post()).map_err(Error::NativeVpError)?;
+        let pipeline_len = pos_params.pipeline_len;
+        let epoch_duration = read_epoch_duration_parameter(&self.ctx.post())
+            .map_err(Error::NativeVpError)?;
+        let unbonding_period_secs =
+            pipeline_len * epoch_duration.min_duration.0;
+        Ok(ValidationParams {
+            chain_id: chain_id.into(),
+            proof_specs: proof_specs.into(),
+            unbonding_period: Duration::from_secs(unbonding_period_secs),
+            upgrade_path: Vec::new(),
+        })
     }
 }
 
@@ -199,6 +222,32 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
     }
 }
 
+/// A dummy validator used for testing
+#[cfg(any(feature = "test", feature = "testing"))]
+pub fn get_dummy_genesis_validator()
+-> namada_proof_of_stake::types::GenesisValidator {
+    use rust_decimal::prelude::Decimal;
+
+    use crate::core::types::address::testing::established_address_1;
+    use crate::types::key::testing::common_sk_from_simple_seed;
+    use crate::types::token::Amount;
+
+    let address = established_address_1();
+    let tokens = Amount::whole(1);
+    let consensus_sk = common_sk_from_simple_seed(0);
+    let consensus_key = consensus_sk.to_public();
+
+    let commission_rate = Decimal::new(1, 1);
+    let max_commission_rate_change = Decimal::new(1, 1);
+    namada_proof_of_stake::types::GenesisValidator {
+        address,
+        tokens,
+        consensus_key,
+        commission_rate,
+        max_commission_rate_change,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::time::Duration;
@@ -206,7 +255,6 @@ mod tests {
     use std::str::FromStr;
 
     use borsh::BorshSerialize;
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use prost::Message;
     use sha2::Digest;
 
@@ -219,8 +267,10 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, receipt_key,
     };
     use super::{get_dummy_header, *};
+    use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::nam;
     use crate::core::types::address::testing::established_address_1;
+    use crate::core::types::storage::Epoch;
     use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
     use crate::ibc::applications::transfer::coin::PrefixedCoin;
     use crate::ibc::applications::transfer::denom::TracePrefix;
@@ -292,8 +342,12 @@ mod tests {
     use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
     use crate::ibc_proto::protobuf::Protobuf;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::ibc::init_genesis_storage;
-    use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
+    use crate::ledger::parameters::storage::{
+        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
+    };
+    use crate::ledger::parameters::EpochDuration;
+    use crate::ledger::{ibc, pos};
+    use crate::proof_of_stake::parameters::PosParams;
     use crate::proto::Tx;
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
@@ -311,11 +365,27 @@ mod tests {
         ClientId::from_str(&id).expect("Creating a client ID failed")
     }
 
-    fn insert_init_states() -> TestWlStorage {
+    fn init_storage() -> TestWlStorage {
         let mut wl_storage = TestWlStorage::default();
 
         // initialize the storage
-        init_genesis_storage(&mut wl_storage);
+        ibc::init_genesis_storage(&mut wl_storage);
+        pos::init_genesis_storage(
+            &mut wl_storage,
+            &PosParams::default(),
+            vec![get_dummy_genesis_validator()].into_iter(),
+            Epoch(1),
+        );
+        // epoch duration
+        let epoch_duration_key = get_epoch_duration_storage_key();
+        let epoch_duration = EpochDuration {
+            min_num_of_blocks: 10,
+            min_duration: DurationSecs(100),
+        };
+        wl_storage
+            .write_log
+            .write(&epoch_duration_key, epoch_duration.try_to_vec().unwrap())
+            .expect("write failed");
         // max_expected_time_per_block
         let time = DurationSecs::from(Duration::new(60, 0));
         let time_key = get_max_expected_time_per_block_key();
@@ -333,6 +403,10 @@ mod tests {
             .begin_block(BlockHash::default(), BlockHeight(1))
             .unwrap();
 
+        wl_storage
+    }
+
+    fn insert_init_client(wl_storage: &mut TestWlStorage) {
         // insert a mock client type
         let client_id = get_client_id();
         let client_type_key = client_type_key(&client_id);
@@ -393,8 +467,6 @@ mod tests {
             )
             .expect("write failed");
         wl_storage.write_log.commit_tx();
-
-        wl_storage
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -541,20 +613,8 @@ mod tests {
 
     #[test]
     fn test_create_client() {
-        let mut wl_storage = TestWlStorage::default();
+        let mut wl_storage = init_storage();
         let mut keys_changed = BTreeSet::new();
-
-        // initialize the storage
-        init_genesis_storage(&mut wl_storage);
-        // set a dummy header
-        wl_storage
-            .storage
-            .set_header(get_dummy_header())
-            .expect("Setting a dummy header shouldn't fail");
-        wl_storage
-            .storage
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
 
         let height = Height::new(0, 1).unwrap();
         let header = MockHeader {
@@ -682,7 +742,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
-        init_genesis_storage(&mut wl_storage);
+        ibc::init_genesis_storage(&mut wl_storage);
         // set a dummy header
         wl_storage
             .storage
@@ -750,7 +810,8 @@ mod tests {
     #[test]
     fn test_update_client() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
 
@@ -878,7 +939,8 @@ mod tests {
     #[test]
     fn test_init_connection() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
         // for next block
@@ -980,7 +1042,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
-        init_genesis_storage(&mut wl_storage);
+        ibc::init_genesis_storage(&mut wl_storage);
         // set a dummy header
         wl_storage
             .storage
@@ -1065,7 +1127,8 @@ mod tests {
     #[test]
     fn test_try_connection() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
         // for next block
@@ -1185,7 +1248,8 @@ mod tests {
     #[test]
     fn test_ack_connection() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an Init connection
         let conn_key = connection_key(&get_connection_id());
@@ -1284,7 +1348,8 @@ mod tests {
     #[test]
     fn test_confirm_connection() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert a TryOpen connection
         let conn_key = connection_key(&get_connection_id());
@@ -1361,7 +1426,8 @@ mod tests {
     #[test]
     fn test_init_channel() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an opened connection
         let conn_id = get_connection_id();
@@ -1474,7 +1540,8 @@ mod tests {
     #[test]
     fn test_try_channel() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -1588,7 +1655,8 @@ mod tests {
     #[test]
     fn test_ack_channel() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -1686,7 +1754,8 @@ mod tests {
     #[test]
     fn test_confirm_channel() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -1785,7 +1854,8 @@ mod tests {
     #[test]
     fn test_send_packet() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -1911,7 +1981,8 @@ mod tests {
     #[test]
     fn test_recv_packet() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -2074,7 +2145,8 @@ mod tests {
     #[test]
     fn test_ack_packet() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -2210,7 +2282,8 @@ mod tests {
     #[test]
     fn test_timeout_packet() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
@@ -2351,7 +2424,8 @@ mod tests {
     #[test]
     fn test_timeout_on_close_packet() {
         let mut keys_changed = BTreeSet::new();
-        let mut wl_storage = insert_init_states();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
 
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());

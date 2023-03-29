@@ -68,12 +68,6 @@ pub trait IbcStorageContext {
         height: BlockHeight,
     ) -> Result<Option<Header>, Self::Error>;
 
-    /// Get the chain ID
-    fn get_chain_id(&self) -> Result<String, Self::Error>;
-
-    /// Get the IBC proof specs
-    fn get_proof_specs(&self) -> Vec<ProofSpec>;
-
     /// Logging
     fn log_string(&self, message: String);
 }

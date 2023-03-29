@@ -56,7 +56,6 @@ use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsg
 use namada::ibc_proto::ics23::CommitmentProof;
 use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
-use namada::ledger::ibc::init_genesis_storage;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
     client_state_key, client_type_key, client_update_height_key,
@@ -66,18 +65,26 @@ pub use namada::ledger::ibc::storage::{
     port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
-    get_dummy_header as tm_dummy_header, Ibc, IbcToken,
+    get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
+    IbcToken,
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::ledger::parameters::storage::get_max_expected_time_per_block_key;
+use namada::ledger::parameters::storage::{
+    get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
+};
+use namada::ledger::parameters::EpochDuration;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
+use namada::ledger::{ibc, pos};
+use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::tendermint::time::Time as TmTime;
 use namada::tendermint_proto::Protobuf as TmProtobuf;
 use namada::types::address::{self, Address, InternalAddress};
-use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
+use namada::types::storage::{
+    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
+};
 use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
@@ -198,7 +205,13 @@ pub fn validate_token_vp_from_tx<'a>(
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
     tx_host_env::with(|env| {
-        init_genesis_storage(&mut env.wl_storage);
+        ibc::init_genesis_storage(&mut env.wl_storage);
+        pos::init_genesis_storage(
+            &mut env.wl_storage,
+            &PosParams::default(),
+            vec![get_dummy_genesis_validator()].into_iter(),
+            Epoch(1),
+        );
         // block header to check timeout timestamp
         env.wl_storage
             .storage
@@ -219,6 +232,17 @@ pub fn init_storage() -> (Address, Address) {
     let key = token::balance_key(&token, &account);
     let init_bal = Amount::whole(100);
     let bytes = init_bal.try_to_vec().expect("encoding failed");
+    tx_host_env::with(|env| {
+        env.wl_storage.storage.write(&key, &bytes).unwrap();
+    });
+
+    // epoch duration
+    let key = get_epoch_duration_storage_key();
+    let epoch_duration = EpochDuration {
+        min_num_of_blocks: 10,
+        min_duration: DurationSecs(100),
+    };
+    let bytes = epoch_duration.try_to_vec().unwrap();
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
     });
