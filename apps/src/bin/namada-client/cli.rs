@@ -65,7 +65,7 @@ pub async fn main() -> Result<()> {
                     rpc::query_balance(ctx, args).await;
                 }
                 Sub::QueryBonds(QueryBonds(args)) => {
-                    rpc::query_bonds(ctx, args).await;
+                    rpc::query_bonds(ctx, args).await.unwrap();
                 }
                 Sub::QueryBondedStake(QueryBondedStake(args)) => {
                     rpc::query_bonded_stake(ctx, args).await;
