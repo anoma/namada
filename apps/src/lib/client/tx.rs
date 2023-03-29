@@ -2320,6 +2320,15 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
                 safe_exit(1)
             }
         }
+        if source != &validator && rpc::is_validator(&client, source).await {
+            eprintln!(
+                "Cannot bond from a validator account {source} to another \
+                 validator {validator}."
+            );
+            if !args.tx.force {
+                safe_exit(1)
+            }
+        }
     }
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
