@@ -1402,6 +1402,11 @@ pub mod testing {
         // a key from key segments
         collection::vec(arb_key_seg(), 2..5)
             .prop_map(|segments| Key { segments })
+            .prop_filter("Key length must be below IBC limit", |key| {
+                let key_str = key.to_string();
+                let bytes = key_str.as_bytes();
+                bytes.len() <= IBC_KEY_LIMIT
+            })
     }
 
     /// Generate an arbitrary [`Key`] for a given address storage sub-space.
