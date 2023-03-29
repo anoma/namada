@@ -1173,13 +1173,10 @@ impl EthEventsQueue {
         current_nam_nonce: Uint,
         latest_nam_transfer: TransfersToNamada,
     ) -> Option<TransfersToNamada> {
-        debug_assert!(current_nam_nonce <= latest_nam_transfer.nonce);
-
-        // the nonces match, so we must process the latest event
-        if current_nam_nonce == latest_nam_transfer.nonce {
-            debug_assert!(self.transfers_to_namada.is_empty());
-            return Some(latest_nam_transfer);
-        }
+        assert!(
+            current_nam_nonce <= latest_nam_transfer.nonce,
+            "Attempted to replay a transfer to Namada event"
+        );
 
         // check if we can process the next event in the queue
         self.push_nam_transfer(latest_nam_transfer);
@@ -1264,6 +1261,116 @@ mod tests {
             let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
             assert_eq!(original_epoch, parsed_epoch);
         }
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce identical to the next expected nonce in Namada yields the
+    /// event itself.
+    #[test]
+    fn test_eth_events_queue_equal_nonces() {
+        let mut queue = EthEventsQueue::default();
+        let nam_nonce = 2u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let next_event =
+            queue.get_next_nam_transfer(nam_nonce, new_event.clone());
+        assert_eq!(next_event, Some(new_event));
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce lower than the next expected nonce in Namada results in a
+    /// panic.
+    #[test]
+    #[should_panic = "Attempted to replay a transfer to Namada event"]
+    fn test_eth_events_queue_panic_on_invalid_nonce() {
+        let mut queue = EthEventsQueue::default();
+        let nam_nonce = 3u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        queue.get_next_nam_transfer(nam_nonce, new_event.clone());
+    }
+
+    /// Test enqueueing transfer to Namada events to
+    /// an [`EthEventsQueue`].
+    #[test]
+    fn test_eth_events_queue_enqueue() {
+        let mut queue = EthEventsQueue::default();
+        let mut nam_nonce = 1u64.into();
+
+        let new_event_4 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 4u64.into(),
+        };
+        let new_event_2 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let new_event_3 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 3u64.into(),
+        };
+        let new_event_1 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 1u64.into(),
+        };
+
+        // enqueue events
+        assert!(
+            queue
+                .get_next_nam_transfer(nam_nonce, new_event_4.clone())
+                .is_none()
+        );
+        assert!(
+            queue
+                .get_next_nam_transfer(nam_nonce, new_event_2.clone())
+                .is_none()
+        );
+        assert!(
+            queue
+                .get_next_nam_transfer(nam_nonce, new_event_3.clone())
+                .is_none()
+        );
+        assert_eq!(
+            &queue.transfers_to_namada,
+            &[
+                new_event_2.clone(),
+                new_event_3.clone(),
+                new_event_4.clone()
+            ]
+        );
+
+        // start dequeueing events
+        assert_eq!(
+            Some(new_event_1.clone()),
+            queue.get_next_nam_transfer(nam_nonce, new_event_1)
+        );
+        nam_nonce = nam_nonce + 1;
+        assert_eq!(
+            Some(new_event_2.clone()),
+            queue.get_next_nam_transfer(nam_nonce, new_event_2)
+        );
+        nam_nonce = nam_nonce + 1;
+        assert_eq!(
+            Some(new_event_3.clone()),
+            queue.get_next_nam_transfer(nam_nonce, new_event_3)
+        );
+        nam_nonce = nam_nonce + 1;
+        assert_eq!(
+            Some(new_event_4.clone()),
+            queue.get_next_nam_transfer(nam_nonce, new_event_4)
+        );
+
+        assert!(queue.transfers_to_namada.is_empty());
     }
 
     #[test]
