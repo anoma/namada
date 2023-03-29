@@ -252,9 +252,10 @@ where
             } else {
                 tracing::debug!(
                     ?pending_transfer,
-                    "Invalid transfer to Ethereum detected, but the relayer \
-                     will be compensated anyway"
+                    "Invalid transfer to Ethereum detected, compensating the \
+                     relayer and refunding assets in Namada"
                 );
+                refund_transferred_assets(wl_storage, &pending_transfer)?;
             }
             // give the relayer the gas fee for this transfer.
             update::amount(wl_storage, &relayer_rewards_key, |balance| {
@@ -312,12 +313,31 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let mut changed_key = BTreeSet::default();
+    let mut changed_keys = BTreeSet::default();
 
     let transfer = match wl_storage.read_bytes(&key)? {
         Some(v) => PendingTransfer::try_from_slice(&v[..])?,
         None => unreachable!(),
     };
+    changed_keys.append(&mut refund_transfer_fees(wl_storage, &transfer)?);
+    changed_keys.append(&mut refund_transferred_assets(wl_storage, &transfer)?);
+
+    // Delete the key from the bridge pool
+    wl_storage.delete(&key)?;
+    _ = changed_keys.insert(key);
+
+    Ok(changed_keys)
+}
+
+fn refund_transfer_fees<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    transfer: &PendingTransfer,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::default();
 
     let payer_balance_key = balance_key(&nam(), &transfer.gas_fee.payer);
     let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
@@ -327,10 +347,23 @@ where
     update::amount(wl_storage, &pool_balance_key, |balance| {
         balance.spend(&transfer.gas_fee.amount);
     })?;
-    _ = changed_key.insert(payer_balance_key);
-    _ = changed_key.insert(pool_balance_key);
 
-    // Unescrow the token
+    tracing::debug!(?transfer, "Refunded Bridge pool transfer fees");
+    _ = changed_keys.insert(payer_balance_key);
+    _ = changed_keys.insert(pool_balance_key);
+    Ok(changed_keys)
+}
+
+fn refund_transferred_assets<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    transfer: &PendingTransfer,
+) -> Result<BTreeSet<Key>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let mut changed_keys = BTreeSet::default();
+
     let native_erc20_addr = match wl_storage
         .read_bytes(&bridge_storage::native_erc20_key())?
     {
@@ -358,14 +391,11 @@ where
     update::amount(wl_storage, &target, |balance| {
         balance.receive(&transfer.transfer.amount);
     })?;
-    _ = changed_key.insert(source);
-    _ = changed_key.insert(target);
 
-    // Delete the key from the bridge pool
-    wl_storage.delete(&key)?;
-    _ = changed_key.insert(key);
-
-    Ok(changed_key)
+    tracing::debug!(?transfer, "Refunded Bridge pool transferred assets");
+    _ = changed_keys.insert(source);
+    _ = changed_keys.insert(target);
+    Ok(changed_keys)
 }
 
 #[cfg(test)]
