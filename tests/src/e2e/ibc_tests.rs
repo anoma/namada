@@ -76,6 +76,7 @@ use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
+use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use prost::Message;
 use setup::constants::*;
 use tendermint::block::Header as TmHeader;
@@ -91,7 +92,7 @@ use crate::{run, run_as};
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
-    let (test_a, test_b) = setup::two_single_node_nets()?;
+    let (test_a, test_b) = setup_two_single_node_nets()?;
 
     // Run Chain A
     let mut ledger_a =
@@ -161,6 +162,22 @@ fn run_ledger_ibc() -> Result<()> {
     // channel cannot be closed
 
     Ok(())
+}
+
+fn setup_two_single_node_nets() -> Result<(Test, Test)> {
+    // epoch per 100 seconds
+    let update_genesis = |mut genesis: GenesisConfig| {
+        genesis.parameters.epochs_per_year = 315_360;
+        genesis
+    };
+    let update_genesis_b = |mut genesis: GenesisConfig| {
+        genesis.parameters.epochs_per_year = 315_360;
+        setup::set_validators(1, genesis, |_| setup::ANOTHER_CHAIN_PORT_OFFSET)
+    };
+    Ok((
+        setup::network(update_genesis, None)?,
+        setup::network(update_genesis_b, None)?,
+    ))
 }
 
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
