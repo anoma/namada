@@ -1756,11 +1756,14 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                NAMADA_START_TIME
-                    .def()
-                    .about("The start time of the ledger."),
-            )
+            app.arg(NAMADA_START_TIME.def().about(
+                "The start time of the ledger. Accepts a relaxed form of \
+                 RFC3339. A space or a 'T' are accepted as the separator \
+                 between the date and time components. Additional spaces are \
+                 allowed between each component.\nAll of these examples are \
+                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
+                 12:12:12Z\n2023-  01-20T12:  12:12Z",
+            ))
         }
     }
 
@@ -3378,7 +3381,8 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository."))
+            app.arg(CHAIN_ID.def().about("The chain ID. The chain must be known in the repository: \
+                                          https://github.com/heliaxdev/anoma-network-config"))
                 .arg(GENESIS_VALIDATOR.def().about("The alias of the genesis validator that you want to set up as, if any."))
                 .arg(PRE_GENESIS_PATH.def().about("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().about(

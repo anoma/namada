@@ -248,16 +248,38 @@ impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
 
 impl<H: StorageHasher + Default> MerkleTree<H> {
     /// Restore the tree from the stores
-    pub fn new(stores: MerkleTreeStoresRead) -> Self {
+    pub fn new(stores: MerkleTreeStoresRead) -> Result<Self> {
         let base = Smt::new(stores.base.0.into(), stores.base.1);
         let account = Smt::new(stores.account.0.into(), stores.account.1);
         let ibc = Amt::new(stores.ibc.0.into(), stores.ibc.1);
         let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
-        Self {
+        let tree = Self {
             base,
             account,
             ibc,
             pos,
+        };
+
+        // validate
+        let account_key = H::hash(StoreType::Account.to_string());
+        let account_root = tree.base.get(&account_key.into())?;
+        let ibc_key = H::hash(StoreType::Ibc.to_string());
+        let ibc_root = tree.base.get(&ibc_key.into())?;
+        let pos_key = H::hash(StoreType::PoS.to_string());
+        let pos_root = tree.base.get(&pos_key.into())?;
+        if (tree.base.root().is_zero()
+            && tree.account.root().is_zero()
+            && tree.ibc.root().is_zero()
+            && tree.pos.root().is_zero())
+            || (account_root == tree.account.root().into()
+                && ibc_root == tree.ibc.root().into()
+                && pos_root == tree.pos.root().into())
+        {
+            Ok(tree)
+        } else {
+            Err(Error::MerkleTree(
+                "Invalid MerkleTreeStoresRead".to_string(),
+            ))
         }
     }
 
@@ -704,7 +726,8 @@ mod test {
             stores_read.set_root(st, stores_write.root(st).clone());
             stores_read.set_store(stores_write.store(st).to_owned());
         }
-        let restored_tree = MerkleTree::<Sha256Hasher>::new(stores_read);
+        let restored_tree =
+            MerkleTree::<Sha256Hasher>::new(stores_read).unwrap();
         assert!(restored_tree.has_key(&ibc_key).unwrap());
         assert!(restored_tree.has_key(&pos_key).unwrap());
     }
