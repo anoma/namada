@@ -1705,7 +1705,7 @@ pub mod args {
     const FEE_AMOUNT: ArgDefault<token::Amount> =
         arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
     const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(10))); //FIXME: fix this default value
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(10)));
     const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");

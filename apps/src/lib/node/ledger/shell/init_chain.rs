@@ -111,14 +111,16 @@ where
 
         // Store wasm codes into storage
         let checksums = wasm_loader::Checksums::read_checksums(&self.wasm_dir);
-        for (name, full_name) in checksums.0.iter() {
+        for (name, info) in checksums.0.iter() {
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
 
-            let elements = full_name.split('.').collect::<Vec<&str>>();
-            let checksum = elements.get(1).ok_or_else(|| {
-                Error::LoadingWasm(format!("invalid full name: {}", full_name))
+            let checksum = info.get("hash").ok_or_else(|| {
+                Error::LoadingWasm(format!(
+                    "Missing wasm hash for tx: {}",
+                    name
+                ))
             })?;
             assert_eq!(
                 code_hash.to_string(),

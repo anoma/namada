@@ -296,9 +296,14 @@ where
                             },
                         );
                         (
-                            tx_event,
-                            None,
-                            TxGasMeter::new(spare_gas), // This is just for logging/events purposes, no more gas is actually used by the wrapper
+                            tx_event, None,
+                            gas_meter,
+                            /* This is just for
+                             * logging/events
+                             * purposes, no more
+                             * gas is actually
+                             * used by the
+                             * wrapper */
                         )
                     }
                     TxType::Decrypted(inner) => {

@@ -49,7 +49,7 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         "--fee-amount",
         "0",
         "--gas-limit",
-        "20",
+        "100",
         "--fee-token",
         NAM,
         "--ledger-address",
@@ -154,7 +154,7 @@ pub fn attempt_red_tokens_transfer(
         "--amount",
         &amount,
         "--gas-limit",
-        "20",
+        "100",
         "--ledger-address",
         rpc_addr,
     ];

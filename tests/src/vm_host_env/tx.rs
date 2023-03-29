@@ -71,7 +71,7 @@ impl Default for TestTxEnv {
         Self {
             wl_storage,
             iterators: PrefixIterators::default(),
-            gas_meter: TxGasMeter::new(10_000_000),
+            gas_meter: TxGasMeter::new(100_000_000),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
             result_buffer: None,

@@ -197,39 +197,8 @@ mod testing {
             // Initialize the `TestClient`
             let mut wl_storage = TestWlStorage::default();
 
-            // Initialize gas table
-            let checksums: BTreeMap<String, String> = serde_json::from_slice(
-                &std::fs::read("../wasm/checksums.json").unwrap(),
-            )
-            .unwrap();
-          
-            let gas_file: BTreeMap<String, u64> = serde_json::from_slice(
-                &std::fs::read("../wasm/gas.json").unwrap(),
-            )
-            .unwrap();
-
-            let mut gas_table = BTreeMap::<String, u64>::new();
-
-            for id in checksums.keys().chain(gas_file.keys()){
-                // Get tx/vp hash (or name if native)
-                let hash = match checksums.get(id.as_str()) {
-                    Some(v) => {
-v
-                    .split_once('.')
-                    .unwrap()
-                    .1
-                    .split_once('.')
-                    .unwrap()
-                    .0.to_owned()
-                    }
-                    None => {
-                        id.to_owned()
-                    }
-                };
-                let gas = gas_file.get(id).unwrap_or(&1_000).to_owned(); 
-                gas_table.insert(hash, gas);
-            }
-            
+            // Initialize mock gas table and gas limit
+            let gas_table: BTreeMap<String, u64> = BTreeMap::default();
             let gas_table_key =
                 namada_core::ledger::parameters::storage::get_gas_table_storage_key();
             wl_storage

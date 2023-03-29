@@ -978,7 +978,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         max_proposal_bytes: Default::default(),
-        max_block_gas: 100_000_000, //FIXME: adjust this value
+        max_block_gas: 100_000_000,
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),

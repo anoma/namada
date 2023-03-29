@@ -127,7 +127,7 @@ pub fn network(
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
     genesis.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
-    genesis.parameters.gas_table = Some(get_gas_checksums(&working_dir));
+    genesis.parameters.gas_table = Some(get_all_wasms_gas(&working_dir));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -890,15 +890,16 @@ pub fn get_all_wasms_hashes(
 ) -> Vec<String> {
     let checksums_path = working_dir.join("wasm/checksums.json");
     let checksums_content = fs::read_to_string(checksums_path).unwrap();
-    let checksums: HashMap<String, String> =
+    let mut checksums: HashMap<String, HashMap<String, String>> =
         serde_json::from_str(&checksums_content).unwrap();
     let filter_prefix = filter.unwrap_or_default();
     checksums
-        .values()
+        .values_mut()
         .filter_map(|wasm| {
-            if wasm.contains(filter_prefix) {
+            let hash = wasm.get_mut("hash").expect("Missing hash in checksum");
+            if hash.contains(filter_prefix) {
                 Some(
-                    wasm.split('.').collect::<Vec<&str>>()[1]
+                    hash.split('.').collect::<Vec<&str>>()[1]
                         .to_owned()
                         .to_lowercase(),
                 )
@@ -909,8 +910,21 @@ pub fn get_all_wasms_hashes(
         .collect()
 }
 
-pub fn get_gas_checksums(working_dir: &Path) -> BTreeMap<String, u64> {
-    let gas_checksums_path = working_dir.join("wasm/gas_checksums.json");
-    serde_json::from_reader(fs::File::open(gas_checksums_path).unwrap())
-        .unwrap()
+pub fn get_all_wasms_gas(working_dir: &Path) -> BTreeMap<String, u64> {
+    let checksums_path = working_dir.join("wasm/checksums.json");
+    let checksums: HashMap<String, HashMap<String, String>> =
+        serde_json::from_reader(fs::File::open(checksums_path).unwrap())
+            .unwrap();
+
+    checksums
+        .values()
+        .map(|map| {
+            (
+                map.get("hash").unwrap().split('.').collect::<Vec<&str>>()[1]
+                    .to_owned()
+                    .to_lowercase(),
+                map.get("gas").unwrap().parse::<u64>().unwrap(),
+            )
+        })
+        .collect()
 }

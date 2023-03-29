@@ -155,7 +155,7 @@ min_num_of_blocks = 4
 max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
-# Max amount of gas per block FIXME: adjust value
+# Max amount of gas per block 
 max_block_gas = 1000000000 
 # Gas table
 gas_table = {}

@@ -22,7 +22,7 @@ const PARALLEL_GAS_DIVIDER: u64 = 10;
 /// The minimum gas cost for accessing the storage
 pub const MIN_STORAGE_GAS: u64 = 1;
 /// The gas cost for verifying the signature of a transaction
-pub const VERIFY_TX_SIG_GAS_COST: u64 = 1_000;
+pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
 /// The gas cost for validating wasm vp code
 pub const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 /// The cost for writing a byte to storage
