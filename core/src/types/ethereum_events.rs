@@ -20,6 +20,7 @@ use crate::types::token::Amount;
 
 /// Namada native type to replace the ethabi::Uint type
 #[derive(
+    Copy,
     Clone,
     Debug,
     Default,

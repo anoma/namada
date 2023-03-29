@@ -740,7 +740,7 @@ mod tests {
             &root,
             100.into(),
         );
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let signing_key = key::testing::keypair_1();
         let hot_key =
             &keys[&address::testing::established_address_2()].eth_bridge;

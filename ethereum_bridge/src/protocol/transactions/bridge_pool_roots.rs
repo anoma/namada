@@ -268,7 +268,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
@@ -317,7 +317,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let mut vexts: MultiSignedVext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
@@ -358,7 +358,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
@@ -404,7 +404,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
             BridgePoolRootProof::new((root, nonce)),
         ));
@@ -459,7 +459,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
@@ -517,7 +517,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
         let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
@@ -580,7 +580,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
         let mut expected =
             BridgePoolRoot(BridgePoolRootProof::new((root, nonce)));
@@ -628,7 +628,7 @@ mod test_apply_bp_roots_to_storage {
         } = setup();
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-        let to_sign = keccak_hash([root.0, nonce.clone().to_bytes()].concat());
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
 
         assert!(
             wl_storage
