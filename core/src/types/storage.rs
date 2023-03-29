@@ -1293,7 +1293,7 @@ mod tests {
             transfers: vec![],
             nonce: 2u64.into(),
         };
-        queue.get_next_nam_transfer(nam_nonce, new_event.clone());
+        queue.get_next_nam_transfer(nam_nonce, new_event);
     }
 
     /// Test enqueueing transfer to Namada events to
