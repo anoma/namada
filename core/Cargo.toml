@@ -74,9 +74,9 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = {version = "0.32.0", default-features = false, features = ["serde"], optional = true}
+ibc = {version = "0.36.0", default-features = false, features = ["serde"], optional = true}
 ibc-proto = {version = "0.26.0", default-features = false, optional = true}
-ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "c0203cd038ebeeacfe49c0a652177c54b96af661", default-features = false, features = ["serde"], optional = true}
+ibc-abcipp = {package = "ibc", git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "db14744bfba6239cc5f58345ff90f8b7d42637d6", default-features = false, features = ["serde"], optional = true}
 ibc-proto-abcipp = {package = "ibc-proto", git = "https://github.com/heliaxdev/ibc-proto-rs", rev = "dd8ba23110a144ffe2074a0b889676468266435a", default-features = false, optional = true}
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}

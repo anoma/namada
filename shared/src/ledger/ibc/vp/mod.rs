@@ -698,6 +698,10 @@ mod tests {
             client_type,
             client_state.latest_height(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -899,6 +903,10 @@ mod tests {
             vec![consensus_height],
             header.into(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -999,6 +1007,10 @@ mod tests {
             msg.client_id_on_a.clone(),
             msg.counterparty.client_id().clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1208,6 +1220,10 @@ mod tests {
             msg.counterparty.connection_id().cloned().unwrap(),
             msg.counterparty.client_id().clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1309,6 +1325,10 @@ mod tests {
             msg.conn_id_on_b.clone(),
             counterparty.client_id().clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1387,6 +1407,10 @@ mod tests {
             counterparty.connection_id().cloned().unwrap(),
             counterparty.client_id().clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1501,6 +1525,10 @@ mod tests {
             conn_id,
             msg.version_proposal.clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1616,6 +1644,10 @@ mod tests {
             conn_id,
             msg.version_supported_on_a.clone(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1715,6 +1747,10 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1812,6 +1848,10 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -1942,6 +1982,10 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2097,6 +2141,10 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2106,6 +2154,10 @@ mod tests {
                 acknowledgement,
                 get_connection_id(),
             ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2243,6 +2295,10 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2385,6 +2441,10 @@ mod tests {
             packet,
             Order::Unordered,
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2527,6 +2587,10 @@ mod tests {
             packet,
             Order::Unordered,
         ));
+        let message_event = RawIbcEvent::Message(event.event_type());
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());

@@ -2937,40 +2937,8 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.32.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=791c10b2c7c965d0c330a6a7aefcdd5ca806ecf9#791c10b2c7c965d0c330a6a7aefcdd5ca806ecf9"
-dependencies = [
- "bytes 1.4.0",
- "cfg-if 1.0.0",
- "derive_more",
- "displaydoc",
- "dyn-clone",
- "erased-serde",
- "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
- "ics23",
- "num-traits 0.2.15",
- "parking_lot 0.12.1",
- "primitive-types",
- "prost 0.11.6",
- "safe-regex",
- "serde 1.0.145",
- "serde_derive",
- "serde_json",
- "sha2 0.10.6",
- "subtle-encoding",
- "tendermint 0.23.6",
- "tendermint-light-client-verifier 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-testgen 0.23.6",
- "time 0.3.15",
- "tracing 0.1.37",
- "uint",
-]
-
-[[package]]
-name = "ibc"
-version = "0.32.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=c0203cd038ebeeacfe49c0a652177c54b96af661#c0203cd038ebeeacfe49c0a652177c54b96af661"
+version = "0.36.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6#db14744bfba6239cc5f58345ff90f8b7d42637d6"
 dependencies = [
  "bytes 1.4.0",
  "cfg-if 1.0.0",
@@ -2994,6 +2962,38 @@ dependencies = [
  "tendermint-light-client-verifier 0.23.5",
  "tendermint-proto 0.23.5",
  "tendermint-testgen 0.23.5",
+ "time 0.3.15",
+ "tracing 0.1.37",
+ "uint",
+]
+
+[[package]]
+name = "ibc"
+version = "0.36.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=dcce4ac23d4d0a4324d23c54a1a99d41f0be2076#dcce4ac23d4d0a4324d23c54a1a99d41f0be2076"
+dependencies = [
+ "bytes 1.4.0",
+ "cfg-if 1.0.0",
+ "derive_more",
+ "displaydoc",
+ "dyn-clone",
+ "erased-serde",
+ "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
+ "ics23",
+ "num-traits 0.2.15",
+ "parking_lot 0.12.1",
+ "primitive-types",
+ "prost 0.11.6",
+ "safe-regex",
+ "serde 1.0.145",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.6",
+ "subtle-encoding",
+ "tendermint 0.23.6",
+ "tendermint-light-client-verifier 0.23.6",
+ "tendermint-proto 0.23.6",
+ "tendermint-testgen 0.23.6",
  "time 0.3.15",
  "tracing 0.1.37",
  "uint",
@@ -3904,8 +3904,8 @@ dependencies = [
  "clru",
  "data-encoding",
  "derivative",
- "ibc 0.32.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=791c10b2c7c965d0c330a6a7aefcdd5ca806ecf9)",
- "ibc 0.32.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=c0203cd038ebeeacfe49c0a652177c54b96af661)",
+ "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6)",
+ "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=dcce4ac23d4d0a4324d23c54a1a99d41f0be2076)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "itertools",
@@ -4051,8 +4051,8 @@ dependencies = [
  "ferveo",
  "ferveo-common",
  "group-threshold-cryptography",
- "ibc 0.32.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=791c10b2c7c965d0c330a6a7aefcdd5ca806ecf9)",
- "ibc 0.32.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=c0203cd038ebeeacfe49c0a652177c54b96af661)",
+ "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=db14744bfba6239cc5f58345ff90f8b7d42637d6)",
+ "ibc 0.36.0 (git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=dcce4ac23d4d0a4324d23c54a1a99d41f0be2076)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=acc378e5e1865fbf559fa4e36e3c2b0dc1da51bb)",
  "ibc-proto 0.26.0 (git+https://github.com/heliaxdev/ibc-proto-rs?rev=dd8ba23110a144ffe2074a0b889676468266435a)",
  "ics23",
