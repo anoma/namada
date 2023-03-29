@@ -198,6 +198,12 @@ impl KeySeg for EthAddress {
     }
 }
 
+/// Nonces of Ethereum events.
+pub trait GetEventNonce {
+    /// Returns the nonce of an Ethereum event.
+    fn get_event_nonce(&self) -> Uint;
+}
+
 /// Event transferring batches of ether or Ethereum based ERC20 tokens
 /// from Ethereum to wrapped assets on Namada
 #[derive(
@@ -219,6 +225,13 @@ pub struct TransfersToNamada {
     pub transfers: Vec<TransferToNamada>,
     /// The indices of the transfers which succeeded or failed
     pub valid_transfers_map: Vec<bool>,
+}
+
+impl GetEventNonce for TransfersToNamada {
+    #[inline]
+    fn get_event_nonce(&self) -> Uint {
+        self.nonce
+    }
 }
 
 impl From<TransfersToNamada> for EthereumEvent {
