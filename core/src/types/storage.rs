@@ -1,4 +1,5 @@
 //! Storage types
+use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
@@ -17,6 +18,7 @@ use thiserror::Error;
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
+use crate::types::ethereum_events::{TransfersToNamada, Uint};
 use crate::types::hash::Hash;
 use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
@@ -1151,12 +1153,76 @@ pub struct PrefixValue {
     pub value: Vec<u8>,
 }
 
-/// A queue of Ethereum events to be processed
-/// in order.
-#[derive(Default, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+/// A queue of Ethereum events to be processed in order.
+#[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
 pub struct EthEventsQueue {
-    // TODO: change this field to an actual queue
-    inner: (),
+    transfers_to_namada: VecDeque<TransfersToNamada>,
+}
+
+impl EthEventsQueue {
+    /// Retrieve the next transfer to Namada event to be
+    /// processed, if any.
+    ///
+    /// This decision is based on the nonce of the latest
+    /// [`TransfersToNamada`] event that has been processed by
+    /// the ledger, and the nonce of the [`TransfersToNamada`]
+    /// event that was just confirmed (i.e. achieved a quorum
+    /// of votes behind it).
+    pub fn get_next_nam_transfer(
+        &mut self,
+        current_nam_nonce: Uint,
+        latest_nam_transfer: TransfersToNamada,
+    ) -> Option<TransfersToNamada> {
+        debug_assert!(current_nam_nonce <= latest_nam_transfer.nonce);
+
+        // the nonces match, so we must process the latest event
+        if current_nam_nonce == latest_nam_transfer.nonce {
+            debug_assert!(self.transfers_to_namada.is_empty());
+            return Some(latest_nam_transfer);
+        }
+
+        // check if we can process the next event in the queue
+        self.push_nam_transfer(latest_nam_transfer);
+
+        let Some(nonce_in_queue) = self.peek_nam_transfer_nonce() else {
+            unreachable!("There is at least one event in the queue");
+        };
+
+        if nonce_in_queue == current_nam_nonce {
+            self.pop_nam_transfer()
+        } else {
+            None
+        }
+    }
+
+    /// Provide a reference to the earliest transfer to Namada event
+    /// stored in the queue.
+    #[inline]
+    fn peek_nam_transfer_nonce(&self) -> Option<Uint> {
+        self.transfers_to_namada.front().map(|ev| ev.nonce)
+    }
+
+    /// Push a new transfer to Namada event to the queue.
+    #[inline]
+    fn push_nam_transfer(&mut self, new_event: TransfersToNamada) {
+        self.transfers_to_namada
+            .binary_search_by_key(&new_event.nonce, |event_in_queue| {
+                event_in_queue.nonce
+            })
+            .map_or_else(
+                |insert_at| {
+                    self.transfers_to_namada.insert(insert_at, new_event)
+                },
+                // the event is already in the queue, so we drop it
+                |_| {},
+            )
+    }
+
+    /// Pop a transfer to Namada event from the queue.
+    #[inline]
+    fn pop_nam_transfer(&mut self) -> Option<TransfersToNamada> {
+        self.transfers_to_namada.pop_front()
+    }
 }
 
 #[cfg(test)]
