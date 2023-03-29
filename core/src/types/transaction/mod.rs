@@ -280,7 +280,7 @@ pub mod tx_types {
     pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
         if let Some(Ok(SignedTxData {
             data: Some(data),
-            ref sig,
+            sig: Some(ref sig),
         })) = tx
             .data
             .as_ref()
@@ -530,7 +530,7 @@ pub mod tx_types {
                     .try_to_vec()
                     .expect("Test failed"),
             ),
-            sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
+            sig: Some(common::Signature::try_from_sig(&ed_sig).unwrap()),
         };
         // create the tx with signed decrypted data
         let tx =

@@ -452,7 +452,7 @@ mod tests {
             assert_eq!(&signed_tx_data.data, data);
             assert!(
                 vp::CTX
-                    .verify_tx_signature(&pk, &signed_tx_data.sig)
+                    .verify_tx_signature(&pk, signed_tx_data.sig.as_ref().unwrap())
                     .unwrap()
             );
 
@@ -461,7 +461,7 @@ mod tests {
                 !vp::CTX
                     .verify_tx_signature(
                         &other_keypair.ref_to(),
-                        &signed_tx_data.sig
+                        signed_tx_data.sig.as_ref().unwrap()
                     )
                     .unwrap()
             );

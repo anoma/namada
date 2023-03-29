@@ -34,7 +34,7 @@ fn validate_tx(
             match pk {
                 Ok(Some(pk)) => {
                     matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
+                        ctx.verify_tx_signature(&pk, signed_tx_data.sig.as_ref().unwrap()),
                         Ok(true)
                     )
                 }

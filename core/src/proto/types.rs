@@ -62,7 +62,7 @@ pub struct SignedTxData {
     pub data: Option<Vec<u8>>,
     /// The signature is produced on the tx data concatenated with the tx code
     /// and the timestamp.
-    pub sig: common::Signature,
+    pub sig: Option<common::Signature>,
 }
 
 /// A generic signed data wrapper for Borsh encode-able data.
@@ -376,7 +376,7 @@ impl Tx {
         let sig = common::SigScheme::sign(keypair, to_sign);
         let signed = SignedTxData {
             data: self.data,
-            sig,
+            sig: Some(sig),
         }
         .try_to_vec()
         .expect("Encoding transaction data shouldn't fail");
@@ -502,7 +502,7 @@ impl InnerTx {
         let sig = common::SigScheme::sign(keypair, to_sign);
         let signed = SignedTxData {
             data: self.data,
-            sig,
+            sig: Some(sig),
         }
         .try_to_vec()
         .expect("Encoding transaction data shouldn't fail");

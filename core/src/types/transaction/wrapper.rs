@@ -490,7 +490,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig)
+            tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig.unwrap())
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)
