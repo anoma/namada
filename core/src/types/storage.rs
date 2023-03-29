@@ -18,7 +18,7 @@ use thiserror::Error;
 use crate::bytes::ByteBuf;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
-use crate::types::ethereum_events::{TransfersToNamada, Uint};
+use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::types::hash::Hash;
 use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
@@ -1153,63 +1153,75 @@ pub struct PrefixValue {
     pub value: Vec<u8>,
 }
 
-/// A queue of Ethereum events to be processed in order.
+/// Container of all Ethereum event queues.
 #[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
 pub struct EthEventsQueue {
-    transfers_to_namada: VecDeque<TransfersToNamada>,
+    /// Queue of transfer to Namada events.
+    pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
+    // TODO: add queue of update whitelist events
 }
 
-impl EthEventsQueue {
-    /// Retrieve the next transfer to Namada event to be
-    /// processed, if any.
+/// A queue of Ethereum events to be processed in order.
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct InnerEthEventsQueue<E> {
+    inner: VecDeque<E>,
+}
+
+impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+}
+
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Retrieve the next event to be processed, if any.
     ///
-    /// This decision is based on the nonce of the latest
-    /// [`TransfersToNamada`] event that has been processed by
-    /// the ledger, and the nonce of the [`TransfersToNamada`]
-    /// event that was just confirmed (i.e. achieved a quorum
-    /// of votes behind it).
-    pub fn get_next_nam_transfer(
+    /// This decision is based on the nonce of the last event that has been
+    /// processed by the ledger, and the nonce of the event that was just
+    /// confirmed (i.e. achieved a quorum of votes behind it).
+    pub fn get_next(
         &mut self,
-        current_nam_nonce: Uint,
-        latest_nam_transfer: TransfersToNamada,
-    ) -> Option<TransfersToNamada> {
+        current_nonce: Uint,
+        latest_event: E,
+    ) -> Option<E> {
+        let event_nonce = latest_event.get_event_nonce();
         assert!(
-            current_nam_nonce <= latest_nam_transfer.nonce,
-            "Attempted to replay a transfer to Namada event"
+            current_nonce <= event_nonce,
+            "Attempted to replay an Ethereum event"
         );
 
         // check if we can process the next event in the queue
-        self.push_nam_transfer(latest_nam_transfer);
+        self.push_event(latest_event);
 
-        let Some(nonce_in_queue) = self.peek_nam_transfer_nonce() else {
+        let Some(nonce_in_queue) = self.peek_event_nonce() else {
             unreachable!("There is at least one event in the queue");
         };
 
-        if nonce_in_queue == current_nam_nonce {
-            self.pop_nam_transfer()
+        if nonce_in_queue == current_nonce {
+            self.pop_event()
         } else {
             None
         }
     }
 
-    /// Provide a reference to the earliest transfer to Namada event
-    /// stored in the queue.
+    /// Provide a reference to the earliest event stored in the queue.
     #[inline]
-    fn peek_nam_transfer_nonce(&self) -> Option<Uint> {
-        self.transfers_to_namada.front().map(|ev| ev.nonce)
+    fn peek_event_nonce(&self) -> Option<Uint> {
+        self.inner.front().map(GetEventNonce::get_event_nonce)
     }
 
     /// Push a new transfer to Namada event to the queue.
     #[inline]
-    fn push_nam_transfer(&mut self, new_event: TransfersToNamada) {
-        self.transfers_to_namada
-            .binary_search_by_key(&new_event.nonce, |event_in_queue| {
-                event_in_queue.nonce
-            })
+    fn push_event(&mut self, new_event: E) {
+        self.inner
+            .binary_search_by_key(
+                &new_event.get_event_nonce(),
+                |event_in_queue| event_in_queue.get_event_nonce(),
+            )
             .map_or_else(
-                |insert_at| {
-                    self.transfers_to_namada.insert(insert_at, new_event)
-                },
+                |insert_at| self.inner.insert(insert_at, new_event),
                 // the event is already present in the queue... this is
                 // certainly a protocol error
                 |_| {
@@ -1223,8 +1235,8 @@ impl EthEventsQueue {
 
     /// Pop a transfer to Namada event from the queue.
     #[inline]
-    fn pop_nam_transfer(&mut self) -> Option<TransfersToNamada> {
-        self.transfers_to_namada.pop_front()
+    fn pop_event(&mut self) -> Option<E> {
+        self.inner.pop_front()
     }
 }
 
@@ -1281,8 +1293,9 @@ mod tests {
             transfers: vec![],
             nonce: 2u64.into(),
         };
-        let next_event =
-            queue.get_next_nam_transfer(nam_nonce, new_event.clone());
+        let next_event = queue
+            .transfers_to_namada
+            .get_next(nam_nonce, new_event.clone());
         assert_eq!(next_event, Some(new_event));
     }
 
@@ -1290,7 +1303,7 @@ mod tests {
     /// a nonce lower than the next expected nonce in Namada results in a
     /// panic.
     #[test]
-    #[should_panic = "Attempted to replay a transfer to Namada event"]
+    #[should_panic = "Attempted to replay an Ethereum event"]
     fn test_eth_events_queue_panic_on_invalid_nonce() {
         let mut queue = EthEventsQueue::default();
         let nam_nonce = 3u64.into();
@@ -1299,7 +1312,7 @@ mod tests {
             transfers: vec![],
             nonce: 2u64.into(),
         };
-        queue.get_next_nam_transfer(nam_nonce, new_event);
+        queue.transfers_to_namada.get_next(nam_nonce, new_event);
     }
 
     /// Test enqueueing transfer to Namada events to
@@ -1333,21 +1346,24 @@ mod tests {
         // enqueue events
         assert!(
             queue
-                .get_next_nam_transfer(nam_nonce, new_event_4.clone())
+                .transfers_to_namada
+                .get_next(nam_nonce, new_event_4.clone())
                 .is_none()
         );
         assert!(
             queue
-                .get_next_nam_transfer(nam_nonce, new_event_2.clone())
+                .transfers_to_namada
+                .get_next(nam_nonce, new_event_2.clone())
                 .is_none()
         );
         assert!(
             queue
-                .get_next_nam_transfer(nam_nonce, new_event_3.clone())
+                .transfers_to_namada
+                .get_next(nam_nonce, new_event_3.clone())
                 .is_none()
         );
         assert_eq!(
-            &queue.transfers_to_namada,
+            &queue.transfers_to_namada.inner,
             &[
                 new_event_2.clone(),
                 new_event_3.clone(),
@@ -1358,25 +1374,25 @@ mod tests {
         // start dequeueing events
         assert_eq!(
             Some(new_event_1.clone()),
-            queue.get_next_nam_transfer(nam_nonce, new_event_1)
+            queue.transfers_to_namada.get_next(nam_nonce, new_event_1)
         );
         nam_nonce = nam_nonce + 1;
         assert_eq!(
             Some(new_event_2.clone()),
-            queue.get_next_nam_transfer(nam_nonce, new_event_2)
+            queue.transfers_to_namada.get_next(nam_nonce, new_event_2)
         );
         nam_nonce = nam_nonce + 1;
         assert_eq!(
             Some(new_event_3.clone()),
-            queue.get_next_nam_transfer(nam_nonce, new_event_3)
+            queue.transfers_to_namada.get_next(nam_nonce, new_event_3)
         );
         nam_nonce = nam_nonce + 1;
         assert_eq!(
             Some(new_event_4.clone()),
-            queue.get_next_nam_transfer(nam_nonce, new_event_4)
+            queue.transfers_to_namada.get_next(nam_nonce, new_event_4)
         );
 
-        assert!(queue.transfers_to_namada.is_empty());
+        assert!(queue.transfers_to_namada.inner.is_empty());
     }
 
     #[test]
