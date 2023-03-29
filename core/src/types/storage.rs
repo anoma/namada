@@ -1210,8 +1210,14 @@ impl EthEventsQueue {
                 |insert_at| {
                     self.transfers_to_namada.insert(insert_at, new_event)
                 },
-                // the event is already in the queue, so we drop it
-                |_| {},
+                // the event is already present in the queue... this is
+                // certainly a protocol error
+                |_| {
+                    unreachable!(
+                        "An event with an identical nonce was already present \
+                         in the EthEventsQueue"
+                    )
+                },
             )
     }
 
