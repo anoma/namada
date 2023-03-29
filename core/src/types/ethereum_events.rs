@@ -198,6 +198,45 @@ impl KeySeg for EthAddress {
     }
 }
 
+/// Event transferring batches of ether or Ethereum based ERC20 tokens
+/// from Ethereum to wrapped assets on Namada
+#[derive(
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Hash,
+    Ord,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct TransfersToNamada {
+    /// Monotonically increasing nonce
+    pub nonce: Uint,
+    /// The batch of transfers
+    pub transfers: Vec<TransferToNamada>,
+    /// The indices of the transfers which succeeded or failed
+    pub valid_transfers_map: Vec<bool>,
+}
+
+impl From<TransfersToNamada> for EthereumEvent {
+    #[inline]
+    fn from(event: TransfersToNamada) -> Self {
+        let TransfersToNamada {
+            nonce,
+            transfers,
+            valid_transfers_map,
+        } = event;
+        Self::TransfersToNamada {
+            nonce,
+            transfers,
+            valid_transfers_map,
+        }
+    }
+}
+
 /// An Ethereum event to be processed by the Namada ledger
 #[derive(
     PartialEq,
