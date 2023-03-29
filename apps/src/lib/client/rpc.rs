@@ -9,6 +9,7 @@ use std::io::{self, Write};
 use std::iter::Iterator;
 use std::str::FromStr;
 
+use namada::proto::InnerTx;
 use async_std::fs;
 use async_std::path::PathBuf;
 use async_std::prelude::*;
@@ -395,7 +396,7 @@ fn extract_payload(
                         wrapper_tx.decrypt(privkey, inner_tx).ok()
                     }) {
                         Some(tx) => DecryptedTx::Decrypted {
-                            tx,
+                            tx: Tx::from(tx),
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: false,
                         },

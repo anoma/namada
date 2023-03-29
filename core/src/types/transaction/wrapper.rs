@@ -11,7 +11,7 @@ pub mod wrapper_tx {
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    use crate::proto::Tx;
+    use crate::proto::{Tx, InnerTx};
     use crate::types::address::Address;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -218,13 +218,12 @@ pub mod wrapper_tx {
         pub fn decrypt(
             &self,
             privkey: <EllipticCurve as PairingEngine>::G2Affine,
-            inner_tx: Vec<u8>,
-        ) -> Result<Tx, WrapperTxErr> {
+            inner_tx: InnerTx,
+        ) -> Result<InnerTx, WrapperTxErr> {
             // decrypt the inner tx
             let decrypted = inner_tx;
             // convert back to Tx type
-            let decrypted_tx = Tx::try_from(decrypted.as_ref())
-                .map_err(|_| WrapperTxErr::InvalidTx)?;
+            let decrypted_tx = decrypted;
             // check that the hash equals commitment
             if decrypted_tx.partial_hash() != self.tx_hash.0 {
                 Err(WrapperTxErr::DecryptedHash)
@@ -234,7 +233,7 @@ pub mod wrapper_tx {
         }
 
         /// Bind the given transaction to this wrapper by recording its hash
-        pub fn bind(mut self, tx: Tx) -> Self {
+        pub fn bind(mut self, tx: InnerTx) -> Self {
             self.tx_hash = Hash(tx.partial_hash());
             self
         }
@@ -356,7 +355,7 @@ pub mod wrapper_tx {
         #[test]
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
-            let tx = Tx::new(
+            let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
@@ -390,7 +389,7 @@ pub mod wrapper_tx {
         #[test]
         fn test_decryption_invalid_hash() {
             let keypair = gen_keypair();
-            let tx = Tx::new(
+            let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
@@ -429,7 +428,7 @@ pub mod wrapper_tx {
             let pubkey = <EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator();
             let keypair = gen_keypair();
             // The intended tx
-            let tx = Tx::new(
+            let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
@@ -466,7 +465,7 @@ pub mod wrapper_tx {
 
             // malicious transaction
             let malicious =
-                Tx::new("Give me all the money".as_bytes().to_owned(), None);
+                InnerTx::new("Give me all the money".as_bytes().to_owned(), None);
 
             // We replace the inner tx with a malicious one
             let inner_tx = malicious.to_bytes();
@@ -479,7 +478,7 @@ pub mod wrapper_tx {
             // we check that decryption still succeeds
             let decrypted = wrapper.decrypt(
                 <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(),
-                inner_tx,
+                malicious.clone(),
             )
                 .expect("Test failed");
             assert_eq!(decrypted, malicious);

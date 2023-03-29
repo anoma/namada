@@ -777,6 +777,7 @@ mod test_utils {
     use namada::types::transaction::{Fee, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
+    use namada::proto::InnerTx;
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -925,7 +926,7 @@ mod test_utils {
         pub fn enqueue_tx(
             &mut self,
             wrapper: WrapperTx,
-            inner_tx: Option<Vec<u8>>,
+            inner_tx: Option<InnerTx>,
         ) {
             self.shell.storage.tx_queue.push(TxInQueue {
                 tx: wrapper,
@@ -994,7 +995,7 @@ mod test_utils {
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
-        let tx = Tx::new(
+        let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
         );
@@ -1010,10 +1011,10 @@ mod test_utils {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .bind(tx);
+        .bind(tx.clone());
         shell.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
-            inner_tx: Some(encrypted_tx),
+            inner_tx: Some(tx),
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });

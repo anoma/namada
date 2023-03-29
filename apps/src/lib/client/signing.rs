@@ -10,6 +10,7 @@ use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
+use namada::proto::InnerTx;
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -250,7 +251,7 @@ pub async fn sign_wrapper(
             pow_solution,
         )
         // Bind the inner transaction to the wrapper
-        .bind(tx.clone())
+        .bind(InnerTx::from(tx.clone()))
     };
     // Then sign over the bound wrapper
     let mut stx = wrapper_tx
@@ -258,7 +259,7 @@ pub async fn sign_wrapper(
         .expect("Wrapper tx signing keypair should be correct");
     // Then encrypt and attach the payload to the wrapper
     stx = stx.attach_inner_tx(
-        &tx,
+        &InnerTx::from(tx),
         // TODO: Actually use the fetched encryption key
         Default::default(),
     );

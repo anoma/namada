@@ -340,6 +340,7 @@ pub mod tx_types {
         use super::*;
         use crate::types::address::nam;
         use crate::types::storage::Epoch;
+        use crate::proto::InnerTx;
 
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
@@ -414,7 +415,7 @@ pub mod tx_types {
         #[test]
         fn test_process_tx_wrapper_tx() {
             let keypair = gen_keypair();
-            let tx = Tx::new(
+            let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );
@@ -451,7 +452,7 @@ pub mod tx_types {
         #[test]
         fn test_process_tx_wrapper_tx_unsigned() {
             let keypair = gen_keypair();
-            let inner_tx = Tx::new(
+            let inner_tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
             );

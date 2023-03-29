@@ -13,6 +13,7 @@ pub mod decrypted_tx {
     use crate::proto::Tx;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
+    use crate::proto::InnerTx;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -76,7 +77,7 @@ pub mod decrypted_tx {
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        inner_tx: Option<Vec<u8>>,
+        inner_tx: Option<InnerTx>,
     ) -> bool {
         match decrypted {
             // A tx is decryptable if it contains the literal code inside it

@@ -148,7 +148,43 @@ pub struct Tx {
     pub timestamp: DateTimeUtc,
     pub extra: Vec<u8>,
     /// the encrypted inner transaction if data contains a WrapperTx
-    pub inner_tx: Option<Vec<u8>>,
+    pub inner_tx: Option<InnerTx>,
+}
+
+/// A SigningTx but with the full code embedded. This structure will almost
+/// certainly be bigger than SigningTxs and contains enough information to
+/// execute the transaction.
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+)]
+pub struct InnerTx {
+    pub code: Vec<u8>,
+    pub data: Option<Vec<u8>>,
+    pub timestamp: DateTimeUtc,
+    pub extra: Vec<u8>,
+}
+
+impl From<Tx> for InnerTx {
+    fn from(tx: Tx) -> Self {
+        Self {
+            code: tx.code,
+            data: tx.data,
+            timestamp: tx.timestamp,
+            extra: tx.extra,
+        }
+    }
+}
+
+impl From<InnerTx> for Tx {
+    fn from(tx: InnerTx) -> Self {
+        Self {
+            code: tx.code,
+            data: tx.data,
+            timestamp: tx.timestamp,
+            extra: tx.extra,
+            inner_tx: None,
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for Tx {
@@ -381,11 +417,123 @@ impl Tx {
     /// contains a WrapperTx and its tx_hash field needs a witness.
     pub fn attach_inner_tx(
         mut self,
-        tx: &Tx,
+        tx: &InnerTx,
         encryption_key: EncryptionKey,
     ) -> Self {
-        self.inner_tx = Some(tx.to_bytes());
+        self.inner_tx = Some(tx.clone());
         self
+    }
+
+    /// A validity check on the ciphertext.
+    #[cfg(feature = "ferveo-tpke")]
+    pub fn validate_ciphertext(&self) -> bool {
+        true
+    }
+}
+
+impl From<InnerTx> for types::InnerTx {
+    fn from(tx: InnerTx) -> Self {
+        let timestamp = Some(tx.timestamp.into());
+        types::InnerTx {
+            code: tx.code,
+            data: tx.data,
+            extra: tx.extra,
+            timestamp,
+        }
+    }
+}
+
+impl InnerTx {
+    pub fn new(code: Vec<u8>, data: Option<Vec<u8>>) -> Self {
+        InnerTx {
+            code,
+            data,
+            timestamp: DateTimeUtc::now(),
+            extra: vec![],
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        let tx: types::InnerTx = self.clone().into();
+        tx.encode(&mut bytes)
+            .expect("encoding a transaction failed");
+        bytes
+    }
+
+    /// Produce a reduced version of this transaction that is sufficient for
+    /// signing. Specifically replaces code and extra with their hashes, and
+    /// leaves out inner tx.
+    pub fn signing_tx(&self) -> types::Tx {
+        let timestamp = Some(self.timestamp.into());
+        types::Tx {
+            code: hash_tx(&self.code).0.to_vec(),
+            extra: hash_tx(&self.extra).0.to_vec(),
+            data: self.data.clone(),
+            timestamp,
+            inner_tx: None,
+        }
+    }
+
+    /// Hash this transaction leaving out the inner tx, but instead of including
+    /// the transaction code and extra data in the hash, include their hashes
+    /// instead.
+    pub fn partial_hash(&self) -> [u8; 32] {
+        let mut bytes = vec![];
+        self.signing_tx()
+            .encode(&mut bytes)
+            .expect("encoding a transaction failed");
+        hash_tx(&bytes).0
+    }
+
+    /// Get the hash of this transaction's code
+    pub fn code_hash(&self) -> [u8; 32] {
+        hash_tx(&self.code).0
+    }
+
+    /// Get the hash of this transaction's extra data
+    pub fn extra_hash(&self) -> [u8; 32] {
+        hash_tx(&self.extra).0
+    }
+
+    /// Sign a transaction using [`SignedTxData`].
+    pub fn sign(self, keypair: &common::SecretKey) -> Self {
+        let to_sign = self.partial_hash();
+        let sig = common::SigScheme::sign(keypair, to_sign);
+        let signed = SignedTxData {
+            data: self.data,
+            sig,
+        }
+        .try_to_vec()
+        .expect("Encoding transaction data shouldn't fail");
+        InnerTx {
+            code: self.code,
+            data: Some(signed),
+            extra: self.extra,
+            timestamp: self.timestamp,
+        }
+    }
+
+    /// Verify that the transaction has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify_sig(
+        &self,
+        pk: &common::PublicKey,
+        sig: &common::Signature,
+    ) -> std::result::Result<(), VerifySigError> {
+        // Try to get the transaction data from decoded `SignedTxData`
+        let tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
+        let signed_tx_data = SignedTxData::try_from_slice(&tx_data[..])
+            .expect("Decoding transaction data shouldn't fail");
+        let data = signed_tx_data.data;
+        let tx = InnerTx {
+            code: self.code.clone(),
+            extra: self.extra.clone(),
+            data,
+            timestamp: self.timestamp,
+        };
+        let signed_data = tx.partial_hash();
+        common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
     }
 
     /// A validity check on the ciphertext.

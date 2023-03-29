@@ -111,7 +111,7 @@ where
                             .and_then(|x| tx.decrypt(privkey, x).ok())
                         {
                             Some(inner_tx) => DecryptedTx::Decrypted {
-                                tx: inner_tx,
+                                tx: Tx::from(inner_tx),
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
                             },
@@ -187,6 +187,7 @@ mod test_prepare_proposal {
     use borsh::BorshSerialize;
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
+    use namada::proto::InnerTx;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -222,7 +223,7 @@ mod test_prepare_proposal {
     fn test_error_in_processing_tx() {
         let (shell, _) = TestShell::new();
         let keypair = gen_keypair();
-        let tx = Tx::new(
+        let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
         );
@@ -281,12 +282,12 @@ mod test_prepare_proposal {
         // create a request with two new wrappers from mempool and
         // two wrappers from the previous block to be decrypted
         for i in 0..2 {
-            let tx = Tx::new(
+            let tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
-                tx: tx.clone(),
+                tx: Tx::from(tx.clone()),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));

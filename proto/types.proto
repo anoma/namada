@@ -13,6 +13,14 @@ message Tx {
   optional bytes inner_tx = 5;
 }
 
+message InnerTx {
+  bytes code = 1;
+  // TODO this optional is useless because it's default on proto3
+  optional bytes data = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  bytes extra = 4;
+}
+
 message Dkg { string data = 1; }
 
 message DkgGossipMessage {
