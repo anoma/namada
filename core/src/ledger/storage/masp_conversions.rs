@@ -49,7 +49,7 @@ where
 
     let masp_rewards = address::masp_rewards();
     // The total transparent value of the rewards being distributed
-    let mut total_reward = token::Amount::from(0);
+    let mut total_reward = token::Amount::native_whole(0);
 
     // Construct MASP asset type for rewards. Always timestamp reward tokens
     // with the zeroth epoch to minimize the number of convert notes clients

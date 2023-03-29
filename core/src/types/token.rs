@@ -1,17 +1,18 @@
 //! A basic fungible token
 
-use std::fmt::Display;
+//use std::fmt::Display;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::transaction::Transaction;
-use rust_decimal::prelude::{Decimal, ToPrimitive};
+use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::uint::{self, SignedUint, Uint};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -30,77 +31,219 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
     Hash,
 )]
 pub struct Amount {
-    micro: u64,
+    raw: Uint,
 }
 
-/// Maximum decimal places in a token [`Amount`] and [`Change`].
-pub const MAX_DECIMAL_PLACES: u32 = 6;
-/// Decimal scale of token [`Amount`] and [`Change`].
-pub const SCALE: u64 = 1_000_000;
+/// A number of decimal places for a token [`Amount`].
+pub type Denom = u8;
 
-/// The largest value that can be represented by this integer type
-pub const MAX_AMOUNT: Amount = Amount { micro: u64::MAX };
+/// Maximum decimal places in a native token [`Amount`] and [`Change`].
+/// For non-native (e.g. ERC20 tokens) one must read the `denom_key` storage
+/// key.
+pub const NATIVE_MAX_DECIMAL_PLACES: u8 = 6;
 
-/// A change in tokens amount
-pub type Change = i128;
+/// Decimal scale of a native token [`Amount`] and [`Change`].
+/// For non-native (e.g. ERC20 tokens) one must read the `denom_key` storage
+/// key.
+pub const NATIVE_SCALE: u64 = 1_000_000;
+
+pub type Change = SignedUint;
 
 impl Amount {
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
-        self.micro as Change
+        self.raw.try_into().unwrap()
     }
 
     /// Spend a given amount.
-    /// Panics when given `amount` > `self.micro` amount.
+    /// Panics when given `amount` > `self.raw` amount.
     pub fn spend(&mut self, amount: &Amount) {
-        self.micro = self.micro.checked_sub(amount.micro).unwrap();
+        self.raw = self.raw.checked_sub(amount.raw).unwrap();
     }
 
     /// Receive a given amount.
-    /// Panics on overflow.
+    /// Panics on overflow and when [`uint::MAX_VALUE`] is exceeded.
     pub fn receive(&mut self, amount: &Amount) {
-        self.micro = self.micro.checked_add(amount.micro).unwrap();
+        self.raw = self.raw.checked_add(amount.raw).unwrap();
     }
 
-    /// Create a new amount from whole number of tokens
-    pub const fn whole(amount: u64) -> Self {
+    /// Create a new amount of native token from whole number of tokens
+    pub fn native_whole(amount: u64) -> Self {
         Self {
-            micro: amount * SCALE,
+            raw: Uint::from(amount) * NATIVE_SCALE,
         }
     }
 
     /// Create a new amount with the maximum value
     pub fn max() -> Self {
-        Self { micro: u64::MAX }
+        Self {
+            raw: uint::MAX_VALUE,
+        }
     }
 
-    /// Checked addition. Returns `None` on overflow.
+    /// Checked addition. Returns `None` on overflow or if
+    /// the amount exceed [`uint::MAX_VALUE`]
     pub fn checked_add(&self, amount: Amount) -> Option<Self> {
-        self.micro
-            .checked_add(amount.micro)
-            .map(|result| Self { micro: result })
+        self.raw.checked_add(amount.raw).and_then(|result| {
+            if result < uint::MAX_VALUE {
+                Some(Self { raw: result })
+            } else {
+                None
+            }
+        })
     }
 
     /// Checked subtraction. Returns `None` on underflow
     pub fn checked_sub(&self, amount: Amount) -> Option<Self> {
-        self.micro
-            .checked_sub(amount.micro)
-            .map(|result| Self { micro: result })
+        self.raw
+            .checked_sub(amount.raw)
+            .map(|result| Self { raw: result })
     }
 
-    /// Create amount from Change
-    ///
-    /// # Panics
-    ///
-    /// Panics if the change is negative or overflows `u64`.
+    /// Create amount from the absolute value of `Change`.
     pub fn from_change(change: Change) -> Self {
-        Self {
-            micro: change as u64,
+        Self { raw: change.abs() }
+    }
+
+    /// Attempt to convert a `Decimal` to an `DenominatedAmount` with the
+    /// specified precision.
+    pub fn from_decimal(
+        decimal: Decimal,
+        denom: impl Into<u8>,
+    ) -> Result<Self, AmountParseError> {
+        let denom = denom.into();
+        if (denom as u32) < decimal.scale() {
+            Err(AmountParseError::ScaleTooLarge(decimal.scale(), denom))
+        } else {
+            let value = Uint::from(decimal.mantissa().unsigned_abs());
+            match Uint::from(10)
+                .checked_pow(Uint::from((denom as u32) - decimal.scale()))
+                .and_then(|scaling| scaling.checked_mul(value))
+            {
+                Some(amount) => Ok(Self { raw: amount }),
+                None => Err(AmountParseError::ConvertToDecimal),
+            }
         }
+    }
+
+    /// Given a string and a denomination, parse an amount from string.
+    pub fn from_str(
+        string: impl AsRef<str>,
+        denom: impl Into<u8>,
+    ) -> Result<Amount, AmountParseError> {
+        match Decimal::from_str(string.as_ref()) {
+            Ok(dec) => Ok(Self::from_decimal(dec, denom)?),
+            Err(err) => Err(AmountParseError::InvalidDecimal(err)),
+        }
+    }
+
+    /// Attempt to convert a float to an `Erc20Amount` with the specified
+    /// precision.
+    pub fn from_float(
+        float: impl Into<f64>,
+        denom: impl Into<u8>,
+    ) -> Result<Self, AmountParseError> {
+        match Decimal::try_from(float.into()) {
+            Err(e) => Err(AmountParseError::InvalidDecimal(e)),
+            Ok(decimal) => Self::from_decimal(decimal, denom),
+        }
+    }
+
+    /// Attempt to convert an unsigned interger to an `Erc20Amount` with the
+    /// specified precision.
+    pub fn from_int(
+        uint: impl Into<u64>,
+        denom: impl Into<u8>,
+    ) -> Result<Self, AmountParseError> {
+        Self::from_decimal(Decimal::try_from(uint.into()).unwrap(), denom)
     }
 }
 
-impl serde::Serialize for Amount {
+/// The number of decimal places in base 10 of an amount.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct Denomination(pub u8);
+
+impl From<u8> for Denomination {
+    fn from(denom: u8) -> Self {
+        Self(denom)
+    }
+}
+
+impl From<Denomination> for u8 {
+    fn from(denom: Denomination) -> Self {
+        denom.0
+    }
+}
+
+/// An amount with its denomination.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+pub struct DenominatedAmount {
+    /// The mantissa
+    pub amount: Amount,
+    /// The number of decimal plces in base ten.
+    pub denom: Denomination,
+}
+
+impl DenominatedAmount {
+    /// A precise string representation. The number of
+    /// decimal places in this string gives the denomination.
+    /// This not true of the string produced by the `Display`
+    /// trait.
+    pub fn to_string_precise(&self) -> String {
+        let decimals = self.denom.0 as usize;
+        let mut string = self.amount.raw.to_string();
+        if string.len() > decimals {
+            string.insert(string.len() - decimals, '.');
+        } else {
+            for _ in string.len()..decimals {
+                string.insert(0, '0');
+            }
+            string.insert(0, '.');
+            string.insert(0, '0');
+        }
+        string
+    }
+}
+
+impl FromStr for DenominatedAmount {
+    type Err = AmountParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let decimal = Decimal::from_str(s)
+            .or_else(|err| Err(AmountParseError::InvalidDecimal(err)))?;
+        let denom = Denomination(decimal.scale() as u8);
+        Ok(Self {
+            amount: Amount::from_decimal(decimal, denom)?,
+            denom,
+        })
+    }
+}
+
+impl serde::Serialize for DenominatedAmount {
     fn serialize<S>(
         &self,
         serializer: S,
@@ -108,12 +251,12 @@ impl serde::Serialize for Amount {
     where
         S: serde::Serializer,
     {
-        let amount_string = self.to_string();
+        let amount_string = self.to_string_precise();
         serde::Serialize::serialize(&amount_string, serializer)
     }
 }
 
-impl<'de> serde::Deserialize<'de> for Amount {
+impl<'de> serde::Deserialize<'de> for DenominatedAmount {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -125,34 +268,22 @@ impl<'de> serde::Deserialize<'de> for Amount {
     }
 }
 
-impl From<Amount> for Decimal {
-    fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
-    }
-}
+impl TryFrom<Amount> for Decimal {
+    type Error = AmountParseError;
 
-impl From<Decimal> for Amount {
-    fn from(micro: Decimal) -> Self {
-        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
-        Self { micro: res }
-    }
-}
-
-impl From<u64> for Amount {
-    fn from(micro: u64) -> Self {
-        Self { micro }
-    }
-}
-
-impl From<Amount> for u64 {
-    fn from(amount: Amount) -> Self {
-        amount.micro
+    fn try_from(amount: Amount) -> Result<Self, AmountParseError> {
+        if amount.raw > Uint([u64::MAX, u64::MAX, 0, 0]) {
+            Err(AmountParseError::ConvertToDecimal)
+        } else {
+            Ok(Into::<Decimal>::into(amount.raw.as_u128())
+                / Into::<Decimal>::into(NATIVE_SCALE))
+        }
     }
 }
 
 impl From<Amount> for u128 {
     fn from(amount: Amount) -> Self {
-        u128::from(amount.micro)
+        amount.raw.as_u128()
     }
 }
 
@@ -160,7 +291,7 @@ impl Add for Amount {
     type Output = Amount;
 
     fn add(mut self, rhs: Self) -> Self::Output {
-        self.micro += rhs.micro;
+        self.raw += rhs.raw;
         self
     }
 }
@@ -169,35 +300,28 @@ impl Mul<u64> for Amount {
     type Output = Amount;
 
     fn mul(mut self, rhs: u64) -> Self::Output {
-        self.micro *= rhs;
+        self.raw *= rhs;
         self
     }
 }
 
 /// A combination of Euclidean division and fractions:
-/// x*(a,b) = (a*(x//b), x%b)
+/// x*(a,b) = (a*(x//b), x%b).
 impl Mul<(u64, u64)> for Amount {
     type Output = (Amount, Amount);
 
     fn mul(mut self, rhs: (u64, u64)) -> Self::Output {
-        let ant = Amount::from((self.micro / rhs.1) * rhs.0);
-        self.micro %= rhs.1;
-        (ant, self)
-    }
-}
-
-impl Mul<Amount> for u64 {
-    type Output = Amount;
-
-    fn mul(mut self, rhs: Amount) -> Self::Output {
-        self *= rhs.micro;
-        Self::Output::from(self)
+        let amt = Amount {
+            raw: (self.raw / rhs.1) * rhs.0,
+        };
+        self.raw %= rhs.1;
+        (amt, self)
     }
 }
 
 impl AddAssign for Amount {
     fn add_assign(&mut self, rhs: Self) {
-        self.micro += rhs.micro
+        self.raw += rhs.raw
     }
 }
 
@@ -205,14 +329,14 @@ impl Sub for Amount {
     type Output = Amount;
 
     fn sub(mut self, rhs: Self) -> Self::Output {
-        self.micro -= rhs.micro;
+        self.raw -= rhs.raw;
         self
     }
 }
 
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
-        self.micro -= rhs.micro
+        self.raw -= rhs.raw
     }
 }
 
@@ -221,16 +345,17 @@ impl KeySeg for Amount {
     where
         Self: Sized,
     {
-        let micro = u64::parse(string)?;
-        Ok(Self { micro })
+        let raw = Uint::from_str(&string)
+            .map_err(|e| super::storage::Error::InvalidKeySeg(e.to_string()))?;
+        Ok(Self { raw })
     }
 
     fn raw(&self) -> String {
-        self.micro.raw()
+        self.raw.to_string()
     }
 
     fn to_db_key(&self) -> DbKeySeg {
-        self.micro.to_db_key()
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 
@@ -241,49 +366,34 @@ pub enum AmountParseError {
     InvalidDecimal(rust_decimal::Error),
     #[error(
         "Error decoding token amount, too many decimal places: {0}. Maximum \
-         {MAX_DECIMAL_PLACES}"
+         {1}"
     )]
-    ScaleTooLarge(u32),
-    #[error("Error decoding token amount, the value is within invalid range.")]
+    ScaleTooLarge(u32, u8),
+    #[error(
+        "Error decoding token amount, the value is not within invalid range."
+    )]
     InvalidRange,
+    #[error("Error converting amount to decimal, number too large.")]
+    ConvertToDecimal,
 }
 
-impl FromStr for Amount {
-    type Err = AmountParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match rust_decimal::Decimal::from_str(s) {
-            Ok(decimal) => {
-                let scale = decimal.scale();
-                if scale > MAX_DECIMAL_PLACES {
-                    return Err(AmountParseError::ScaleTooLarge(scale));
-                }
-                let whole =
-                    decimal * rust_decimal::Decimal::new(SCALE as i64, 0);
-                let micro: u64 =
-                    rust_decimal::prelude::ToPrimitive::to_u64(&whole)
-                        .ok_or(AmountParseError::InvalidRange)?;
-                Ok(Self { micro })
-            }
-            Err(err) => Err(AmountParseError::InvalidDecimal(err)),
-        }
-    }
-}
-
-impl Display for Amount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let decimal = rust_decimal::Decimal::from_i128_with_scale(
-            self.micro as i128,
-            MAX_DECIMAL_PLACES,
-        )
-        .normalize();
-        write!(f, "{}", decimal)
-    }
-}
+// impl Display for DenominatedAmount {
+// fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+// let string = self.to_string_precise();
+// let string = string.trim_end_matches(&['0', '.']);
+// f.write_str(string)
+// }
+// }
 
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
-        amount.micro as i128
+        amount.raw.try_into().unwrap()
+    }
+}
+
+impl From<DenominatedAmount> for Amount {
+    fn from(amt: DenominatedAmount) -> Self {
+        amt.amount
     }
 }
 
@@ -439,7 +549,7 @@ pub struct Transfer {
     /// Source token's sub prefix
     pub sub_prefix: Option<Key>,
     /// The amount of tokens
-    pub amount: Amount,
+    pub amount: DenominatedAmount,
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
@@ -473,7 +583,7 @@ impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
         let token =
             Address::decode(token_str).map_err(TransferError::Address)?;
         let amount =
-            Amount::from_str(&data.amount).map_err(TransferError::Amount)?;
+            DenominatedAmount::from_str(&data.amount).map_err(TransferError::Amount)?;
         Ok(Self {
             source,
             target,
@@ -561,12 +671,12 @@ pub mod testing {
 
     /// Generate an arbitrary token amount
     pub fn arb_amount() -> impl Strategy<Value = Amount> {
-        any::<u64>().prop_map(Amount::from)
+        any::<u64>().prop_map(Amount::native_whole)
     }
 
     /// Generate an arbitrary token amount up to and including given `max` value
     pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
-        (0..=max).prop_map(Amount::from)
+        (0..=max).prop_map(Amount::native_whole)
     }
 
     /// Generate an arbitrary non-zero token amount up to and including given
@@ -574,6 +684,6 @@ pub mod testing {
     pub fn arb_amount_non_zero_ceiled(
         max: u64,
     ) -> impl Strategy<Value = Amount> {
-        (1..=max).prop_map(Amount::from)
+        (1..=max).prop_map(Amount::native_whole)
     }
 }

@@ -187,7 +187,7 @@ impl Parameters {
         {
             let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
             let wrapper_tx_fees =
-                wrapper_tx_fees.unwrap_or(token::Amount::whole(100));
+                wrapper_tx_fees.unwrap_or(token::Amount::native_whole(100));
             storage.write(&wrapper_tx_fees_key, wrapper_tx_fees)?;
         }
         Ok(())

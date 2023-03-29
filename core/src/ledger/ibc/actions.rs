@@ -956,7 +956,7 @@ pub trait IbcActions {
             data.denom = denom.to_string();
         }
         let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
-        let amount = Amount::from_str(&data.amount).map_err(|e| {
+        let amount = Amount::from_str(&data.amount, 0).map_err(|e| {
             Error::SendingToken(format!(
                 "Invalid amount: amount {}, error {}",
                 data.amount, e
@@ -1037,7 +1037,7 @@ pub trait IbcActions {
         data: &FungibleTokenPacketData,
     ) -> std::result::Result<(), Self::Error> {
         let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
-        let amount = Amount::from_str(&data.amount).map_err(|e| {
+        let amount = Amount::from_str(&data.amount, 0).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
                 data.amount, e
@@ -1122,7 +1122,7 @@ pub trait IbcActions {
         data: &FungibleTokenPacketData,
     ) -> std::result::Result<(), Self::Error> {
         let token = storage::token(&data.denom).map_err(Error::IbcStorage)?;
-        let amount = Amount::from_str(&data.amount).map_err(|e| {
+        let amount = Amount::from_str(&data.amount, 0).map_err(|e| {
             Error::ReceivingToken(format!(
                 "Invalid amount: amount {}, error {}",
                 data.amount, e

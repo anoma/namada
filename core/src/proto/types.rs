@@ -321,7 +321,7 @@ impl From<Tx> for ResponseDeliverTx {
                             EventAttribute {
                                 key: encode_str("amount"),
                                 value: encode_string(
-                                    transfer.amount.to_string(),
+                                    transfer.amount.to_string_precise(),
                                 ),
                                 index: true,
                             },
