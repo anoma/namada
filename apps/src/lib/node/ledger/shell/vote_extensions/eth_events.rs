@@ -501,15 +501,7 @@ mod test_vote_extensions {
             .write(&bridge_pool::get_nonce_key(), nonce.try_to_vec().unwrap())
             .expect("Test failed");
 
-        // write nam nonce to storage
-        shell
-            .wl_storage
-            .storage
-            .write(
-                &bridge_pool::get_namada_transfers_nonce_key(),
-                nonce.try_to_vec().unwrap(),
-            )
-            .expect("Test failed");
+        // TODO: write nam nonce to storage
 
         // eth transfers with the same nonce as the bp nonce in storage are
         // valid

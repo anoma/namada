@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::active_key;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_namada_transfers_nonce_key, get_nonce_key, get_signed_root_key,
+    get_nonce_key, get_signed_root_key,
 };
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
@@ -144,16 +144,7 @@ where
 
     /// Get the latest transfers to Namada nonce.
     pub fn get_namada_transfers_nonce(self) -> Uint {
-        Uint::try_from_slice(
-            &self
-                .wl_storage
-                .storage
-                .read(&get_namada_transfers_nonce_key())
-                .expect("Reading the Namada transfers nonce shouldn't fail.")
-                .0
-                .expect("Reading the Namada transfers nonce shouldn't fail."),
-        )
-        .expect("Deserializing the nonce from storage should not fail.")
+        todo!()
     }
 
     /// Get the latest nonce for the Ethereum bridge

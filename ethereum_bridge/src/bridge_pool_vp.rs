@@ -1,5 +1,5 @@
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_namada_transfers_nonce_key, get_nonce_key, BRIDGE_POOL_ADDRESS,
+    get_nonce_key, BRIDGE_POOL_ADDRESS,
 };
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageWrite;
@@ -23,7 +23,4 @@ where
     wl_storage
         .write(&get_nonce_key(), Uint::from(0))
         .expect("Initializing the Bridge pool nonce shouldn't fail.");
-    wl_storage
-        .write(&get_namada_transfers_nonce_key(), Uint::from(0))
-        .expect("Initializing the Namada transfers nonce shouldn't fail.");
 }

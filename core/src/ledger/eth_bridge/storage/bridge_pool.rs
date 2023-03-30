@@ -24,7 +24,6 @@ pub const BRIDGE_POOL_ADDRESS: Address =
 struct Segments {
     signed_root: &'static str,
     bridge_pool_nonce: &'static str,
-    transfers_to_namada_nonce: &'static str,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -65,22 +64,6 @@ pub fn get_nonce_key() -> Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
             DbKeySeg::StringSeg(Segments::VALUES.bridge_pool_nonce.into()),
-        ],
-    }
-}
-
-/// Get the storage key of the nonce emitted by the
-/// Ethereum bridge smart contract for transfers to
-/// Namada.
-///
-/// This nonce is used for replay protection.
-pub fn get_namada_transfers_nonce_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
-            DbKeySeg::StringSeg(
-                Segments::VALUES.transfers_to_namada_nonce.into(),
-            ),
         ],
     }
 }
