@@ -77,13 +77,12 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let signed =
-            SignedTxData::try_from_slice(tx_data).map_err(Error::Decoding)?;
-        let tx_data = &signed.data.ok_or(Error::NoTxData)?;
+        let signed = tx_data;
+        let tx_data = signed.data.as_ref().ok_or(Error::NoTxData)?;
 
         // Check the non-onwer balance updates
         let keys_changed: HashSet<Key> = keys_changed

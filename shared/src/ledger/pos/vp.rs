@@ -37,6 +37,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
+use crate::proto::SignedTxData;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -107,7 +108,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {

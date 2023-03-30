@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
+use namada_core::proto::SignedTxData;
 use thiserror::Error;
 
 use super::governance;
@@ -44,7 +45,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {

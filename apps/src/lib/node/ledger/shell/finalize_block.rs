@@ -457,6 +457,7 @@ mod test_finalize_block {
     use namada::types::transaction::encrypted::EncryptedTx;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::proto::InnerTx;
+    use namada::proto::SignedTxData;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -488,7 +489,7 @@ mod test_finalize_block {
         for i in 1u64..5 {
             let raw_tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -563,7 +564,7 @@ mod test_finalize_block {
         let keypair = gen_keypair();
         let raw_tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some(String::from("transaction data").as_bytes().to_owned()),
+            Some(SignedTxData {data: Some(String::from("transaction data").as_bytes().to_owned()), sig: None}),
         );
         let encrypted_raw_tx =
             raw_tx.to_bytes();
@@ -694,9 +695,9 @@ mod test_finalize_block {
             let raw_tx = InnerTx::new(
                 tx_code.clone(),
                 Some(
-                    format!("Decrypted transaction data: {}", i)
+                    SignedTxData {data: Some(format!("Decrypted transaction data: {}", i)
                         .as_bytes()
-                        .to_owned(),
+                                  .to_owned()), sig: None},
                 ),
             );
             let encrypted_raw_tx =
@@ -732,9 +733,9 @@ mod test_finalize_block {
             let raw_tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(
-                    format!("Encrypted transaction data: {}", i)
+                    SignedTxData {data: Some(format!("Encrypted transaction data: {}", i)
                         .as_bytes()
-                        .to_owned(),
+                                  .to_owned()), sig: None},
                 ),
             );
             let wrapper_tx = WrapperTx::new(

@@ -12,7 +12,7 @@ use once_cell::unsync::Lazy;
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Vec<u8>,
+    tx_data: SignedTxData,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -25,23 +25,19 @@ fn validate_tx(
         verifiers
     );
 
-    let signed_tx_data =
-        Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
-
-    let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
+    let valid_sig = Lazy::new(|| {
+        {
             let pk = key::get(ctx, &addr);
             match pk {
                 Ok(Some(pk)) => {
                     matches!(
-                        ctx.verify_tx_signature(&pk, signed_tx_data.sig.as_ref().unwrap()),
+                        ctx.verify_tx_signature(&pk, tx_data.sig.as_ref().unwrap()),
                         Ok(true)
                     )
                 }
                 _ => false,
             }
         }
-        _ => false,
     });
 
     if !is_valid_tx(ctx, &tx_data)? {

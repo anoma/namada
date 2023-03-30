@@ -13,6 +13,7 @@ use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada::proto::SignedTxData;
 
 use super::*;
 
@@ -72,7 +73,7 @@ where
                     shell.read_storage_key_bytes(&proposal_code_key);
                 match proposal_code {
                     Some(proposal_code) => {
-                        let tx = Tx::new(proposal_code, Some(encode(&id)));
+                        let tx = Tx::new(proposal_code, Some(SignedTxData { data: Some(encode(&id)), sig: None }));
                         let tx_type =
                             TxType::Decrypted(DecryptedTx::Decrypted {
                                 tx,

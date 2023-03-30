@@ -443,11 +443,10 @@ mod tests {
             None,
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
-                let tx_data = env.tx.data.as_ref().expect("data should exist");
+                env.tx = Tx::new(code.clone(), Some(SignedTxData {data:data.clone(), sig: None})).sign(&keypair);
+                let tx_data = env.tx.data.clone().expect("data should exist");
 
-                SignedTxData::try_from_slice(&tx_data[..])
-                    .expect("decoding signed data we just signed")
+                tx_data
             });
             assert_eq!(&signed_tx_data.data, data);
             assert!(
@@ -503,14 +502,14 @@ mod tests {
         // evaluating without any code should fail
         let empty_code = vec![];
         let input_data = vec![];
-        let result = vp::CTX.eval(empty_code, input_data).unwrap();
+        let result = vp::CTX.eval(empty_code, SignedTxData {data:Some(input_data), sig: None}).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
         let code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
         let input_data = vec![];
-        let result = vp::CTX.eval(code, input_data).unwrap();
+        let result = vp::CTX.eval(code, SignedTxData {data:Some(input_data), sig: None}).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
@@ -518,7 +517,7 @@ mod tests {
         let code =
             std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
         let input_data = vec![];
-        let result = vp::CTX.eval(code, input_data).unwrap();
+        let result = vp::CTX.eval(code, SignedTxData {data:Some(input_data), sig: None}).unwrap();
         assert!(!result);
     }
 
@@ -538,7 +537,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -577,7 +576,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -612,7 +611,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -659,7 +658,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -690,7 +689,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -730,7 +729,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -769,7 +768,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -797,7 +796,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -835,7 +834,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -864,7 +863,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -907,7 +906,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -950,7 +949,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -996,7 +995,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1022,7 +1021,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1062,7 +1061,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1089,7 +1088,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1131,7 +1130,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1173,7 +1172,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1220,7 +1219,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1262,7 +1261,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1313,7 +1312,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1380,7 +1379,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1459,7 +1458,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1508,7 +1507,7 @@ mod tests {
             .expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1539,7 +1538,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1592,7 +1591,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1656,7 +1655,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],
@@ -1730,7 +1729,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let tx = Tx {
             code: vec![],
-            data: Some(tx_data.clone()),
+            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
             inner_tx: None,
             extra: vec![],

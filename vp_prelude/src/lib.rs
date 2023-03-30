@@ -83,11 +83,11 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 /// - tx is whitelisted, or
 /// - tx is executed by an approved governance proposal (no need to be
 ///   whitelisted)
-pub fn is_valid_tx(ctx: &Ctx, tx_data: &[u8]) -> VpResult {
+pub fn is_valid_tx(ctx: &Ctx, tx_data: &SignedTxData) -> VpResult {
     if is_tx_whitelisted(ctx)? {
         accept()
     } else {
-        let proposal_id = u64::try_from_slice(tx_data).ok();
+        let proposal_id = tx_data.data.as_ref().and_then(|x| u64::try_from_slice(&x).ok());
 
         proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
     }
@@ -269,14 +269,15 @@ impl<'view> VpEnv<'view> for Ctx {
     fn eval(
         &self,
         vp_code: Vec<u8>,
-        input_data: Vec<u8>,
+        input_data: SignedTxData,
     ) -> Result<bool, Error> {
+        let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
                 vp_code.as_ptr() as _,
                 vp_code.len() as _,
-                input_data.as_ptr() as _,
-                input_data.len() as _,
+                input_data_bytes.as_ptr() as _,
+                input_data_bytes.len() as _,
             )
         };
         Ok(HostEnvResult::is_success(result))

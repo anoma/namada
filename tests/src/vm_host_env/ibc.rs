@@ -69,6 +69,7 @@ use namada::types::storage::{self, BlockHash, BlockHeight, Key, TxIndex};
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_tx_prelude::StorageWrite;
+use namada::proto::SignedTxData;
 
 use crate::tx::{self, *};
 
@@ -82,7 +83,7 @@ pub struct TestIbcVp<'a> {
 impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
     ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
         self.ibc.validate_tx(
             tx_data,
@@ -99,7 +100,7 @@ pub struct TestIbcTokenVp<'a> {
 impl<'a> TestIbcTokenVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
     ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
         self.token.validate_tx(
             tx_data,

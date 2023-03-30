@@ -240,7 +240,7 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -256,7 +256,7 @@ mod test_process_proposal {
         .bind(tx.clone());
         let tx = Tx::new(
             vec![],
-            Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+            Some(SignedTxData {data: Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None}),
         )
         .attach_inner_tx(&tx, Default::default())
         .to_bytes();
@@ -288,7 +288,7 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
@@ -306,13 +306,12 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed")
         .attach_inner_tx(&tx, Default::default());
-        let new_tx = if let Some(Ok(SignedTxData {
+        let new_tx = if let Some(SignedTxData {
             data: Some(data),
             sig,
-        })) = wrapper
+        }) = wrapper
             .data
             .take()
-            .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let mut new_wrapper = if let TxType::Wrapper(wrapper) =
                 <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
@@ -334,9 +333,7 @@ mod test_process_proposal {
                     SignedTxData {
                         sig,
                         data: Some(new_data),
-                    }
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    },
                 ),
                 timestamp,
                 inner_tx: Some(tx),
@@ -375,7 +372,7 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::keys().remove(0).1;
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -431,7 +428,7 @@ mod test_process_proposal {
 
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -481,7 +478,7 @@ mod test_process_proposal {
         for i in 0..3 {
             let tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None }),
             );
             let encrypted_tx = tx.to_bytes();
             let wrapper = WrapperTx::new(
@@ -551,7 +548,7 @@ mod test_process_proposal {
 
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -614,7 +611,7 @@ mod test_process_proposal {
 
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let mut wrapper = WrapperTx::new(
             Fee {
@@ -712,7 +709,7 @@ mod test_process_proposal {
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
 
         let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -749,7 +746,7 @@ mod test_process_proposal {
 
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let tx = Tx::from(TxType::Raw(tx));
         let request = ProcessProposal {

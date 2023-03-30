@@ -22,6 +22,7 @@ use crate::types::storage::TxIndex;
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
+use crate::proto::SignedTxData;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -288,10 +289,7 @@ where
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
-                    let tx_data = match tx.data.as_ref() {
-                        Some(data) => &data[..],
-                        None => &[],
-                    };
+                    let tx_data = tx.data.clone().unwrap_or_default();
 
                     let accepted: Result<bool> = match internal_addr {
                         InternalAddress::PoS => {
@@ -306,7 +304,7 @@ where
                             let result = match panic::catch_unwind(move || {
                                 pos_ref
                                     .validate_tx(
-                                        tx_data,
+                                        &tx_data,
                                         keys_changed_ref,
                                         verifiers_addr_ref,
                                     )
@@ -328,7 +326,7 @@ where
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
                             let result = ibc
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::IbcNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = ibc.ctx.gas_meter.into_inner();
@@ -337,7 +335,7 @@ where
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
                             let result = parameters
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::ParametersNativeVpError);
                             // Take the gas meter back out of the context
                             gas_meter = parameters.ctx.gas_meter.into_inner();
@@ -353,7 +351,7 @@ where
                         InternalAddress::Governance => {
                             let governance = GovernanceVp { ctx };
                             let result = governance
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::GovernanceNativeVpError);
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
@@ -361,7 +359,7 @@ where
                         InternalAddress::SlashFund => {
                             let slash_fund = SlashFundVp { ctx };
                             let result = slash_fund
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::SlashFundNativeVpError);
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
@@ -373,7 +371,7 @@ where
                             // validate the transfer
                             let ibc_token = IbcToken { ctx };
                             let result = ibc_token
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::IbcTokenNativeVpError);
                             gas_meter = ibc_token.ctx.gas_meter.into_inner();
                             result
@@ -381,7 +379,7 @@ where
                         InternalAddress::EthBridge => {
                             let bridge = EthBridge { ctx };
                             let result = bridge
-                                .validate_tx(tx_data, &keys_changed, &verifiers)
+                                .validate_tx(&tx_data, &keys_changed, &verifiers)
                                 .map_err(Error::EthBridgeNativeVpError);
                             gas_meter = bridge.ctx.gas_meter.into_inner();
                             result

@@ -18,6 +18,7 @@ pub mod wrapper_tx {
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxError, TxType};
+    use crate::proto::SignedTxData;
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -249,9 +250,12 @@ pub mod wrapper_tx {
             Ok(Tx::new(
                 vec![],
                 Some(
-                    TxType::Wrapper(self.clone())
-                        .try_to_vec()
-                        .expect("Could not serialize WrapperTx"),
+                    SignedTxData {
+                        data: Some(TxType::Wrapper(self.clone())
+                            .try_to_vec()
+                            .expect("Could not serialize WrapperTx")),
+                        sig: None,
+                    }
                 ),
             )
             .sign(keypair))
@@ -357,7 +361,7 @@ pub mod wrapper_tx {
             let keypair = gen_keypair();
             let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
 
             let wrapper = WrapperTx::new(
@@ -391,7 +395,7 @@ pub mod wrapper_tx {
             let keypair = gen_keypair();
             let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
 
             let mut wrapper = WrapperTx::new(
@@ -430,7 +434,7 @@ pub mod wrapper_tx {
             // The intended tx
             let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             // the signed tx
             let mut tx = WrapperTx::new(
@@ -460,8 +464,7 @@ pub mod wrapper_tx {
             };
 
             let mut signed_tx_data =
-                SignedTxData::try_from_slice(&tx.data.as_ref().unwrap()[..])
-                    .expect("Test failed");
+                tx.data.clone().unwrap();
 
             // malicious transaction
             let malicious =
@@ -487,7 +490,7 @@ pub mod wrapper_tx {
             signed_tx_data.data = Some(
                 TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
             );
-            tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
+            tx.data = Some(signed_tx_data.clone());
 
             // check that the signature is not valid
             tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig.unwrap())

@@ -778,6 +778,7 @@ mod test_utils {
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
     use namada::proto::InnerTx;
+    use namada::proto::SignedTxData;
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -997,7 +998,7 @@ mod test_utils {
         // enqueue a wrapper tx
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData { data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let encrypted_tx = tx.to_bytes();
         let wrapper = WrapperTx::new(

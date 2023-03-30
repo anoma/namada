@@ -235,7 +235,10 @@ pub mod tx_types {
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
-            Tx::new(vec![], Some(ty.try_to_vec().unwrap()))
+            Tx::new(vec![], Some(SignedTxData {
+                data: Some(ty.try_to_vec().unwrap()),
+                sig: None,
+            }))
         }
     }
 
@@ -247,7 +250,7 @@ pub mod tx_types {
         type Error = std::io::Error;
 
         fn try_from(tx: Tx) -> std::io::Result<TxType> {
-            if let Some(ref data) = tx.data {
+            if let Some(ref data) = tx.data.clone().and_then(|data| data.data) {
                 BorshDeserialize::deserialize(&mut data.as_ref())
             } else {
                 // We allow Txs with empty data fields, which we
@@ -278,17 +281,19 @@ pub mod tx_types {
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
     pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
-        if let Some(Ok(SignedTxData {
+        if let Some(SignedTxData {
             data: Some(data),
             sig: Some(ref sig),
-        })) = tx
+        }) = tx
             .data
             .as_ref()
-            .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
                 code: tx.code.clone(),
-                data: Some(data.clone()),
+                data: Some(SignedTxData {
+                    data: Some(data.clone()),
+                    sig: None,
+                }),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx.clone(),
                 extra: tx.extra.clone(),
@@ -296,7 +301,10 @@ pub mod tx_types {
             .partial_hash();
             match TxType::try_from(Tx {
                 code: tx.code,
-                data: Some(data),
+                data: Some(SignedTxData {
+                    data: Some(data.clone()),
+                    sig: None,
+                }),
                 timestamp: tx.timestamp,
                 inner_tx: tx.inner_tx,
                 extra: tx.extra,
@@ -369,14 +377,17 @@ pub mod tx_types {
         fn test_process_tx_raw_tx_some_data() {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some(
-                    TxType::Raw(inner.clone())
+                    SignedTxData {
+                    data: Some(TxType::Raw(inner.clone())
                         .try_to_vec()
-                        .expect("Test failed"),
+                            .expect("Test failed")),
+                        sig: None,
+                    }
                 ),
             );
 
@@ -392,14 +403,15 @@ pub mod tx_types {
         fn test_process_tx_raw_tx_some_signed_data() {
             let inner = Tx::new(
                 "code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some(
-                    TxType::Raw(inner.clone())
+                    SignedTxData {data: Some(TxType::Raw(inner.clone())
                         .try_to_vec()
-                        .expect("Test failed"),
+                                             .expect("Test failed")),
+                    sig: None,}
                 ),
             )
             .sign(&gen_keypair());
@@ -417,7 +429,7 @@ pub mod tx_types {
             let keypair = gen_keypair();
             let tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData{data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             // the signed tx
             let wrapper_tx = WrapperTx::new(
@@ -454,7 +466,7 @@ pub mod tx_types {
             let keypair = gen_keypair();
             let inner_tx = InnerTx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some("transaction data".as_bytes().to_owned()),
+                Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             // the signed tx
             let wrapper = WrapperTx::new(
@@ -472,7 +484,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 vec![],
                 Some(
-                    TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
+                    SignedTxData {data:Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None},
                 ),
             )
             .attach_inner_tx(&inner_tx, Default::default());
@@ -487,7 +499,7 @@ pub mod tx_types {
     fn test_process_tx_decrypted_unsigned() {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -514,7 +526,7 @@ pub mod tx_types {
     fn test_process_tx_decrypted_signed() {
         let payload = Tx::new(
             "transaction data".as_bytes().to_owned(),
-            Some("transaction data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let decrypted = DecryptedTx::Decrypted {
             tx: payload.clone(),
@@ -534,7 +546,7 @@ pub mod tx_types {
         };
         // create the tx with signed decrypted data
         let tx =
-            Tx::new(vec![], Some(signed.try_to_vec().expect("Test failed")));
+            Tx::new(vec![], Some(signed));
         match process_tx(tx).expect("Test failed") {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,

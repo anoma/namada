@@ -188,6 +188,7 @@ mod test_prepare_proposal {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
     use namada::proto::InnerTx;
+    use namada::proto::SignedTxData;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -200,7 +201,7 @@ mod test_prepare_proposal {
         let (shell, _) = TestShell::new();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
+            Some(SignedTxData {data: Some("transaction_data".as_bytes().to_owned()), sig: None}),
         );
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
@@ -225,26 +226,29 @@ mod test_prepare_proposal {
         let keypair = gen_keypair();
         let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some("transaction_data".as_bytes().to_owned()),
+            Some(SignedTxData {data:Some("transaction_data".as_bytes().to_owned()), sig: None}),
         );
         // an unsigned wrapper will cause an error in processing
         let wrapper = Tx::new(
             "".as_bytes().to_owned(),
             Some(
-                WrapperTx::new(
-                    Fee {
-                        amount: 0.into(),
-                        token: shell.storage.native_token.clone(),
-                    },
-                    &keypair,
-                    Epoch(0),
-                    0.into(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
-                )
-                .bind(tx.clone())
-                .try_to_vec()
-                .expect("Test failed"),
+                SignedTxData {
+                    data: Some(WrapperTx::new(
+                        Fee {
+                            amount: 0.into(),
+                            token: shell.storage.native_token.clone(),
+                        },
+                        &keypair,
+                        Epoch(0),
+                        0.into(),
+                        #[cfg(not(feature = "mainnet"))]
+                        None,
+                    )
+                               .bind(tx.clone())
+                               .try_to_vec()
+                               .expect("Test failed")),
+                    sig: None,
+                }
             ),
         )
         .attach_inner_tx(&tx, Default::default())
@@ -284,7 +288,7 @@ mod test_prepare_proposal {
         for i in 0..2 {
             let tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
-                Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
                 tx: Tx::from(tx.clone()),
@@ -315,7 +319,7 @@ mod test_prepare_proposal {
         // equality since otherwise changes in timestamps would
         // fail the test
         expected_wrapper.append(&mut expected_decrypted);
-        let expected_txs: Vec<Vec<u8>> = expected_wrapper
+        let expected_txs: Vec<SignedTxData> = expected_wrapper
             .iter()
             .map(|tx| tx.data.clone().expect("Test failed"))
             .collect();
@@ -350,7 +354,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let received: Vec<Vec<u8>> = shell
+            let received: Vec<SignedTxData> = shell
                 .prepare_proposal(req)
                 .txs
                 .into_iter()

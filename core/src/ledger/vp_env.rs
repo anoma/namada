@@ -8,6 +8,7 @@ use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
+use crate::proto::SignedTxData;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -83,7 +84,7 @@ where
     fn eval(
         &self,
         vp_code: Vec<u8>,
-        input_data: Vec<u8>,
+        input_data: SignedTxData,
     ) -> Result<bool, storage_api::Error>;
 
     /// Verify a transaction signature. The signature is expected to have been

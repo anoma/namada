@@ -15,6 +15,7 @@ use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
+use crate::proto::SignedTxData;
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
@@ -217,12 +218,12 @@ pub fn is_valid_validator_voting_period(
 /// Check if an accepted proposal is being executed
 pub fn is_proposal_accepted<S>(
     storage: &S,
-    tx_data: &[u8],
+    tx_data: &SignedTxData,
 ) -> storage_api::Result<bool>
 where
     S: storage_api::StorageRead,
 {
-    let proposal_id = u64::try_from_slice(tx_data).ok();
+    let proposal_id = tx_data.data.clone().and_then(|x| u64::try_from_slice(&x).ok());
     match proposal_id {
         Some(id) => {
             let proposal_execution_key =

@@ -22,6 +22,7 @@ use crate::types::hash::Hash;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
+use crate::proto::SignedTxData;
 
 /// Possible error in a native VP host function call
 /// The `storage_api::Error` may wrap the `vp_host_fns::RuntimeError` and can
@@ -39,7 +40,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &[u8],
+        tx_data: &SignedTxData,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<bool, Self::Error>;
@@ -429,7 +430,7 @@ where
     fn eval(
         &self,
         vp_code: Vec<u8>,
-        input_data: Vec<u8>,
+        input_data: SignedTxData,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
         {

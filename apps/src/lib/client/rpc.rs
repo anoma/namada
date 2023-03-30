@@ -413,10 +413,9 @@ fn extract_payload(
             #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: _,
         })) => {
-            let empty_vec = vec![];
-            let tx_data = tx.data.as_ref().unwrap_or(&empty_vec);
-            let _ = SignedTxData::try_from_slice(tx_data).map(|signed| {
-                Transfer::try_from_slice(&signed.data.unwrap()[..])
+            let tx_data = tx.data.clone().unwrap_or_default();
+            let _ = tx_data.data.map(|signed| {
+                Transfer::try_from_slice(&signed[..])
                     .map(|tfer| *transfer = Some(tfer))
             });
         }

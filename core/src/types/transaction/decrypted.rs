@@ -14,6 +14,7 @@ pub mod decrypted_tx {
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::proto::InnerTx;
+    use crate::proto::SignedTxData;
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -96,9 +97,14 @@ pub mod decrypted_tx {
             Tx::new(
                 vec![],
                 Some(
-                    TxType::Decrypted(decrypted)
-                        .try_to_vec()
-                        .expect("Encrypting transaction should not fail"),
+                    SignedTxData {
+                        data: Some(
+                            TxType::Decrypted(decrypted)
+                                .try_to_vec()
+                                .expect("Encrypting transaction should not fail")
+                        ),
+                        sig: None,
+                    }
                 ),
             )
         }

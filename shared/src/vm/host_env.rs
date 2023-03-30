@@ -25,6 +25,7 @@ use crate::types::key::*;
 use crate::types::storage::{Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
+use crate::proto::SignedTxData;
 use crate::vm::{
     validate_untrusted_wasm, HostRef, MutHostRef, WasmValidationError,
 };
@@ -293,7 +294,7 @@ pub trait VpEvaluator {
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
         vp_code: Vec<u8>,
-        input_data: Vec<u8>,
+        input_data: SignedTxData,
     ) -> HostEnvResult;
 }
 
@@ -1900,6 +1901,8 @@ where
         .read_bytes(input_data_ptr, input_data_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
+    let input_data: SignedTxData = BorshDeserialize::try_from_slice(&input_data)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
     Ok(eval_runner
