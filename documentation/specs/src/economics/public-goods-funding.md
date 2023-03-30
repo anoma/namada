@@ -71,12 +71,12 @@ In the same way that a Steward can be voted in by Namada governance through a cu
 
 ### Initiating the vote
 
-Before a new PGF Steward can either be elected or removed, a governance proposal that specifies this objective must pass. The voting on this proposal is handled by the governance proposal type `CustomProposal`.
+Before a new PGF Steward can either be elected or removed, a governance proposal that specifies this objective must pass. The voting on this proposal is handled by the governance proposal type `StewardProposal`, which is a Custom Proposal type.
 
-The struct of `PgfProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
+The struct of `StewardProposal` is constructed as follows, and is explained in more detail in the [governance specs](../base-ledger/governance.md)
 
 ```rust
-struct CustomProposal{
+struct StewardProposal{
   id: u64
   content: Vec<u8>,
   author: Address,
@@ -87,12 +87,12 @@ struct CustomProposal{
 }
 ```
 
- In order for a new PGF Steward to be elected (or removed), $\frac{2}{3}$ of validating power must vote on the `CustomProposal` and more than half of the votes must be in favor. If more than half of the votes are against the proposal, the Steward set is kept the same, and the proposer of the proposal loses their escrowed funds.
+ In order for a new PGF Steward to be elected (or removed), $\frac{2}{3}$ of validating power must vote on the `StewardProposal` and more than half of the votes must be in favor. If more than half of the votes are against the proposal, the Steward set is kept the same, and the proposer of the proposal loses their escrowed funds.
 
 See the example below for more detail, as it may serve as the best medium for explaining the mechanism.
 
 ### Voting on the Steward
-After the `CustomProposal` has been submitted, and once the Steward's address has been constructed and broadcasted, the Steward address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
+After the `StewardProposal` has been submitted, and once the Steward's address has been constructed and broadcasted, the Steward address can be voted on by governance particpants. All voting must occur between `votingStartEpoch` and `votingEndEpoch`.
 
 The vote for a Steward addresses's membership will be constructed as follows:
 
@@ -126,14 +126,14 @@ The governance set consists of Alice, Bob, Charlie, Dave, and Elsa. Each member 
 The current PGF Stewards are Dave and Elsa.
 
 - At epoch 42, Bob and Charlie decide to put themselves forward as a joint PGF Steward. They construct a multisig with address `0xBobCharlieMultisig`. 
-- At epoch 42, Bob proposes his and Charlie's candidacy through a `CustomProposal`:
+- At epoch 42, Bob proposes his and Charlie's candidacy through a `StewardProposal`:
 
 ```rust
-struct CustomProposal{
+struct StewardProposal{
   id: 2
   content: Vec<32,54,01,24,13,37>, // (Just the byte representation of the content (description) of the proposal)
   author: 0xCharlie,
-  r#type: CustomProposal,
+  r#type: StewardProposal,
   votingStartEpoch: Epoch(45),
   votingEndEpoch: Epoch(54),
   graceEpoch: Epoch(57),
@@ -212,7 +212,7 @@ The Stewards should be able to propose the burning of funds, but this hopefully 
 
 ### VP checks
 
-The VP must check that the Stewards spending doeso not exceed the balance of the VP (in aggregate).
+The VP must check that the Stewards spending does not exceed the balance of the VP (in aggregate).
 
 The VP must also check that the any spending is only done by a the active correctly elected PGF Stewards.
 
