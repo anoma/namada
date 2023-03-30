@@ -31,6 +31,18 @@ impl std::fmt::Display for IbcEvent {
     }
 }
 
+/// Returns true if the event attributes should be indexed
+pub fn is_indexed_event_type(event_type: &str) -> bool {
+    match event_type {
+        "create_client"
+        | "update_client"
+        | "send_packet"
+        | "write_acknowledgement"
+        | "message" => true,
+        _ => false,
+    }
+}
+
 #[cfg(any(feature = "abciplus", feature = "abcipp"))]
 mod ibc_rs_conversion {
     use std::collections::HashMap;

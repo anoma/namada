@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::ledger::native_vp::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
-use crate::types::ibc::IbcEvent;
+use crate::types::ibc::{self, IbcEvent};
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
 
@@ -164,16 +164,29 @@ impl From<ProposalEvent> for Event {
 /// Convert our custom event into the necessary tendermint proto type
 impl From<Event> for crate::tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
+        let convert_attribute = |(key, value)| {
+            let index = match &event.event_type {
+                EventType::Accepted | EventType::Applied
+                    if key == "hash".to_string() =>
+                {
+                    true
+                }
+                EventType::Ibc(event_type)
+                    if ibc::is_indexed_event_type(&event_type) =>
+                {
+                    true
+                }
+                // TODO others
+                _ => false,
+            };
+            EventAttribute { key, value, index }
+        };
         Self {
             r#type: event.event_type.to_string(),
             attributes: event
                 .attributes
                 .into_iter()
-                .map(|(key, value)| EventAttribute {
-                    key,
-                    value,
-                    index: true,
-                })
+                .map(convert_attribute)
                 .collect(),
         }
     }
