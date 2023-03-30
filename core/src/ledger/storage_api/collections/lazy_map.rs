@@ -173,27 +173,6 @@ where
             {
                 validate_sub_key(sub_b.raw())
             }
-            // TODO: other collections
-            [DbKeySeg::StringSeg(sub_a), DbKeySeg::AddressSeg(sub_b)]
-                if sub_a == DATA_SUBKEY =>
-            {
-                if let Ok(key_in_kv) = storage::KeySeg::parse(sub_b.raw()) {
-                    let nested = self.at(&key_in_kv).is_valid_sub_key(key)?;
-                    match nested {
-                        Some(nested_sub_key) => Ok(Some(NestedSubKey::Data {
-                            key: key_in_kv,
-                            nested_sub_key,
-                        })),
-                        None => Err(ValidationError::InvalidNestedSubKey(
-                            key.clone(),
-                        ))
-                        .into_storage_result(),
-                    }
-                } else {
-                    Err(ValidationError::InvalidSubKey(key.clone()))
-                        .into_storage_result()
-                }
-            }
             _ => Err(ValidationError::InvalidSubKey(key.clone()))
                 .into_storage_result(),
         }
@@ -439,11 +418,9 @@ where
         )?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
-            // dbg!(&key, &val);
             let sub_key = LazyCollection::is_valid_sub_key(self, &key)?
                 .ok_or(ReadError::UnexpectedlyEmptyStorageKey)
                 .into_storage_result()?;
-            // dbg!(&sub_key);
             Ok((sub_key, val))
         }))
     }
