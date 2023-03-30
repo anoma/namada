@@ -32,7 +32,7 @@ use crate::parameters::PosParams;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
-    ValidatorSetUpdate, ValidatorState, WeightedValidator,
+    UnbondDetails, ValidatorSetUpdate, ValidatorState, WeightedValidator,
 };
 use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
@@ -460,8 +460,12 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     }
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    // Unbond the self-bond
-    let amount_self_unbond = token::Amount::from(50_000);
+    // Unbond the self-bond with an amount that will remove all of the self-bond
+    // executed after genesis and some of the genesis bond
+    let amount_self_unbond: token::Amount =
+        amount_self_bond + (u64::from(validator.tokens) / 2).into();
+    let self_unbond_epoch = s.storage.block.epoch;
+
     unbond_tokens(
         &mut s,
         None,
@@ -478,9 +482,11 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         pipeline_epoch - 1,
     )
     .unwrap();
+
     let val_stake_post =
         read_validator_stake(&s, &params, &validator.address, pipeline_epoch)
             .unwrap();
+
     let val_delta = read_validator_delta_value(
         &s,
         &params,
@@ -494,9 +500,16 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     assert_eq!(
         unbond
             .at(&(pipeline_epoch + params.unbonding_len))
+            .get(&s, &Epoch::default())
+            .unwrap(),
+        Some(amount_self_unbond - amount_self_bond)
+    );
+    assert_eq!(
+        unbond
+            .at(&(pipeline_epoch + params.unbonding_len))
             .get(&s, &(self_bond_epoch + params.pipeline_len))
             .unwrap(),
-        Some(amount_self_unbond)
+        Some(amount_self_bond)
     );
     assert_eq!(
         val_stake_pre,
@@ -508,6 +521,68 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
             validator.tokens + amount_self_bond + amount_del
                 - amount_self_unbond
         )
+    );
+
+    // Check all bond and unbond details (self-bonds and delegation)
+    let check_bond_details = |ix, bond_details: BondsAndUnbondsDetails| {
+        println!("Check index {ix}");
+        dbg!(&bond_details);
+        assert_eq!(bond_details.len(), 2);
+        let self_bond_details = bond_details.get(&self_bond_id).unwrap();
+        let delegation_details = bond_details.get(&delegation_bond_id).unwrap();
+        assert_eq!(
+            self_bond_details.bonds.len(),
+            1,
+            "Contains only part of the genesis bond now"
+        );
+        assert_eq!(
+            self_bond_details.bonds[0],
+            BondDetails {
+                start: start_epoch,
+                amount: amount_self_unbond - amount_self_bond,
+                slashed_amount: None
+            },
+        );
+        assert_eq!(
+            delegation_details.bonds[0],
+            BondDetails {
+                start: delegation_epoch + params.pipeline_len,
+                amount: amount_del,
+                slashed_amount: None
+            },
+        );
+        assert_eq!(
+            self_bond_details.unbonds.len(),
+            2,
+            "Contains a full unbond of the last self-bond and an unbond from \
+             the genesis bond"
+        );
+        assert_eq!(
+            self_bond_details.unbonds[0],
+            UnbondDetails {
+                start: start_epoch,
+                withdraw: self_unbond_epoch
+                    + params.pipeline_len
+                    + params.unbonding_len,
+                amount: amount_self_unbond - amount_self_bond,
+                slashed_amount: None
+            }
+        );
+        assert_eq!(
+            self_bond_details.unbonds[1],
+            UnbondDetails {
+                start: self_bond_epoch + params.pipeline_len,
+                withdraw: self_unbond_epoch
+                    + params.pipeline_len
+                    + params.unbonding_len,
+                amount: amount_self_bond,
+                slashed_amount: None
+            }
+        );
+    };
+    check_bond_details(
+        0,
+        bonds_and_unbonds(&s, None, Some(validator.address.clone())).unwrap(),
     );
 
     // Unbond delegation

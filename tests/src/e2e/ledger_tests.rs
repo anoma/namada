@@ -1907,14 +1907,7 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 32 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
-    let epoch_raw = matched
-        .trim()
-        .split_once(expected)
-        .unwrap()
-        .1
-        .split_once('.')
-        .unwrap()
-        .0;
+    let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
     client.assert_success();
 
@@ -1978,6 +1971,159 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    Ok(())
+}
+
+/// Test for PoS bonds and unbonds queries.
+///
+/// 1. Run the ledger node
+/// 2. Submit a delegation to the genesis validator
+/// 3. Wait for epoch 4
+/// 4. Submit another delegation to the genesis validator
+/// 5. Submit an unbond of the delegation
+/// 6. Wait for epoch 7
+/// 7. Check the output of the bonds query
+#[test]
+fn test_bond_queries() -> Result<()> {
+    let pipeline_len = 2;
+    let unbonding_len = 4;
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 2,
+                max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
+                ..genesis.parameters
+            };
+            let pos_params = PosParamsConfig {
+                pipeline_len,
+                unbonding_len,
+                ..genesis.pos_params
+            };
+            GenesisConfig {
+                parameters,
+                pos_params,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+
+    // Wait for a first block
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_alias = "validator-0";
+
+    // 2. Submit a delegation to the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        validator_alias,
+        "--source",
+        BERTHA,
+        "--amount",
+        "200",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 3. Wait for epoch 4
+    let start = Instant::now();
+    let loop_timeout = Duration::new(20, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for epoch: {}", 1);
+        }
+        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        if epoch >= Epoch(4) {
+            break;
+        }
+    }
+
+    // 4. Submit another delegation to the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        validator_alias,
+        "--source",
+        BERTHA,
+        "--amount",
+        "300",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 5. Submit an unbond of the delegation
+    let tx_args = vec![
+        "unbond",
+        "--validator",
+        validator_alias,
+        "--source",
+        BERTHA,
+        "--amount",
+        "412",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 6. Wait for epoch 7
+    let start = Instant::now();
+    let loop_timeout = Duration::new(20, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timed out waiting for epoch: {}", 7);
+        }
+        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        if epoch >= Epoch(7) {
+            break;
+        }
+    }
+
+    // 7. Check the output of the bonds query
+    let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(
+        "All bonds total active: 200088\r
+All bonds total: 200088\r
+All unbonds total active: 412\r
+All unbonds total: 412\r
+All unbonds total withdrawable: 412\r",
+    )?;
     client.assert_success();
 
     Ok(())
