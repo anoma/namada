@@ -214,6 +214,12 @@ where
         &self,
         event: &EthereumEvent,
     ) -> std::result::Result<(), VoteExtensionError> {
+        // TODO: on the transfer events, maybe perform additional checks:
+        // - some token asset is not whitelisted
+        // - do we have enough balance for the transfer
+        // in practice, some events may have a variable degree of garbage
+        // data in them; we can simply rely on quorum decisions to filter
+        // out such events, which will time out in storage
         match event {
             EthereumEvent::TransfersToEthereum {
                 nonce: ext_nonce,
@@ -241,9 +247,6 @@ where
                     );
                     return Err(VoteExtensionError::InvalidBpNonce);
                 }
-                // TODO: maybe perform additional checks:
-                // - some token asset is not whitelisted
-                // - do we have enough balance for the transfer
             }
             EthereumEvent::TransfersToNamada {
                 nonce: ext_nonce,
@@ -272,9 +275,6 @@ where
                     );
                     return Err(VoteExtensionError::InvalidNamNonce);
                 }
-                // TODO: maybe perform additional checks:
-                // - some token asset is not whitelisted
-                // - do we have enough balance for the transfer
             }
             EthereumEvent::UpdateBridgeWhitelist { .. } => {
                 // TODO: check nonce of whitelist update;
