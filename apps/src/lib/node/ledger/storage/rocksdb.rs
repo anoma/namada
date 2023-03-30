@@ -2,15 +2,18 @@
 //!
 //! The current storage tree is:
 //! - `chain_id`
+//! - `ethereum_height`: the height of the last eth block processed by the
+//!   oracle
+//! - `eth_events_queue`: a queue of confirmed ethereum events to be processed
+//!   in order
 //! - `height`: the last committed block height
 //! - `tx_queue`: txs to be decrypted in the next block
-//! - `pred`: predecessor values of the top-level keys of the same name
-//!   - `tx_queue`
 //! - `next_epoch_min_start_height`: minimum block height from which the next
 //!   epoch can start
 //! - `next_epoch_min_start_time`: minimum block time from which the next epoch
 //!   can start
 //! - `pred`: predecessor values of the top-level keys of the same name
+//!   - `tx_queue`
 //!   - `next_epoch_min_start_height`
 //!   - `next_epoch_min_start_time`
 //! - `subspace`: accounts sub-spaces
