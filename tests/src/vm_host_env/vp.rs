@@ -344,6 +344,7 @@ mod native_vp_host_env {
     // [`namada_vm_env::imports::vp`] `extern "C"` section.
     native_host_fn!(vp_read_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_read_post(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(vp_read_temp(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_result_buffer(result_ptr: u64));
     native_host_fn!(vp_has_key_pre(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(vp_has_key_post(key_ptr: u64, key_len: u64) -> i64);

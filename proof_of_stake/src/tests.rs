@@ -204,9 +204,10 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Read some data before submitting bond
     let pipeline_epoch = current_epoch + params.pipeline_len;
+    let staking_token = staking_token_address(&s);
     let pos_balance_pre = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap()
@@ -216,13 +217,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     // Self-bond
     let amount_self_bond = token::Amount::from(100_500_000);
-    credit_tokens(
-        &mut s,
-        &staking_token_address(),
-        &validator.address,
-        amount_self_bond,
-    )
-    .unwrap();
+    credit_tokens(&mut s, &staking_token, &validator.address, amount_self_bond)
+        .unwrap();
     bond_tokens(
         &mut s,
         None,
@@ -326,9 +322,8 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Get a non-validating account with tokens
     let delegator = address::testing::gen_implicit_address();
     let amount_del = token::Amount::from(201_000_000);
-    credit_tokens(&mut s, &staking_token_address(), &delegator, amount_del)
-        .unwrap();
-    let balance_key = token::balance_key(&staking_token_address(), &delegator);
+    credit_tokens(&mut s, &staking_token, &delegator, amount_del).unwrap();
+    let balance_key = token::balance_key(&staking_token, &delegator);
     let balance = s
         .read::<token::Amount>(&balance_key)
         .unwrap()
@@ -575,7 +570,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -593,7 +588,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -619,7 +614,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
     let pos_balance = s
         .read::<token::Amount>(&token::balance_key(
-            &staking_token_address(),
+            &staking_token,
             &super::ADDRESS,
         ))
         .unwrap();
@@ -694,9 +689,9 @@ fn test_become_validator_aux(
     current_epoch = advance_epoch(&mut s, &params);
 
     // Self-bond to the new validator
+    let staking_token = staking_token_address(&s);
     let amount = token::Amount::from(100_500_000);
-    credit_tokens(&mut s, &staking_token_address(), &new_validator, amount)
-        .unwrap();
+    credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
     bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
 
     // Check the bond delta
@@ -870,25 +865,15 @@ fn test_validator_sets() {
     )
     .unwrap();
 
-    // Check tendermint validator set updates
-    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    assert_eq!(tm_updates.len(), 2);
-    assert_eq!(
-        tm_updates[0],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk1.clone(),
-            bonded_stake: stake1.into(),
-        })
-    );
-    assert_eq!(
-        tm_updates[1],
-        ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk2.clone(),
-            bonded_stake: stake2.into(),
-        })
-    );
-
     // Advance to EPOCH 1
+    //
+    // We cannot call `get_tendermint_set_updates` for the genesis state as
+    // `validator_set_update_tendermint` is only called 2 blocks before the
+    // start of an epoch and so we need to give it a predecessor epoch (see
+    // `get_tendermint_set_updates`), which we cannot have on the first
+    // epoch. In any way, the initial validator set is given to Tendermint
+    // from InitChain, so `validator_set_update_tendermint` is
+    // not being used for it.
     let epoch = advance_epoch(&mut s, &params);
     let pipeline_epoch = epoch + params.pipeline_len;
 
@@ -1575,8 +1560,13 @@ fn test_validator_sets_swap() {
 fn get_tendermint_set_updates(
     s: &TestWlStorage,
     params: &PosParams,
-    epoch: Epoch,
+    Epoch(epoch): Epoch,
 ) -> Vec<ValidatorSetUpdate> {
+    // Because the `validator_set_update_tendermint` is called 2 blocks before
+    // the start of a new epoch, it expects to receive the epoch that is before
+    // the start of a new one too and so we give it the predecessor of the
+    // current epoch here to actually get the update for the current epoch.
+    let epoch = Epoch(epoch - 1);
     validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
 }
 
