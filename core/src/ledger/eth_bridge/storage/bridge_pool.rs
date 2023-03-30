@@ -6,6 +6,7 @@ use std::convert::TryInto;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::Token;
 use eyre::eyre;
+use namada_macros::StorageKeys;
 
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_abi::Encode;
@@ -17,10 +18,14 @@ use crate::types::storage::{BlockHeight, DbKeySeg, Key, KeySeg};
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::EthBridgePool);
-/// Sub-segment for getting the latest signed
-const SIGNED_ROOT_SEG: &str = "signed_root";
-const NONCE: &str = "bridge_pool_nonce";
-const TRANSFERS_TO_NAMADA_NONCE: &str = "transfers_to_namada_nonce";
+
+/// Bridge pool key segments.
+#[derive(StorageKeys)]
+struct Segments {
+    signed_root: &'static str,
+    bridge_pool_nonce: &'static str,
+    transfers_to_namada_nonce: &'static str,
+}
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -48,7 +53,7 @@ pub fn get_signed_root_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
-            DbKeySeg::StringSeg(SIGNED_ROOT_SEG.into()),
+            DbKeySeg::StringSeg(Segments::VALUES.signed_root.into()),
         ],
     }
 }
@@ -59,7 +64,7 @@ pub fn get_nonce_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
-            DbKeySeg::StringSeg(NONCE.into()),
+            DbKeySeg::StringSeg(Segments::VALUES.bridge_pool_nonce.into()),
         ],
     }
 }
@@ -73,7 +78,9 @@ pub fn get_namada_transfers_nonce_key() -> Key {
     Key {
         segments: vec![
             DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
-            DbKeySeg::StringSeg(TRANSFERS_TO_NAMADA_NONCE.into()),
+            DbKeySeg::StringSeg(
+                Segments::VALUES.transfers_to_namada_nonce.into(),
+            ),
         ],
     }
 }
@@ -85,9 +92,15 @@ pub fn is_bridge_pool_key(key: &Key) -> bool {
 
 /// Check if a key is for a pending transfer
 pub fn is_pending_transfer_key(key: &Key) -> bool {
-    is_bridge_pool_key(key)
-        && *key != get_signed_root_key()
-        && *key != get_nonce_key()
+    let segment = match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(segment)]
+            if addr == &BRIDGE_POOL_ADDRESS =>
+        {
+            segment.as_str()
+        }
+        _ => return false,
+    };
+    !Segments::ALL.iter().any(|s| s == &segment)
 }
 
 /// A simple Merkle tree for the Ethereum bridge pool
