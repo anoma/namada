@@ -451,10 +451,12 @@ mod test_vote_extensions {
     use std::convert::TryInto;
 
     #[cfg(feature = "abcipp")]
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
+    use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::consensus_validator_set_handle;
     #[cfg(feature = "abcipp")]
@@ -465,7 +467,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::ethereum_events::Uint;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToEthereum,
+        EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::keccak_hash;
@@ -485,6 +487,109 @@ mod test_vote_extensions {
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+
+    /// Test validating Ethereum events.
+    #[test]
+    fn test_eth_event_validate() {
+        let (mut shell, _, _, _) = setup();
+        let nonce: Uint = 10u64.into();
+
+        // write bp nonce to storage
+        shell
+            .wl_storage
+            .storage
+            .write(&bridge_pool::get_nonce_key(), nonce.try_to_vec().unwrap())
+            .expect("Test failed");
+
+        // write nam nonce to storage
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &bridge_pool::get_namada_transfers_nonce_key(),
+                nonce.try_to_vec().unwrap(),
+            )
+            .expect("Test failed");
+
+        // eth transfers with the same nonce as the bp nonce in storage are
+        // valid
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+                nonce,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+                relayer: gen_established_address(),
+            })
+            .expect("Test failed");
+
+        // eth transfers with different nonces are invalid
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+                nonce: nonce + 1,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+                relayer: gen_established_address(),
+            })
+            .expect_err("Test failed");
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+                nonce: nonce - 1,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+                relayer: gen_established_address(),
+            })
+            .expect_err("Test failed");
+
+        // nam transfers with nonces >= the nonce in storage are valid
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+                nonce,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+            })
+            .expect("Test failed");
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+                nonce: nonce + 5,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+            })
+            .expect("Test failed");
+
+        // nam transfers with lower nonces are invalid
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+                nonce: nonce - 1,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+            })
+            .expect_err("Test failed");
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+                nonce: nonce - 2,
+                transfers: vec![],
+                valid_transfers_map: vec![],
+            })
+            .expect_err("Test failed");
+
+        // either kind of transfer with different validity map and transfer
+        // array length are invalid
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+                nonce,
+                transfers: vec![],
+                valid_transfers_map: vec![true, true],
+                relayer: gen_established_address(),
+            })
+            .expect_err("Test failed");
+        shell
+            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+                nonce,
+                transfers: vec![],
+                valid_transfers_map: vec![true, true],
+            })
+            .expect_err("Test failed");
+    }
 
     /// Test that we successfully receive ethereum events
     /// from the channel to fullnode process
