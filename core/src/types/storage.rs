@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bytes::ByteBuf;
+use crate::hints;
 use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
 use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
@@ -1265,6 +1266,7 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
                 // the event is already present in the queue... this is
                 // certainly a protocol error
                 |_| {
+                    hints::cold();
                     unreachable!(
                         "An event with an identical nonce was already present \
                          in the EthEventsQueue"
