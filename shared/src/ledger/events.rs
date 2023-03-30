@@ -166,13 +166,11 @@ impl From<Event> for crate::tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         let convert_attribute = |(key, value)| {
             let index = match &event.event_type {
-                EventType::Accepted | EventType::Applied
-                    if key == "hash".to_string() =>
-                {
+                EventType::Accepted | EventType::Applied if key == *"hash" => {
                     true
                 }
                 EventType::Ibc(event_type)
-                    if ibc::is_indexed_event_type(&event_type) =>
+                    if ibc::is_indexed_event_type(event_type) =>
                 {
                     true
                 }
