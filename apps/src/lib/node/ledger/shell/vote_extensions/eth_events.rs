@@ -149,7 +149,7 @@ where
     /// A detailed description of the validation applied
     /// to each event kind can be found in the docstring
     /// of [`Shell::validate_eth_event`].
-    pub fn validate_eth_events(
+    fn validate_eth_events(
         &self,
         ext: &ethereum_events::Vext,
     ) -> std::result::Result<(), VoteExtensionError> {
@@ -210,7 +210,7 @@ where
     /// For any of these events to be considered valid, the
     /// whitelist update nonce in storage must be greater
     /// than or equal to the nonce in the event.
-    pub fn validate_eth_event(
+    fn validate_eth_event(
         &self,
         event: &EthereumEvent,
     ) -> std::result::Result<(), VoteExtensionError> {
