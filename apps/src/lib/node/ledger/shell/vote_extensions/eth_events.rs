@@ -199,8 +199,8 @@ where
     /// ## Transfers to Namada
     ///
     /// For a transfers to Namada event to be considered valid,
-    /// much like a transfers to Ethereum, the nonce of this
-    /// kind of event must match the one stored in Namada.
+    /// the nonce of this kind of event must not be lower than
+    /// the one stored in Namada.
     ///
     /// In this case, the length of the transfers array and their
     /// respective validity map must also match.
@@ -208,9 +208,8 @@ where
     /// ## Whitelist updates
     ///
     /// For any of these events to be considered valid, the
-    /// whitelist update nonce in storage must match the nonce
-    /// in the event.
-    // TODO: change transfers to namada checking docstr
+    /// whitelist update nonce in storage must be greater
+    /// than or equal to the nonce in the event.
     pub fn validate_eth_event(
         &self,
         event: &EthereumEvent,

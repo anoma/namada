@@ -1161,7 +1161,7 @@ pub struct EthEventsQueue {
     // TODO: add queue of update whitelist events
 }
 
-/// A queue of Ethereum events to be processed in order.
+/// A queue of confirmed Ethereum events to be processed in order.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct InnerEthEventsQueue<E> {
     inner: VecDeque<E>,
