@@ -115,7 +115,7 @@ enum Transition {
         infraction_epoch: Epoch,
         height: u64,
     },
-    ReactivateValidator {
+    UnjailValidator {
         address: Address,
     },
 }
@@ -403,22 +403,16 @@ impl StateMachineTest for ConcretePosState {
 
                 // TODO: Any others?
             }
-            Transition::ReactivateValidator { address } => {
+            Transition::UnjailValidator { address } => {
                 let current_epoch = state.current_epoch();
 
-                // Re-activate the validator
-                super::reactivate_validator(
-                    &mut state.s,
-                    &address,
-                    current_epoch,
-                )
-                .unwrap();
+                // Unjail the validator
+                super::unjail_validator(&mut state.s, &address, current_epoch)
+                    .unwrap();
 
                 // Post-conditions
                 let params = read_pos_params(&state.s).unwrap();
-                state.check_reactivate_validator_post_conditions(
-                    &params, &address,
-                );
+                state.check_unjail_validator_post_conditions(&params, &address);
             }
         }
         state
@@ -781,7 +775,7 @@ impl ConcretePosState {
         // TODO: Any others?
     }
 
-    fn check_reactivate_validator_post_conditions(
+    fn check_unjail_validator_post_conditions(
         &self,
         params: &PosParams,
         validator: &Address,
@@ -982,7 +976,7 @@ impl AbstractStateMachine for AbstractPosState {
             .collect::<Vec<_>>();
 
         // TODO: need to get list of jailed validators eligible to be
-        // reactivated given their last slash epoch and the current epoch, not
+        // unjailed given their last slash epoch and the current epoch, not
         // just the list of jailed validators at pipeline alone
 
         // Transitions that can be applied if there are no bonds and unbonds
@@ -1021,9 +1015,7 @@ impl AbstractStateMachine for AbstractPosState {
                 prop_oneof![
                     basic,
                     prop::sample::select(eligible_for_reactivation).prop_map(
-                        |address| {
-                            Transition::ReactivateValidator { address }
-                        }
+                        |address| { Transition::UnjailValidator { address } }
                     )
                 ]
                 .boxed()
@@ -1050,7 +1042,7 @@ impl AbstractStateMachine for AbstractPosState {
                         arb_unbond,
                         prop::sample::select(eligible_for_reactivation)
                             .prop_map(|address| {
-                                Transition::ReactivateValidator { address }
+                                Transition::UnjailValidator { address }
                             })
                     ]
                     .boxed()
@@ -1069,7 +1061,7 @@ impl AbstractStateMachine for AbstractPosState {
                         arb_withdrawal,
                         prop::sample::select(eligible_for_reactivation)
                             .prop_map(|address| {
-                                Transition::ReactivateValidator { address }
+                                Transition::UnjailValidator { address }
                             })
                     ]
                     .boxed()
@@ -1480,11 +1472,11 @@ impl AbstractStateMachine for AbstractPosState {
                 dbg!(&state.consensus_set);
                 dbg!(&state.below_capacity_set);
             }
-            Transition::ReactivateValidator { address } => {
+            Transition::UnjailValidator { address } => {
                 let pipeline_epoch = state.epoch + state.params.pipeline_len;
 
                 println!(
-                    "\nABSTRACT Reactivate validator {} starting in epoch {}",
+                    "\nABSTRACT Unjail validator {} starting in epoch {}",
                     address.clone(),
                     pipeline_epoch
                 );
@@ -1690,7 +1682,7 @@ impl AbstractStateMachine for AbstractPosState {
 
                 // TODO: any others conditions?
             }
-            Transition::ReactivateValidator { address } => {
+            Transition::UnjailValidator { address } => {
                 // Validator address must be jailed thru the pipeline epoch
                 for epoch in Epoch::iter_bounds_inclusive(
                     state.epoch,

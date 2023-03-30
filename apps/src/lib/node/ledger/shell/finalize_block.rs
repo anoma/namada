@@ -845,11 +845,10 @@ mod test_finalize_block {
     };
     use namada::proof_of_stake::{
         enqueued_slashes_handle, get_num_consensus_validators,
-        reactivate_validator,
         read_consensus_validator_set_addresses_with_stake,
-        rewards_accumulator_handle, validator_consensus_key_handle,
-        validator_rewards_products_handle, validator_slashes_handle,
-        validator_state_handle, write_pos_params,
+        rewards_accumulator_handle, unjail_validator,
+        validator_consensus_key_handle, validator_rewards_products_handle,
+        validator_slashes_handle, validator_state_handle, write_pos_params,
     };
     use namada::types::governance::ProposalVote;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -1935,7 +1934,7 @@ mod test_finalize_block {
 
         // Reactivate one of the validators
         let current_epoch = shell.wl_storage.storage.block.epoch;
-        reactivate_validator(
+        unjail_validator(
             &mut shell.wl_storage,
             &val1.address,
             current_epoch,

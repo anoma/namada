@@ -3247,8 +3247,8 @@ where
     Ok(())
 }
 
-/// Re-activate a validator that is currently jailed
-pub fn reactivate_validator<S>(
+/// Unjail a validator that is currently jailed
+pub fn unjail_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,

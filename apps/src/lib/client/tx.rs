@@ -91,7 +91,7 @@ const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
-const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
+const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 
 /// Timeout for requests to the `/accepted` and `/applied`
 /// ABCI query endpoints.
@@ -2635,7 +2635,7 @@ pub async fn submit_validator_reactivation(
     ctx: Context,
     args: args::TxReactivateValidator,
 ) {
-    let tx_code = ctx.read_wasm(TX_REACTIVATE_VALIDATOR_WASM);
+    let tx_code = ctx.read_wasm(TX_UNJAIL_VALIDATOR_WASM);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let validator = ctx.get(&args.validator);
