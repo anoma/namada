@@ -713,7 +713,7 @@ mod test_vote_extensions {
             shell.wl_storage.pos_queries().get_current_decision_height();
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
-                nonce: 1.into(),
+                nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
                     sender: gen_established_address(),
