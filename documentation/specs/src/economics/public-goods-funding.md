@@ -41,7 +41,7 @@ Stewards are elected by governance through a governance proposal. Each Steward w
 ## Voting for the Steward
 
 ### What is a Steward (technically)?
-All valid PGF stewards will be established multisignature account addresses. These must be created by the intdended parties (which may very well be just one person, but could be more) that wish to represent the stewards entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity.
+All valid PGF stewards will be established multisignature account addresses. These must be created by the intdended parties (which may very well be just one person, but could be more) that wish to represent the Steward entity. For example, if David Alice and Bob wish to represent the combined steward DAB, they may do so as a common entity. But likewise, Alice can create her own 1-out-of-1 multisig that to just represent herself.
 
 
 ### Becoming a Steward
@@ -67,8 +67,7 @@ Finally, the Steward can be "voted-out" from its responsibility through a custom
 
 #### "Voting-out" the Steward
 
-In the same way that a Steward can be voted in by Namada governance through a custom proposal, the equal and opposite force exists. Hence, any governance member (validator or delegate), is able to initiate a vote (for the relevant cost) in order to remove an arbitrary number of current PGF Stewards. If this proposal passes, it signals that the Steward has not fulfilled their duty, as the public, which the Steward is meant to serve (hence the name), is unhappy with the Steward's service.
-
+In the same way that a Steward can be voted in by Namada governance through a custom proposal, the equal and opposite force exists. Hence, any governance member (validator or delegate), is able to initiate a vote (for the relevant cost) in order to remove an arbitrary number of current PGF Stewards. If this proposal passes, it signals that the Steward(s) has/have not fulfilled their duty to the public, which the Stewards are meant to serve (hence the name).
 
 ### Initiating the vote
 
@@ -113,7 +112,7 @@ Where the proposalVote is simply an enum dictating whether the voter voted `Yay`
 In the rare occurance of a tie, the Steward retains membership by default.
 
 
-### Electing the council
+### Electing the Steward
 
 Once the decision has been made on whether to elect (or remove) the intended Steward, the established address corresponding to the multisig is added to (removed from) the `PGF` internal address.
 
@@ -168,7 +167,7 @@ Where the proposalVote is simply the enum `Yay` with an empty memo field.
 Once elected and instantiated, PGF Stewards will then unilaterally be able to sign transactions that propose either RPGF or CPGF funding. The PGF Stewards as a whole will have an "allowance" to spend up to the `PGF` internal address's balance.
 
 ### Proposing Funding
-In order to propose funding, any Steward will be able to sign a transaction that creates the governance proposal. 
+In order to propose funding, any Steward will be able to propose a PGFProposal through governance. Only Stewards will be valid authors of these proposals. There will be a minimum voting period set specifically for these types of proposals and can be changed by Governance. 
 
 This governance proposal will be such that it passes by default **unless** the following conditions are met:
 
@@ -178,11 +177,11 @@ Conditions to veto a PGF proposal:
   - Further, if at least $\frac{2}{3}$ of voting power voted on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
 
 
-The PGF council should be able to make both retroactive and continuous public funding transactions. Retroactive public funding transactions should be straightforward and implement no additional logic to a normal transfer.
+The PGF Stewards should be able to propose both retroactive and continuous public funding transactions. Retroactive public funding transactions are straightforward and implement no additional logic to a normal transfer.
 
-However, for continuous PGF (cPGF), the council should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
+However, for continuous PGF (cPGF), the Stewards should be able to submit a one time transaction which indicates the recipient addresses that should be eligble for receiveing cPGF. 
 
-The following data is attached to the PGF transaction and will allow the council to decide which projects will be continously funded. Each tuple represent the address and the respective amount of NAM that the recipient will receive every epoch.
+The following data is attached to the PGF transaction and will allow the Stewards to represent the projects they wish to be continously funded. Each tuple represent the address of the recipient and the respective amount of NAM that the recipient will receive every epoch.
 
 ```rust
 struct cPgfRecipients {
@@ -201,26 +200,21 @@ impl addRecipient for cPgfRecipients
 impl remRecipient for cPgfRecipients
 ```
 
-### End of Term Summary
-
-At the end of each term, the council is encouraged to submit a "summary"  which describes the funding decisions the councils have made and their reasoning for these decisions. This summary will act as an assessment of the council and will be the primary document on the basis of which governance should decide whether to re-elect the council.
 
 ## Addresses
 Governance adds 1 internal address:
 
 `PGF` internal address
 
-The internal address VP will hold the allowance the 10% inflation of NAM. This will be added in addition to what was unspent by the previous council. It is important to note that it is this internal address which holds the funds, rather than the PGF council multisig.
+The internal address VP will hold the allowance the 10% inflation of NAM. This funding will be allocated to the internal address at the start of each epoch. It is important to note that it is this internal address which holds the funds, rather than any of the Stewards' multisigs.
 
-The council should be able to burn funds (up to their spending cap), but this hopefully should not require additional functionality beyond what currently exists.
-
-Further, the VP should contain the parameter that dictates the number of epochs a candidacy is valid for once it has been broadcast and before it needs to be renewed.
+The Stewards should be able to propose the burning of funds, but this hopefully should not require additional functionality beyond what currently exists.
 
 ### VP checks
 
-The VP must check that the council does not exceed its spending cap.
+The VP must check that the Stewards spending doeso not exceed the balance of the VP (in aggregate).
 
-The VP must also check that the any spending is only done by a the correctly elected PGF council multisig address.
+The VP must also check that the any spending is only done by a the active correctly elected PGF Stewards.
 
 ## Storage
 
@@ -228,17 +222,11 @@ The VP must also check that the any spending is only done by a the correctly ele
 
 Each recipient will be listed under this storage space (for cPGF)
 - `/PGFAddress/cPGF_recipients/Address = Amount`
-- `/PGFAddress/spending_cap = Amount`
-- `/PGFAddress/spent_amount = Amount`
-- `/PGFAddress/candidacy_length = u8`
-- `/PGFAddress/council_candidates/candidate_address/spending_cap = (epoch, url)`
-- `/PGFAddress/active_council/address = Address`
+- `/PGFAddress/active_stewards/address = Address`
 ### Struct
 
 ```rust
-struct Council {
-    address: Address,
-    spending_cap: Amount,
-    spent_amount: Amount,
+struct Stewards {
+    addresses: Vec<Address>,
 }
 ```
