@@ -1234,10 +1234,11 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
         E: std::fmt::Debug,
     {
         let event_nonce = latest_event.get_event_nonce();
-        assert!(
-            self.next_nonce_to_process <= event_nonce,
-            "Attempted to replay an Ethereum event: {latest_event:#?}"
-        );
+        if hints::unlikely(self.next_nonce_to_process > event_nonce) {
+            unreachable!(
+                "Attempted to replay an Ethereum event: {latest_event:#?}"
+            );
+        }
 
         self.push_event(latest_event);
 
