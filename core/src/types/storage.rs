@@ -1323,7 +1323,7 @@ mod tests {
     #[test]
     fn test_eth_events_queue_enqueue() {
         let mut queue = EthEventsQueue::default();
-        let mut nam_nonce = 1u64.into();
+        let nam_nonce = 1u64.into();
 
         let new_event_4 = TransfersToNamada {
             valid_transfers_map: vec![],
@@ -1379,23 +1379,10 @@ mod tests {
             Some(new_event_1.clone()),
             queue.transfers_to_namada.get_next(nam_nonce, new_event_1)
         );
-        nam_nonce = nam_nonce + 1;
-        assert_eq!(
-            Some(new_event_2.clone()),
-            queue.transfers_to_namada.get_next(nam_nonce, new_event_2)
-        );
-        nam_nonce = nam_nonce + 1;
-        assert_eq!(
-            Some(new_event_3.clone()),
-            queue.transfers_to_namada.get_next(nam_nonce, new_event_3)
-        );
-        nam_nonce = nam_nonce + 1;
-        assert_eq!(
-            Some(new_event_4.clone()),
-            queue.transfers_to_namada.get_next(nam_nonce, new_event_4)
-        );
-
-        assert!(queue.transfers_to_namada.inner.is_empty());
+        assert_eq!(Some(new_event_2), queue.transfers_to_namada.pop_event());
+        assert_eq!(Some(new_event_3), queue.transfers_to_namada.pop_event());
+        assert_eq!(Some(new_event_4), queue.transfers_to_namada.pop_event());
+        assert!(queue.transfers_to_namada.pop_event().is_none());
     }
 
     #[test]
