@@ -1667,7 +1667,6 @@ mod test_finalize_block {
             .unwrap()
             .into_iter()
             .collect();
-        // let validator_set_copy = validator_set.clone();
 
         let val1 = validator_set[0].clone();
         let val2 = validator_set[1].clone();
@@ -1678,7 +1677,7 @@ mod test_finalize_block {
         let _val7 = validator_set[6].clone();
 
         let initial_stake = val1.bonded_stake;
-        let total_initial_stake = 7 * initial_stake;
+        let total_initial_stake = num_validators * initial_stake;
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
@@ -1799,14 +1798,15 @@ mod test_finalize_block {
                 votes.clone(),
                 None,
             );
+            println!(
+                "Block {} epoch {}",
+                shell.wl_storage.storage.block.height,
+                shell.wl_storage.storage.block.epoch
+            );
             if shell.wl_storage.storage.block.epoch == processing_epoch {
+                println!("Reached processing epoch");
                 break;
             } else {
-                // println!(
-                //     "Block {} epoch {}",
-                //     shell.wl_storage.storage.block.height,
-                //     shell.wl_storage.storage.block.epoch
-                // );
                 assert!(
                     enqueued_slashes_handle()
                         .at(&shell.wl_storage.storage.block.epoch)
@@ -1836,7 +1836,6 @@ mod test_finalize_block {
                 assert_eq!(total_stake, total_initial_stake);
             }
         }
-        println!("LOOP ENDED");
 
         let num_slashes = storage_api::iter_prefix_bytes(
             &shell.wl_storage,
@@ -1846,7 +1845,7 @@ mod test_finalize_block {
             let (k, _v) = kv_res.as_ref().unwrap();
             is_validator_slashes_key(k).is_some()
         })
-        .fold(0, |sum, _a| sum + 1);
+        .count();
 
         assert_eq!(num_slashes, 2);
         assert_eq!(
