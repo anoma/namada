@@ -1175,17 +1175,40 @@ impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
     }
 }
 
+/// Iterator over a queue of Ethereum events.
+pub struct EthEventsQueueIter<'queue, E> {
+    current_nonce: Uint,
+    queue: &'queue mut InnerEthEventsQueue<E>,
+}
+
+impl<E: GetEventNonce> Iterator for EthEventsQueueIter<'_, E> {
+    type Item = E;
+
+    fn next(&mut self) -> Option<E> {
+        let nonce_in_queue = self.queue.peek_event_nonce()?;
+        if nonce_in_queue == self.current_nonce {
+            self.current_nonce = self
+                .current_nonce
+                .checked_increment()
+                .expect("Nonce overflow");
+            self.queue.pop_event()
+        } else {
+            None
+        }
+    }
+}
+
 impl<E: GetEventNonce> InnerEthEventsQueue<E> {
-    /// Retrieve the next event to be processed, if any.
+    /// Retrieve the next events to be processed, if any.
     ///
     /// This decision is based on the nonce of the last event that has been
     /// processed by the ledger, and the nonce of the event that was just
     /// confirmed (i.e. achieved a quorum of votes behind it).
-    pub fn get_next(
+    pub fn get_next_events(
         &mut self,
         current_nonce: Uint,
         latest_event: E,
-    ) -> Option<E>
+    ) -> EthEventsQueueIter<'_, E>
     where
         E: std::fmt::Debug,
     {
@@ -1195,17 +1218,11 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
             "Attempted to replay an Ethereum event: {latest_event:#?}"
         );
 
-        // check if we can process the next event in the queue
         self.push_event(latest_event);
 
-        let Some(nonce_in_queue) = self.peek_event_nonce() else {
-            unreachable!("There is at least one event in the queue");
-        };
-
-        if nonce_in_queue == current_nonce {
-            self.pop_event()
-        } else {
-            None
+        EthEventsQueueIter {
+            current_nonce,
+            queue: self,
         }
     }
 
@@ -1298,7 +1315,8 @@ mod tests {
         };
         let next_event = queue
             .transfers_to_namada
-            .get_next(nam_nonce, new_event.clone());
+            .get_next_events(nam_nonce, new_event.clone())
+            .next();
         assert_eq!(next_event, Some(new_event));
     }
 
@@ -1315,7 +1333,9 @@ mod tests {
             transfers: vec![],
             nonce: 2u64.into(),
         };
-        queue.transfers_to_namada.get_next(nam_nonce, new_event);
+        _ = queue
+            .transfers_to_namada
+            .get_next_events(nam_nonce, new_event);
     }
 
     /// Test enqueueing transfer to Namada events to
@@ -1350,19 +1370,22 @@ mod tests {
         assert!(
             queue
                 .transfers_to_namada
-                .get_next(nam_nonce, new_event_4.clone())
+                .get_next_events(nam_nonce, new_event_4.clone())
+                .next()
                 .is_none()
         );
         assert!(
             queue
                 .transfers_to_namada
-                .get_next(nam_nonce, new_event_2.clone())
+                .get_next_events(nam_nonce, new_event_2.clone())
+                .next()
                 .is_none()
         );
         assert!(
             queue
                 .transfers_to_namada
-                .get_next(nam_nonce, new_event_3.clone())
+                .get_next_events(nam_nonce, new_event_3.clone())
+                .next()
                 .is_none()
         );
         assert_eq!(
@@ -1376,12 +1399,12 @@ mod tests {
 
         // start dequeueing events
         assert_eq!(
-            Some(new_event_1.clone()),
-            queue.transfers_to_namada.get_next(nam_nonce, new_event_1)
+            vec![new_event_1.clone(), new_event_2, new_event_3, new_event_4],
+            queue
+                .transfers_to_namada
+                .get_next_events(nam_nonce, new_event_1)
+                .collect::<Vec<_>>()
         );
-        assert_eq!(Some(new_event_2), queue.transfers_to_namada.pop_event());
-        assert_eq!(Some(new_event_3), queue.transfers_to_namada.pop_event());
-        assert_eq!(Some(new_event_4), queue.transfers_to_namada.pop_event());
         assert!(queue.transfers_to_namada.pop_event().is_none());
     }
 
