@@ -488,7 +488,7 @@ pub mod eth_events {
             let test_case = U256::from(confs);
             assert_eq!(test_case.parse_u32().expect("Test failed"), confs);
 
-            let test_case = U256::from(uint.clone());
+            let test_case = U256(uint.0);
             assert_eq!(test_case.parse_uint256().expect("Test failed"), uint);
 
             let test_case = boolean;

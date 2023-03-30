@@ -1,12 +1,13 @@
 //! Types representing data intended for Namada via Ethereum events
 
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use ethabi::ethereum_types::H160;
-use ethabi::{Token, Uint as ethUint};
+use ethabi::ethereum_types::{H160, U256 as ethUint};
+use ethabi::Token;
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
@@ -19,14 +20,13 @@ use crate::types::token::Amount;
 
 /// Namada native type to replace the ethabi::Uint type
 #[derive(
+    Copy,
     Clone,
     Debug,
     Default,
     Hash,
     PartialEq,
     Eq,
-    PartialOrd,
-    Ord,
     Serialize,
     Deserialize,
     BorshSerialize,
@@ -35,19 +35,33 @@ use crate::types::token::Amount;
 )]
 pub struct Uint(pub [u64; 4]);
 
+impl PartialOrd for Uint {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        ethUint(self.0).partial_cmp(&ethUint(other.0))
+    }
+}
+
+impl Ord for Uint {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        ethUint(self.0).cmp(&ethUint(other.0))
+    }
+}
+
 impl Uint {
     /// Convert to a little endian byte representation of
     /// a uint256.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
-        ethUint::from(self).to_little_endian(&mut bytes);
+        ethUint(self.0).to_little_endian(&mut bytes);
         bytes
     }
 }
 
 impl Display for Uint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        ethUint::from(self).fmt(f)
+        ethUint(self.0).fmt(f)
     }
 }
 
@@ -85,7 +99,7 @@ impl Add<u64> for Uint {
     type Output = Self;
 
     fn add(self, rhs: u64) -> Self::Output {
-        (ethUint::from(self) + rhs).into()
+        (ethUint(self.0) + rhs).into()
     }
 }
 
