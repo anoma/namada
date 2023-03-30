@@ -1168,6 +1168,16 @@ pub struct InnerEthEventsQueue<E> {
     inner: VecDeque<E>,
 }
 
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Return an Ethereum events queue starting at the specified nonce.
+    pub fn new_at(next_nonce_to_process: Uint) -> Self {
+        Self {
+            next_nonce_to_process,
+            ..Default::default()
+        }
+    }
+}
+
 impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
     fn default() -> Self {
         Self {

@@ -263,14 +263,14 @@ where
                     );
                     return Err(VoteExtensionError::TransfersLenMismatch);
                 }
-                let current_nam_nonce = self
+                let next_nam_transfers_nonce = self
                     .wl_storage
                     .ethbridge_queries()
-                    .get_namada_transfers_nonce();
-                if &current_nam_nonce > ext_nonce {
+                    .get_next_nam_transfers_nonce();
+                if &next_nam_transfers_nonce > ext_nonce {
                     tracing::debug!(
                         ?event,
-                        %current_nam_nonce,
+                        %next_nam_transfers_nonce,
                         "Attempt to replay a transfer to Namada event"
                     );
                     return Err(VoteExtensionError::InvalidNamNonce);
@@ -474,7 +474,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::types::storage::{BlockHeight, Epoch, InnerEthEventsQueue};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
@@ -501,7 +501,12 @@ mod test_vote_extensions {
             .write(&bridge_pool::get_nonce_key(), nonce.try_to_vec().unwrap())
             .expect("Test failed");
 
-        // TODO: write nam nonce to storage
+        // write nam nonce to the eth events queue
+        shell
+            .wl_storage
+            .storage
+            .eth_events_queue
+            .transfers_to_namada = InnerEthEventsQueue::new_at(nonce);
 
         // eth transfers with the same nonce as the bp nonce in storage are
         // valid

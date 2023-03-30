@@ -7,7 +7,7 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{EthAddress, Uint};
+use namada_core::types::ethereum_events::{EthAddress, GetEventNonce, Uint};
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token;
@@ -142,9 +142,13 @@ where
         }
     }
 
-    /// Get the latest transfers to Namada nonce.
-    pub fn get_namada_transfers_nonce(self) -> Uint {
-        todo!()
+    /// Get the nonce of the next transfers to Namada event to be processed.
+    pub fn get_next_nam_transfers_nonce(self) -> Uint {
+        self.wl_storage
+            .storage
+            .eth_events_queue
+            .transfers_to_namada
+            .get_event_nonce()
     }
 
     /// Get the latest nonce for the Ethereum bridge
