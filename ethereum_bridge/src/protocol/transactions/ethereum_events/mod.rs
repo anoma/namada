@@ -68,7 +68,7 @@ where
 
     let mut changed_keys = apply_updates(wl_storage, updates, voting_powers)?;
 
-    changed_keys.extend(timeout_events(wl_storage)?);
+    changed_keys.append(&mut timeout_events(wl_storage)?);
 
     Ok(TxResult {
         changed_keys,
