@@ -174,7 +174,6 @@ impl From<Event> for crate::tendermint_proto::abci::Event {
                 {
                     true
                 }
-                // TODO others
                 _ => false,
             };
             EventAttribute { key, value, index }
