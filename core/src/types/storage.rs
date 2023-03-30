@@ -1185,11 +1185,14 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
         &mut self,
         current_nonce: Uint,
         latest_event: E,
-    ) -> Option<E> {
+    ) -> Option<E>
+    where
+        E: std::fmt::Debug,
+    {
         let event_nonce = latest_event.get_event_nonce();
         assert!(
             current_nonce <= event_nonce,
-            "Attempted to replay an Ethereum event"
+            "Attempted to replay an Ethereum event: {latest_event:#?}"
         );
 
         // check if we can process the next event in the queue
