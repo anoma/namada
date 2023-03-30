@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::ops::Add;
+use std::ops::{Add, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -106,6 +106,14 @@ impl Add<u64> for Uint {
 
     fn add(self, rhs: u64) -> Self::Output {
         (ethUint(self.0) + rhs).into()
+    }
+}
+
+impl Sub<u64> for Uint {
+    type Output = Self;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        (ethUint(self.0) - rhs).into()
     }
 }
 
