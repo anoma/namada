@@ -128,13 +128,14 @@ impl<'de> serde::Deserialize<'de> for Amount {
 
 impl From<Amount> for Decimal {
     fn from(amount: Amount) -> Self {
-        Into::<Decimal>::into(amount.micro)
+        Into::<Decimal>::into(amount.micro) / Into::<Decimal>::into(SCALE)
     }
 }
 
 impl From<Decimal> for Amount {
     fn from(micro: Decimal) -> Self {
-        let res = micro.to_u64().unwrap();
+        // TODO: handle error (will need to use `TryFrom` instead)
+        let res = (micro * Into::<Decimal>::into(SCALE)).to_u64().unwrap();
         Self { micro: res }
     }
 }
