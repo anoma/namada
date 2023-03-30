@@ -111,7 +111,7 @@ where
                             .and_then(|x| tx.decrypt(privkey, x).ok())
                         {
                             Some(inner_tx) => DecryptedTx::Decrypted {
-                                tx: Tx::from(inner_tx),
+                                tx: inner_tx,
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
                             },
@@ -188,7 +188,7 @@ mod test_prepare_proposal {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
     use namada::proto::InnerTx;
-    use namada::proto::SignedTxData;
+    use namada::proto::{SignedOuterTxData, SignedTxData};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -201,7 +201,7 @@ mod test_prepare_proposal {
         let (shell, _) = TestShell::new();
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction_data".as_bytes().to_owned()), sig: None}),
+            Some(SignedOuterTxData {data: Some("transaction_data".as_bytes().to_owned()), sig: None}),
         );
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
@@ -232,7 +232,7 @@ mod test_prepare_proposal {
         let wrapper = Tx::new(
             "".as_bytes().to_owned(),
             Some(
-                SignedTxData {
+                SignedOuterTxData {
                     data: Some(WrapperTx::new(
                         Fee {
                             amount: 0.into(),
@@ -291,7 +291,7 @@ mod test_prepare_proposal {
                 Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
-                tx: Tx::from(tx.clone()),
+                tx: tx.clone(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));
@@ -319,7 +319,7 @@ mod test_prepare_proposal {
         // equality since otherwise changes in timestamps would
         // fail the test
         expected_wrapper.append(&mut expected_decrypted);
-        let expected_txs: Vec<SignedTxData> = expected_wrapper
+        let expected_txs: Vec<SignedOuterTxData> = expected_wrapper
             .iter()
             .map(|tx| tx.data.clone().expect("Test failed"))
             .collect();
@@ -354,7 +354,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let received: Vec<SignedTxData> = shell
+            let received: Vec<SignedOuterTxData> = shell
                 .prepare_proposal(req)
                 .txs
                 .into_iter()

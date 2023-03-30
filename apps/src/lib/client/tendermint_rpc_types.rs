@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
 use namada::ledger::events::Event;
-use namada::proto::Tx;
+use namada::proto::{InnerTx, Tx};
 use namada::types::address::Address;
 use serde::Serialize;
 
@@ -15,7 +15,7 @@ use crate::cli::safe_exit;
 /// in a wrapper.
 #[derive(Debug, Clone)]
 pub enum TxBroadcastData {
-    DryRun(Tx),
+    DryRun(InnerTx),
     Wrapper {
         tx: Tx,
         wrapper_hash: String,

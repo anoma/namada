@@ -380,7 +380,7 @@ mod tests {
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::storage::testing::TestStorage;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::Tx;
+    use crate::proto::{InnerTx, Tx};
     use crate::types::ibc::data::{PacketAck, PacketReceipt};
     use crate::vm::wasm;
     use crate::types::storage::TxIndex;
@@ -568,7 +568,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -608,7 +608,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -689,7 +689,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -748,7 +748,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -804,7 +804,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -886,7 +886,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -974,7 +974,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1049,7 +1049,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1110,7 +1110,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1190,7 +1190,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1278,7 +1278,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1363,7 +1363,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1404,7 +1404,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1446,7 +1446,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1530,7 +1530,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1619,7 +1619,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1713,7 +1713,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1799,7 +1799,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1893,7 +1893,7 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1943,7 +1943,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = Tx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();

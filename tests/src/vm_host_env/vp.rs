@@ -4,7 +4,7 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::Tx;
+use namada::proto::{InnerTx, Tx};
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
 use namada::vm::prefix_iter::PrefixIterators;
@@ -41,7 +41,7 @@ pub struct TestVpEnv {
     pub write_log: WriteLog,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: VpGasMeter,
-    pub tx: Tx,
+    pub tx: InnerTx,
     pub tx_index: TxIndex,
     pub keys_changed: BTreeSet<storage::Key>,
     pub verifiers: BTreeSet<Address>,
@@ -69,7 +69,7 @@ impl Default for TestVpEnv {
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], None),
+            tx: InnerTx::new(vec![], None),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

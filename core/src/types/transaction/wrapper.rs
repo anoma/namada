@@ -18,7 +18,7 @@ pub mod wrapper_tx {
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxError, TxType};
-    use crate::proto::SignedTxData;
+    use crate::proto::{SignedTxData, SignedOuterTxData};
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -250,7 +250,7 @@ pub mod wrapper_tx {
             Ok(Tx::new(
                 vec![],
                 Some(
-                    SignedTxData {
+                    SignedOuterTxData {
                         data: Some(TxType::Wrapper(self.clone())
                             .try_to_vec()
                             .expect("Could not serialize WrapperTx")),

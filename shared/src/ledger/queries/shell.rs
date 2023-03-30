@@ -72,13 +72,13 @@ where
     use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::Tx;
+    use crate::proto::{InnerTx, Tx};
     use crate::types::storage::TxIndex;
     use crate::types::transaction::{DecryptedTx, TxType};
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
-    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    let tx = InnerTx::try_from(&request.data[..]).into_storage_result()?;
     let tx = TxType::Decrypted(DecryptedTx::Decrypted {
         tx,
         #[cfg(not(feature = "mainnet"))]

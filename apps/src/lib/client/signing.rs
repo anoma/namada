@@ -147,7 +147,7 @@ pub async fn tx_signer(
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
     mut ctx: Context,
-    tx: Tx,
+    tx: InnerTx,
     args: &args::Tx,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
@@ -183,7 +183,7 @@ pub async fn sign_wrapper(
     ctx: &Context,
     args: &args::Tx,
     epoch: Epoch,
-    tx: Tx,
+    tx: InnerTx,
     keypair: &common::SecretKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
@@ -251,7 +251,7 @@ pub async fn sign_wrapper(
             pow_solution,
         )
         // Bind the inner transaction to the wrapper
-        .bind(InnerTx::from(tx.clone()))
+        .bind(tx.clone())
     };
     // Then sign over the bound wrapper
     let mut stx = wrapper_tx
@@ -259,7 +259,7 @@ pub async fn sign_wrapper(
         .expect("Wrapper tx signing keypair should be correct");
     // Then encrypt and attach the payload to the wrapper
     stx = stx.attach_inner_tx(
-        &InnerTx::from(tx),
+        &tx,
         // TODO: Actually use the fetched encryption key
         Default::default(),
     );

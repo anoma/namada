@@ -61,7 +61,7 @@ use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
-use namada::proto::Tx;
+use namada::proto::{InnerTx, Tx};
 use namada::tendermint_proto::Protobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::ibc::data::{FungibleTokenPacketData, PacketAck};
@@ -113,7 +113,7 @@ impl<'a> TestIbcTokenVp<'a> {
 /// Validate an IBC transaction with IBC VP.
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    tx: &'a Tx,
+    tx: &'a InnerTx,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
     let (verifiers, keys_changed) = tx_env
         .write_log
@@ -147,7 +147,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
 /// Validate the native token VP for the given address
 pub fn validate_token_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    tx: &'a Tx,
+    tx: &'a InnerTx,
     target: &Key,
 ) -> std::result::Result<bool, namada::ledger::ibc::vp::IbcTokenError> {
     let (verifiers, keys_changed) = tx_env

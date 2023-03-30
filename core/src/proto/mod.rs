@@ -3,7 +3,7 @@
 pub mod generated;
 mod types;
 
-pub use types::{Dkg, Error, Signed, SignedTxData, Tx, InnerTx};
+pub use types::{Dkg, Error, Signed, SignedTxData, SignedOuterTxData, Tx, InnerTx};
 
 #[cfg(test)]
 mod tests {

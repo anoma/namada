@@ -65,6 +65,15 @@ pub struct SignedTxData {
     pub sig: Option<common::Signature>,
 }
 
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Default, Deserialize, Serialize)]
+pub struct SignedOuterTxData {
+    /// The original tx data bytes, if any
+    pub data: Option<Vec<u8>>,
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
+    pub sig: Option<common::Signature>,
+}
+
 /// A generic signed data wrapper for Borsh encode-able data.
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -144,7 +153,7 @@ where
 )]
 pub struct Tx {
     pub code: Vec<u8>,
-    pub data: Option<SignedTxData>,
+    pub data: Option<SignedOuterTxData>,
     pub timestamp: DateTimeUtc,
     pub extra: Vec<u8>,
     /// the encrypted inner transaction if data contains a WrapperTx
@@ -164,11 +173,29 @@ pub struct InnerTx {
     pub extra: Vec<u8>,
 }
 
+impl From<SignedOuterTxData> for SignedTxData {
+    fn from(data: SignedOuterTxData) -> Self {
+        Self {
+            data: data.data,
+            sig: data.sig,
+        }
+    }
+}
+
+impl From<SignedTxData> for SignedOuterTxData {
+    fn from(data: SignedTxData) -> Self {
+        Self {
+            data: data.data,
+            sig: data.sig,
+        }
+    }
+}
+
 impl From<Tx> for InnerTx {
     fn from(tx: Tx) -> Self {
         Self {
             code: tx.code,
-            data: tx.data,
+            data: tx.data.map(|x| x.into()),
             timestamp: tx.timestamp,
             extra: tx.extra,
         }
@@ -179,7 +206,7 @@ impl From<InnerTx> for Tx {
     fn from(tx: InnerTx) -> Self {
         Self {
             code: tx.code,
-            data: tx.data,
+            data: tx.data.map(|x| x.into()),
             timestamp: tx.timestamp,
             extra: tx.extra,
             inner_tx: None,
@@ -216,6 +243,31 @@ impl TryFrom<&[u8]> for Tx {
             extra: tx.extra,
             timestamp,
             inner_tx,
+        })
+    }
+}
+
+impl TryFrom<&[u8]> for InnerTx {
+    type Error = Error;
+
+    fn try_from(tx_bytes: &[u8]) -> Result<Self> {
+        let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+        let timestamp = match tx.timestamp {
+            Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
+            None => return Err(Error::NoTimestampError),
+        };
+        let data = tx
+            .data
+            .map(|x| {
+                BorshDeserialize::try_from_slice(&x)
+                    .map_err(Error::TxDeserializingError)
+            })
+            .transpose()?;
+        Ok(InnerTx {
+            code: tx.code,
+            data,
+            extra: tx.extra,
+            timestamp,
         })
     }
 }
@@ -328,7 +380,7 @@ impl From<Tx> for ResponseDeliverTx {
 }
 
 impl Tx {
-    pub fn new(code: Vec<u8>, data: Option<SignedTxData>) -> Self {
+    pub fn new(code: Vec<u8>, data: Option<SignedOuterTxData>) -> Self {
         Tx {
             code,
             data,
@@ -389,7 +441,7 @@ impl Tx {
     pub fn sign(self, keypair: &common::SecretKey) -> Self {
         let to_sign = self.partial_hash();
         let sig = common::SigScheme::sign(keypair, to_sign);
-        let signed = SignedTxData {
+        let signed = SignedOuterTxData {
             data: self.data.and_then(|x| x.data),
             sig: Some(sig),
         };
@@ -642,11 +694,11 @@ mod tests {
     fn test_tx() {
         let code = "wasm code".as_bytes().to_owned();
         let data = "arbitrary data".as_bytes().to_owned();
-        let tx = Tx::new(code.clone(), Some(SignedTxData {data: Some(data.clone()), sig: None}));
+        let tx = InnerTx::new(code.clone(), Some(SignedTxData {data: Some(data.clone()), sig: None}));
 
         let bytes = tx.to_bytes();
         let tx_from_bytes =
-            Tx::try_from(bytes.as_ref()).expect("decoding failed");
+            InnerTx::try_from(bytes.as_ref()).expect("decoding failed");
         assert_eq!(tx_from_bytes, tx);
 
         let types_tx = types::Tx {

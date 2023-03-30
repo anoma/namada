@@ -16,7 +16,7 @@ use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
-use crate::proto::Tx;
+use crate::proto::{InnerTx, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{BlockHash, BlockHeight, Epoch, Key, TxIndex};
@@ -69,7 +69,7 @@ where
     /// Read-only access to the write log.
     pub write_log: &'a WriteLog,
     /// The transaction code is used for signature verification
-    pub tx: &'a Tx,
+    pub tx: &'a InnerTx,
     /// The transaction index is used to obtain the shielded transaction's
     /// parent
     pub tx_index: &'a TxIndex,
@@ -122,7 +122,7 @@ where
         address: &'a Address,
         storage: &'a Storage<DB, H>,
         write_log: &'a WriteLog,
-        tx: &'a Tx,
+        tx: &'a InnerTx,
         tx_index: &'a TxIndex,
         gas_meter: VpGasMeter,
         keys_changed: &'a BTreeSet<Key>,

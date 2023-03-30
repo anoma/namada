@@ -216,7 +216,7 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use borsh::BorshDeserialize;
-    use namada::proto::SignedTxData;
+    use namada::proto::{SignedOuterTxData, SignedTxData};
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
@@ -256,7 +256,7 @@ mod test_process_proposal {
         .bind(tx.clone());
         let tx = Tx::new(
             vec![],
-            Some(SignedTxData {data: Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None}),
+            Some(SignedOuterTxData {data: Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None}),
         )
         .attach_inner_tx(&tx, Default::default())
         .to_bytes();
@@ -306,7 +306,7 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed")
         .attach_inner_tx(&tx, Default::default());
-        let new_tx = if let Some(SignedTxData {
+        let new_tx = if let Some(SignedOuterTxData {
             data: Some(data),
             sig,
         }) = wrapper
@@ -330,7 +330,7 @@ mod test_process_proposal {
             Tx {
                 code: vec![],
                 data: Some(
-                    SignedTxData {
+                    SignedOuterTxData {
                         sig,
                         data: Some(new_data),
                     },
@@ -495,7 +495,7 @@ mod test_process_proposal {
             .bind(tx.clone());
             shell.enqueue_tx(wrapper, Some(tx.clone()));
             txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Tx::from(tx),
+                tx,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             })));
@@ -707,7 +707,7 @@ mod test_process_proposal {
     fn test_too_many_decrypted_txs() {
         let (mut shell, _) = TestShell::new();
 
-        let tx = Tx::new(
+        let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
@@ -744,7 +744,7 @@ mod test_process_proposal {
     fn test_raw_tx_rejected() {
         let (mut shell, _) = TestShell::new();
 
-        let tx = Tx::new(
+        let tx = InnerTx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );

@@ -7,7 +7,7 @@ use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::Tx;
+use namada::proto::{InnerTx, Tx};
 use namada::types::address::Address;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
@@ -56,7 +56,7 @@ pub struct TestTxEnv {
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
-    pub tx: Tx,
+    pub tx: InnerTx,
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
@@ -77,7 +77,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None),
+            tx: InnerTx::new(vec![], None),
         }
     }
 }

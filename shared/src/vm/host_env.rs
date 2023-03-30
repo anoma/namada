@@ -17,7 +17,7 @@ use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
-use crate::proto::Tx;
+use crate::proto::{InnerTx, Tx};
 use crate::types::address::{self, Address};
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
@@ -93,7 +93,7 @@ where
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx: HostRef<'a, &'a Tx>,
+    pub tx: HostRef<'a, &'a InnerTx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -134,7 +134,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut BlockGasMeter,
-        tx: &Tx,
+        tx: &InnerTx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -249,7 +249,7 @@ where
     /// VP gas meter.
     pub gas_meter: MutHostRef<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx: HostRef<'a, &'a Tx>,
+    pub tx: HostRef<'a, &'a InnerTx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -320,7 +320,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
-        tx: &Tx,
+        tx: &InnerTx,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, DB>,
         verifiers: &BTreeSet<Address>,
@@ -388,7 +388,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
-        tx: &Tx,
+        tx: &InnerTx,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, DB>,
         verifiers: &BTreeSet<Address>,
@@ -2000,7 +2000,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut BlockGasMeter,
-        tx: &Tx,
+        tx: &InnerTx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -2036,7 +2036,7 @@ pub mod testing {
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
-        tx: &Tx,
+        tx: &InnerTx,
         tx_index: &TxIndex,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,

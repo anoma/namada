@@ -15,7 +15,7 @@ use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use crate::proto::{self, Tx};
+use crate::proto::{self, Tx, InnerTx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
@@ -149,7 +149,7 @@ where
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 fn execute_tx<D, H, CA>(
-    tx: &Tx,
+    tx: &InnerTx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
@@ -180,7 +180,7 @@ where
 /// Check the acceptance of a transaction by validity predicates
 #[allow(clippy::too_many_arguments)]
 fn check_vps<D, H, CA>(
-    tx: &Tx,
+    tx: &InnerTx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     gas_meter: &mut BlockGasMeter,
@@ -228,7 +228,7 @@ where
 fn execute_vps<D, H, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
-    tx: &Tx,
+    tx: &InnerTx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     write_log: &WriteLog,

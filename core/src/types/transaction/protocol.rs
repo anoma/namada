@@ -35,7 +35,7 @@ mod protocol_txs {
     use crate::proto::Tx;
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
-    use crate::proto::SignedTxData;
+    use crate::proto::{SignedTxData, SignedOuterTxData};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
@@ -92,7 +92,7 @@ mod protocol_txs {
             Tx::new(
                 vec![],
                 Some(
-                    SignedTxData {
+                    SignedOuterTxData {
                         data: Some(TxType::Protocol(ProtocolTx {
                             pk: pk.clone(),
                             tx: self,
@@ -126,7 +126,7 @@ mod protocol_txs {
                 Tx::new(
                     code,
                     Some(
-                        SignedTxData {
+                        SignedOuterTxData {
                             data: Some(data.try_to_vec()
                                 .expect("Serializing request should not fail")),
                             sig: None,

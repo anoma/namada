@@ -14,7 +14,7 @@ pub mod decrypted_tx {
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::proto::InnerTx;
-    use crate::proto::SignedTxData;
+    use crate::proto::{SignedTxData, SignedOuterTxData};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     #[allow(clippy::large_enum_variant)]
@@ -28,7 +28,7 @@ pub mod decrypted_tx {
             // For some reason, we get `warning: fields `tx` and
             // `has_valid_pow` are never read` even though they are being used!
             #[allow(dead_code)]
-            tx: Tx,
+            tx: InnerTx,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -97,7 +97,7 @@ pub mod decrypted_tx {
             Tx::new(
                 vec![],
                 Some(
-                    SignedTxData {
+                    SignedOuterTxData {
                         data: Some(
                             TxType::Decrypted(decrypted)
                                 .try_to_vec()

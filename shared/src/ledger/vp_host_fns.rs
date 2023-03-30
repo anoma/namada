@@ -14,7 +14,7 @@ use crate::ledger::gas;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::proto::Tx;
+use crate::proto::{InnerTx, Tx};
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -250,7 +250,7 @@ where
 /// current transaction is being applied.
 pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
-    tx: &Tx,
+    tx: &InnerTx,
 ) -> EnvResult<Hash> {
     let hash = Hash(tx.code_hash());
     add_gas(gas_meter, MIN_STORAGE_GAS)?;

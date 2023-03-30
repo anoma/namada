@@ -583,7 +583,7 @@ mod test_finalize_block {
 
         let processed_tx = ProcessedTx {
             tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Tx::from(raw_tx.clone()),
+                tx: raw_tx.clone(),
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }))
@@ -717,7 +717,7 @@ mod test_finalize_block {
             shell.enqueue_tx(wrapper_tx, Some(raw_tx.clone()));
             processed_txs.push(ProcessedTx {
                 tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: Tx::from(raw_tx),
+                    tx: raw_tx,
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
                 }))

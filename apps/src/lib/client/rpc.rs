@@ -396,7 +396,7 @@ fn extract_payload(
                         wrapper_tx.decrypt(privkey, inner_tx).ok()
                     }) {
                         Some(tx) => DecryptedTx::Decrypted {
-                            tx: Tx::from(tx),
+                            tx: InnerTx::from(tx),
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: false,
                         },

@@ -28,7 +28,7 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{SignedTxData, Tx};
+    use namada::proto::{SignedTxData, InnerTx, Tx};
     use namada::tendermint_proto::Protobuf;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
@@ -443,7 +443,7 @@ mod tests {
             None,
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                env.tx = Tx::new(code.clone(), Some(SignedTxData {data:data.clone(), sig: None})).sign(&keypair);
+                env.tx = InnerTx::new(code.clone(), Some(SignedTxData {data:data.clone(), sig: None})).sign(&keypair);
                 let tx_data = env.tx.data.clone().expect("data should exist");
 
                 tx_data
@@ -535,11 +535,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -574,11 +573,10 @@ mod tests {
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -609,11 +607,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -656,11 +653,10 @@ mod tests {
         let msg = ibc::msg_update_client(client_id.clone());
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -687,11 +683,10 @@ mod tests {
         let msg = ibc::msg_upgrade_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -727,11 +722,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -766,11 +760,10 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -794,11 +787,10 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -832,11 +824,10 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -861,11 +852,10 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -904,11 +894,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -947,11 +936,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -993,11 +981,10 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1019,11 +1006,10 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1059,11 +1045,10 @@ mod tests {
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1086,11 +1071,10 @@ mod tests {
         let msg = ibc::msg_channel_open_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1128,11 +1112,10 @@ mod tests {
         let msg = ibc::msg_channel_close_init(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1170,11 +1153,10 @@ mod tests {
         let msg = ibc::msg_channel_close_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1217,11 +1199,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1259,11 +1240,10 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1310,11 +1290,10 @@ mod tests {
             ibc::msg_transfer(port_id.clone(), channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1377,11 +1356,10 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1456,11 +1434,10 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1505,11 +1482,10 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1536,11 +1512,10 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1589,11 +1564,10 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1653,11 +1627,10 @@ mod tests {
         let msg = ibc::msg_timeout(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());
@@ -1727,11 +1700,10 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx {
+        let tx = InnerTx {
             code: vec![],
             data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
             timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             extra: vec![],
         }
         .sign(&key::testing::keypair_1());

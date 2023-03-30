@@ -33,7 +33,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, DB,
 };
 use namada::ledger::{ibc, pos, protocol};
-use namada::proto::{self, Tx};
+use namada::proto::{self, InnerTx, Tx};
 use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
@@ -625,7 +625,7 @@ where
         let mut write_log = WriteLog::default();
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match Tx::try_from(tx_bytes) {
+        match InnerTx::try_from(tx_bytes) {
             Ok(tx) => {
                 let tx = TxType::Decrypted(DecryptedTx::Decrypted {
                     tx,

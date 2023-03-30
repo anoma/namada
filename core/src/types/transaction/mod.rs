@@ -203,7 +203,7 @@ pub mod tx_types {
     use thiserror;
 
     use super::*;
-    use crate::proto::{SignedTxData, Tx};
+    use crate::proto::{SignedTxData, SignedOuterTxData, InnerTx, Tx};
     use crate::types::transaction::protocol::ProtocolTx;
 
     /// Errors relating to decrypting a wrapper tx and its
@@ -224,7 +224,7 @@ pub mod tx_types {
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
     pub enum TxType {
         /// An ordinary tx
-        Raw(Tx),
+        Raw(InnerTx),
         /// A Tx that contains an encrypted raw tx
         Wrapper(WrapperTx),
         /// An attempted decryption of a wrapper tx
@@ -235,7 +235,7 @@ pub mod tx_types {
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
-            Tx::new(vec![], Some(SignedTxData {
+            Tx::new(vec![], Some(SignedOuterTxData {
                 data: Some(ty.try_to_vec().unwrap()),
                 sig: None,
             }))
@@ -253,9 +253,7 @@ pub mod tx_types {
             if let Some(ref data) = tx.data.clone().and_then(|data| data.data) {
                 BorshDeserialize::deserialize(&mut data.as_ref())
             } else {
-                // We allow Txs with empty data fields, which we
-                // will assume to be of Raw TxType
-                Ok(TxType::Raw(tx))
+                Ok(TxType::Raw(tx.into()))
             }
         }
     }
@@ -281,7 +279,7 @@ pub mod tx_types {
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
     pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
-        if let Some(SignedTxData {
+        if let Some(SignedOuterTxData {
             data: Some(data),
             sig: Some(ref sig),
         }) = tx
@@ -290,7 +288,7 @@ pub mod tx_types {
         {
             let signed_hash = Tx {
                 code: tx.code.clone(),
-                data: Some(SignedTxData {
+                data: Some(SignedOuterTxData {
                     data: Some(data.clone()),
                     sig: None,
                 }),
@@ -301,7 +299,7 @@ pub mod tx_types {
             .partial_hash();
             match TxType::try_from(Tx {
                 code: tx.code,
-                data: Some(SignedTxData {
+                data: Some(SignedOuterTxData {
                     data: Some(data.clone()),
                     sig: None,
                 }),
@@ -362,9 +360,9 @@ pub mod tx_types {
         /// data and returns an identical copy
         #[test]
         fn test_process_tx_raw_tx_no_data() {
-            let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
+            let tx = InnerTx::new("wasm code".as_bytes().to_owned(), None);
 
-            match process_tx(tx.clone()).expect("Test failed") {
+            match process_tx(tx.clone().into()).expect("Test failed") {
                 TxType::Raw(raw) => assert_eq!(tx, raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
@@ -375,14 +373,14 @@ pub mod tx_types {
         /// of the inner data
         #[test]
         fn test_process_tx_raw_tx_some_data() {
-            let inner = Tx::new(
+            let inner = InnerTx::new(
                 "code".as_bytes().to_owned(),
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some(
-                    SignedTxData {
+                    SignedOuterTxData {
                     data: Some(TxType::Raw(inner.clone())
                         .try_to_vec()
                             .expect("Test failed")),
@@ -401,20 +399,21 @@ pub mod tx_types {
         /// signed data and returns an identical copy of the inner data
         #[test]
         fn test_process_tx_raw_tx_some_signed_data() {
-            let inner = Tx::new(
+            let inner = InnerTx::new(
                 "code".as_bytes().to_owned(),
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
                 Some(
-                    SignedTxData {data: Some(TxType::Raw(inner.clone())
-                        .try_to_vec()
-                                             .expect("Test failed")),
-                    sig: None,}
+                    SignedOuterTxData {
+                        data: Some(TxType::Raw(inner.clone())
+                                   .try_to_vec()
+                                   .expect("Test failed")),
+                        sig: None,}
                 ),
             )
-            .sign(&gen_keypair());
+                .sign(&gen_keypair());
 
             match process_tx(tx).expect("Test failed") {
                 TxType::Raw(raw) => assert_eq!(inner, raw),
@@ -484,7 +483,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 vec![],
                 Some(
-                    SignedTxData {data:Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None},
+                    SignedOuterTxData {data:Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None},
                 ),
             )
             .attach_inner_tx(&inner_tx, Default::default());
@@ -497,7 +496,7 @@ pub mod tx_types {
     /// with some unsigned data and returns an identical copy
     #[test]
     fn test_process_tx_decrypted_unsigned() {
-        let payload = Tx::new(
+        let payload = InnerTx::new(
             "transaction data".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
@@ -524,7 +523,7 @@ pub mod tx_types {
     /// signature
     #[test]
     fn test_process_tx_decrypted_signed() {
-        let payload = Tx::new(
+        let payload = InnerTx::new(
             "transaction data".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
@@ -536,7 +535,7 @@ pub mod tx_types {
         // Invalid signed data
         let ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-        let signed = SignedTxData {
+        let signed = SignedOuterTxData {
             data: Some(
                 TxType::Decrypted(decrypted)
                     .try_to_vec()
