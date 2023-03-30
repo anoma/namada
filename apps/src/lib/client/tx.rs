@@ -2418,7 +2418,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let data = pos::Unbond {
         validator: validator.clone(),
         amount: args.amount,
-        source,
+        source: Some(bond_source.clone()),
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 

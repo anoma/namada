@@ -4,12 +4,13 @@ pub mod vp;
 
 pub use namada_core::ledger::storage_api;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::types::address;
 pub use namada_core::types::key::common;
 pub use namada_core::types::token;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::storage::*;
-pub use namada_proof_of_stake::types;
+pub use namada_proof_of_stake::{staking_token_address, types};
 use rust_decimal::Decimal;
 pub use vp::PosVP;
 
@@ -17,7 +18,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Epoch;
 
 /// Address of the PoS account implemented as a native VP
-pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
+pub const ADDRESS: Address = address::POS;
 
 /// Address of the PoS slash pool account
 pub const SLASH_POOL_ADDRESS: Address =
