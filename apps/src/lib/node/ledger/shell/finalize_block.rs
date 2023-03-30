@@ -73,6 +73,10 @@ where
             )?;
         }
 
+        // Invariant: This has to be applied after
+        // `copy_validator_sets_and_positions` if we're starting a new epoch
+        self.slash();
+
         let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
 
@@ -404,8 +408,6 @@ where
             .wl_storage
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
-
-        self.slash();
         (height, new_epoch)
     }
 
