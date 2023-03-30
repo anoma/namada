@@ -1222,7 +1222,7 @@ impl<E: GetEventNonce> Iterator for EthEventsQueueIter<'_, E> {
 impl<E: GetEventNonce> InnerEthEventsQueue<E> {
     /// Retrieve the next events to be processed, if any.
     ///
-    /// This decision is based on the nonce of the last event that has been
+    /// This decision is based on the nonce of the next event to be
     /// processed by the ledger, and the nonce of the event that was just
     /// confirmed (i.e. achieved a quorum of votes behind it).
     pub fn get_next_events(
