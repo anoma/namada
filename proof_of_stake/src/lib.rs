@@ -2883,10 +2883,8 @@ where
     let cubic_rate =
         compute_cubic_slash_rate(storage, params, infraction_epoch)?;
     // Need some truncation right now to max the rate at 100%
-    let rate = cmp::min(
-        Decimal::ONE,
-        cmp::max(current_slash_type.get_slash_rate(params), cubic_rate),
-    );
+    let rate = cubic_rate
+        .clamp(current_slash_type.get_slash_rate(params), Decimal::ONE);
     Ok(rate)
 }
 
