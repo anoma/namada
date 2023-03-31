@@ -1,6 +1,7 @@
 //! A basic fungible token
 
 use std::fmt::Display;
+use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
@@ -213,6 +214,12 @@ impl Sub for Amount {
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
         self.micro -= rhs.micro
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 
