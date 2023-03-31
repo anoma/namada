@@ -109,6 +109,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
@@ -120,9 +121,6 @@ mod tests {
     use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
-
-    const VP_ALWAYS_TRUE_WASM: &str =
-        "../../wasm_for_tests/vp_always_true.wasm";
 
     /// Allows anyone to withdraw up to 1_000 tokens in a single tx
     pub const MAX_FREE_DEBIT: i128 = 1_000_000_000; // in micro units
@@ -197,8 +195,7 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -233,8 +230,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
         let public_key = &keypair.ref_to();
-        let vp_code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);

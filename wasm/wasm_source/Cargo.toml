@@ -46,6 +46,7 @@ masp_primitives = { git = "https://github.com/anoma/masp", rev = "bee40fc465f6af
 [dev-dependencies]
 namada = {path = "../../shared"}
 namada_tests = {path = "../../tests"}
+namada_test_utils = {path = "../../test_utils"}
 namada_tx_prelude = {path = "../../tx_prelude"}
 namada_vp_prelude = {path = "../../vp_prelude"}
 # A fork with state machine testing

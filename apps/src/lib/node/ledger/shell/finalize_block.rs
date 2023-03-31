@@ -846,6 +846,7 @@ mod test_finalize_block {
         InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada_test_utils::TestWasms;
     use rust_decimal_macros::dec;
     use test_log::test;
 
@@ -1080,10 +1081,7 @@ mod test_finalize_block {
             .unwrap();
 
         // create two decrypted txs
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
+        let tx_code = TestWasms::TxNoOp.read_bytes();
         for i in 0..2 {
             let raw_tx = Tx::new(
                 tx_code.clone(),

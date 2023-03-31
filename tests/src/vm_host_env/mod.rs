@@ -35,6 +35,7 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
+    use namada_test_utils::TestWasms;
     use namada_tx_prelude::{
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
@@ -45,10 +46,6 @@ mod tests {
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
     use crate::vp::{vp_host_env, TestVpEnv};
-
-    // paths to the WASMs used for tests
-    const VP_ALWAYS_TRUE_WASM: &str = "../wasm_for_tests/vp_always_true.wasm";
-    const VP_ALWAYS_FALSE_WASM: &str = "../wasm_for_tests/vp_always_false.wasm";
 
     #[test]
     fn test_tx_read_write() {
@@ -220,8 +217,7 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
         tx::ctx().init_account(code).unwrap();
     }
 
@@ -528,16 +524,14 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
-        let code =
-            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysTrue.read_bytes();
         let input_data = vec![];
         let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
-        let code =
-            std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
+        let code = TestWasms::VpAlwaysFalse.read_bytes();
         let input_data = vec![];
         let result = vp::CTX.eval(code, input_data).unwrap();
         assert!(!result);
