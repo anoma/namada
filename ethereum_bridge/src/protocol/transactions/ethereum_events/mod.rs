@@ -116,7 +116,7 @@ where
 
     // Right now, the order in which events are acted on does not matter.
     // For `TransfersToNamada` events, they can happen in any order.
-    for event in &confirmed {
+    for event in confirmed {
         let mut changed = events::act_on(wl_storage, event)?;
         changed_keys.append(&mut changed);
     }

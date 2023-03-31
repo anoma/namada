@@ -22,6 +22,7 @@ use namada_core::types::address::{nam, Address};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
+    TransfersToNamada,
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
@@ -38,28 +39,51 @@ use crate::storage::eth_bridge_queries::EthBridgeQueries;
 /// transferred assets to the appropriate receiver addresses.
 pub(super) fn act_on<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    event: &EthereumEvent,
+    event: EthereumEvent,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    match &event {
+    match event {
         EthereumEvent::TransfersToNamada {
             transfers,
             valid_transfers_map,
-            ..
-        } => act_on_transfers_to_namada(
-            wl_storage,
-            transfers
-                .iter()
-                .zip(valid_transfers_map.iter())
-                .filter_map(|(transf, valid)| valid.then_some(transf)),
-        ),
+            nonce,
+        } => {
+            let mut changed_keys = BTreeSet::new();
+            // we need to collect the events into a separate
+            // buffer because of rust's borrowing rules :|
+            let confirmed_events: Vec<_> = wl_storage
+                .storage
+                .eth_events_queue
+                .transfers_to_namada
+                .get_next_events(TransfersToNamada {
+                    transfers,
+                    valid_transfers_map,
+                    nonce,
+                })
+                .collect();
+            for TransfersToNamada {
+                transfers,
+                valid_transfers_map,
+                ..
+            } in confirmed_events
+            {
+                changed_keys.append(&mut act_on_transfers_to_namada(
+                    wl_storage,
+                    transfers
+                        .iter()
+                        .zip(valid_transfers_map.iter())
+                        .filter_map(|(transf, valid)| valid.then_some(transf)),
+                )?);
+            }
+            Ok(changed_keys)
+        }
         EthereumEvent::TransfersToEthereum {
-            transfers,
-            relayer,
-            valid_transfers_map,
+            ref transfers,
+            ref relayer,
+            ref valid_transfers_map,
             ..
         } => act_on_transfers_to_eth(
             wl_storage,
@@ -593,8 +617,8 @@ mod tests {
             },
         ];
 
-        for event in events.iter() {
-            act_on(&mut wl_storage, event).unwrap();
+        for event in events {
+            act_on(&mut wl_storage, event.clone()).unwrap();
             assert_eq!(
                 stored_keys_count(&wl_storage),
                 initial_stored_keys_count,
@@ -625,7 +649,7 @@ mod tests {
             transfers,
         };
 
-        act_on(&mut wl_storage, &event).unwrap();
+        act_on(&mut wl_storage, event).unwrap();
 
         assert_eq!(
             stored_keys_count(&wl_storage),
@@ -704,7 +728,7 @@ mod tests {
                 .expect("Test failed"),
         )
         .expect("Test failed");
-        let mut changed_keys = act_on(&mut wl_storage, &event).unwrap();
+        let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
 
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
@@ -777,7 +801,7 @@ mod tests {
             valid_transfers_map: vec![],
             relayer: gen_implicit_address(),
         };
-        let _ = act_on(&mut wl_storage, &event).unwrap();
+        let _ = act_on(&mut wl_storage, event).unwrap();
 
         // The latest transfer is still pending
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
