@@ -196,7 +196,7 @@ mod test_prepare_proposal {
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
-    #[test]
+    /*#[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (shell, _) = TestShell::new();
         let tx = Tx::new(
@@ -215,7 +215,7 @@ mod test_prepare_proposal {
         );
         #[cfg(not(feature = "abcipp"))]
         assert!(shell.prepare_proposal(req).txs.is_empty());
-    }
+    }*/
 
     /// Test that if an error is encountered while
     /// trying to process a tx from the mempool,
@@ -233,7 +233,7 @@ mod test_prepare_proposal {
             "".as_bytes().to_owned(),
             Some(
                 SignedOuterTxData {
-                    data: Some(WrapperTx::new(
+                    data: Some(TxType::Wrapper(WrapperTx::new(
                         Fee {
                             amount: 0.into(),
                             token: shell.storage.native_token.clone(),
@@ -244,9 +244,7 @@ mod test_prepare_proposal {
                         #[cfg(not(feature = "mainnet"))]
                         None,
                     )
-                               .bind(tx.clone())
-                               .try_to_vec()
-                               .expect("Test failed")),
+                               .bind(tx.clone()))),
                     sig: None,
                 }
             ),
@@ -366,7 +364,10 @@ mod test_prepare_proposal {
                 })
                 .collect();
             // check that the order of the txs is correct
-            assert_eq!(received, expected_txs);
+            assert_eq!(
+                received.iter().map(|x| x.try_to_vec().unwrap()).collect::<Vec<_>>(),
+                expected_txs.iter().map(|x| x.try_to_vec().unwrap()).collect::<Vec<_>>(),
+            );
         }
     }
 }

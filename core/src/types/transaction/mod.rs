@@ -196,7 +196,6 @@ pub struct InitValidator {
 /// different types of transactions that the ledger
 /// must support as well as conversion functions
 /// between them.
-#[cfg(feature = "ferveo-tpke")]
 pub mod tx_types {
     use std::convert::TryFrom;
 
@@ -204,6 +203,7 @@ pub mod tx_types {
 
     use super::*;
     use crate::proto::{SignedTxData, SignedOuterTxData, InnerTx, Tx};
+    #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::protocol::ProtocolTx;
 
     /// Errors relating to decrypting a wrapper tx and its
@@ -221,22 +221,24 @@ pub mod tx_types {
 
     /// Struct that classifies that kind of Tx
     /// based on the contents of its data.
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
     pub enum TxType {
         /// An ordinary tx
         Raw(InnerTx),
         /// A Tx that contains an encrypted raw tx
         Wrapper(WrapperTx),
         /// An attempted decryption of a wrapper tx
+        #[cfg(feature = "ferveo-tpke")]
         Decrypted(DecryptedTx),
         /// Txs issued by validators as part of internal protocols
+        #[cfg(feature = "ferveo-tpke")]
         Protocol(ProtocolTx),
     }
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
             Tx::new(vec![], Some(SignedOuterTxData {
-                data: Some(ty.try_to_vec().unwrap()),
+                data: Some(ty),
                 sig: None,
             }))
         }
@@ -250,8 +252,8 @@ pub mod tx_types {
         type Error = std::io::Error;
 
         fn try_from(tx: Tx) -> std::io::Result<TxType> {
-            if let Some(ref data) = tx.data.clone().and_then(|data| data.data) {
-                BorshDeserialize::deserialize(&mut data.as_ref())
+            if let Some(data) = tx.data.clone().and_then(|data| data.data) {
+                Ok(data)
             } else {
                 Ok(TxType::Raw(tx.into()))
             }
@@ -315,11 +317,13 @@ pub mod tx_types {
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // verify signature and extract signed data
+                #[cfg(feature = "ferveo-tpke")]
                 TxType::Protocol(protocol) => {
                     protocol.validate_sig(signed_hash, sig)?;
                     Ok(TxType::Protocol(protocol))
                 }
                 // we extract the signed data, but don't check the signature
+                #[cfg(feature = "ferveo-tpke")]
                 decrypted @ TxType::Decrypted(_) => Ok(decrypted),
                 // return as is
                 raw @ TxType::Raw(_) => Ok(raw),
@@ -332,6 +336,7 @@ pub mod tx_types {
                 TxType::Wrapper(_) => Err(TxError::Unsigned(
                     "Wrapper transactions must be signed".into(),
                 )),
+                #[cfg(feature = "ferveo-tpke")]
                 TxType::Protocol(_) => Err(TxError::Unsigned(
                     "Protocol transactions must be signed".into(),
                 )),
@@ -360,10 +365,9 @@ pub mod tx_types {
         /// data and returns an identical copy
         #[test]
         fn test_process_tx_raw_tx_no_data() {
-            let tx = InnerTx::new("wasm code".as_bytes().to_owned(), None);
-
+            let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
             match process_tx(tx.clone().into()).expect("Test failed") {
-                TxType::Raw(raw) => assert_eq!(tx, raw),
+                TxType::Raw(raw) => assert_eq!(InnerTx::from(tx), raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
@@ -381,9 +385,7 @@ pub mod tx_types {
                 "wasm code".as_bytes().to_owned(),
                 Some(
                     SignedOuterTxData {
-                    data: Some(TxType::Raw(inner.clone())
-                        .try_to_vec()
-                            .expect("Test failed")),
+                        data: Some(TxType::Raw(inner.clone())),
                         sig: None,
                     }
                 ),
@@ -407,9 +409,7 @@ pub mod tx_types {
                 "wasm code".as_bytes().to_owned(),
                 Some(
                     SignedOuterTxData {
-                        data: Some(TxType::Raw(inner.clone())
-                                   .try_to_vec()
-                                   .expect("Test failed")),
+                        data: Some(TxType::Raw(inner.clone())),
                         sig: None,}
                 ),
             )
@@ -483,7 +483,7 @@ pub mod tx_types {
             let tx = Tx::new(
                 vec![],
                 Some(
-                    SignedOuterTxData {data:Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None},
+                    SignedOuterTxData {data:Some(TxType::Wrapper(wrapper)), sig: None},
                 ),
             )
             .attach_inner_tx(&inner_tx, Default::default());
@@ -536,11 +536,7 @@ pub mod tx_types {
         let ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
         let signed = SignedOuterTxData {
-            data: Some(
-                TxType::Decrypted(decrypted)
-                    .try_to_vec()
-                    .expect("Test failed"),
-            ),
+            data: Some(TxType::Decrypted(decrypted)),
             sig: Some(common::Signature::try_from_sig(&ed_sig).unwrap()),
         };
         // create the tx with signed decrypted data
@@ -559,5 +555,4 @@ pub mod tx_types {
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use tx_types::*;

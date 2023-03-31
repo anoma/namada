@@ -28,7 +28,6 @@ use crate::types::transaction::DecryptedTx;
 use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
-#[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::TxType;
 
 #[derive(Error, Debug)]
@@ -65,10 +64,10 @@ pub struct SignedTxData {
     pub sig: Option<common::Signature>,
 }
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Default, Deserialize, Serialize)]
 pub struct SignedOuterTxData {
     /// The original tx data bytes, if any
-    pub data: Option<Vec<u8>>,
+    pub data: Option<TxType>,
     /// The signature is produced on the tx data concatenated with the tx code
     /// and the timestamp.
     pub sig: Option<common::Signature>,
@@ -149,7 +148,7 @@ where
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct Tx {
     pub code: Vec<u8>,
@@ -164,7 +163,7 @@ pub struct Tx {
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Serialize, Deserialize,
 )]
 pub struct InnerTx {
     pub code: Vec<u8>,
@@ -176,16 +175,7 @@ pub struct InnerTx {
 impl From<SignedOuterTxData> for SignedTxData {
     fn from(data: SignedOuterTxData) -> Self {
         Self {
-            data: data.data,
-            sig: data.sig,
-        }
-    }
-}
-
-impl From<SignedTxData> for SignedOuterTxData {
-    fn from(data: SignedTxData) -> Self {
-        Self {
-            data: data.data,
+            data: data.data.map(|x| x.try_to_vec().unwrap()),
             sig: data.sig,
         }
     }
@@ -198,18 +188,6 @@ impl From<Tx> for InnerTx {
             data: tx.data.map(|x| x.into()),
             timestamp: tx.timestamp,
             extra: tx.extra,
-        }
-    }
-}
-
-impl From<InnerTx> for Tx {
-    fn from(tx: InnerTx) -> Self {
-        Self {
-            code: tx.code,
-            data: tx.data.map(|x| x.into()),
-            timestamp: tx.timestamp,
-            extra: tx.extra,
-            inner_tx: None,
         }
     }
 }

@@ -96,7 +96,8 @@ impl From<std::time::Duration> for DurationNanos {
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
 impl DateTimeUtc {
@@ -146,7 +147,7 @@ impl BorshSerialize for DateTimeUtc {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let raw = self.0.to_rfc3339();
-        raw.serialize(writer)
+        BorshSerialize::serialize(&raw, writer)
     }
 }
 

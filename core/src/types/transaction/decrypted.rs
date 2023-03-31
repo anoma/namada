@@ -16,7 +16,7 @@ pub mod decrypted_tx {
     use crate::proto::InnerTx;
     use crate::proto::{SignedTxData, SignedOuterTxData};
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, serde::Serialize, serde::Deserialize)]
     #[allow(clippy::large_enum_variant)]
     /// Holds the result of attempting to decrypt
     /// a transaction and the data necessary for
@@ -100,8 +100,6 @@ pub mod decrypted_tx {
                     SignedOuterTxData {
                         data: Some(
                             TxType::Decrypted(decrypted)
-                                .try_to_vec()
-                                .expect("Encrypting transaction should not fail")
                         ),
                         sig: None,
                     }

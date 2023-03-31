@@ -32,14 +32,14 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::Tx;
+    use crate::proto::{InnerTx, Tx};
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::proto::{SignedTxData, SignedOuterTxData};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
     /// Txs sent by validators as part of internal protocols
     pub struct ProtocolTx {
         /// we require ProtocolTxs be signed
@@ -66,20 +66,20 @@ mod protocol_txs {
     }
 
     /// DKG message wrapper type that adds Borsh encoding.
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct DkgMessage(pub Message<EllipticCurve>);
 
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
     #[allow(clippy::large_enum_variant)]
     /// Types of protocol messages to be sent
     pub enum ProtocolTxType {
         /// Messages to be given to the DKG state machine
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
-        NewDkgKeypair(Tx),
+        NewDkgKeypair(InnerTx),
         /// Aggregation of Ethereum state changes
         /// voted on by validators in last block
-        EthereumStateUpdate(Tx),
+        EthereumStateUpdate(InnerTx),
     }
 
     impl ProtocolTxType {
@@ -96,9 +96,7 @@ mod protocol_txs {
                         data: Some(TxType::Protocol(ProtocolTx {
                             pk: pk.clone(),
                             tx: self,
-                        })
-                            .try_to_vec()
-                            .expect("Could not serialize ProtocolTx")),
+                        })),
                         sig: None,
                     }
                 ),
@@ -123,10 +121,10 @@ mod protocol_txs {
                 TX_NEW_DKG_KP_WASM,
             );
             Self::NewDkgKeypair(
-                Tx::new(
+                InnerTx::new(
                     code,
                     Some(
-                        SignedOuterTxData {
+                        SignedTxData {
                             data: Some(data.try_to_vec()
                                 .expect("Serializing request should not fail")),
                             sig: None,

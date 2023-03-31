@@ -1,11 +1,11 @@
 /// Integration of Ferveo cryptographic primitives
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
-#[cfg(feature = "ferveo-tpke")]
 pub mod wrapper_tx {
     use std::convert::TryFrom;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
+    #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ pub mod wrapper_tx {
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
+    #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxError, TxType};
     use crate::proto::{SignedTxData, SignedOuterTxData};
@@ -55,6 +56,7 @@ pub mod wrapper_tx {
         BorshSchema,
         Serialize,
         Deserialize,
+        Eq,
     )]
     pub struct Fee {
         /// amount of the fee
@@ -79,6 +81,7 @@ pub mod wrapper_tx {
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
+        Eq,
     )]
     #[serde(from = "u64")]
     #[serde(into = "u64")]
@@ -216,6 +219,7 @@ pub mod wrapper_tx {
         /// Will fail if the inner transaction does match the
         /// hash commitment or we are unable to recover a
         /// valid Tx from the decoded byte stream.
+        #[cfg(feature = "ferveo-tpke")]
         pub fn decrypt(
             &self,
             privkey: <EllipticCurve as PairingEngine>::G2Affine,
@@ -251,9 +255,7 @@ pub mod wrapper_tx {
                 vec![],
                 Some(
                     SignedOuterTxData {
-                        data: Some(TxType::Wrapper(self.clone())
-                            .try_to_vec()
-                            .expect("Could not serialize WrapperTx")),
+                        data: Some(TxType::Wrapper(self.clone())),
                         sig: None,
                     }
                 ),
@@ -487,9 +489,7 @@ pub mod wrapper_tx {
             assert_eq!(decrypted, malicious);
 
             // we substitute in the modified wrapper
-            signed_tx_data.data = Some(
-                TxType::Wrapper(wrapper).try_to_vec().expect("Test failed"),
-            );
+            signed_tx_data.data = Some(TxType::Wrapper(wrapper));
             tx.data = Some(signed_tx_data.clone());
 
             // check that the signature is not valid
@@ -503,5 +503,4 @@ pub mod wrapper_tx {
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use wrapper_tx::*;

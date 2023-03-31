@@ -256,7 +256,7 @@ mod test_process_proposal {
         .bind(tx.clone());
         let tx = Tx::new(
             vec![],
-            Some(SignedOuterTxData {data: Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")), sig: None}),
+            Some(SignedOuterTxData {data: Some(TxType::Wrapper(wrapper)), sig: None}),
         )
         .attach_inner_tx(&tx, Default::default())
         .to_bytes();
@@ -313,10 +313,7 @@ mod test_process_proposal {
             .data
             .take()
         {
-            let mut new_wrapper = if let TxType::Wrapper(wrapper) =
-                <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
-                    .expect("Test failed")
-            {
+            let mut new_wrapper = if let TxType::Wrapper(wrapper) = data {
                 wrapper
             } else {
                 panic!("Test failed")
@@ -324,9 +321,7 @@ mod test_process_proposal {
 
             // we mount a malleability attack to try and remove the fee
             new_wrapper.fee.amount = 0.into();
-            let new_data = TxType::Wrapper(new_wrapper)
-                .try_to_vec()
-                .expect("Test failed");
+            let new_data = TxType::Wrapper(new_wrapper);
             Tx {
                 code: vec![],
                 data: Some(
