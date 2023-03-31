@@ -1256,14 +1256,20 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
 
     /// Push a new transfer to Namada event to the queue.
     #[inline]
-    fn push_event(&mut self, new_event: E) {
+    fn push_event(&mut self, new_event: E)
+    where
+        E: std::fmt::Debug,
+    {
         self.inner
             .binary_search_by_key(
                 &new_event.get_event_nonce(),
                 |event_in_queue| event_in_queue.get_event_nonce(),
             )
             .map_or_else(
-                |insert_at| self.inner.insert(insert_at, new_event),
+                |insert_at| {
+                    tracing::debug!(?new_event, "Queueing Ethereum event");
+                    self.inner.insert(insert_at, new_event)
+                },
                 // the event is already present in the queue... this is
                 // certainly a protocol error
                 |_| {
