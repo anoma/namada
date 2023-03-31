@@ -26,6 +26,97 @@ where
     pub storage: Storage<D, H>,
 }
 
+/// Temporary storage that can be used for changes that will never be committed
+/// to the DB. This is useful for the shell `PrepareProposal` and
+/// `ProcessProposal` handlers that should not change state, but need to apply
+/// storage changes for replay protection to validate the proposal.
+#[derive(Debug)]
+pub struct TempWlStorage<'a, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Write log
+    pub write_log: WriteLog,
+    /// Storage provides access to DB
+    pub storage: &'a Storage<D, H>,
+}
+
+impl<'a, D, H> TempWlStorage<'a, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Create a temp storage that can mutated in memory, but never committed to
+    /// DB.
+    pub fn new(storage: &'a Storage<D, H>) -> Self {
+        Self {
+            write_log: WriteLog::default(),
+            storage,
+        }
+    }
+}
+
+/// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
+/// storage_api traits.
+trait WriteLogAndStorage {
+    // DB type
+    type D: DB + for<'iter> DBIter<'iter>;
+    // DB hasher type
+    type H: StorageHasher;
+
+    /// Borrow `WriteLog`
+    fn write_log(&self) -> &WriteLog;
+
+    /// Borrow mutable `WriteLog`
+    fn write_log_mut(&mut self) -> &mut WriteLog;
+
+    /// Borrow `Storage`
+    fn storage(&self) -> &Storage<Self::D, Self::H>;
+}
+
+impl<D, H> WriteLogAndStorage for WlStorage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    type D = D;
+    type H = H;
+
+    fn write_log(&self) -> &WriteLog {
+        &self.write_log
+    }
+
+    fn write_log_mut(&mut self) -> &mut WriteLog {
+        &mut self.write_log
+    }
+
+    fn storage(&self) -> &Storage<D, H> {
+        &self.storage
+    }
+}
+
+impl<D, H> WriteLogAndStorage for TempWlStorage<'_, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    type D = D;
+    type H = H;
+
+    fn write_log(&self) -> &WriteLog {
+        &self.write_log
+    }
+
+    fn write_log_mut(&mut self) -> &mut WriteLog {
+        &mut self.write_log
+    }
+
+    fn storage(&self) -> &Storage<D, H> {
+        self.storage
+    }
+}
+
 impl<D, H> WlStorage<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
@@ -255,10 +346,11 @@ where
     }
 }
 
-impl<D, H> StorageRead for WlStorage<D, H>
+impl<T, D, H> StorageRead for T
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    T: WriteLogAndStorage<D = D, H = H>,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
 
@@ -267,7 +359,7 @@ where
         key: &storage::Key,
     ) -> storage_api::Result<Option<Vec<u8>>> {
         // try to read from the write log first
-        let (log_val, _gas) = self.write_log.read(key);
+        let (log_val, _gas) = self.write_log().read(key);
         match log_val {
             Some(&write_log::StorageModification::Write { ref value }) => {
                 Ok(Some(value.clone()))
@@ -282,14 +374,17 @@ where
             }
             None => {
                 // when not found in write log, try to read from the storage
-                self.storage.db.read_subspace_val(key).into_storage_result()
+                self.storage()
+                    .db
+                    .read_subspace_val(key)
+                    .into_storage_result()
             }
         }
     }
 
     fn has_key(&self, key: &storage::Key) -> storage_api::Result<bool> {
         // try to read from the write log first
-        let (log_val, _gas) = self.write_log.read(key);
+        let (log_val, _gas) = self.write_log().read(key);
         match log_val {
             Some(&write_log::StorageModification::Write { .. })
             | Some(&write_log::StorageModification::InitAccount { .. })
@@ -300,7 +395,7 @@ where
             }
             None => {
                 // when not found in write log, try to check the storage
-                self.storage.block.tree.has_key(key).into_storage_result()
+                self.storage().block.tree.has_key(key).into_storage_result()
             }
         }
     }
@@ -310,7 +405,7 @@ where
         prefix: &storage::Key,
     ) -> storage_api::Result<Self::PrefixIter<'iter>> {
         let (iter, _gas) =
-            iter_prefix_post(&self.write_log, &self.storage, prefix);
+            iter_prefix_post(self.write_log(), self.storage(), prefix);
         Ok(iter)
     }
 
@@ -322,40 +417,41 @@ where
     }
 
     fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.storage.chain_id.to_string())
+        Ok(self.storage().chain_id.to_string())
     }
 
     fn get_block_height(
         &self,
     ) -> std::result::Result<storage::BlockHeight, storage_api::Error> {
-        Ok(self.storage.block.height)
+        Ok(self.storage().block.height)
     }
 
     fn get_block_hash(
         &self,
     ) -> std::result::Result<storage::BlockHash, storage_api::Error> {
-        Ok(self.storage.block.hash.clone())
+        Ok(self.storage().block.hash.clone())
     }
 
     fn get_block_epoch(
         &self,
     ) -> std::result::Result<storage::Epoch, storage_api::Error> {
-        Ok(self.storage.block.epoch)
+        Ok(self.storage().block.epoch)
     }
 
     fn get_tx_index(
         &self,
     ) -> std::result::Result<storage::TxIndex, storage_api::Error> {
-        Ok(self.storage.tx_index)
+        Ok(self.storage().tx_index)
     }
 
     fn get_native_token(&self) -> storage_api::Result<Address> {
-        Ok(self.storage.native_token.clone())
+        Ok(self.storage().native_token.clone())
     }
 }
 
-impl<D, H> StorageWrite for WlStorage<D, H>
+impl<T, D, H> StorageWrite for T
 where
+    T: WriteLogAndStorage<D = D, H = H>,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
@@ -364,13 +460,19 @@ where
         key: &storage::Key,
         val: impl AsRef<[u8]>,
     ) -> storage_api::Result<()> {
-        self.write_log
+        let _ = self
+            .write_log_mut()
             .protocol_write(key, val.as_ref().to_vec())
-            .into_storage_result()
+            .into_storage_result();
+        Ok(())
     }
 
     fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
-        self.write_log.protocol_delete(key).into_storage_result()
+        let _ = self
+            .write_log_mut()
+            .protocol_delete(key)
+            .into_storage_result();
+        Ok(())
     }
 }
 
