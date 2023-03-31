@@ -50,36 +50,14 @@ where
             transfers,
             valid_transfers_map,
             nonce,
-        } => {
-            let mut changed_keys = BTreeSet::new();
-            // we need to collect the events into a separate
-            // buffer because of rust's borrowing rules :|
-            let confirmed_events: Vec<_> = wl_storage
-                .storage
-                .eth_events_queue
-                .transfers_to_namada
-                .get_next_events(TransfersToNamada {
-                    transfers,
-                    valid_transfers_map,
-                    nonce,
-                })
-                .collect();
-            for TransfersToNamada {
+        } => act_on_transfers_to_namada(
+            wl_storage,
+            TransfersToNamada {
                 transfers,
                 valid_transfers_map,
-                ..
-            } in confirmed_events
-            {
-                changed_keys.append(&mut act_on_transfers_to_namada(
-                    wl_storage,
-                    transfers
-                        .iter()
-                        .zip(valid_transfers_map.iter())
-                        .filter_map(|(transf, valid)| valid.then_some(transf)),
-                )?);
-            }
-            Ok(changed_keys)
-        }
+                nonce,
+            },
+        ),
         EthereumEvent::TransfersToEthereum {
             ref transfers,
             ref relayer,
@@ -100,20 +78,69 @@ where
 
 fn act_on_transfers_to_namada<'tx, D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
+    transfer_event: TransfersToNamada,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let wrapped_native_erc20 = read_native_erc20_address(wl_storage)?;
-    let mut changed_keys = BTreeSet::default();
-    for TransferToNamada {
-        amount,
-        asset,
-        receiver,
-    } in transfers
+    tracing::debug!(?transfer_event, "Acting on transfers to Namada");
+    let mut changed_keys = BTreeSet::new();
+    // we need to collect the events into a separate
+    // buffer because of rust's borrowing rules :|
+    let confirmed_events: Vec<_> = wl_storage
+        .storage
+        .eth_events_queue
+        .transfers_to_namada
+        .get_next_events(transfer_event)
+        .collect();
+    for TransfersToNamada {
+        transfers,
+        valid_transfers_map,
+        ..
+    } in confirmed_events
     {
+        update_transfers_to_namada_state(
+            wl_storage,
+            &mut changed_keys,
+            transfers.iter().zip(valid_transfers_map.iter()).filter_map(
+                |(transfer, &valid)| {
+                    if valid {
+                        Some(transfer)
+                    } else {
+                        tracing::debug!(
+                            ?transfer,
+                            "Ignoring invalid transfer to Namada event"
+                        );
+                        None
+                    }
+                },
+            ),
+        )?;
+    }
+    Ok(changed_keys)
+}
+
+fn update_transfers_to_namada_state<'tx, D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    changed_keys: &mut BTreeSet<Key>,
+    transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let wrapped_native_erc20 = read_native_erc20_address(wl_storage)?;
+    for transfer in transfers {
+        tracing::debug!(
+            ?transfer,
+            "Applying state updates derived from a transfer to Namada event"
+        );
+        let TransferToNamada {
+            amount,
+            asset,
+            receiver,
+        } = transfer;
         let mut changed = if asset != &wrapped_native_erc20 {
             let changed =
                 mint_wrapped_erc20s(wl_storage, asset, receiver, amount)?;
@@ -127,7 +154,7 @@ where
         };
         changed_keys.append(&mut changed)
     }
-    Ok(changed_keys)
+    Ok(())
 }
 
 /// Redeems `amount` of the native token for `receiver` from escrow.
@@ -249,6 +276,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    tracing::debug!(
+        ?transfers,
+        ?valid_transfers,
+        "Acting on transfers to Ethereum"
+    );
     let mut changed_keys = BTreeSet::default();
     // all keys of pending transfers
     let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
@@ -672,7 +704,12 @@ mod tests {
             receiver: receiver.clone(),
         }];
 
-        act_on_transfers_to_namada(&mut wl_storage, &transfers).unwrap();
+        update_transfers_to_namada_state(
+            &mut wl_storage,
+            &mut BTreeSet::new(),
+            &transfers,
+        )
+        .unwrap();
 
         let wdai: wrapped_erc20s::Keys = (&DAI_ERC20_ETH_ADDRESS).into();
         let receiver_balance_key = wdai.balance(&receiver);
