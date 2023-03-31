@@ -436,7 +436,7 @@ async fn test_wnam_transfer() -> Result<()> {
         receiver: address::testing::established_address_1(),
     };
     let transfers = EthereumEvent::TransfersToNamada {
-        nonce: 1.into(),
+        nonce: 0.into(),
         transfers: vec![wnam_transfer.clone()],
         valid_transfers_map: vec![true],
     };
