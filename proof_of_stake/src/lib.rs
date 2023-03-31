@@ -1658,8 +1658,7 @@ where
     let mut computed_amounts = HashSet::<SlashedAmount>::new();
 
     for slash in slashes {
-        let (infraction_epoch, slash_type) =
-            (slash.epoch, slash.r#type.clone());
+        let (infraction_epoch, slash_type) = (slash.epoch, slash.r#type);
         let mut computed_to_remove = HashSet::<SlashedAmount>::new();
         for slashed_amount in computed_amounts.iter() {
             // Update amount with slashes that happened more than unbonding_len
@@ -2029,7 +2028,7 @@ where
                 storage,
                 params,
                 *slash_epoch,
-                slash_type.clone(),
+                *slash_type,
             )?;
             let current_slashed = decimal_mult_i128(cubic_rate, delta);
             let delta = token::Amount::from_change(delta - current_slashed);
@@ -2605,7 +2604,7 @@ where
                         storage,
                         params,
                         slash.epoch,
-                        slash.r#type.clone(),
+                        slash.r#type,
                     )
                     .unwrap();
                     let validator_slashes =
@@ -2654,7 +2653,7 @@ where
                         storage,
                         params,
                         slash.epoch,
-                        slash.r#type.clone(),
+                        slash.r#type,
                     )
                     .unwrap();
                     let validator_slashes =

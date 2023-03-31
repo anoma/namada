@@ -403,6 +403,7 @@ pub type Slashes = LazyVec<Slash>;
 #[derive(
     Debug,
     Clone,
+    Copy,
     BorshDeserialize,
     BorshSerialize,
     BorshSchema,

@@ -387,7 +387,7 @@ impl StateMachineTest for ConcretePosState {
                     current_epoch,
                     infraction_epoch,
                     height,
-                    slash_type.clone(),
+                    slash_type,
                     &address,
                 )
                 .unwrap();
@@ -1323,7 +1323,7 @@ impl AbstractStateMachine for AbstractPosState {
                 let slash = Slash {
                     epoch: *infraction_epoch,
                     block_height: *height,
-                    r#type: slash_type.clone(),
+                    r#type: *slash_type,
                     rate: Decimal::ZERO,
                 };
 
