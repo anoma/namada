@@ -151,10 +151,10 @@ where
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct Tx {
-    pub code: Vec<u8>,
-    pub data: Option<SignedOuterTxData>,
-    pub timestamp: DateTimeUtc,
-    pub extra: Vec<u8>,
+    pub outer_code: Vec<u8>,
+    pub outer_data: Option<SignedOuterTxData>,
+    pub outer_timestamp: DateTimeUtc,
+    pub outer_extra: Vec<u8>,
     /// the encrypted inner transaction if data contains a WrapperTx
     pub inner_tx: Option<InnerTx>,
 }
@@ -184,10 +184,10 @@ impl From<SignedOuterTxData> for SignedTxData {
 impl From<Tx> for InnerTx {
     fn from(tx: Tx) -> Self {
         Self {
-            code: tx.code,
-            data: tx.data.map(|x| x.into()),
-            timestamp: tx.timestamp,
-            extra: tx.extra,
+            code: tx.outer_code,
+            data: tx.outer_data.map(|x| x.into()),
+            timestamp: tx.outer_timestamp,
+            extra: tx.outer_extra,
         }
     }
 }
@@ -216,10 +216,10 @@ impl TryFrom<&[u8]> for Tx {
             })
             .transpose()?;
         Ok(Tx {
-            code: tx.code,
-            data,
-            extra: tx.extra,
-            timestamp,
+            outer_code: tx.code,
+            outer_data: data,
+            outer_extra: tx.extra,
+            outer_timestamp: timestamp,
             inner_tx,
         })
     }
@@ -252,19 +252,19 @@ impl TryFrom<&[u8]> for InnerTx {
 
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
-        let timestamp = Some(tx.timestamp.into());
+        let timestamp = Some(tx.outer_timestamp.into());
         let inner_tx = tx.inner_tx.map(|x| {
             x.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         });
-        let data = tx.data.map(|x| {
+        let data = tx.outer_data.map(|x| {
             x.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         });
         types::Tx {
-            code: tx.code,
+            code: tx.outer_code,
             data,
-            extra: tx.extra,
+            extra: tx.outer_extra,
             timestamp,
             inner_tx,
         }
@@ -360,11 +360,11 @@ impl From<Tx> for ResponseDeliverTx {
 impl Tx {
     pub fn new(code: Vec<u8>, data: Option<SignedOuterTxData>) -> Self {
         Tx {
-            code,
-            data,
-            timestamp: DateTimeUtc::now(),
+            outer_code: code,
+            outer_data: data,
+            outer_timestamp: DateTimeUtc::now(),
             inner_tx: None,
-            extra: vec![],
+            outer_extra: vec![],
         }
     }
 
@@ -380,14 +380,14 @@ impl Tx {
     /// signing. Specifically replaces code and extra with their hashes, and
     /// leaves out inner tx.
     pub fn signing_tx(&self) -> types::Tx {
-        let timestamp = Some(self.timestamp.into());
-        let data = self.data.as_ref().map(|x| {
+        let timestamp = Some(self.outer_timestamp.into());
+        let data = self.outer_data.as_ref().map(|x| {
             x.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         });
         types::Tx {
-            code: hash_tx(&self.code).0.to_vec(),
-            extra: hash_tx(&self.extra).0.to_vec(),
+            code: hash_tx(&self.outer_code).0.to_vec(),
+            extra: hash_tx(&self.outer_extra).0.to_vec(),
             data,
             timestamp,
             inner_tx: None,
@@ -407,12 +407,12 @@ impl Tx {
 
     /// Get the hash of this transaction's code
     pub fn code_hash(&self) -> [u8; 32] {
-        hash_tx(&self.code).0
+        hash_tx(&self.outer_code).0
     }
 
     /// Get the hash of this transaction's extra data
     pub fn extra_hash(&self) -> [u8; 32] {
-        hash_tx(&self.extra).0
+        hash_tx(&self.outer_extra).0
     }
 
     /// Sign a transaction using [`SignedTxData`].
@@ -420,14 +420,14 @@ impl Tx {
         let to_sign = self.partial_hash();
         let sig = common::SigScheme::sign(keypair, to_sign);
         let signed = SignedOuterTxData {
-            data: self.data.and_then(|x| x.data),
+            data: self.outer_data.and_then(|x| x.data),
             sig: Some(sig),
         };
         Tx {
-            code: self.code,
-            data: Some(signed),
-            extra: self.extra,
-            timestamp: self.timestamp,
+            outer_code: self.outer_code,
+            outer_data: Some(signed),
+            outer_extra: self.outer_extra,
+            outer_timestamp: self.outer_timestamp,
             inner_tx: self.inner_tx,
         }
     }
@@ -440,14 +440,14 @@ impl Tx {
         sig: &common::Signature,
     ) -> std::result::Result<(), VerifySigError> {
         // Try to get the transaction data from decoded `SignedTxData`
-        let signed_tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
+        let signed_tx_data = self.outer_data.clone().ok_or(VerifySigError::MissingData)?;
         let mut data = signed_tx_data.clone();
         data.sig = None;
         let tx = Tx {
-            code: self.code.clone(),
-            extra: self.extra.clone(),
-            data: Some(data),
-            timestamp: self.timestamp,
+            outer_code: self.outer_code.clone(),
+            outer_extra: self.outer_extra.clone(),
+            outer_data: Some(data),
+            outer_timestamp: self.outer_timestamp,
             inner_tx: self.inner_tx.clone(),
         };
         let signed_data = tx.partial_hash();

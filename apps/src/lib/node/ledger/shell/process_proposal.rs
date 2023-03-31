@@ -310,7 +310,7 @@ mod test_process_proposal {
             data: Some(data),
             sig,
         }) = wrapper
-            .data
+            .outer_data
             .take()
         {
             let mut new_wrapper = if let TxType::Wrapper(wrapper) = data {
@@ -323,16 +323,16 @@ mod test_process_proposal {
             new_wrapper.fee.amount = 0.into();
             let new_data = TxType::Wrapper(new_wrapper);
             Tx {
-                code: vec![],
-                data: Some(
+                outer_code: vec![],
+                outer_data: Some(
                     SignedOuterTxData {
                         sig,
                         data: Some(new_data),
                     },
                 ),
-                timestamp,
+                outer_timestamp: timestamp,
                 inner_tx: Some(tx),
-                extra: vec![],
+                outer_extra: vec![],
             }
         } else {
             panic!("Test failed");

@@ -252,7 +252,7 @@ pub mod tx_types {
         type Error = std::io::Error;
 
         fn try_from(tx: Tx) -> std::io::Result<TxType> {
-            if let Some(data) = tx.data.clone().and_then(|data| data.data) {
+            if let Some(data) = tx.outer_data.clone().and_then(|data| data.data) {
                 Ok(data)
             } else {
                 Ok(TxType::Raw(tx.into()))
@@ -285,29 +285,29 @@ pub mod tx_types {
             data: Some(data),
             sig: Some(ref sig),
         }) = tx
-            .data
+            .outer_data
             .as_ref()
         {
             let signed_hash = Tx {
-                code: tx.code.clone(),
-                data: Some(SignedOuterTxData {
+                outer_code: tx.outer_code.clone(),
+                outer_data: Some(SignedOuterTxData {
                     data: Some(data.clone()),
                     sig: None,
                 }),
-                timestamp: tx.timestamp,
+                outer_timestamp: tx.outer_timestamp,
                 inner_tx: tx.inner_tx.clone(),
-                extra: tx.extra.clone(),
+                outer_extra: tx.outer_extra.clone(),
             }
             .partial_hash();
             match TxType::try_from(Tx {
-                code: tx.code,
-                data: Some(SignedOuterTxData {
+                outer_code: tx.outer_code,
+                outer_data: Some(SignedOuterTxData {
                     data: Some(data.clone()),
                     sig: None,
                 }),
-                timestamp: tx.timestamp,
+                outer_timestamp: tx.outer_timestamp,
                 inner_tx: tx.inner_tx,
-                extra: tx.extra,
+                outer_extra: tx.outer_extra,
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {

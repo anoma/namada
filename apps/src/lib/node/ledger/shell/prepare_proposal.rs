@@ -319,7 +319,7 @@ mod test_prepare_proposal {
         expected_wrapper.append(&mut expected_decrypted);
         let expected_txs: Vec<SignedOuterTxData> = expected_wrapper
             .iter()
-            .map(|tx| tx.data.clone().expect("Test failed"))
+            .map(|tx| tx.outer_data.clone().expect("Test failed"))
             .collect();
         #[cfg(feature = "abcipp")]
         {
