@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
 use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
+use namada::ledger::pos::types::into_tm_voting_power;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
@@ -653,7 +653,7 @@ where
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
-            let reward = decimal_mult_u64(fractional_claim, inflation);
+            let reward = fractional_claim * inflation.as_dec_unscaled();
 
             // Get validator data at the last epoch
             let stake = read_validator_stake(
@@ -662,8 +662,8 @@ where
                 &address,
                 last_epoch,
             )?
-            .map(Decimal::from)
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .as_dec_unscaled();
             let last_rewards_product =
                 validator_rewards_products_handle(&address)
                     .get(&self.wl_storage, &last_epoch)?
@@ -676,15 +676,14 @@ where
                 .get(&self.wl_storage, last_epoch, &params)?
                 .expect("Should be able to find validator commission rate");
 
-            let new_product = last_rewards_product
-                * (Decimal::ONE + Decimal::from(reward) / stake);
+            let new_product =
+                last_rewards_product * (Decimal::ONE + reward / stake);
             let new_delegation_product = last_delegation_product
                 * (Decimal::ONE
-                    + (Decimal::ONE - commission_rate) * Decimal::from(reward)
-                        / stake);
+                    + (Decimal::ONE - commission_rate) * reward / stake);
             new_rewards_products
                 .insert(address, (new_product, new_delegation_product));
-            reward_tokens_remaining -= reward;
+            reward_tokens_remaining -= token::Amount::from_dec_unscaled(reward);
         }
         for (
             address,
@@ -706,8 +705,7 @@ where
         let staking_token = staking_token_address(&self.wl_storage);
 
         // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_reward_tokens =
-            Amount::from(inflation - reward_tokens_remaining);
+        let pos_reward_tokens = inflation - reward_tokens_remaining;
         tracing::info!(
             "Minting tokens for PoS rewards distribution into the PoS \
              account. Amount: {pos_reward_tokens}.",
@@ -719,17 +717,16 @@ where
             pos_reward_tokens,
         )?;
 
-        if reward_tokens_remaining > 0 {
-            let amount = Amount::from(reward_tokens_remaining);
+        if reward_tokens_remaining > token::Amount::default() {
             tracing::info!(
                 "Minting tokens remaining from PoS rewards distribution into \
-                 the Governance account. Amount: {amount}.",
+                 the Governance account. Amount: {reward_tokens_remaining}.",
             );
             credit_tokens(
                 &mut self.wl_storage,
                 &staking_token,
                 &address::GOV,
-                amount,
+                reward_tokens_remaining,
             )?;
         }
 
@@ -1934,11 +1931,7 @@ mod test_finalize_block {
 
         // Unjail one of the validators
         let current_epoch = shell.wl_storage.storage.block.epoch;
-        unjail_validator(
-            &mut shell.wl_storage,
-            &val1.address,
-            current_epoch,
-        )?;
+        unjail_validator(&mut shell.wl_storage, &val1.address, current_epoch)?;
         let pipeline_epoch = current_epoch + params.pipeline_len;
 
         // Check that the state is the same until the pipeline epoch, at which

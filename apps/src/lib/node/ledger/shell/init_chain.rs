@@ -11,7 +11,6 @@ use namada::ledger::storage_api::token::{
 };
 use namada::ledger::storage_api::StorageWrite;
 use namada::types::key::*;
-use rust_decimal::Decimal;
 #[cfg(not(feature = "dev"))]
 use sha2::{Digest, Sha256};
 
@@ -370,7 +369,7 @@ where
         // Set the ratio of staked to total NAM tokens in the parameters storage
         parameters::update_staked_ratio_parameter(
             &mut self.wl_storage,
-            &(Decimal::from(total_staked_nam) / Decimal::from(total_nam)),
+            &(total_staked_nam.as_dec_unscaled() / total_nam.as_dec_unscaled()),
         )
         .expect("unable to set staked ratio of NAM in storage");
 

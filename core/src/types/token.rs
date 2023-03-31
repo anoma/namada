@@ -99,6 +99,23 @@ impl Amount {
             micro: change as u64,
         }
     }
+
+    /// Convert the amount to [`Decimal`] ignoring its scale (i.e. as an integer
+    /// in micro units).
+    pub fn as_dec_unscaled(&self) -> Decimal {
+        Into::<Decimal>::into(self.micro)
+    }
+
+    /// Convert from a [`Decimal`] that's not scaled (i.e. an integer
+    /// in micro units).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given decimal is not an integer that fits `u64`.
+    pub fn from_dec_unscaled(micro: Decimal) -> Self {
+        let res = micro.to_u64().unwrap();
+        Self { micro: res }
+    }
 }
 
 impl serde::Serialize for Amount {

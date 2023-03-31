@@ -2,7 +2,6 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -22,7 +21,7 @@ pub enum RewardsType {
 #[allow(missing_docs)]
 pub struct ValsToUpdate {
     pub locked_ratio: Decimal,
-    pub inflation: u64,
+    pub inflation: token::Amount,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
@@ -63,9 +62,9 @@ impl RewardsController {
             epochs_per_year,
         } = self;
 
-        let locked: Decimal = u64::from(locked_tokens).into();
-        let total: Decimal = u64::from(total_tokens).into();
-        let epochs_py: Decimal = (epochs_per_year).into();
+        let locked: Decimal = locked_tokens.as_dec_unscaled();
+        let total: Decimal = total_tokens.as_dec_unscaled();
+        let epochs_py: Decimal = epochs_per_year.into();
 
         let locked_ratio = locked / total;
         let max_inflation = total * max_reward_rate / epochs_py;
@@ -76,7 +75,7 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount = Decimal::from(last_inflation_amount);
+        let last_inflation_amount = last_inflation_amount.as_dec_unscaled();
         let inflation = if last_inflation_amount + control_val > max_inflation {
             max_inflation
         } else if last_inflation_amount + control_val > dec!(0.0) {
@@ -84,7 +83,7 @@ impl RewardsController {
         } else {
             dec!(0.0)
         };
-        let inflation: u64 = inflation.to_u64().unwrap();
+        let inflation = token::Amount::from_dec_unscaled(inflation);
 
         ValsToUpdate {
             locked_ratio,

@@ -2848,7 +2848,7 @@ where
 
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let total_stake =
-            Decimal::from(read_total_stake(storage, params, epoch)?);
+            read_total_stake(storage, params, epoch)?.as_dec_unscaled();
 
         let processing_epoch = epoch + params.unbonding_len;
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
@@ -2867,7 +2867,7 @@ where
                     read_validator_stake(storage, params, &validator, epoch)?
                         .unwrap_or_default();
 
-                Ok(Decimal::from(validator_stake))
+                Ok(validator_stake.as_dec_unscaled())
                 // TODO: does something more complex need to be done
                 // here in the event some of these slashes correspond to
                 // the same validator?
