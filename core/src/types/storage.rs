@@ -1160,6 +1160,13 @@ impl Epochs {
         }
         None
     }
+
+    /// Return all starting block heights for each successive Epoch.
+    ///
+    /// __INVARIANT:__ The returned values are sorted in ascending order.
+    pub fn first_block_heights(&self) -> &[BlockHeight] {
+        &self.first_block_heights
+    }
 }
 
 /// A value of a storage prefix iterator.

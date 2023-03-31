@@ -15,6 +15,7 @@
 pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
+pub mod pos_queries;
 pub mod rewards;
 pub mod storage;
 pub mod types;

@@ -1794,7 +1794,7 @@ fn pos_bonds() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 2,
+                min_num_of_blocks: 6,
                 max_expected_time_per_block: 1,
                 epochs_per_year: 31_536_000,
                 ..genesis.parameters
@@ -1928,7 +1928,7 @@ fn pos_bonds() -> Result<()> {
         epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
-    let loop_timeout = Duration::new(40, 0);
+    let loop_timeout = Duration::new(60, 0);
     loop {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
@@ -2149,7 +2149,7 @@ fn pos_init_validator() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 2,
+                min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
@@ -2420,7 +2420,7 @@ fn proposal_submission() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 2,
+                min_num_of_blocks: 4,
                 max_expected_time_per_block: 1,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
