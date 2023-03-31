@@ -136,8 +136,8 @@ pub enum UnbondError {
     ValidatorHasNoVotingPower(Address),
     #[error("Voting power overflow: {0}")]
     VotingPowerOverflow(TryFromIntError),
-    #[error("Trying to unbond from a jailed validator: {0}")]
-    ValidatorIsJailed(Address),
+    #[error("Trying to unbond from a frozen validator: {0}")]
+    ValidatorIsFrozen(Address),
 }
 
 #[allow(missing_docs)]
@@ -1485,11 +1485,9 @@ where
     if !is_validator(storage, validator, &params, pipeline_epoch)? {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
-    // Make sure the validator is not currently jailed
-    if validator_state_handle(validator).get(storage, current_epoch, &params)?
-        == Some(ValidatorState::Jailed)
-    {
-        return Err(UnbondError::ValidatorIsJailed(validator.clone()).into());
+    // Make sure the validator is not currently frozen
+    if is_validator_frozen(storage, validator, current_epoch, &params)? {
+        return Err(UnbondError::ValidatorIsFrozen(validator.clone()).into());
     }
 
     // Should be able to unbond inactive validators
@@ -3316,4 +3314,23 @@ where
         params.pipeline_len,
     )?;
     Ok(())
+}
+
+fn is_validator_frozen<S>(
+    storage: &mut S,
+    validator: &Address,
+    current_epoch: Epoch,
+    params: &PosParams,
+) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let last_infraction_epoch =
+        read_validator_last_slash_epoch(storage, validator)?;
+    if let Some(last_epoch) = last_infraction_epoch {
+        let is_frozen = current_epoch < last_epoch + params.unbonding_len;
+        Ok(is_frozen)
+    } else {
+        Ok(false)
+    }
 }
