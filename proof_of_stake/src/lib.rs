@@ -1653,20 +1653,23 @@ where
     // 2. carefully check this logic (Informal-partnership PR 38)
     // 3. Should `computed_amounts` consider > 1 identical instances of a
     // `SlashedAmount`?
+    //   - I think yes, otherwise we have a problem for collisions (done with
+    //     indices using `last_computed_ix`)
 
     let mut updated_amount = amount;
-    let mut computed_amounts = HashSet::<SlashedAmount>::new();
+    let mut last_computed_ix = 0_u64;
+    let mut computed_amounts = HashMap::<u64, SlashedAmount>::new();
 
     for slash in slashes {
         let (infraction_epoch, slash_type) = (slash.epoch, slash.r#type);
-        let mut computed_to_remove = HashSet::<SlashedAmount>::new();
-        for slashed_amount in computed_amounts.iter() {
+        let mut computed_to_remove = HashSet::<u64>::new();
+        for (ix, slashed_amount) in computed_amounts.iter() {
             // Update amount with slashes that happened more than unbonding_len
             // epochs before this current slash
             // TODO: understand this better (from Informal)
             if slashed_amount.epoch + params.unbonding_len < infraction_epoch {
                 updated_amount -= slashed_amount.amount;
-                computed_to_remove.insert(slashed_amount.clone());
+                computed_to_remove.insert(*ix);
             }
         }
         for item in computed_to_remove {
@@ -1678,16 +1681,20 @@ where
             infraction_epoch,
             slash_type,
         )?;
-        computed_amounts.insert(SlashedAmount {
-            amount: decimal_mult_amount(slash_rate, updated_amount),
-            epoch: infraction_epoch,
-        });
+        computed_amounts.insert(
+            last_computed_ix,
+            SlashedAmount {
+                amount: decimal_mult_amount(slash_rate, updated_amount),
+                epoch: infraction_epoch,
+            },
+        );
+        last_computed_ix += 1;
     }
 
     let final_amount = updated_amount
         - computed_amounts
             .into_iter()
-            .map(|slashed| slashed.amount)
+            .map(|(_, slashed)| slashed.amount)
             .sum();
     Ok(final_amount.change())
 }
