@@ -94,8 +94,8 @@ impl<'db, DB> Copy for PosQueriesHook<'db, DB> {}
 
 impl<'db, D, H> PosQueriesHook<'db, WlStorage<D, H>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -292,8 +292,8 @@ where
 
 impl<'db, D, H> ActiveValidators<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
 {
     /// Iterate over the set of active validators in Namada, at some given
     /// epoch.

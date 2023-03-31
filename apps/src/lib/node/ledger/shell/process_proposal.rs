@@ -36,8 +36,8 @@ pub struct ValidationMeta {
 
 impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     fn from(storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =

@@ -120,7 +120,7 @@ where
 impl<D, H> WlStorage<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    H: 'static + StorageHasher,
 {
     /// Combine storage with write-log
     pub fn new(write_log: WriteLog, storage: Storage<D, H>) -> Self {
