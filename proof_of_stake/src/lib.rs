@@ -2841,26 +2841,27 @@ where
 
         let processing_epoch = epoch + params.unbonding_len;
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
-        let infracting_stake =
-            slashes.iter(storage)?.fold(Decimal::ZERO, |sum, res| {
+        let infracting_stake = slashes
+            .iter(storage)?
+            .map(|res| {
                 let (
                     NestedSubKey::Data {
                         key: validator,
                         nested_sub_key: _,
                     },
                     _slash,
-                ) = res.unwrap();
+                ) = res?;
 
                 let validator_stake =
-                    read_validator_stake(storage, params, &validator, epoch)
-                        .unwrap()
+                    read_validator_stake(storage, params, &validator, epoch)?
                         .unwrap_or_default();
 
-                sum + Decimal::from(validator_stake)
+                Ok(Decimal::from(validator_stake))
                 // TODO: does something more complex need to be done
                 // here in the event some of these slashes correspond to
                 // the same validator?
-            });
+            })
+            .sum::<storage_api::Result<Decimal>>()?;
         sum_vp_fraction += infracting_stake / total_stake;
     }
 
