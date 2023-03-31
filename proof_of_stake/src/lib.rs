@@ -2922,19 +2922,14 @@ where
         write_validator_last_slash_epoch(storage, validator, evidence_epoch)?;
     }
 
-    // Jail the validator and remove it from the validator set immediately. Need
-    // to do this for the current through the pipeline epoch
-    let prev_state = validator_state_handle(validator)
-        .get(storage, current_epoch, params)?
-        .expect("Expected to find a valid validator.");
-    match prev_state {
-        ValidatorState::Inactive => {
-            todo!()
-        }
-        ValidatorState::Consensus => {
-            for epoch in
-                Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch)
-            {
+    // Remove the validator from the set immediately and up thru the pipeline
+    // epoch
+    for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
+        let prev_state = validator_state_handle(validator)
+            .get(storage, epoch, params)?
+            .expect("Expected to find a valid validator.");
+        match prev_state {
+            ValidatorState::Consensus => {
                 let amount_pre = validator_deltas_handle(validator)
                     .get_sum(storage, epoch, params)?
                     .unwrap_or_default();
@@ -2946,44 +2941,43 @@ where
                     .at(&epoch)
                     .at(&token::Amount::from_change(amount_pre))
                     .remove(storage, &val_position)?;
-            }
 
-            // For the pipeline epoch only:
-            // promote the next max inactive validator to the active validator
-            // set at the pipeline offset
-            let below_capacity_handle =
-                below_capacity_validator_set_handle().at(&pipeline_epoch);
-            if !below_capacity_handle.is_empty(storage)? {
-                let max_below_capacity_amount =
-                    get_max_below_capacity_validator_amount(
-                        &below_capacity_handle,
-                        storage,
-                    )?;
-                let position_to_promote = find_first_position(
-                    &below_capacity_handle
-                        .at(&max_below_capacity_amount.into()),
-                    storage,
-                )?
-                .expect("Should return a position.");
-                let removed_validator = below_capacity_handle
-                    .at(&max_below_capacity_amount.into())
-                    .remove(storage, &position_to_promote)?
-                    .expect("Should have returned a removed validator.");
-                insert_validator_into_set(
-                    &consensus_validator_set_handle()
-                        .at(&pipeline_epoch)
-                        .at(&max_below_capacity_amount),
-                    storage,
-                    &pipeline_epoch,
-                    &removed_validator,
-                )?;
+                // For the pipeline epoch only:
+                // promote the next max inactive validator to the active
+                // validator set at the pipeline offset
+                if epoch == pipeline_epoch {
+                    let below_capacity_handle =
+                        below_capacity_validator_set_handle().at(&epoch);
+                    if !below_capacity_handle.is_empty(storage)? {
+                        let max_below_capacity_amount =
+                            get_max_below_capacity_validator_amount(
+                                &below_capacity_handle,
+                                storage,
+                            )?;
+                        let position_to_promote = find_first_position(
+                            &below_capacity_handle
+                                .at(&max_below_capacity_amount.into()),
+                            storage,
+                        )?
+                        .expect("Should return a position.");
+                        let removed_validator = below_capacity_handle
+                            .at(&max_below_capacity_amount.into())
+                            .remove(storage, &position_to_promote)?
+                            .expect(
+                                "Should have returned a removed validator.",
+                            );
+                        insert_validator_into_set(
+                            &consensus_validator_set_handle()
+                                .at(&epoch)
+                                .at(&max_below_capacity_amount),
+                            storage,
+                            &epoch,
+                            &removed_validator,
+                        )?;
+                    }
+                }
             }
-        }
-        ValidatorState::BelowCapacity => {
-            // Remove from the below-capacity set
-            for epoch in
-                Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch)
-            {
+            ValidatorState::BelowCapacity => {
                 let amount_pre = validator_deltas_handle(validator)
                     .get_sum(storage, epoch, params)?
                     .unwrap_or_default();
@@ -2996,20 +2990,22 @@ where
                     .at(&token::Amount::from_change(amount_pre).into())
                     .remove(storage, &val_position)?;
             }
-        }
-        _ => {
-            // TODO: get rid of this eventually
-            println!(
-                "Already jailed or in 'Pending' state which will prob be \
-                 removed"
-            );
-            return Ok(());
+            ValidatorState::Inactive => {
+                todo!();
+            }
+            ValidatorState::Jailed => {
+                println!("Validator already jailed");
+                return Ok(());
+            }
         }
     }
+
     println!(
         "\nWRITING VALIDATOR {} STATE AS JAILED STARTING IN EPOCH {}\n",
         validator, current_epoch
     );
+
+    // Set the validator state as `Jailed` thru the pipeline epoch
     for offset in 0..=params.pipeline_len {
         validator_state_handle(validator).set(
             storage,
