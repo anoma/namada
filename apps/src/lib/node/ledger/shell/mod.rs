@@ -33,10 +33,9 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{ibc, pos, protocol};
+use namada::ledger::{ibc, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, read_pos_params, slash};
 use namada::proto::{self, Tx};
-use namada::types::address;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::internal::WrapperTxInQueue;
@@ -48,6 +47,7 @@ use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, MIN_FEE,
 };
+use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheRwAccess;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -130,8 +130,9 @@ pub enum ErrorCodes {
     InvalidOrder = 4,
     ExtraTxs = 5,
     Undecryptable = 6,
-    AllocationError = 7, /* NOTE: keep these values in sync with
-                          * [`ErrorCodes::is_recoverable`] */
+    AllocationError = 7,
+    ReplayTx = 8, /* NOTE: keep these values in sync with
+                   * [`ErrorCodes::is_recoverable`] */
 }
 
 impl ErrorCodes {
@@ -594,49 +595,113 @@ where
     /// Validate a transaction request. On success, the transaction will
     /// included in the mempool and propagated to peers, otherwise it will be
     /// rejected.
+    ///
+    /// Error codes:
+    ///    0: Ok
+    ///    1: Invalid tx
+    ///    2: Tx is invalidly signed
+    ///    7: Replay attack
     pub fn mempool_validate(
         &self,
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
         let mut response = response::CheckTx::default();
-        match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
-            Ok(tx) => {
-                // Check balance for fee
-                if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
-                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                        wrapper.fee_payer()
-                    } else {
-                        masp()
-                    };
-                    // check that the fee payer has sufficient balance
-                    let balance =
-                        self.get_balance(&wrapper.fee.token, &fee_payer);
 
-                    // In testnets with a faucet, tx is allowed to skip fees if
-                    // it includes a valid PoW
-                    #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-                    #[cfg(feature = "mainnet")]
-                    let has_valid_pow = false;
-
-                    if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
-                        response.code = 1;
-                        response.log = String::from(
-                            "The address given does not have sufficient \
-                             balance to pay fee",
-                        );
-                        return response;
-                    }
-                }
-
-                response.log = String::from("Mempool validation passed");
-            }
+        // Tx format check
+        let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
+            Ok(t) => t,
             Err(msg) => {
-                response.code = 1;
+                response.code = ErrorCodes::InvalidTx.into();
                 response.log = msg.to_string();
+                return response;
             }
+        };
+
+        // Tx signature check
+        let tx_type = match process_tx(tx) {
+            Ok(ty) => ty,
+            Err(msg) => {
+                response.code = ErrorCodes::InvalidSig.into();
+                response.log = msg.to_string();
+                return response;
+            }
+        };
+
+        // Tx type check
+        if let TxType::Wrapper(wrapper) = tx_type {
+            // Replay protection check
+            let inner_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+            if self
+                .wl_storage
+                .storage
+                .has_key(&inner_hash_key)
+                .expect("Error while checking inner tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!(
+                    "Inner transaction hash {} already in storage, replay \
+                     attempt",
+                    wrapper.tx_hash
+                );
+                return response;
+            }
+
+            let tx =
+                Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
+            let wrapper_hash = hash::Hash(tx.unsigned_hash());
+            let wrapper_hash_key =
+                replay_protection::get_tx_hash_key(&wrapper_hash);
+            if self
+                .wl_storage
+                .storage
+                .has_key(&wrapper_hash_key)
+                .expect("Error while checking wrapper tx hash key in storage")
+                .0
+            {
+                response.code = ErrorCodes::ReplayTx.into();
+                response.log = format!(
+                    "Wrapper transaction hash {} already in storage, replay \
+                     attempt",
+                    wrapper_hash
+                );
+                return response;
+            }
+
+            // Check balance for fee
+            let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                wrapper.fee_payer()
+            } else {
+                masp()
+            };
+            // check that the fee payer has sufficient balance
+            let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+
+            // In testnets with a faucet, tx is allowed to skip fees if
+            // it includes a valid PoW
+            #[cfg(not(feature = "mainnet"))]
+            let has_valid_pow = self.has_valid_pow_solution(&wrapper);
+            #[cfg(feature = "mainnet")]
+            let has_valid_pow = false;
+
+            if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
+                response.code = ErrorCodes::InvalidTx.into();
+                response.log = String::from(
+                    "The given address does not have a sufficient balance to \
+                     pay fee",
+                );
+                return response;
+            }
+        } else {
+            response.code = ErrorCodes::InvalidTx.into();
+            response.log = "Unsupported tx type".to_string();
+            return response;
         }
+
+        response.log = "Mempool validation passed".to_string();
+
         response
     }
 
@@ -1074,5 +1139,272 @@ mod test_utils {
             address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
+    }
+}
+
+/// Test the failure cases of [`mempool_validate`]
+#[cfg(test)]
+mod test_mempool_validate {
+    use namada::proto::SignedTxData;
+    use namada::types::storage::Epoch;
+    use namada::types::transaction::{Fee, WrapperTx};
+
+    use super::test_utils::TestShell;
+    use super::{MempoolTxType, *};
+
+    /// Mempool validation must reject unsigned wrappers
+    #[test]
+    fn test_missing_signature() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        let mut wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair)
+        .expect("Wrapper signing failed");
+
+        let unsigned_wrapper = if let Some(Ok(SignedTxData {
+            data: Some(data),
+            sig: _,
+        })) = wrapper
+            .data
+            .take()
+            .map(|data| SignedTxData::try_from_slice(&data[..]))
+        {
+            Tx::new(vec![], Some(data))
+        } else {
+            panic!("Test failed")
+        };
+
+        let mut result = shell.mempool_validate(
+            unsigned_wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        result = shell.mempool_validate(
+            unsigned_wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+    }
+
+    /// Mempool validation must reject wrappers with an invalid signature
+    #[test]
+    fn test_invalid_signature() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        let mut wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair)
+        .expect("Wrapper signing failed");
+
+        let invalid_wrapper = if let Some(Ok(SignedTxData {
+            data: Some(data),
+            sig,
+        })) = wrapper
+            .data
+            .take()
+            .map(|data| SignedTxData::try_from_slice(&data[..]))
+        {
+            let mut new_wrapper = if let TxType::Wrapper(wrapper) =
+                <TxType as BorshDeserialize>::deserialize(&mut data.as_ref())
+                    .expect("Test failed")
+            {
+                wrapper
+            } else {
+                panic!("Test failed")
+            };
+
+            // we mount a malleability attack to try and remove the fee
+            new_wrapper.fee.amount = 0.into();
+            let new_data = TxType::Wrapper(new_wrapper)
+                .try_to_vec()
+                .expect("Test failed");
+            Tx::new(
+                vec![],
+                Some(
+                    SignedTxData {
+                        sig,
+                        data: Some(new_data),
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
+                ),
+            )
+        } else {
+            panic!("Test failed");
+        };
+
+        let mut result = shell.mempool_validate(
+            invalid_wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        result = shell.mempool_validate(
+            invalid_wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+    }
+
+    /// Mempool validation must reject non-wrapper txs
+    #[test]
+    fn test_wrong_tx_type() {
+        let (shell, _) = TestShell::new();
+
+        // Test Raw TxType
+        let tx = Tx::new("wasm_code".as_bytes().to_owned(), None);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(result.log, "Unsupported tx type")
+    }
+
+    /// Mempool validation must reject already applied wrapper and decrypted
+    /// transactions
+    #[test]
+    fn test_replay_attack() {
+        let (mut shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+        );
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        )
+        .sign(&keypair)
+        .expect("Wrapper signing failed");
+
+        let tx_type = match process_tx(wrapper.clone()).expect("Test failed") {
+            TxType::Wrapper(t) => t,
+            _ => panic!("Test failed"),
+        };
+
+        // Write wrapper hash to storage
+        let wrapper_hash = hash::Hash(wrapper.unsigned_hash());
+        let wrapper_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&wrapper_hash_key, &wrapper_hash)
+            .expect("Test failed");
+
+        // Try wrapper tx replay attack
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Wrapper transaction hash {} already in storage, replay \
+                 attempt",
+                wrapper_hash
+            )
+        );
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Wrapper transaction hash {} already in storage, replay \
+                 attempt",
+                wrapper_hash
+            )
+        );
+
+        // Write inner hash in storage
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&tx_type.tx_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&inner_hash_key, &tx_type.tx_hash)
+            .expect("Test failed");
+
+        // Try inner tx replay attack
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        );
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::RecheckTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(
+            result.log,
+            format!(
+                "Inner transaction hash {} already in storage, replay attempt",
+                tx_type.tx_hash
+            )
+        )
     }
 }

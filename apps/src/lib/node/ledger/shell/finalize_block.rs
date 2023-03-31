@@ -9,7 +9,7 @@ use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
-use namada::ledger::{inflation, protocol};
+use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -173,16 +173,48 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed
+                // from the queue of txs to be processed and remove the hash
+                // from storage
                 if let TxType::Decrypted(_) = &tx_type {
-                    self.wl_storage.storage.tx_queue.pop();
+                    let tx_hash = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
+                    let tx_hash_key =
+                        replay_protection::get_tx_hash_key(&tx_hash);
+                    self.wl_storage
+                        .storage
+                        .delete(&tx_hash_key)
+                        .expect("Error while deleting tx hash from storage");
                 }
                 continue;
             }
 
-            let mut tx_event = match &tx_type {
+            let (mut tx_event, tx_unsigned_hash) = match &tx_type {
                 TxType::Wrapper(wrapper) => {
                     let mut tx_event = Event::new_tx_event(&tx_type, height.0);
+
+                    // Writes both txs hash to storage
+                    let tx = Tx::try_from(processed_tx.tx.as_ref()).unwrap();
+                    let wrapper_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&hash::Hash(
+                            tx.unsigned_hash(),
+                        ));
+                    self.wl_storage
+                        .storage
+                        .write(&wrapper_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
+
+                    let inner_tx_hash_key =
+                        replay_protection::get_tx_hash_key(&wrapper.tx_hash);
+                    self.wl_storage
+                        .storage
+                        .write(&inner_tx_hash_key, vec![])
+                        .expect("Error while writing tx hash to storage");
 
                     #[cfg(not(feature = "mainnet"))]
                     let has_valid_pow =
@@ -244,11 +276,18 @@ where
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
-                    tx_event
+                    (tx_event, None)
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    self.wl_storage.storage.tx_queue.pop();
+                    let wrapper_hash = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue")
+                        .tx
+                        .tx_hash;
                     let mut event = Event::new_tx_event(&tx_type, height.0);
 
                     match inner {
@@ -267,8 +306,7 @@ where
                             event["code"] = ErrorCodes::Undecryptable.into();
                         }
                     }
-
-                    event
+                    (event, Some(wrapper_hash))
                 }
                 TxType::Raw(_) => {
                     tracing::error!(
@@ -361,6 +399,25 @@ where
                         msg
                     );
                     stats.increment_errored_txs();
+
+                    // If transaction type is Decrypted and failed because of
+                    // out of gas, remove its hash from storage to allow
+                    // rewrapping it
+                    if let Some(hash) = tx_unsigned_hash {
+                        if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
+                            msg
+                        {
+                            let tx_hash_key =
+                                replay_protection::get_tx_hash_key(&hash);
+                            self.wl_storage
+                                .storage
+                                .delete(&tx_hash_key)
+                                .expect(
+                                "Error while deleting tx hash key from storage",
+                            );
+                        }
+                    }
+
                     self.wl_storage.drop_tx();
                     tx_event["gas_used"] = self
                         .gas_meter
@@ -1069,7 +1126,7 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
 
-        // Add unshielded balance for fee paymenty
+        // Add unshielded balance for fee payment
         let balance_key = token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
@@ -1613,5 +1670,80 @@ mod test_finalize_block {
         };
         shell.finalize_block(req).unwrap();
         shell.commit();
+    }
+
+    /// Test that if a decrypted transaction fails because of out-of-gas, its
+    /// hash is removed from storage to allow rewrapping it
+    #[test]
+    fn test_remove_tx_hash() {
+        let (mut shell, _) = setup(1);
+        let keypair = gen_keypair();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let raw_tx = Tx::new(
+            tx_code,
+            Some("Encrypted transaction data".as_bytes().to_owned()),
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            raw_tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+
+        // Write inner hash in storage
+        let inner_hash_key =
+            replay_protection::get_tx_hash_key(&wrapper_tx.tx_hash);
+        shell
+            .wl_storage
+            .storage
+            .write(&inner_hash_key, vec![])
+            .expect("Test failed");
+
+        let processed_tx = ProcessedTx {
+            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: raw_tx,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+            .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        shell.enqueue_tx(wrapper_tx);
+
+        let _event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // FIXME: uncomment when proper gas metering is in place
+        // // Check inner tx hash has been removed from storage
+        // assert_eq!(event.event_type.to_string(), String::from("applied"));
+        // let code = event.attributes.get("code").expect("Test
+        // failed").as_str(); assert_eq!(code,
+        // String::from(ErrorCodes::WasmRuntimeError).as_str());
+
+        // assert!(
+        //     !shell
+        //         .storage
+        //         .has_key(&inner_hash_key)
+        //         .expect("Test failed")
+        //         .0
+        // )
     }
 }
