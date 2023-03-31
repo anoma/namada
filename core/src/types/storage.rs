@@ -1372,10 +1372,10 @@ mod tests {
         let mut queue = EthEventsQueue::default();
         queue.transfers_to_namada.next_nonce_to_process = 1u64.into();
 
-        let new_event_4 = TransfersToNamada {
+        let new_event_1 = TransfersToNamada {
             valid_transfers_map: vec![],
             transfers: vec![],
-            nonce: 4u64.into(),
+            nonce: 1u64.into(),
         };
         let new_event_2 = TransfersToNamada {
             valid_transfers_map: vec![],
@@ -1387,10 +1387,15 @@ mod tests {
             transfers: vec![],
             nonce: 3u64.into(),
         };
-        let new_event_1 = TransfersToNamada {
+        let new_event_4 = TransfersToNamada {
             valid_transfers_map: vec![],
             transfers: vec![],
-            nonce: 1u64.into(),
+            nonce: 4u64.into(),
+        };
+        let new_event_7 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 7u64.into(),
         };
 
         // enqueue events
@@ -1415,12 +1420,20 @@ mod tests {
                 .next()
                 .is_none()
         );
+        assert!(
+            queue
+                .transfers_to_namada
+                .get_next_events(new_event_7.clone())
+                .next()
+                .is_none()
+        );
         assert_eq!(
             &queue.transfers_to_namada.inner,
             &[
                 new_event_2.clone(),
                 new_event_3.clone(),
-                new_event_4.clone()
+                new_event_4.clone(),
+                new_event_7.clone()
             ]
         );
 
@@ -1432,10 +1445,16 @@ mod tests {
                 .get_next_events(new_event_1)
                 .collect::<Vec<_>>()
         );
-        assert!(queue.transfers_to_namada.pop_event().is_none());
 
         // check the next nonce to process
         assert_eq!(queue.transfers_to_namada.get_event_nonce(), 5u64.into());
+
+        // one remaining event with nonce 7
+        assert_eq!(
+            queue.transfers_to_namada.pop_event().expect("Test failed"),
+            new_event_7
+        );
+        assert!(queue.transfers_to_namada.pop_event().is_none());
     }
 
     #[test]
