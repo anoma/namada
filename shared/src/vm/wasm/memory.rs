@@ -14,7 +14,7 @@ use wasmer::{
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
-use crate::proto::SignedTxData;
+use crate::proto::{Tx, SignedTxData};
 
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
@@ -82,7 +82,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data: &SignedTxData,
+    tx_data: &Tx,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_bytes = tx_data.try_to_vec().map_err(Error::EncodingError)?;

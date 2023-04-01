@@ -3,14 +3,14 @@ pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 /// Integration of Ferveo cryptographic primitives
 /// to enable decrypting txs.
 /// *Not wasm compatible*
-#[cfg(feature = "ferveo-tpke")]
 pub mod decrypted_tx {
-
+    #[cfg(feature = "ferveo-tpke")]
     use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
     use super::EllipticCurve;
     use crate::proto::Tx;
+    #[cfg(feature = "ferveo-tpke")]
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::proto::InnerTx;
@@ -75,6 +75,7 @@ pub mod decrypted_tx {
     /// Verify that if the encrypted payload was marked
     /// "undecryptable", we should not be able to decrypt
     /// it
+    #[cfg(feature = "ferveo-tpke")]
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
@@ -109,5 +110,4 @@ pub mod decrypted_tx {
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use decrypted_tx::*;

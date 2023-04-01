@@ -87,7 +87,7 @@ where
                             .write(&pending_execution_key, "")
                             .expect("Should be able to write to storage.");
                         let tx_result = protocol::apply_tx(
-                            tx_type,
+                            tx_type.into(),
                             0, /*  this is used to compute the fee
                                 * based on the code size. We dont
                                 * need it here. */

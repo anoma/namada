@@ -18,7 +18,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::SignedTxData;
+use crate::proto::{Tx, SignedTxData};
 
 /// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
@@ -53,7 +53,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -97,7 +97,13 @@ where
                 (KeyType::PROPOSAL_COMMIT, _) => {
                     self.is_valid_proposal_commit()
                 }
-                (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
+                (KeyType::PARAMETER, _) => self.is_valid_parameter(
+                    if let Some(data) = &tx_data.data() {
+                        data
+                    } else {
+                        return false;
+                    }
+                ),
                 (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
                 (KeyType::UNKNOWN, _) => Ok(true),
@@ -531,7 +537,7 @@ where
     }
 
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, tx_data: &SignedTxData) -> Result<bool> {
+    pub fn is_valid_parameter(&self, tx_data: &[u8]) -> Result<bool> {
         utils::is_proposal_accepted(self.ctx.storage, tx_data)
             .map_err(Error::NativeVpError)
     }

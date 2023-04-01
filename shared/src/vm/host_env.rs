@@ -93,7 +93,7 @@ where
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx: HostRef<'a, &'a InnerTx>,
+    pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -134,7 +134,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut BlockGasMeter,
-        tx: &InnerTx,
+        tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -249,7 +249,7 @@ where
     /// VP gas meter.
     pub gas_meter: MutHostRef<'a, &'a VpGasMeter>,
     /// The transaction code is used for signature verification
-    pub tx: HostRef<'a, &'a InnerTx>,
+    pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -294,7 +294,7 @@ pub trait VpEvaluator {
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
         vp_code: Vec<u8>,
-        input_data: SignedTxData,
+        input_data: Tx,
     ) -> HostEnvResult;
 }
 
@@ -320,7 +320,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
-        tx: &InnerTx,
+        tx: &Tx,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, DB>,
         verifiers: &BTreeSet<Address>,
@@ -388,7 +388,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
-        tx: &InnerTx,
+        tx: &Tx,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, DB>,
         verifiers: &BTreeSet<Address>,
@@ -1505,44 +1505,6 @@ where
     Ok(tx_index.0)
 }
 
-/// Getting the transaction extra data function exposed to the wasm VM Tx
-/// environment. The extra data is that of the transaction being applied.
-pub fn tx_get_tx_extra<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    result_ptr: u64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let tx = unsafe { env.ctx.tx.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
-    let gas = env
-        .memory
-        .write_bytes(result_ptr, tx.extra.clone())
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
-}
-
-/// Getting the transaction extra data length function exposed to the wasm
-/// VM Tx environment. The extra data length is that of the transaction
-/// being applied.
-pub fn tx_get_tx_extra_len<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-) -> TxResult<u64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let tx = unsafe { env.ctx.tx.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
-    Ok(tx.extra.len() as u64)
-}
-
 /// Getting the block height function exposed to the wasm VM VP
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
@@ -1739,9 +1701,19 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let tx = unsafe { env.ctx.tx.get() };
     let hash = vp_host_fns::get_tx_code_hash(gas_meter, tx)?;
+    let mut result_bytes = vec![];
+    if let Some(hash) = hash {
+        result_bytes.push(1);
+        result_bytes.extend(&hash.0);
+    } else {
+        result_bytes.push(0);
+    };
     let gas = env
         .memory
-        .write_bytes(result_ptr, hash.0)
+        .write_bytes(
+            result_ptr,
+            result_bytes,
+        )
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)
 }
@@ -1901,7 +1873,7 @@ where
         .read_bytes(input_data_ptr, input_data_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
-    let input_data: SignedTxData = BorshDeserialize::try_from_slice(&input_data)
+    let input_data: Tx = BorshDeserialize::try_from_slice(&input_data)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     let eval_runner = unsafe { env.ctx.eval_runner.get() };
@@ -2000,7 +1972,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut BlockGasMeter,
-        tx: &InnerTx,
+        tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -2036,7 +2008,7 @@ pub mod testing {
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,
-        tx: &InnerTx,
+        tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,

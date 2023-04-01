@@ -457,8 +457,8 @@ pub mod wrapper_tx {
 
             // we now try to alter the inner tx maliciously
             let mut wrapper = if let TxType::Wrapper(wrapper) =
-                crate::types::transaction::process_tx(tx.clone())
-                    .expect("Test failed")
+                crate::types::transaction::process_tx(&tx.clone())
+                    .expect("Test failed").header()
             {
                 wrapper
             } else {
@@ -496,7 +496,7 @@ pub mod wrapper_tx {
             tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig.unwrap())
                 .expect_err("Test failed");
             // check that the try from method also fails
-            let err = crate::types::transaction::process_tx(tx)
+            let err = crate::types::transaction::process_tx(&tx)
                 .expect_err("Test failed");
             assert_matches!(err, TxError::SigError(_));
         }

@@ -580,7 +580,7 @@ where
         match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(tx) => {
                 // Check balance for fee
-                if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
+                if let Ok(TxType::Wrapper(wrapper)) = process_tx(&tx).map(Tx::header) {
                     let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
                         wrapper.fee_payer()
                     } else {
@@ -625,15 +625,8 @@ where
         let mut write_log = WriteLog::default();
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
-        match InnerTx::try_from(tx_bytes) {
+        match Tx::try_from(tx_bytes) {
             Ok(tx) => {
-                let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx,
-                    #[cfg(not(feature = "mainnet"))]
-                    // To be able to dry-run testnet faucet withdrawal, pretend 
-                    // that we got a valid PoW
-                    has_valid_pow: true,
-                });
                 match protocol::apply_tx(
                     tx,
                     tx_bytes.len(),

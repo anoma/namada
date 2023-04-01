@@ -13,7 +13,7 @@ use crate::ibc::core::ics26_routing::msgs::Ics26Envelope;
 use crate::ledger::ibc::storage as ibc_storage;
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::proto::SignedTxData;
+use crate::proto::{Tx, SignedTxData};
 use crate::types::address::{
     Address, DecodeError as AddressError, InternalAddress,
 };
@@ -77,12 +77,12 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let signed = tx_data;
-        let tx_data = signed.data.as_ref().ok_or(Error::NoTxData)?;
+        let tx_data = signed.data().ok_or(Error::NoTxData)?;
 
         // Check the non-onwer balance updates
         let keys_changed: HashSet<Key> = keys_changed
@@ -114,7 +114,7 @@ where
         }
 
         // Check the message
-        let ibc_msg = IbcMessage::decode(tx_data).map_err(Error::IbcMessage)?;
+        let ibc_msg = IbcMessage::decode(&tx_data).map_err(Error::IbcMessage)?;
         match &ibc_msg.0 {
             Ics26Envelope::Ics20Msg(msg) => self.validate_sending_token(msg),
             Ics26Envelope::Ics4PacketMsg(PacketMsg::RecvPacket(msg)) => {

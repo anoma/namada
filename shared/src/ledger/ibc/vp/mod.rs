@@ -16,7 +16,7 @@ use namada_core::ledger::ibc::storage::{
     client_id, ibc_prefix, is_client_counter_key, IbcPrefix,
 };
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::proto::SignedTxData;
+use namada_core::proto::{Tx, SignedTxData};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent as WrappedIbcEvent;
 use namada_core::types::storage::Key;
@@ -85,12 +85,12 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let signed = tx_data;
-        let tx_data = signed.data.as_ref().ok_or(Error::NoTxData)?;
+        let tx_data = signed.data().ok_or(Error::NoTxData)?;
         let mut clients = HashSet::new();
 
         for key in keys_changed {
@@ -117,35 +117,35 @@ where
                                 // this client has been checked
                                 continue;
                             }
-                            self.validate_client(&client_id, tx_data)?
+                            self.validate_client(&client_id, &tx_data)?
                         }
                     }
                     IbcPrefix::Connection => {
-                        self.validate_connection(key, tx_data)?
+                        self.validate_connection(key, &tx_data)?
                     }
                     IbcPrefix::Channel => {
-                        self.validate_channel(key, tx_data)?
+                        self.validate_channel(key, &tx_data)?
                     }
                     IbcPrefix::Port => self.validate_port(key)?,
                     IbcPrefix::Capability => self.validate_capability(key)?,
                     IbcPrefix::SeqSend => {
-                        self.validate_sequence_send(key, tx_data)?
+                        self.validate_sequence_send(key, &tx_data)?
                     }
                     IbcPrefix::SeqRecv => {
-                        self.validate_sequence_recv(key, tx_data)?
+                        self.validate_sequence_recv(key, &tx_data)?
                     }
                     IbcPrefix::SeqAck => {
-                        self.validate_sequence_ack(key, tx_data)?
+                        self.validate_sequence_ack(key, &tx_data)?
                     }
                     IbcPrefix::Commitment => {
-                        self.validate_commitment(key, tx_data)?
+                        self.validate_commitment(key, &tx_data)?
                     }
                     IbcPrefix::Receipt => {
-                        self.validate_receipt(key, tx_data)?
+                        self.validate_receipt(key, &tx_data)?
                     }
                     IbcPrefix::Ack => self.validate_ack(key)?,
                     IbcPrefix::Event => {}
-                    IbcPrefix::Denom => self.validate_denom(tx_data)?,
+                    IbcPrefix::Denom => self.validate_denom(&tx_data)?,
                     IbcPrefix::Unknown => {
                         return Err(Error::KeyError(format!(
                             "Invalid IBC-related key: {}",
@@ -577,11 +577,12 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -593,7 +594,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -618,11 +619,12 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -633,7 +635,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
         let result = ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .validate_tx(&Tx {inner_tx: Some(tx.clone()), ..Tx::default()}, &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -698,11 +700,12 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -713,7 +716,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -757,11 +760,12 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -772,7 +776,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -813,11 +817,12 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -827,7 +832,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no client exists
         let result = ibc
-            .validate_tx(tx.data.as_ref().unwrap(), &keys_changed, &verifiers)
+            .validate_tx(&Tx {inner_tx: Some(tx.clone()), ..Tx::default()}, &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -895,11 +900,12 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -910,7 +916,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -983,11 +989,12 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -997,7 +1004,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1058,11 +1065,12 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1072,7 +1080,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1119,11 +1127,12 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1133,7 +1142,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1199,11 +1208,12 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1213,7 +1223,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1287,11 +1297,12 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1301,7 +1312,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1372,11 +1383,12 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1386,7 +1398,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1413,11 +1425,12 @@ mod tests {
         keys_changed.insert(port_key(&get_port_id()));
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1427,7 +1440,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1456,11 +1469,12 @@ mod tests {
         keys_changed.insert(cap_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1471,7 +1485,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1539,11 +1553,12 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1553,7 +1568,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1628,11 +1643,12 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1642,7 +1658,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1722,11 +1738,12 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1736,7 +1753,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1808,11 +1825,12 @@ mod tests {
         keys_changed.insert(commitment_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1822,7 +1840,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1901,11 +1919,12 @@ mod tests {
         keys_changed.insert(receipt_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1916,7 +1935,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )
@@ -1951,11 +1970,12 @@ mod tests {
         keys_changed.insert(ack_key);
 
         let verifiers = BTreeSet::new();
+        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
             &write_log,
-            &tx,
+            &outer_tx,
             &tx_index,
             gas_meter,
             &keys_changed,
@@ -1966,7 +1986,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                tx.data.as_ref().unwrap(),
+                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
                 &keys_changed,
                 &verifiers
             )

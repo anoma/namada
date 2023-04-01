@@ -52,7 +52,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: SignedTxData,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -69,10 +69,7 @@ fn validate_tx(
             let pk = key::get(ctx, &addr);
             match pk {
                 Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, tx_data.sig.as_ref().unwrap()),
-                        Ok(true)
-                    )
+                    tx_data.verify_signature(&pk, &tx_data.data_hash().unwrap()).is_ok()
                 }
                 _ => false,
             }

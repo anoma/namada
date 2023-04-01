@@ -6,8 +6,8 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
-    let data = signed.data.ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data")?;
     ctx.dispatch_ibc_action(&data)
 }

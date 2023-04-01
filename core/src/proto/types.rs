@@ -22,13 +22,13 @@ use crate::types::transaction::encrypted::EncryptedTx;
 use crate::types::transaction::hash_tx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::process_tx;
-#[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::DecryptedTx;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EllipticCurve;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::EncryptionKey;
 use crate::types::transaction::TxType;
+use crate::types::transaction::WrapperTx;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -148,7 +148,7 @@ where
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize,
 )]
 pub struct Tx {
     pub outer_code: Vec<u8>,
@@ -299,7 +299,7 @@ impl From<Tx> for ResponseDeliverTx {
         fn encode_string(x: String) -> String {
             x
         }
-        match process_tx(tx) {
+        match process_tx(&tx).map(Tx::header) {
             Ok(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
                 #[cfg(not(feature = "mainnet"))]
@@ -357,6 +357,18 @@ impl From<Tx> for ResponseDeliverTx {
     }
 }
 
+impl Default for Tx {
+    fn default() -> Self {
+        Tx {
+            outer_code: vec![],
+            outer_data: None,
+            outer_timestamp: DateTimeUtc::now(),
+            inner_tx: None,
+            outer_extra: vec![],
+        }
+    }
+}
+
 impl Tx {
     pub fn new(code: Vec<u8>, data: Option<SignedOuterTxData>) -> Self {
         Tx {
@@ -366,6 +378,65 @@ impl Tx {
             inner_tx: None,
             outer_extra: vec![],
         }
+    }
+
+    pub fn header(&self) -> TxType {
+        if let Some(data) = self.outer_data.clone().and_then(|data| data.data) {
+            data
+        } else {
+            TxType::Raw(self.clone().into())
+        }
+    }
+
+    pub fn code(&self) -> Option<Vec<u8>> {
+        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
+            return Some(tx.code);
+        }
+        if let Some(inner_tx) = &self.inner_tx {
+            Some(inner_tx.code.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn extra(&self) -> Option<Vec<u8>> {
+        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
+            return Some(tx.extra);
+        }
+        if let Some(inner_tx) = &self.inner_tx {
+            Some(inner_tx.extra.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn data(&self) -> Option<Vec<u8>> {
+        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
+            return tx.data.and_then(|x| x.data);
+        }
+        if let Some(InnerTx { data: Some(SignedTxData { data, ..}), .. }) = &self.inner_tx {
+            data.clone()
+        } else {
+            None
+        }
+    }
+
+    pub fn data_hash(&self) -> Option<crate::types::hash::Hash> {
+        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
+            return Some(crate::types::hash::Hash(tx.partial_hash()));
+        }
+        if let Some(tx) = &self.inner_tx {
+            Some(crate::types::hash::Hash(tx.partial_hash()))
+        } else {
+            None
+        }
+    }
+
+    pub fn inner_tx(&self) -> Option<InnerTx> {
+        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
+            return Some(tx);
+        }
+        self.inner_tx.clone()
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -452,6 +523,26 @@ impl Tx {
         };
         let signed_data = tx.partial_hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
+    }
+
+    pub fn verify_signature(
+        &self,
+        pk: &common::PublicKey,
+        hash: &crate::types::hash::Hash,
+    ) -> std::result::Result<(), VerifySigError> {
+        let inner_tx = self.inner_tx();
+        if self.partial_hash() == hash.0 {
+            self.outer_data.as_ref().ok_or(VerifySigError::MissingData)?
+                .sig.as_ref().ok_or(VerifySigError::MissingData)
+                .and_then(|sig| self.verify_sig(pk, &sig))
+        } else if inner_tx.is_some() && inner_tx.as_ref().unwrap().partial_hash() == hash.0 {
+            inner_tx.clone().unwrap()
+                .data.ok_or(VerifySigError::MissingData)?
+                .sig.ok_or(VerifySigError::MissingData)
+                .and_then(|sig| inner_tx.unwrap().verify_sig(pk, &sig))
+        } else {
+            Err(VerifySigError::MissingData)
+        }
     }
 
     #[cfg(feature = "ferveo-tpke")]

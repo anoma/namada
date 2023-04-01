@@ -14,7 +14,7 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::Key;
 use crate::types::token;
 use crate::vm::WasmCacheAccess;
-use crate::proto::SignedTxData;
+use crate::proto::{Tx, SignedTxData};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -49,7 +49,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -61,9 +61,14 @@ where
                     if addr.ne(&slash_fund::ADDRESS) {
                         return true;
                     }
+                    let data = if let Some(data) = tx_data.data() {
+                        data
+                    } else {
+                        return false;
+                    };
                     governance::utils::is_proposal_accepted(
                         self.ctx.storage,
-                        tx_data,
+                        &data,
                     )
                     .unwrap_or(false)
                 }

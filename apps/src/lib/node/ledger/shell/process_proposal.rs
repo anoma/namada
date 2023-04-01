@@ -87,7 +87,7 @@ where
         // TODO: This should not be hardcoded
         let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
 
-        match process_tx(tx.clone()) {
+        match process_tx(&tx).map(Tx::header) {
             // This occurs if the wrapper / protocol tx signature is invalid
             Err(err) => TxResult {
                 code: ErrorCodes::InvalidSig.into(),
@@ -150,7 +150,7 @@ where
                 },
                 TxType::Wrapper(wtx) => {
                     // validate the ciphertext via Ferveo
-                    if tx.inner_tx.is_none() || !tx.validate_ciphertext() {
+                    if tx.inner_tx().is_none() || !tx.validate_ciphertext() {
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: format!(
@@ -563,7 +563,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper, tx.inner_tx.clone());
+        shell.enqueue_tx(wrapper, tx.inner_tx().clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -627,7 +627,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper, tx.inner_tx.clone());
+        shell.enqueue_tx(wrapper, tx.inner_tx().clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],

@@ -24,7 +24,7 @@ pub use namada_core::ledger::storage_api::{
 };
 pub use namada_core::ledger::vp_env::VpEnv;
 pub use namada_core::ledger::{parameters, testnet_pow};
-pub use namada_core::proto::{Signed, SignedTxData};
+pub use namada_core::proto::{Signed, SignedTxData, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
@@ -51,7 +51,7 @@ pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
     let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
     // if whitelist is empty, allow any transaction
     Ok(whitelist.is_empty()
-        || whitelist.contains(&tx_hash.to_string().to_lowercase()))
+        || (tx_hash.is_some() && whitelist.contains(&tx_hash.unwrap().to_string().to_lowercase())))
 }
 
 pub fn is_vp_whitelisted(ctx: &Ctx, vp_bytes: &[u8]) -> VpResult {
@@ -83,11 +83,11 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
 /// - tx is whitelisted, or
 /// - tx is executed by an approved governance proposal (no need to be
 ///   whitelisted)
-pub fn is_valid_tx(ctx: &Ctx, tx_data: &SignedTxData) -> VpResult {
+pub fn is_valid_tx(ctx: &Ctx, tx_data: &Tx) -> VpResult {
     if is_tx_whitelisted(ctx)? {
         accept()
     } else {
-        let proposal_id = tx_data.data.as_ref().and_then(|x| u64::try_from_slice(&x).ok());
+        let proposal_id = tx_data.data().as_ref().and_then(|x| u64::try_from_slice(&x).ok());
 
         proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
     }
@@ -269,7 +269,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn eval(
         &self,
         vp_code: Vec<u8>,
-        input_data: SignedTxData,
+        input_data: Tx,
     ) -> Result<bool, Error> {
         let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
         let result = unsafe {
@@ -301,14 +301,18 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(HostEnvResult::is_success(valid))
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, Error> {
-        let result = Vec::with_capacity(HASH_LENGTH);
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {
+        let result = Vec::with_capacity(HASH_LENGTH+1);
         unsafe {
             namada_vp_get_tx_code_hash(result.as_ptr() as _);
         }
         let slice =
-            unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH) };
-        Ok(Hash::try_from(slice).expect("Cannot convert the hash"))
+            unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH+1) };
+        Ok(if slice[0] == 1 {
+            Some(Hash(slice[1..HASH_LENGTH+1].try_into().expect("Cannot convert the hash")))
+        } else {
+            None
+        })
     }
 
     fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, self::Error> {

@@ -34,6 +34,8 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Missing wasm code error")]
+    MissingCode,
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
     #[error("Unable to inject gas meter")]
@@ -78,7 +80,7 @@ pub fn tx<DB, H, CA>(
     write_log: &mut WriteLog,
     gas_meter: &mut BlockGasMeter,
     tx_index: &TxIndex,
-    tx: &InnerTx,
+    tx: &Tx,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -89,10 +91,11 @@ where
 {
     // let wasm_store = untrusted_wasm_store(memory::tx_limit());
 
-    let tx_data = tx.data.clone().unwrap_or_default();
-    validate_untrusted_wasm(&tx.code).map_err(Error::ValidationError)?;
+    let tx_data = tx.data().unwrap_or_default();
+    let tx_code = tx.code().ok_or(Error::MissingCode)?;
+    validate_untrusted_wasm(&tx_code).map_err(Error::ValidationError)?;
 
-    let (module, store) = tx_wasm_cache.fetch_or_compile(&tx.code)?;
+    let (module, store) = tx_wasm_cache.fetch_or_compile(&tx_code)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
@@ -104,7 +107,7 @@ where
         write_log,
         &mut iterators,
         gas_meter,
-        tx,
+        &tx,
         tx_index,
         &mut verifiers,
         &mut result_buffer,
@@ -129,7 +132,7 @@ where
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, &tx_data).map_err(Error::MemoryError)?;
+    } = memory::write_tx_inputs(memory, &tx).map_err(Error::MemoryError)?;
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
@@ -160,7 +163,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn vp<DB, H, CA>(
     vp_code: impl AsRef<[u8]>,
-    tx: &InnerTx,
+    tx: &Tx,
     tx_index: &TxIndex,
     address: &Address,
     storage: &Storage<DB, H>,
@@ -177,7 +180,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     let vp_code = vp_code.as_ref();
-    let input_data = tx.data.clone().unwrap_or_default();
+    let input_data = tx.data().unwrap_or_default();
 
     // let wasm_store = untrusted_wasm_store(memory::vp_limit());
 
@@ -194,13 +197,14 @@ where
         cache_access: PhantomData,
     };
 
+    let inner_tx = tx.inner_tx().ok_or(Error::MissingCode)?;
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
         storage,
         write_log,
         gas_meter,
-        tx,
+        &tx,
         tx_index,
         &mut iterators,
         verifiers,
@@ -219,7 +223,7 @@ where
     run_vp(
         module,
         imports,
-        &input_data,
+        tx,
         address,
         keys_changed,
         verifiers,
@@ -229,7 +233,7 @@ where
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
-    input_data: &SignedTxData,
+    input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
@@ -319,7 +323,7 @@ where
         &self,
         ctx: VpCtx<'static, DB, H, Self, CA>,
         vp_code: Vec<u8>,
-        input_data: SignedTxData,
+        input_data: Tx,
     ) -> HostEnvResult {
         match self.eval_native_result(ctx, vp_code, input_data) {
             Ok(ok) => HostEnvResult::from(ok),
@@ -342,7 +346,7 @@ where
         &self,
         ctx: VpCtx<'static, DB, H, Self, CA>,
         vp_code: Vec<u8>,
-        input_data: SignedTxData,
+        input_data: Tx,
     ) -> Result<bool> {
         // let wasm_store = untrusted_wasm_store(memory::tx_limit());
 
@@ -489,12 +493,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
+        let inner_tx = InnerTx::new(
+            tx_code.clone(),
+            Some(SignedTxData { data: Some(tx_data), sig: None }),
+        );
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(inner_tx);
         let result = tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            &InnerTx::new(tx_code.clone(), Some(SignedTxData { data: Some(tx_data), sig: None })),
+            &outer_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -503,12 +513,18 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
+        let mut inner_tx = InnerTx::new(
+            tx_code,
+            Some(SignedTxData { data: Some(tx_data), sig: None }),
+        );
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(inner_tx);
         let error = tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            &InnerTx::new(tx_code, Some(SignedTxData { data: Some(tx_data), sig: None })),
+            &outer_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -542,18 +558,21 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit.clone(),
-            input: SignedTxData { data: Some(input), sig: None },
+            input: Tx { inner_tx: Some(tx), ..Tx::default() },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
         let passed = vp(
             vp_eval.clone(),
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -571,18 +590,21 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
+        let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit,
-            input: SignedTxData { data: Some(input), sig: None },
+            input: Tx { inner_tx: Some(tx), ..Tx::default() },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
         let passed = vp(
             vp_eval,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -622,10 +644,12 @@ mod tests {
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code.clone(),
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -643,9 +667,11 @@ mod tests {
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let error = vp(
             vp_code,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -684,12 +710,17 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
+        let inner_tx = InnerTx::new(
+            tx_no_op,
+            Some(SignedTxData { data: Some(tx_data), sig: None }),
+        );
+        let outer_tx = Tx {inner_tx: Some(inner_tx), ..Tx::default()};
         let result = tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            &InnerTx::new(tx_no_op, Some(SignedTxData { data: Some(tx_data), sig: None })),
+            &outer_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -735,10 +766,12 @@ mod tests {
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(tx_data.clone()), sig: None}));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -800,12 +833,17 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
+        let inner_tx = InnerTx::new(
+            tx_read_key,
+            Some(SignedTxData {data: Some(tx_data), sig: None}),
+        );
+        let outer_tx = Tx {inner_tx: Some(inner_tx), ..Tx::default()};
         let error = tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            &InnerTx::new(tx_read_key, Some(SignedTxData {data: Some(tx_data), sig: None})),
+            &outer_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -843,10 +881,12 @@ mod tests {
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             vp_read_key,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -895,16 +935,19 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let input = 2_usize.pow(23).try_to_vec().unwrap();
+        let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_read_key,
-            input: SignedTxData { data: Some(input), sig: None },
+            input: Tx { inner_tx: Some(tx), ..Tx::default() },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
             vp_eval,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,
@@ -964,12 +1007,17 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
+        let inner_tx = InnerTx::new(
+            tx_code,
+            Some(SignedTxData {data: Some(tx_data), sig: None}),
+        );
+        let outer_tx = Tx {inner_tx: Some(inner_tx), ..Tx::default()};
         tx(
             &storage,
             &mut write_log,
             &mut gas_meter,
             &tx_index,
-            &InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})),
+            &outer_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1005,6 +1053,8 @@ mod tests {
         .expect("unexpected error converting wat2wasm").into_owned();
 
         let tx = InnerTx::new(vec![], None);
+        let mut outer_tx = Tx::new(vec![], None);
+        outer_tx.inner_tx = Some(tx);
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
@@ -1015,7 +1065,7 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         vp(
             vp_code,
-            &tx,
+            &outer_tx,
             &tx_index,
             &addr,
             &storage,

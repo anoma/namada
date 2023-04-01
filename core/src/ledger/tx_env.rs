@@ -64,7 +64,4 @@ pub trait TxEnv: StorageRead + StorageWrite {
 
     /// Get the transaction index
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error>;
-
-    /// Get the transaction extra data
-    fn get_tx_extra(&self) -> Result<Vec<u8>, storage_api::Error>;
 }

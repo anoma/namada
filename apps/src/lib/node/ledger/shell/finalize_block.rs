@@ -77,7 +77,7 @@ where
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
                 == ErrorCodes::InvalidSig
             {
-                let mut tx_event = match process_tx(tx.clone()) {
+                let mut tx_event = match process_tx(&tx).map(Tx::header) {
                     Ok(tx @ TxType::Wrapper(_))
                     | Ok(tx @ TxType::Protocol(_)) => {
                         Event::new_tx_event(&tx, height.0)
@@ -106,8 +106,8 @@ where
                 continue;
             }
 
-            let tx_type = if let Ok(tx_type) = process_tx(tx.clone()) {
-                tx_type
+            let tx = if let Ok(tx) = process_tx(&tx) {
+                tx
             } else {
                 tracing::error!(
                     "Internal logic error: FinalizeBlock received tx that \
@@ -115,6 +115,7 @@ where
                 );
                 continue;
             };
+            let tx_type = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
@@ -217,7 +218,7 @@ where
 
                     self.storage.tx_queue.push(TxInQueue {
                         tx: wrapper.clone(),
-                        inner_tx: tx.inner_tx,
+                        inner_tx: tx.inner_tx().clone(),
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -264,7 +265,7 @@ where
             };
 
             match protocol::apply_tx(
-                tx_type,
+                tx.clone(),
                 tx_length,
                 TxIndex(
                     tx_index
@@ -517,7 +518,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(wrapper.clone(), tx.inner_tx);
+                shell.enqueue_tx(wrapper.clone(), tx.inner_tx());
             }
 
             if i != 3 {

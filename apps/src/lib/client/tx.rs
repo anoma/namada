@@ -40,6 +40,7 @@ use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
 use namada::proto::Tx;
+use namada::types::transaction::TxType;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
@@ -56,6 +57,7 @@ use namada::types::token::{
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+use namada::types::transaction::decrypted::DecryptedTx;
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
 use namada::types::{storage, token};
 use namada::{ledger, vm};
@@ -2174,7 +2176,13 @@ pub async fn submit_reveal_pk_aux(
     })
     .await;
     let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(tx)
+        TxBroadcastData::DryRun(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        }).into())
     } else {
         super::signing::sign_wrapper(
             ctx,

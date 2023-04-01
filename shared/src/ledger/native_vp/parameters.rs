@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use namada_core::ledger::storage;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::proto::SignedTxData;
+use namada_core::proto::{Tx, SignedTxData};
 use thiserror::Error;
 
 use super::governance;
@@ -45,16 +45,17 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let result = keys_changed.iter().all(|key| {
             let key_type: KeyType = key.into();
+            let data = if let Some(data) = tx_data.data() { data } else { return false; };
             match key_type {
                 KeyType::PARAMETER => governance::utils::is_proposal_accepted(
                     self.ctx.storage,
-                    tx_data,
+                    &data,
                 )
                 .unwrap_or(false),
                 KeyType::UNKNOWN_PARAMETER => false,

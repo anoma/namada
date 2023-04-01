@@ -29,7 +29,7 @@ fn convert_amount(
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: SignedTxData,
+    tx_data: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -37,7 +37,7 @@ fn validate_tx(
     debug_log!(
         "vp_masp called with {} bytes data, address {}, keys_changed {:?}, \
          verifiers {:?}",
-        tx_data.data.as_ref().map(|x| x.len()).unwrap_or(0),
+        tx_data.data().as_ref().map(|x| x.len()).unwrap_or(0),
         addr,
         keys_changed,
         verifiers,
@@ -45,9 +45,9 @@ fn validate_tx(
 
     let signed = tx_data;
     // Also get the data as bytes for the VM.
-    let data = signed.data.as_ref().unwrap().clone();
+    let data = signed.data().as_ref().unwrap().clone();
     let transfer =
-        token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+        token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
 
     if let Some(shielded_tx) = transfer.shielded {
         let mut transparent_tx_pool = Amount::zero();

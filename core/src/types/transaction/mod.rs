@@ -228,7 +228,6 @@ pub mod tx_types {
         /// A Tx that contains an encrypted raw tx
         Wrapper(WrapperTx),
         /// An attempted decryption of a wrapper tx
-        #[cfg(feature = "ferveo-tpke")]
         Decrypted(DecryptedTx),
         /// Txs issued by validators as part of internal protocols
         #[cfg(feature = "ferveo-tpke")]
@@ -280,7 +279,7 @@ pub mod tx_types {
     /// data if valid and return it wrapped in a enum variant
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
-    pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
+    pub fn process_tx(tx: &Tx) -> Result<&Tx, TxError> {
         if let Some(SignedOuterTxData {
             data: Some(data),
             sig: Some(ref sig),
@@ -300,36 +299,35 @@ pub mod tx_types {
             }
             .partial_hash();
             match TxType::try_from(Tx {
-                outer_code: tx.outer_code,
+                outer_code: tx.outer_code.clone(),
                 outer_data: Some(SignedOuterTxData {
                     data: Some(data.clone()),
                     sig: None,
                 }),
-                outer_timestamp: tx.outer_timestamp,
-                inner_tx: tx.inner_tx,
-                outer_extra: tx.outer_extra,
+                outer_timestamp: tx.outer_timestamp.clone(),
+                inner_tx: tx.inner_tx.clone(),
+                outer_extra: tx.outer_extra.clone(),
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
                     wrapper.validate_sig(signed_hash, sig)?;
-                    Ok(TxType::Wrapper(wrapper))
+                    Ok(tx)
                 }
                 // verify signature and extract signed data
                 #[cfg(feature = "ferveo-tpke")]
                 TxType::Protocol(protocol) => {
                     protocol.validate_sig(signed_hash, sig)?;
-                    Ok(TxType::Protocol(protocol))
+                    Ok(tx)
                 }
                 // we extract the signed data, but don't check the signature
-                #[cfg(feature = "ferveo-tpke")]
-                decrypted @ TxType::Decrypted(_) => Ok(decrypted),
+                decrypted @ TxType::Decrypted(_) => Ok(tx),
                 // return as is
-                raw @ TxType::Raw(_) => Ok(raw),
+                raw @ TxType::Raw(_) => Ok(tx),
             }
         } else {
-            match TxType::try_from(tx)
+            match TxType::try_from(tx.clone())
                 .map_err(|err| TxError::Deserialization(err.to_string()))?
             {
                 // we only accept signed wrappers
@@ -341,7 +339,7 @@ pub mod tx_types {
                     "Protocol transactions must be signed".into(),
                 )),
                 // return as is
-                val => Ok(val),
+                val => Ok(tx),
             }
         }
     }
@@ -366,7 +364,7 @@ pub mod tx_types {
         #[test]
         fn test_process_tx_raw_tx_no_data() {
             let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
-            match process_tx(tx.clone().into()).expect("Test failed") {
+            match process_tx(&tx).expect("Test failed").header() {
                 TxType::Raw(raw) => assert_eq!(InnerTx::from(tx), raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
@@ -391,7 +389,7 @@ pub mod tx_types {
                 ),
             );
 
-            match process_tx(tx).expect("Test failed") {
+            match process_tx(&tx).expect("Test failed").header() {
                 TxType::Raw(raw) => assert_eq!(inner, raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
@@ -415,7 +413,7 @@ pub mod tx_types {
             )
                 .sign(&gen_keypair());
 
-            match process_tx(tx).expect("Test failed") {
+            match process_tx(&tx).expect("Test failed").header() {
                 TxType::Raw(raw) => assert_eq!(inner, raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
@@ -447,7 +445,7 @@ pub mod tx_types {
             .expect("Test failed")
             .attach_inner_tx(&tx, Default::default());
 
-            match process_tx(wrapper_tx.clone()).expect("Test failed") {
+            match process_tx(&wrapper_tx.clone()).expect("Test failed").header() {
                 TxType::Wrapper(wrapper) => {
                     let decrypted =
                         wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(), wrapper_tx.inner_tx.unwrap())
@@ -487,7 +485,7 @@ pub mod tx_types {
                 ),
             )
             .attach_inner_tx(&inner_tx, Default::default());
-            let result = process_tx(tx).expect_err("Test failed");
+            let result = process_tx(&tx).expect_err("Test failed");
             assert_matches!(result, TxError::Unsigned(_));
         }
     }
@@ -506,7 +504,7 @@ pub mod tx_types {
             has_valid_pow: false,
         };
         let tx = Tx::from(TxType::Decrypted(decrypted));
-        match process_tx(tx).expect("Test failed") {
+        match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,
                 #[cfg(not(feature = "mainnet"))]
@@ -542,7 +540,7 @@ pub mod tx_types {
         // create the tx with signed decrypted data
         let tx =
             Tx::new(vec![], Some(signed));
-        match process_tx(tx).expect("Test failed") {
+        match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,
                 #[cfg(not(feature = "mainnet"))]

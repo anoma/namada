@@ -4,7 +4,7 @@ pub mod main {
     use namada_tx_prelude::*;
 
     #[transaction]
-    fn apply_tx(_ctx: &mut Ctx, _tx_data: SignedTxData) -> TxResult {
+    fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         Ok(())
     }
 }
@@ -15,8 +15,8 @@ pub mod main {
     use namada_tx_prelude::*;
 
     #[transaction]
-    fn apply_tx(_ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
-        let len = usize::try_from_slice(&tx_data.data.as_ref().unwrap()[..]).unwrap();
+    fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
         log_string(format!("allocate len {}", len));
         let bytes: Vec<u8> = vec![6_u8; len];
         // use the variable to prevent it from compiler optimizing it away
@@ -31,7 +31,7 @@ pub mod main {
     use namada_tx_prelude::*;
 
     #[transaction]
-    fn apply_tx(ctx: &mut Ctx, _tx_data: SignedTxData) -> TxResult {
+    fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         // governance
         let target_key = gov_storage::get_min_proposal_grace_epoch_key();
         ctx.write(&target_key, 9_u64)?;
@@ -49,9 +49,9 @@ pub mod main {
     use namada_tx_prelude::*;
 
     #[transaction]
-    fn apply_tx(ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
+    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         // Allocates a memory of size given from the `tx_data (usize)`
-        let key = storage::Key::try_from_slice(&tx_data.data.as_ref().unwrap()[..]).unwrap();
+        let key = storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
         log_string(format!("key {}", key));
         let _result: Vec<u8> = ctx.read(&key)?.unwrap();
         Ok(())
@@ -82,9 +82,9 @@ pub mod main {
     }
 
     #[transaction]
-    fn apply_tx(ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
+    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         let signed = tx_data;
-        let data = match signed.data {
+        let data = match signed.data() {
             Some(data) => {
                 log(&format!("got data ({} bytes)", data.len()));
                 data
@@ -127,10 +127,10 @@ pub mod main {
     use namada_tx_prelude::*;
 
     #[transaction]
-    fn apply_tx(ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
+    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         let signed = tx_data;
         let transfer =
-            token::Transfer::try_from_slice(&signed.data.unwrap()[..]).unwrap();
+            token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
         log_string(format!("apply_tx called to mint tokens: {:#?}", transfer));
         let token::Transfer {
             source: _,
@@ -158,7 +158,7 @@ pub mod main {
     #[validity_predicate]
     fn validate_tx(
         _ctx: &Ctx,
-        _tx_data: SignedTxData,
+        _tx_data: Tx,
         _addr: Address,
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
@@ -175,7 +175,7 @@ pub mod main {
     #[validity_predicate]
     fn validate_tx(
         _ctx: &Ctx,
-        _tx_data: SignedTxData,
+        _tx_data: Tx,
         _addr: Address,
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
@@ -193,14 +193,14 @@ pub mod main {
     #[validity_predicate]
     fn validate_tx(
         ctx: &Ctx,
-        tx_data: SignedTxData,
+        tx_data: Tx,
         _addr: Address,
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
         use validity_predicate::EvalVp;
         let EvalVp { vp_code, input }: EvalVp =
-            EvalVp::try_from_slice(&tx_data.data.as_ref().unwrap()[..]).unwrap();
+            EvalVp::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
         ctx.eval(vp_code, input)
     }
 }
@@ -214,12 +214,12 @@ pub mod main {
     #[validity_predicate]
     fn validate_tx(
         _ctx: &Ctx,
-        tx_data: SignedTxData,
+        tx_data: Tx,
         _addr: Address,
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
-        let len = usize::try_from_slice(&tx_data.data.as_ref().unwrap()[..]).unwrap();
+        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
         log_string(format!("allocate len {}", len));
         let bytes: Vec<u8> = vec![6_u8; len];
         // use the variable to prevent it from compiler optimizing it away
@@ -237,13 +237,13 @@ pub mod main {
     #[validity_predicate]
     fn validate_tx(
         ctx: &Ctx,
-        tx_data: SignedTxData,
+        tx_data: Tx,
         _addr: Address,
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
         // Allocates a memory of size given from the `tx_data (usize)`
-        let key = storage::Key::try_from_slice(&tx_data.data.as_ref().unwrap()[..]).unwrap();
+        let key = storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
         log_string(format!("key {}", key));
         let _result: Vec<u8> = ctx.read_pre(&key)?.unwrap();
         accept()

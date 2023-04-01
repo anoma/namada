@@ -56,7 +56,7 @@ pub struct TestTxEnv {
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
-    pub tx: InnerTx,
+    pub tx: Tx,
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
@@ -77,7 +77,7 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: InnerTx::new(vec![], None),
+            tx: Tx::new(vec![], None),
         }
     }
 }

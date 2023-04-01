@@ -218,12 +218,12 @@ pub fn is_valid_validator_voting_period(
 /// Check if an accepted proposal is being executed
 pub fn is_proposal_accepted<S>(
     storage: &S,
-    tx_data: &SignedTxData,
+    tx_data: &[u8],
 ) -> storage_api::Result<bool>
 where
     S: storage_api::StorageRead,
 {
-    let proposal_id = tx_data.data.clone().and_then(|x| u64::try_from_slice(&x).ok());
+    let proposal_id = u64::try_from_slice(&tx_data).ok();
     match proposal_id {
         Some(id) => {
             let proposal_execution_key =

@@ -78,12 +78,7 @@ where
 
     let mut gas_meter = BlockGasMeter::default();
     let mut write_log = WriteLog::default();
-    let tx = InnerTx::try_from(&request.data[..]).into_storage_result()?;
-    let tx = TxType::Decrypted(DecryptedTx::Decrypted {
-        tx,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: true,
-    });
+    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     let data = protocol::apply_tx(
         tx,
         request.data.len(),
@@ -336,8 +331,10 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::Tx;
+    use crate::proto::{InnerTx, Tx};
     use crate::types::{address, token};
+    use crate::types::transaction::TxType;
+    use crate::types::transaction::decrypted::DecryptedTx;
 
     const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
 
@@ -375,8 +372,15 @@ mod test {
 
         // Request dry run tx
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
-        let tx = Tx::new(tx_no_op, None);
-        let tx_bytes = tx.to_bytes();
+        let tx = InnerTx::new(tx_no_op, None);
+        let outer_tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+            tx,
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        }));
+        let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()
             .dry_run_tx(&client, Some(tx_bytes), None, false)

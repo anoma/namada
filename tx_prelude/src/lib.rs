@@ -25,7 +25,7 @@ pub use namada_core::ledger::storage_api::{
     StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
-pub use namada_core::proto::{Signed, SignedTxData};
+pub use namada_core::proto::{Signed, SignedTxData, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::internal::HostEnvResult;
@@ -323,15 +323,5 @@ impl TxEnv for Ctx {
     fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
         let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
-    }
-
-    fn get_tx_extra(&self) -> Result<Vec<u8>, Error> {
-        let capacity = unsafe { namada_tx_get_tx_extra_len() } as usize;
-        let result = Vec::with_capacity(capacity);
-        unsafe {
-            namada_tx_get_tx_extra(result.as_ptr() as _);
-        }
-        let slice = unsafe { slice::from_raw_parts(result.as_ptr(), capacity) };
-        Ok(slice.to_vec())
     }
 }

@@ -40,7 +40,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &SignedTxData,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<bool, Self::Error>;
@@ -69,7 +69,7 @@ where
     /// Read-only access to the write log.
     pub write_log: &'a WriteLog,
     /// The transaction code is used for signature verification
-    pub tx: &'a InnerTx,
+    pub tx: &'a Tx,
     /// The transaction index is used to obtain the shielded transaction's
     /// parent
     pub tx_index: &'a TxIndex,
@@ -122,7 +122,7 @@ where
         address: &'a Address,
         storage: &'a Storage<DB, H>,
         write_log: &'a WriteLog,
-        tx: &'a InnerTx,
+        tx: &'a Tx,
         tx_index: &'a TxIndex,
         gas_meter: VpGasMeter,
         keys_changed: &'a BTreeSet<Key>,
@@ -430,7 +430,7 @@ where
     fn eval(
         &self,
         vp_code: Vec<u8>,
-        input_data: SignedTxData,
+        input_data: Tx,
     ) -> Result<bool, storage_api::Error> {
         #[cfg(feature = "wasm-runtime")]
         {
@@ -493,14 +493,14 @@ where
         pk: &crate::types::key::common::PublicKey,
         sig: &crate::types::key::common::Signature,
     ) -> Result<bool, storage_api::Error> {
-        Ok(self.tx.verify_sig(pk, sig).is_ok())
+        Ok(self.tx.inner_tx.as_ref().map(|x| x.verify_sig(pk, sig).is_ok()).unwrap_or(false))
     }
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
     }
 
-    fn get_tx_code_hash(&self) -> Result<Hash, storage_api::Error> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {
         vp_host_fns::get_tx_code_hash(&mut self.gas_meter.borrow_mut(), self.tx)
             .into_storage_result()
     }

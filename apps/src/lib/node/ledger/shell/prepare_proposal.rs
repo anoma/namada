@@ -79,7 +79,7 @@ where
                 .into_iter()
                 .filter_map(|tx_bytes| {
                     if let Ok(Ok(TxType::Wrapper(_))) =
-                        Tx::try_from(tx_bytes.as_slice()).map(process_tx)
+                        Tx::try_from(tx_bytes.as_slice()).map(|x| process_tx(&x).map(Tx::header))
                     {
                         Some(tx_bytes)
                     } else {
@@ -309,7 +309,7 @@ mod test_prepare_proposal {
                 .sign(&keypair)
                 .expect("Test failed")
                 .attach_inner_tx(&tx, Default::default());
-            shell.enqueue_tx(wrapper_tx, wrapper.inner_tx.clone());
+            shell.enqueue_tx(wrapper_tx, wrapper.inner_tx().clone());
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }
@@ -359,7 +359,7 @@ mod test_prepare_proposal {
                 .map(|tx_bytes| {
                     Tx::try_from(tx_bytes.as_slice())
                         .expect("Test failed")
-                        .data
+                        .outer_data
                         .expect("Test failed")
                 })
                 .collect();

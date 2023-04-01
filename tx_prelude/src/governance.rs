@@ -35,7 +35,7 @@ pub fn init_proposal(ctx: &mut Ctx, data: InitProposalData) -> TxResult {
     ctx.write(&grace_epoch_key, data.grace_epoch)?;
 
     let proposal_code_key = storage::get_proposal_code_key(proposal_id);
-    ctx.write_bytes(&proposal_code_key, ctx.get_tx_extra()?)?;
+    //ctx.write_bytes(&proposal_code_key, ctx.get_tx_extra()?)?;
 
     ctx.write(&counter_key, proposal_id + 1)?;
 

@@ -1,7 +1,7 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(_ctx: &mut Ctx, tx_data: SignedTxData) -> TxResult {
+fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     log_string(format!("apply_tx called with data: {:#?}", tx_data));
     Ok(())
 }
