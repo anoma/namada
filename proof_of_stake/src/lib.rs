@@ -183,13 +183,13 @@ pub enum CommissionRateChangeError {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum ReactivateValidatorError {
+pub enum UnjailValidatorError {
     #[error("The given address {0} is not a validator address")]
     NotAValidator(Address),
     #[error("The given address {0} is not jailed in epoch {1}")]
     NotJailed(Address, Epoch),
     #[error(
-        "The given address {0} is not eligible for reactivation until epoch \
+        "The given address {0} is not eligible for unnjailing until epoch \
          {1}: current epoch is {2}"
     )]
     NotEligible(Address, Epoch, Epoch),
@@ -231,8 +231,8 @@ impl From<InflationError> for storage_api::Error {
     }
 }
 
-impl From<ReactivateValidatorError> for storage_api::Error {
-    fn from(err: ReactivateValidatorError) -> Self {
+impl From<UnjailValidatorError> for storage_api::Error {
+    fn from(err: UnjailValidatorError) -> Self {
         Self::new(err)
     }
 }
@@ -1604,15 +1604,25 @@ where
         )?;
     }
 
-    tracing::debug!("Updating validator set for unbonding");
-    // Update the validator set at the pipeline offset
-    update_validator_set(
-        storage,
-        &params,
-        validator,
-        -amount_after_slashing,
-        current_epoch,
-    )?;
+    // Update the validator set at the pipeline offset. Since unbonding from a
+    // jailed validator who is no longer frozen is allowed, only update the
+    // validator set only if the validator is not jailed
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle(validator)
+            .get(storage, pipeline_epoch, &params)?
+            .unwrap(),
+        ValidatorState::Jailed
+    );
+    if !is_jailed_at_pipeline {
+        tracing::debug!("Updating validator set for unbonding");
+        update_validator_set(
+            storage,
+            &params,
+            validator,
+            -amount_after_slashing,
+            current_epoch,
+        )?;
+    }
 
     // Update the validator and total deltas at the pipeline offset
     update_validator_deltas(
@@ -3266,27 +3276,26 @@ where
         )?;
         if let Some(state) = state {
             if state != ValidatorState::Jailed {
-                return Err(ReactivateValidatorError::NotJailed(
+                return Err(UnjailValidatorError::NotJailed(
                     validator.clone(),
                     epoch,
                 )
                 .into());
             }
         } else {
-            return Err(ReactivateValidatorError::NotAValidator(
-                validator.clone(),
-            )
-            .into());
+            return Err(
+                UnjailValidatorError::NotAValidator(validator.clone()).into()
+            );
         }
     }
 
-    // Check that the reactivation tx can be submitted given the current epoch
+    // Check that the unjailing tx can be submitted given the current epoch
     // and the most recent infraction epoch
     let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?
         .unwrap_or_default();
     let eligible_epoch = last_slash_epoch + params.unbonding_len; // TODO: check this is the correct epoch to submit this tx
     if current_epoch < eligible_epoch {
-        return Err(ReactivateValidatorError::NotEligible(
+        return Err(UnjailValidatorError::NotEligible(
             validator.clone(),
             eligible_epoch,
             current_epoch,

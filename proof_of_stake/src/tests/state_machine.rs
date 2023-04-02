@@ -952,7 +952,7 @@ impl AbstractStateMachine for AbstractPosState {
         let withdrawable =
             state.withdrawable_unbonds().into_iter().collect::<Vec<_>>();
 
-        let eligible_for_reactivation = state
+        let eligible_for_unjail = state
             .validator_states
             .get(&(state.epoch + state.params.pipeline_len))
             .unwrap()
@@ -1009,12 +1009,12 @@ impl AbstractStateMachine for AbstractPosState {
         ];
 
         if unbondable.is_empty() {
-            if eligible_for_reactivation.is_empty() {
+            if eligible_for_unjail.is_empty() {
                 basic.boxed()
             } else {
                 prop_oneof![
                     basic,
-                    prop::sample::select(eligible_for_reactivation).prop_map(
+                    prop::sample::select(eligible_for_unjail).prop_map(
                         |address| { Transition::UnjailValidator { address } }
                     )
                 ]
@@ -1034,16 +1034,17 @@ impl AbstractStateMachine for AbstractPosState {
                 });
 
             if withdrawable.is_empty() {
-                if eligible_for_reactivation.is_empty() {
+                if eligible_for_unjail.is_empty() {
                     prop_oneof![basic, arb_unbond].boxed()
                 } else {
                     prop_oneof![
                         basic,
                         arb_unbond,
-                        prop::sample::select(eligible_for_reactivation)
-                            .prop_map(|address| {
+                        prop::sample::select(eligible_for_unjail).prop_map(
+                            |address| {
                                 Transition::UnjailValidator { address }
-                            })
+                            }
+                        )
                     ]
                     .boxed()
                 }
@@ -1052,17 +1053,18 @@ impl AbstractStateMachine for AbstractPosState {
                 let arb_withdrawal = arb_withdrawable
                     .prop_map(|(id, _)| Transition::Withdraw { id });
 
-                if eligible_for_reactivation.is_empty() {
+                if eligible_for_unjail.is_empty() {
                     prop_oneof![basic, arb_unbond, arb_withdrawal].boxed()
                 } else {
                     prop_oneof![
                         basic,
                         arb_unbond,
                         arb_withdrawal,
-                        prop::sample::select(eligible_for_reactivation)
-                            .prop_map(|address| {
+                        prop::sample::select(eligible_for_unjail).prop_map(
+                            |address| {
                                 Transition::UnjailValidator { address }
-                            })
+                            }
+                        )
                     ]
                     .boxed()
                 }
@@ -1625,19 +1627,19 @@ impl AbstractStateMachine for AbstractPosState {
                     .map(|sum| *sum >= token::Change::from(*amount))
                     .unwrap_or_default();
 
-                // The validator must not be jailed currently
-                let is_jailed = state
-                    .validator_states
-                    .get(&state.epoch)
-                    .unwrap()
-                    .get(&id.validator)
-                    .cloned()
-                    == Some(ValidatorState::Jailed);
+                // The validator must not be frozen currently
+                let is_frozen = if let Some(last_epoch) =
+                    state.validator_last_slash_epochs.get(&id.validator)
+                {
+                    *last_epoch + state.params.unbonding_len > state.epoch
+                } else {
+                    false
+                };
 
                 // The validator must be known
                 state.is_validator(&id.validator, pipeline)
                     // The amount must be available to unbond and the validator not jailed
-                    && is_unbondable && !is_jailed
+                    && is_unbondable && !is_frozen
             }
             Transition::Withdraw { id } => {
                 let pipeline = state.epoch + state.params.pipeline_len;

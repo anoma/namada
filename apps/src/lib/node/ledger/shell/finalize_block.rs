@@ -1932,7 +1932,7 @@ mod test_finalize_block {
         assert_eq!(stake2, initial_stake - expected_slashed);
         assert_eq!(total_stake, total_initial_stake - 2 * expected_slashed);
 
-        // Reactivate one of the validators
+        // Unjail one of the validators
         let current_epoch = shell.wl_storage.storage.block.epoch;
         unjail_validator(
             &mut shell.wl_storage,
@@ -1942,7 +1942,7 @@ mod test_finalize_block {
         let pipeline_epoch = current_epoch + params.pipeline_len;
 
         // Check that the state is the same until the pipeline epoch, at which
-        // point one validator is reactivated
+        // point one validator is unjailed
         for epoch in shell
             .wl_storage
             .storage

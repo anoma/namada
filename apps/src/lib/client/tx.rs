@@ -2631,9 +2631,9 @@ pub async fn submit_validator_commission_change(
     .await;
 }
 
-pub async fn submit_validator_reactivation(
+pub async fn submit_unjail_validator(
     ctx: Context,
-    args: args::TxReactivateValidator,
+    args: args::TxUnjailValidator,
 ) {
     let tx_code = ctx.read_wasm(TX_UNJAIL_VALIDATOR_WASM);
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
