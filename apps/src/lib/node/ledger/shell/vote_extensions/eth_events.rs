@@ -464,8 +464,6 @@ mod test_vote_extensions {
     use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
-    #[cfg(feature = "abcipp")]
-    use namada::types::ethereum_events::Uint;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
