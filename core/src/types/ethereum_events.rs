@@ -510,7 +510,7 @@ pub mod testing {
     }
 
     pub fn arbitrary_nonce() -> Uint {
-        123.into()
+        0.into()
     }
 
     pub fn arbitrary_keccak_hash() -> KeccakHash {

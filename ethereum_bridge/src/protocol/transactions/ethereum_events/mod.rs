@@ -383,7 +383,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -446,7 +446,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -498,7 +498,7 @@ mod tests {
         );
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -621,7 +621,7 @@ mod tests {
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
@@ -652,7 +652,7 @@ mod tests {
         wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;
 
         let new_event = EthereumEvent::TransfersToNamada {
-            nonce: 2.into(),
+            nonce: 1.into(),
             valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),

@@ -732,6 +732,8 @@ mod tests {
     /// TransfersToEthereum
     fn test_act_on_changes_storage_for_transfers_to_eth() {
         let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        wl_storage.commit_block().expect("Test failed");
         init_storage(&mut wl_storage);
         let pending_transfers = init_bridge_pool(&mut wl_storage);
         init_balance(&mut wl_storage, &pending_transfers);
@@ -769,6 +771,7 @@ mod tests {
 
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
+        assert!(changed_keys.remove(&get_nonce_key()));
         assert!(changed_keys.iter().all(|k| pending_keys.contains(k)));
 
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
@@ -777,7 +780,8 @@ mod tests {
                 .iter_prefix(&prefix)
                 .expect("Test failed")
                 .count(),
-            0
+            // NOTE: we should have one write -- the bridge pool nonce update
+            1
         );
         let relayer_balance = Amount::try_from_slice(
             &wl_storage
