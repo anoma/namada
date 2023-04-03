@@ -1,16 +1,20 @@
 //! A basic fungible token
 
-//use std::fmt::Display;
+use std::fmt::Display;
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::BASE32HEX_NOPAD;
 use masp_primitives::transaction::Transaction;
 use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ledger::storage_api::StorageRead;
+use crate::ledger::storage_api::token::read_denom;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::uint::{self, SignedUint, Uint};
 
@@ -33,9 +37,6 @@ use crate::types::uint::{self, SignedUint, Uint};
 pub struct Amount {
     raw: Uint,
 }
-
-/// A number of decimal places for a token [`Amount`].
-pub type Denom = u8;
 
 /// Maximum decimal places in a native token [`Amount`] and [`Change`].
 /// For non-native (e.g. ERC20 tokens) one must read the `denom_key` storage
@@ -63,7 +64,7 @@ impl Amount {
     }
 
     /// Receive a given amount.
-    /// Panics on overflow and when [`uint::MAX_VALUE`] is exceeded.
+    /// Panics on overflow and when [`uint::MAX_SIGNED_VALUE`] is exceeded.
     pub fn receive(&mut self, amount: &Amount) {
         self.raw = self.raw.checked_add(amount.raw).unwrap();
     }
@@ -82,11 +83,23 @@ impl Amount {
         }
     }
 
+    /// Create a new amount with the maximum signed value
+    pub fn max_signed() -> Self {
+        Self {
+            raw: uint::MAX_SIGNED_VALUE,
+        }
+    }
+
+    /// Check if [`Amount`] is zero.
+    pub fn is_zero(&self) -> bool {
+        self.raw == Uint::from(0)
+    }
+
     /// Checked addition. Returns `None` on overflow or if
-    /// the amount exceed [`uint::MAX_VALUE`]
+    /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
     pub fn checked_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
-            if result < uint::MAX_VALUE {
+            if result < uint::MAX_SIGNED_VALUE {
                 Some(Self { raw: result })
             } else {
                 None
@@ -150,17 +163,60 @@ impl Amount {
         }
     }
 
-    /// Attempt to convert an unsigned interger to an `Amount` with the
+    /// Attempt to convert an unsigned integer to an `Amount` with the
     /// specified precision.
-    pub fn from_int(
-        uint: impl Into<u64>,
+    pub fn from_uint(
+        uint: impl Into<Uint>,
         denom: impl Into<u8>,
     ) -> Result<Self, AmountParseError> {
-        Self::from_decimal(Decimal::try_from(uint.into()).unwrap(), denom)
+        let denom = denom.into();
+        match Uint::from(10)
+            .checked_pow(Uint::from(denom))
+            .and_then(|scaling| scaling.checked_mul(uint.into()))
+        {
+            Some(amount) => Ok(Self { raw: amount }),
+            None => Err(AmountParseError::ConvertToDecimal),
+        }
     }
+
+    /// Given a u64 and [`MaspDenom`], construct the corresponding
+    /// amount.
+    pub fn from_masp_denominated(val: u64, denom: MaspDenom) -> Self {
+        let val = Uint::from(val);
+        let denom = Uint::from(denom as u64);
+        let scaling = Uint::from(2).pow(denom);
+        Self { raw: val * scaling }
+    }
+
+    /// Get a string representation of a native token amount.
+    pub fn to_string_native(&self) -> String {
+        DenominatedAmount {
+            amount: *self,
+            denom: 6.into(),
+        }.to_string_precise()
+    }
+
+    /// Add denomination info if it exists in storage.
+    pub fn denominated(&self, token: &Address, storage: &impl StorageRead) -> Option<DenominatedAmount> {
+        let denom = read_denom(storage, token).expect("Should be able to read storage");
+        denom.map(|denom|
+            DenominatedAmount {
+                amount: *self,
+                denom,
+            })
+    }
+
+    /// Convert to an [`Amount`] under the assumption that the input
+    /// string encodes all necessary decimal places.
+    pub fn from_string_precise(string: &str) -> Result<Self, AmountParseError> {
+        DenominatedAmount::from_str(string).map(|den| den.amount)
+    }
+
 }
 
-/// The number of decimal places in base 10 of an amount.
+/// Given a number represented as `M*B^D`, then
+/// `M` is the matissa, `B` is the base and `D`
+/// is the denomination, represented by this stuct.
 #[derive(
     Debug,
     Copy,
@@ -227,6 +283,14 @@ impl DenominatedAmount {
             string.insert(0, '0');
         }
         string
+    }
+}
+
+impl Display for DenominatedAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = self.to_string_precise();
+        let string = string.trim_end_matches(&['0', '.']);
+        f.write_str(string)
     }
 }
 
@@ -307,6 +371,18 @@ impl TryFrom<Amount> for Decimal {
     }
 }
 
+impl<'a> From<&'a DenominatedAmount> for &'a Amount {
+    fn from(denom: &'a DenominatedAmount) -> Self {
+        &denom.amount
+    }
+}
+
+impl From<DenominatedAmount> for Amount {
+    fn from(denom: DenominatedAmount) -> Self {
+        denom.amount
+    }
+}
+
 impl From<Amount> for u128 {
     fn from(amount: Amount) -> Self {
         amount.raw.as_u128()
@@ -327,6 +403,24 @@ impl Mul<u64> for Amount {
 
     fn mul(mut self, rhs: u64) -> Self::Output {
         self.raw *= rhs;
+        self
+    }
+}
+
+impl Mul<Uint> for Amount {
+    type Output = Amount;
+
+    fn mul(mut self, rhs: Uint) -> Self::Output {
+        self.raw *= rhs;
+        self
+    }
+}
+
+impl Mul<Amount> for Amount {
+    type Output = Amount;
+
+    fn mul(mut self, rhs: Amount) -> Self::Output {
+        self.raw *= rhs.raw;
         self
     }
 }
@@ -371,13 +465,19 @@ impl KeySeg for Amount {
     where
         Self: Sized,
     {
-        let raw = Uint::from_str(&string)
-            .map_err(|e| super::storage::Error::InvalidKeySeg(e.to_string()))?;
-        Ok(Self { raw })
+        let bytes = BASE32HEX_NOPAD.decode(string.as_ref()).map_err(|err| {
+            storage::Error::ParseKeySeg(format!(
+                "Failed parsing {} with {}",
+                string, err
+            ))
+        })?;
+        Ok(Amount{ raw: Uint::from_big_endian(&bytes)})
     }
 
     fn raw(&self) -> String {
-        self.raw.to_string()
+        let mut buf = [0u8; 32];
+        self.raw.to_big_endian(&mut buf);
+        BASE32HEX_NOPAD.encode(&buf)
     }
 
     fn to_db_key(&self) -> DbKeySeg {
@@ -401,15 +501,9 @@ pub enum AmountParseError {
     InvalidRange,
     #[error("Error converting amount to decimal, number too large.")]
     ConvertToDecimal,
+    #[error("Could not convert from string, expected an unsigned 256-bit integer.")]
+    FromString,
 }
-
-// impl Display for DenominatedAmount {
-// fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// let string = self.to_string_precise();
-// let string = string.trim_end_matches(&['0', '.']);
-// f.write_str(string)
-// }
-// }
 
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
@@ -417,15 +511,54 @@ impl From<Amount> for Change {
     }
 }
 
-impl From<DenominatedAmount> for Amount {
-    fn from(amt: DenominatedAmount) -> Self {
-        amt.amount
+impl From<Change> for Amount {
+    fn from(change: Change) -> Self {
+        Amount{raw: change.abs()}
+    }
+}
+
+/// The four possible u64 words in a [`Uint`].
+/// Used for converting to MASP amounts.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
+#[repr(u8)]
+#[allow(missing_docs)]
+pub enum MaspDenom {
+    Zero = 0,
+    One,
+    Two,
+    Three,
+}
+
+impl From<u8> for MaspDenom {
+    fn from(denom: u8) -> Self {
+        match denom {
+            0 => Self::Zero,
+            1 => Self::One,
+            2 => Self::Two,
+            3 => Self::Three,
+            _ => panic!("Possible MASP denominations must be between 0 and 3"),
+        }
+    }
+}
+
+impl MaspDenom {
+    /// Iterator over the possible denominations
+    pub fn iter() -> impl Iterator<Item=MaspDenom>{
+        (0u8..3).into_iter().map(Self::from)
+    }
+
+    /// Get the corresponding u64 word from the input uint256.
+    pub fn denominate<'a>(&self, amount: impl Into<&'a Amount>) -> u64 {
+        let amount = amount.into();
+        amount.raw.0[*self as usize]
     }
 }
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
-/// Key segment for head shielded transaction pointer key
+/// Key segment for a denomination key
+pub const DENOM_STORAGE_KEY: &str = "balance";
+/// Key segment for head shielded transaction pointer keys
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
 pub const TX_KEY_PREFIX: &str = "tx-";
@@ -494,6 +627,22 @@ pub fn is_any_token_balance_key(key: &Key) -> Option<&Address> {
         ] if key == BALANCE_STORAGE_KEY => Some(owner),
         _ => None,
     }
+}
+
+/// Obtain a storage key denomination of a token.
+pub fn denom_key(token_addr: &Address) -> Key {
+    Key::from(token_addr.to_db_key())
+        .push(&DENOM_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Check if the given storage key is a denomination key for the given token.
+pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+        ] if key == DENOM_STORAGE_KEY && addr == token_addr)
 }
 
 /// Check if the given storage key is a masp key
@@ -646,7 +795,7 @@ mod tests {
         let max = Amount::from(u64::MAX);
         assert_eq!("18446744073709.551615", max.to_string());
 
-        let whole = Amount::from(u64::MAX / SCALE * SCALE);
+        let whole = Amount::from(u64::MAX / NATIVE_SCALE * NATIVE_SCALE);
         assert_eq!("18446744073709", whole.to_string());
 
         let trailing_zeroes = Amount::from(123000);

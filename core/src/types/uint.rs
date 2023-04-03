@@ -2,12 +2,13 @@
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
 use std::cmp::Ordering;
-use std::ops::{BitXor, Neg};
+use std::ops::{Add, AddAssign, BitXor, Neg, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
+use crate::types::token;
 
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
@@ -24,6 +25,9 @@ construct_uint! {
 }
 
 impl_uint_num_traits!(Uint, 4);
+
+/// The maximum 256 bit integer
+pub const MAX_VALUE: Uint = Uint([u64::MAX; 4]);
 
 impl Uint {
     /// Compute the two's complement of a number.
@@ -43,11 +47,11 @@ impl Uint {
 /// The maximum absolute value a [`SignedUint`] may have.
 /// Note the the last digit is 2^63 - 1. We add this cap so
 /// we can use two's complement.
-pub const MAX_VALUE: Uint =
+pub const MAX_SIGNED_VALUE: Uint =
     Uint([u64::MAX, u64::MAX, u64::MAX, 9223372036854775807]);
 
 /// A signed 256 big integer.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct SignedUint(Uint);
 
 impl SignedUint {
@@ -65,13 +69,36 @@ impl SignedUint {
             self.0.negate().unwrap()
         }
     }
+
+    /// Check if this value is zero
+    pub fn is_zero(&self) -> bool {
+        self.0 == Uint::zero()
+    }
+
+    /// Get a string representation of `self` as a
+    /// native token amount.
+    pub fn to_string_native(&self) -> String {
+        let mut sign = if self.non_negative() {
+            String::from("-")
+        } else {
+            String::new()
+        };
+        sign.push_str(&token::Amount::from(*self).to_string_native());
+        sign
+    }
+}
+
+impl From<u64> for SignedUint {
+    fn from(val: u64) -> Self {
+        SignedUint::try_from(Uint::from(val)).expect("A u64 will always fit in this type")
+    }
 }
 
 impl TryFrom<Uint> for SignedUint {
     type Error = Box<dyn 'static + std::error::Error>;
 
     fn try_from(value: Uint) -> Result<Self, Self::Error> {
-        if value.0 <= MAX_VALUE.0 {
+        if value.0 <= MAX_SIGNED_VALUE.0 {
             Ok(Self(value))
         } else {
             Err("The given integer is too large to be represented asa \
@@ -106,5 +133,32 @@ impl PartialOrd for SignedUint {
 impl Ord for SignedUint {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
+    }
+}
+
+impl Add<SignedUint> for SignedUint {
+    type Output = Self;
+
+    fn add(self, rhs: SignedUint) -> Self::Output {
+        match (self.non_negative(), rhs.non_negative()) {
+            (true, true) => Self(self.0 + rhs.0),
+            (false, false) => -Self(self.abs() + rhs.abs()),
+            (true, false) => Self(self.0 - rhs.abs()),
+            (false, true) => Self(rhs.0 - self.abs()),
+        }
+    }
+}
+
+impl AddAssign for SignedUint {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl Sub for SignedUint {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + (-rhs)
     }
 }

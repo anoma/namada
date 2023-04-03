@@ -14,11 +14,11 @@ pub fn transfer(
     dest: &Address,
     token: &Address,
     sub_prefix: Option<storage::Key>,
-    amount: Amount,
+    amount: DenominatedAmount,
     key: &Option<String>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
-    if amount != Amount::default() {
+    if amount.amount != Amount::default() {
         let src_key = match &sub_prefix {
             Some(sub_prefix) => {
                 let prefix =
@@ -36,7 +36,7 @@ pub fn transfer(
             None => token::balance_key(token, dest),
         };
         let src_bal: Option<Amount> = match src {
-            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max()),
+            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max_signed()),
             Address::Internal(InternalAddress::IbcBurn) => {
                 log_string("invalid transfer from the burn address");
                 unreachable!()
@@ -47,7 +47,7 @@ pub fn transfer(
             log_string(format!("src {} has no balance", src_key));
             unreachable!()
         });
-        src_bal.spend(&amount);
+        src_bal.spend(&amount.amount);
         let mut dest_bal: Amount = match dest {
             Address::Internal(InternalAddress::IbcMint) => {
                 log_string("invalid transfer to the mint address");
@@ -55,7 +55,7 @@ pub fn transfer(
             }
             _ => ctx.read(&dest_key)?.unwrap_or_default(),
         };
-        dest_bal.receive(&amount);
+        dest_bal.receive(&amount.amount);
         if src != dest {
             match src {
                 Address::Internal(InternalAddress::IbcMint) => {
@@ -141,7 +141,7 @@ pub fn transfer_with_keys(
     let src_owner = is_any_multitoken_balance_key(src_key).map(|(_, o)| o);
     let src_bal: Option<Amount> = match src_owner {
         Some(Address::Internal(InternalAddress::IbcMint)) => {
-            Some(Amount::max())
+            Some(Amount::max_signed())
         }
         Some(Address::Internal(InternalAddress::IbcBurn)) => {
             log_string("invalid transfer from the burn address");

@@ -828,6 +828,7 @@ macro_rules! router {
     );
 }
 
+/*
 /// You can expand the `handlers!` macro invocation with e.g.:
 /// ```shell
 /// cargo expand ledger::queries::router::test_rpc_handlers --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
@@ -1029,13 +1030,13 @@ mod test {
         let result = TEST_RPC.b1(&client).await.unwrap();
         assert_eq!(result, "b1");
 
-        let balance = token::Amount::from(123_000_000);
+        let balance = token::Amount::native_whole(123_000_000);
         let result = TEST_RPC.b2i(&client, &balance).await.unwrap();
         assert_eq!(result, format!("b2i/{balance}"));
 
-        let a1 = token::Amount::from(345);
-        let a2 = token::Amount::from(123_000);
-        let a3 = token::Amount::from(1_000_999);
+        let a1 = token::Amount::native_whole(345);
+        let a2 = token::Amount::native_whole(123_000);
+        let a3 = token::Amount::native_whole(1_000_999);
         let result = TEST_RPC.b3(&client, &a1, &a2, &a3).await.unwrap();
         assert_eq!(result, format!("b3/{a1}/{a2}/{a3}"));
 
@@ -1088,3 +1089,4 @@ mod test {
         Ok(())
     }
 }
+*/

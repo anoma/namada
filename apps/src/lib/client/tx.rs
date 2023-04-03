@@ -50,9 +50,7 @@ use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::{
-    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
-};
+use namada::types::token::{Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX, MaspDenom};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -473,11 +471,14 @@ pub enum PinnedBalanceError {
 pub type Conversions =
     HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i64)>;
 
+/// Represents an amount that is
+pub type MaspDenominatedAmount = Amount<(Address, MaspDenom)>;
+
 /// Represents the changes that were made to a list of transparent accounts
-pub type TransferDelta = HashMap<Address, Amount<Address>>;
+pub type TransferDelta = HashMap<Address, MaspDenominatedAmount>;
 
 /// Represents the changes that were made to a list of shielded accounts
-pub type TransactionDelta = HashMap<ViewingKey, Amount>;
+pub type TransactionDelta = HashMap<ViewingKey, MaspDenominatedAmount>;
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -1003,7 +1004,7 @@ impl ShieldedContext {
     pub async fn compute_exchanged_amount(
         &mut self,
         client: HttpClient,
-        mut input: Amount,
+        mut input: MaspDenominatedAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
     ) -> (Amount, Conversions) {
@@ -1252,7 +1253,7 @@ impl ShieldedContext {
         client: HttpClient,
         amt: Amount,
         target_epoch: Epoch,
-    ) -> Amount<Address> {
+    ) -> MaspDenominatedAmount {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type

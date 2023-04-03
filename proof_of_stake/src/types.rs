@@ -21,6 +21,8 @@ use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 pub use rev_order::ReverseOrdTokenAmount;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
+use rust_decimal::RoundingStrategy;
+use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 
 use crate::parameters::PosParams;
 
@@ -240,7 +242,7 @@ impl Display for WeightedValidator {
         write!(
             f,
             "{} with bonded stake {}",
-            self.address, self.bonded_stake
+            self.address, self.bonded_stake.to_string_native()
         )
     }
 }
@@ -445,10 +447,10 @@ impl Display for SlashType {
 
 /// Multiply a value of type Decimal with one of type u64 and then return the
 /// truncated u64
-pub fn decimal_mult_u64(dec: Decimal, int: u64) -> u64 {
+pub fn decimal_mult_u128(dec: Decimal, int: u128) -> u128 {
     let prod = dec * Decimal::from(int);
     // truncate the number to the floor
-    prod.to_u64().expect("Product is out of bounds")
+    prod.to_u128().expect("Product is out of bounds")
 }
 
 /// Multiply a value of type Decimal with one of type i128 and then return the
@@ -459,23 +461,29 @@ pub fn decimal_mult_i128(dec: Decimal, int: i128) -> i128 {
     prod.to_i128().expect("Product is out of bounds")
 }
 
-/// Multiply a value of type Decimal with one of type i128 and then convert it
+/// Multiply a value of type Decimal with one of type Uint and then convert it
 /// to an Amount type
 pub fn mult_change_to_amount(
     dec: Decimal,
     change: token::Change,
 ) -> token::Amount {
-    let prod = dec * Decimal::from(change);
-    // truncate the number to the floor
-    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
+    // this function is used for slashing calculations. We want to err
+    // on the side of slashing more, not less.
+    let dec = dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+    Amount::from_decimal(
+        dec,
+        NATIVE_MAX_DECIMAL_PLACES
+    ).unwrap() * change.abs()
 }
 
 /// Multiply a value of type Decimal with one of type Amount and then return the
 /// truncated Amount
 pub fn mult_amount(dec: Decimal, amount: token::Amount) -> token::Amount {
-    let prod = dec * Decimal::from(amount);
-    // truncate the number to the floor
-    token::Amount::from(prod.to_u64().expect("Product is out of bounds"))
+    let dec = dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+    Amount::from_decimal(
+        dec,
+        NATIVE_MAX_DECIMAL_PLACES
+    ).unwrap() * amount
 }
 
 /// Calculate voting power in the tendermint context (which is stored as i64)
@@ -484,7 +492,7 @@ pub fn into_tm_voting_power(
     votes_per_token: Decimal,
     tokens: impl Into<u64>,
 ) -> i64 {
-    let prod = decimal_mult_u64(votes_per_token, tokens.into());
+    let prod = decimal_mult_u128(votes_per_token, tokens.into() as u128);
     i64::try_from(prod).expect("Invalid voting power")
 }
 

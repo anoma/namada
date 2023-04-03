@@ -29,7 +29,7 @@ pub fn into_tm_voting_power(
     votes_per_token: Decimal,
     tokens: impl Into<u64>,
 ) -> i64 {
-    let prod = decimal_mult_u64(votes_per_token, tokens.into());
+    let prod = decimal_mult_u128(votes_per_token, tokens.into() as u128);
     i64::try_from(prod).expect("Invalid validator voting power (i64)")
 }
 

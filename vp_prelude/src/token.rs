@@ -18,7 +18,7 @@ pub fn vp(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
 ) -> VpResult {
-    let mut change: Change = 0;
+    let mut change: Change = Change::default();
     for key in keys_changed.iter() {
         let owner: Option<&Address> =
             match token::is_multitoken_balance_key(token, key) {
@@ -37,7 +37,7 @@ pub fn vp(
                 // accumulate the change
                 let pre: Amount = match owner {
                     Address::Internal(InternalAddress::IbcMint) => {
-                        Amount::max()
+                        Amount::max_signed()
                     }
                     Address::Internal(InternalAddress::IbcBurn) => {
                         Amount::default()
@@ -46,7 +46,7 @@ pub fn vp(
                 };
                 let post: Amount = match owner {
                     Address::Internal(InternalAddress::IbcMint) => {
-                        ctx.read_temp(key)?.unwrap_or_else(Amount::max)
+                        ctx.read_temp(key)?.unwrap_or_else(Amount::max_signed)
                     }
                     Address::Internal(InternalAddress::IbcBurn) => {
                         ctx.read_temp(key)?.unwrap_or_default()
@@ -56,13 +56,12 @@ pub fn vp(
                 let this_change = post.change() - pre.change();
                 change += this_change;
                 // make sure that the spender approved the transaction
-                if this_change < 0
-                    && !(verifiers.contains(owner) || *owner == address::masp())
+                if !(this_change.non_negative() || verifiers.contains(owner) || *owner == address::masp())
                 {
                     return reject();
                 }
             }
         }
     }
-    Ok(change == 0)
+    Ok(change.is_zero())
 }

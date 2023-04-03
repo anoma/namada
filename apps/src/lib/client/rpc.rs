@@ -45,7 +45,7 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
-use namada::types::token::{balance_key, Transfer};
+use namada::types::token::{balance_key, DenominatedAmount, MaspDenom, Transfer};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
@@ -239,21 +239,27 @@ pub async fn query_tx_deltas(
                         // Describe how a Transfer simply subtracts from one
                         // account and adds the same to another
                         let mut delta = TransferDelta::default();
-                        let tfer_delta = Amount::from_nonnegative(
-                            transfer.token.clone(),
-                            u64::from(transfer.amount),
-                        )
-                        .expect("invalid value for amount");
-                        delta.insert(
-                            transfer.source,
-                            Amount::zero() - &tfer_delta,
-                        );
-                        delta.insert(transfer.target, tfer_delta);
+                        for denom in MaspDenom::iter() {
+                            let denominated = denom.denominate(&transfer.amount);
+                            if denominated !=  0 {
+                                let tfer_delta = Amount::from_nonnegative(
+                                    (transfer.token.clone(), denom.into()),
+                                    denominated,
+                                )
+                                    .expect("invalid value for amount");
+                                delta.insert(
+                                    transfer.source.clone(),
+                                    Amount::zero() - &tfer_delta,
+                                );
+                                delta.insert(transfer.target.clone(), tfer_delta);
+                            }
+                        }
                         // No shielded accounts are affected by this Transfer
                         transfers.insert(
                             (height, idx),
                             (epoch, delta, TransactionDelta::new()),
                         );
+
                     }
                 }
                 // An incomplete page signifies no more transactions
@@ -322,8 +328,8 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         // Check if this transfer pertains to the supplied token
         relevant &= match &query_token {
             Some(token) => {
-                tfer_delta.values().any(|x| x[token] != 0)
-                    || shielded_accounts.values().any(|x| x[token] != 0)
+                tfer_delta.values().zip(MaspDenom::iter()).any(|(x, denom)| x[&(token.clone(), denom)] != 0)
+                    || shielded_accounts.values().zip(MaspDenom::iter()).any(|(x, denom)| x[&(token.clone(), denom)] != 0)
             }
             None => true,
         };
@@ -336,7 +342,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         for (account, amt) in tfer_delta {
             if account != masp() {
                 print!("  {}:", account);
-                for (addr, val) in amt.components() {
+                for ((addr, denom), val) in amt.components() {
                     let addr_enc = addr.encode();
                     let readable =
                         tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
@@ -348,7 +354,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                     print!(
                         " {}{} {}",
                         sign,
-                        token::Amount::from(val.unsigned_abs()),
+                        format_denominated_amount(&client, addr,token::Amount::from_masp_denominated(val.unsigned_abs(), *denom)).await,
                         readable
                     );
                 }
@@ -360,7 +366,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         for (account, amt) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
-                for (addr, val) in amt.components() {
+                for ((addr, denom), val) in amt.components() {
                     let addr_enc = addr.encode();
                     let readable =
                         tokens.get(addr).cloned().unwrap_or(addr_enc.as_str());
@@ -372,7 +378,7 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                     print!(
                         " {}{} {}",
                         sign,
-                        token::Amount::from(val.unsigned_abs()),
+                        format_denominated_amount(&client, addr, token::Amount::from_masp_denominated(val.unsigned_abs(), *denom)).await,
                         readable
                     );
                 }
@@ -909,45 +915,48 @@ pub async fn query_shielded_balance(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(token), true) => {
-            // Query the multi-asset balance at the given spending key
-            let viewing_key =
-                ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            let balance: Amount<AssetType> = if no_conversions {
-                ctx.shielded
-                    .compute_shielded_balance(&viewing_key)
-                    .expect("context should contain viewing key")
-            } else {
-                ctx.shielded
-                    .compute_exchanged_balance(
-                        client.clone(),
-                        &viewing_key,
-                        epoch,
-                    )
-                    .await
-                    .expect("context should contain viewing key")
-            };
-            // Compute the unique asset identifier from the token address
+            let mut total_balance = token::Amount::default();
             let token = ctx.get(&token);
-            let asset_type = AssetType::new(
-                (token.clone(), epoch.0)
-                    .try_to_vec()
-                    .expect("token addresses should serialize")
-                    .as_ref(),
-            )
-            .unwrap();
+            for denom in MaspDenom::iter() {
+                // Query the multi-asset balance at the given spending key
+                let viewing_key =
+                    ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
+                let balance: Amount<AssetType> = if no_conversions {
+                    ctx.shielded
+                        .compute_shielded_balance(&viewing_key)
+                        .expect("context should contain viewing key")
+                } else {
+                    ctx.shielded
+                        .compute_exchanged_balance(
+                            client.clone(),
+                            &viewing_key,
+                            epoch,
+                        )
+                        .await
+                        .expect("context should contain viewing key")
+                };
+                // Compute the unique asset identifier from the token address
+                let asset_type = AssetType::new(
+                    (token.clone(), denom, epoch.0)
+                        .try_to_vec()
+                        .expect("token addresses should serialize")
+                        .as_ref(),
+                )
+                .unwrap();
+                total_balance += token::Amount::from_masp_denominated(balance[&asset_type] as u64, denom);
+            }
+
             let currency_code = tokens
                 .get(&token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            if balance[&asset_type] == 0 {
+            if total_balance.is_zero() {
                 println!(
                     "No shielded {} balance found for given key",
                     currency_code
                 );
             } else {
-                let asset_value =
-                    token::Amount::from(balance[&asset_type] as u64);
-                println!("{}: {}", currency_code, asset_value);
+                println!("{}: {}", currency_code, format_denominated_amount(&client, &token, total_balance).await);
             }
         }
         // Here the user wants to know the balance of all tokens across users
@@ -2611,4 +2620,15 @@ fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
         eprintln!("Error in the query {}", err);
         cli::safe_exit(1)
     })
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+async fn format_denominated_amount(client: &HttpClient, token: &Address, amount: token::Amount) -> String {
+    let denom = unwrap_client_response( RPC.vp().token().denomination(client, token).await)
+        .unwrap_or_else(|| {
+            println!("No denomination found for token: {token}, defaulting to zero decimal places");
+            0.into()
+        });
+    DenominatedAmount{ amount, denom }.to_string()
 }

@@ -426,7 +426,7 @@ mod test {
         assert!(!has_balance_key);
 
         // Then write some balance ...
-        let balance = token::Amount::from(1000);
+        let balance = token::Amount::native_whole(1000);
         StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
         // It has to be committed to be visible in a query
         client.wl_storage.commit_tx();

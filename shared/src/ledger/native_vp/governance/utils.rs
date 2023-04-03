@@ -86,7 +86,7 @@ where
 {
     let params = read_pos_params(storage)?;
     let total_stake = read_total_stake(storage, &params, epoch)?;
-    let total_stake = VotePower::from(u64::from(total_stake));
+    let total_stake = VotePower::from(total_stake);
 
     let Votes {
         yay_validators,

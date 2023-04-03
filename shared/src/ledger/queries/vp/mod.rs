@@ -1,11 +1,17 @@
 // Re-export to show in rustdoc!
 pub use pos::Pos;
+pub use token::Token;
+
 use pos::POS;
+use token::TOKEN;
+
 mod pos;
+mod token;
 
 // Validity predicate queries
 router! {VP,
     ( "pos" ) = (sub POS),
+    ( "token" ) = (sub TOKEN),
 }
 
 #[cfg(any(test, feature = "async-client"))]
