@@ -7,7 +7,8 @@ use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::{InnerTx, Tx};
+use namada::proto::{InnerTx, Tx, SignedOuterTxData};
+use namada::types::transaction::TxType;
 use namada::types::address::Address;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
@@ -77,7 +78,10 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(InnerTx::new(vec![], None))
+            }),
         }
     }
 }

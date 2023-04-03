@@ -4,7 +4,8 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
-use namada::proto::{InnerTx, Tx};
+use namada::proto::{InnerTx, Tx, SignedOuterTxData};
+use namada::types::transaction::TxType;
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
 use namada::vm::prefix_iter::PrefixIterators;
@@ -69,7 +70,10 @@ impl Default for TestVpEnv {
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], None),
+            tx: Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(InnerTx::new(vec![], None)),
+            }),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

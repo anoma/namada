@@ -236,10 +236,10 @@ pub mod tx_types {
 
     impl From<TxType> for Tx {
         fn from(ty: TxType) -> Self {
-            Tx::new(vec![], Some(SignedOuterTxData {
-                data: Some(ty),
+            Tx::new(vec![], SignedOuterTxData {
+                data: ty,
                 sig: None,
-            }))
+            })
         }
     }
 
@@ -247,15 +247,9 @@ pub mod tx_types {
     /// tells us how to handle it. Otherwise, we return an error.
     /// The exception is when the Tx data field is empty. We
     /// allow this and type it as a Raw TxType.
-    impl TryFrom<Tx> for TxType {
-        type Error = std::io::Error;
-
-        fn try_from(tx: Tx) -> std::io::Result<TxType> {
-            if let Some(data) = tx.outer_data.clone().and_then(|data| data.data) {
-                Ok(data)
-            } else {
-                Ok(TxType::Raw(tx.into()))
-            }
+    impl From<Tx> for TxType {
+        fn from(tx: Tx) -> Self {
+            tx.outer_data.data
         }
     }
 
@@ -280,19 +274,17 @@ pub mod tx_types {
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
     pub fn process_tx(tx: &Tx) -> Result<&Tx, TxError> {
-        if let Some(SignedOuterTxData {
-            data: Some(data),
+        if let SignedOuterTxData {
+            data,
             sig: Some(ref sig),
-        }) = tx
-            .outer_data
-            .as_ref()
+        } = tx.outer_data.clone()
         {
             let signed_hash = Tx {
                 outer_code: tx.outer_code.clone(),
-                outer_data: Some(SignedOuterTxData {
-                    data: Some(data.clone()),
+                outer_data: SignedOuterTxData {
+                    data: data.clone(),
                     sig: None,
-                }),
+                },
                 outer_timestamp: tx.outer_timestamp,
                 inner_tx: tx.inner_tx.clone(),
                 outer_extra: tx.outer_extra.clone(),
@@ -300,10 +292,10 @@ pub mod tx_types {
             .partial_hash();
             match TxType::try_from(Tx {
                 outer_code: tx.outer_code.clone(),
-                outer_data: Some(SignedOuterTxData {
-                    data: Some(data.clone()),
+                outer_data: SignedOuterTxData {
+                    data: data.clone(),
                     sig: None,
-                }),
+                },
                 outer_timestamp: tx.outer_timestamp.clone(),
                 inner_tx: tx.inner_tx.clone(),
                 outer_extra: tx.outer_extra.clone(),
@@ -363,8 +355,12 @@ pub mod tx_types {
         /// data and returns an identical copy
         #[test]
         fn test_process_tx_raw_tx_no_data() {
-            let tx = Tx::new("wasm code".as_bytes().to_owned(), None);
-            match process_tx(&tx).expect("Test failed").header() {
+            let tx = InnerTx::new("wasm code".as_bytes().to_owned(), None);
+            let outer_tx = Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(tx.clone()),
+            });
+            match process_tx(&outer_tx).expect("Test failed").header() {
                 TxType::Raw(raw) => assert_eq!(InnerTx::from(tx), raw),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
@@ -381,12 +377,10 @@ pub mod tx_types {
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some(
-                    SignedOuterTxData {
-                        data: Some(TxType::Raw(inner.clone())),
-                        sig: None,
-                    }
-                ),
+                SignedOuterTxData {
+                    data: TxType::Raw(inner.clone()),
+                    sig: None,
+                },
             );
 
             match process_tx(&tx).expect("Test failed").header() {
@@ -405,11 +399,9 @@ pub mod tx_types {
             );
             let tx = Tx::new(
                 "wasm code".as_bytes().to_owned(),
-                Some(
-                    SignedOuterTxData {
-                        data: Some(TxType::Raw(inner.clone())),
-                        sig: None,}
-                ),
+                SignedOuterTxData {
+                    data: TxType::Raw(inner.clone()),
+                    sig: None,},
             )
                 .sign(&gen_keypair());
 
@@ -480,9 +472,7 @@ pub mod tx_types {
 
             let tx = Tx::new(
                 vec![],
-                Some(
-                    SignedOuterTxData {data:Some(TxType::Wrapper(wrapper)), sig: None},
-                ),
+                SignedOuterTxData {data: TxType::Wrapper(wrapper), sig: None},
             )
             .attach_inner_tx(&inner_tx, Default::default());
             let result = process_tx(&tx).expect_err("Test failed");
@@ -534,12 +524,11 @@ pub mod tx_types {
         let ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
         let signed = SignedOuterTxData {
-            data: Some(TxType::Decrypted(decrypted)),
+            data: TxType::Decrypted(decrypted),
             sig: Some(common::Signature::try_from_sig(&ed_sig).unwrap()),
         };
         // create the tx with signed decrypted data
-        let tx =
-            Tx::new(vec![], Some(signed));
+        let tx = Tx::new(vec![], signed);
         match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,

@@ -231,23 +231,21 @@ mod test_prepare_proposal {
         // an unsigned wrapper will cause an error in processing
         let wrapper = Tx::new(
             "".as_bytes().to_owned(),
-            Some(
-                SignedOuterTxData {
-                    data: Some(TxType::Wrapper(WrapperTx::new(
-                        Fee {
-                            amount: 0.into(),
-                            token: shell.storage.native_token.clone(),
-                        },
-                        &keypair,
-                        Epoch(0),
-                        0.into(),
-                        #[cfg(not(feature = "mainnet"))]
-                        None,
-                    )
-                               .bind(tx.clone()))),
-                    sig: None,
-                }
-            ),
+            SignedOuterTxData {
+                data: TxType::Wrapper(WrapperTx::new(
+                    Fee {
+                        amount: 0.into(),
+                        token: shell.storage.native_token.clone(),
+                    },
+                    &keypair,
+                    Epoch(0),
+                    0.into(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                )
+                                           .bind(tx.clone())),
+                sig: None,
+            },
         )
         .attach_inner_tx(&tx, Default::default())
         .to_bytes();
@@ -319,7 +317,7 @@ mod test_prepare_proposal {
         expected_wrapper.append(&mut expected_decrypted);
         let expected_txs: Vec<SignedOuterTxData> = expected_wrapper
             .iter()
-            .map(|tx| tx.outer_data.clone().expect("Test failed"))
+            .map(|tx| tx.outer_data.clone())
             .collect();
         #[cfg(feature = "abcipp")]
         {
@@ -360,7 +358,6 @@ mod test_prepare_proposal {
                     Tx::try_from(tx_bytes.as_slice())
                         .expect("Test failed")
                         .outer_data
-                        .expect("Test failed")
                 })
                 .collect();
             // check that the order of the txs is correct

@@ -256,7 +256,7 @@ mod test_process_proposal {
         .bind(tx.clone());
         let tx = Tx::new(
             vec![],
-            Some(SignedOuterTxData {data: Some(TxType::Wrapper(wrapper)), sig: None}),
+            SignedOuterTxData {data: TxType::Wrapper(wrapper), sig: None},
         )
         .attach_inner_tx(&tx, Default::default())
         .to_bytes();
@@ -306,12 +306,11 @@ mod test_process_proposal {
         .sign(&keypair)
         .expect("Test failed")
         .attach_inner_tx(&tx, Default::default());
-        let new_tx = if let Some(SignedOuterTxData {
-            data: Some(data),
+        let new_tx = if let SignedOuterTxData {
+            data,
             sig,
-        }) = wrapper
+        } = wrapper
             .outer_data
-            .take()
         {
             let mut new_wrapper = if let TxType::Wrapper(wrapper) = data {
                 wrapper
@@ -324,12 +323,11 @@ mod test_process_proposal {
             let new_data = TxType::Wrapper(new_wrapper);
             Tx {
                 outer_code: vec![],
-                outer_data: Some(
-                    SignedOuterTxData {
-                        sig,
-                        data: Some(new_data),
-                    },
-                ),
+                outer_data:
+                SignedOuterTxData {
+                    sig,
+                    data: new_data,
+                },
                 outer_timestamp: timestamp,
                 inner_tx: Some(tx),
                 outer_extra: vec![],

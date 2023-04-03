@@ -91,15 +91,13 @@ mod protocol_txs {
         ) -> Tx {
             Tx::new(
                 vec![],
-                Some(
-                    SignedOuterTxData {
-                        data: Some(TxType::Protocol(ProtocolTx {
-                            pk: pk.clone(),
-                            tx: self,
-                        })),
-                        sig: None,
-                    }
-                ),
+                SignedOuterTxData {
+                    data: TxType::Protocol(ProtocolTx {
+                        pk: pk.clone(),
+                        tx: self,
+                    }),
+                    sig: None,
+                },
             )
             .sign(signing_key)
         }

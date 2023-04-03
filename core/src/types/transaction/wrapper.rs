@@ -253,12 +253,10 @@ pub mod wrapper_tx {
             }
             Ok(Tx::new(
                 vec![],
-                Some(
-                    SignedOuterTxData {
-                        data: Some(TxType::Wrapper(self.clone())),
-                        sig: None,
-                    }
-                ),
+                SignedOuterTxData {
+                    data: TxType::Wrapper(self.clone()),
+                    sig: None,
+                },
             )
             .sign(keypair))
         }
@@ -466,7 +464,7 @@ pub mod wrapper_tx {
             };
 
             let mut signed_tx_data =
-                tx.outer_data.clone().unwrap();
+                tx.outer_data.clone();
 
             // malicious transaction
             let malicious =
@@ -489,8 +487,8 @@ pub mod wrapper_tx {
             assert_eq!(decrypted, malicious);
 
             // we substitute in the modified wrapper
-            signed_tx_data.data = Some(TxType::Wrapper(wrapper));
-            tx.outer_data = Some(signed_tx_data.clone());
+            signed_tx_data.data = TxType::Wrapper(wrapper);
+            tx.outer_data = signed_tx_data.clone();
 
             // check that the signature is not valid
             tx.verify_sig(&keypair.ref_to(), &signed_tx_data.sig.unwrap())

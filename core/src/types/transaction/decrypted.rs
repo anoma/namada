@@ -97,14 +97,10 @@ pub mod decrypted_tx {
         fn from(decrypted: DecryptedTx) -> Self {
             Tx::new(
                 vec![],
-                Some(
-                    SignedOuterTxData {
-                        data: Some(
-                            TxType::Decrypted(decrypted)
-                        ),
-                        sig: None,
-                    }
-                ),
+                SignedOuterTxData {
+                    data: TxType::Decrypted(decrypted),
+                    sig: None,
+                },
             )
         }
     }

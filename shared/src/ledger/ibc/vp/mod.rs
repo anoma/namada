@@ -315,6 +315,8 @@ mod tests {
     use core::time::Duration;
     use std::convert::TryFrom;
     use std::str::FromStr;
+    use crate::types::transaction::TxType;
+    use crate::proto::{SignedOuterTxData, SignedTxData};
 
     use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::core::ics02_client::client_consensus::ConsensusState;
@@ -577,7 +579,10 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -594,11 +599,14 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
-            .expect("validation failed")
+                .expect("validation failed")
         );
     }
 
@@ -619,7 +627,10 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -635,7 +646,10 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
         let result = ibc
-            .validate_tx(&Tx {inner_tx: Some(tx.clone()), ..Tx::default()}, &keys_changed, &verifiers)
+            .validate_tx(&Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(tx)
+            }), &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -700,7 +714,10 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -716,7 +733,10 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -760,7 +780,10 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -776,7 +799,10 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -817,7 +843,10 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -832,7 +861,10 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no client exists
         let result = ibc
-            .validate_tx(&Tx {inner_tx: Some(tx.clone()), ..Tx::default()}, &keys_changed, &verifiers)
+            .validate_tx(&Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(tx)
+            }), &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -900,7 +932,10 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -916,7 +951,10 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -989,7 +1027,10 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1004,7 +1045,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1065,7 +1109,10 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1080,7 +1127,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1127,7 +1177,10 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1142,7 +1195,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1208,7 +1264,10 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1223,7 +1282,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1297,7 +1359,10 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1312,7 +1377,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1383,7 +1451,10 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1398,7 +1469,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1425,7 +1499,10 @@ mod tests {
         keys_changed.insert(port_key(&get_port_id()));
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1440,7 +1517,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1469,7 +1549,10 @@ mod tests {
         keys_changed.insert(cap_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1485,7 +1568,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1553,7 +1639,10 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1568,7 +1657,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1643,7 +1735,10 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1658,7 +1753,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1738,7 +1836,10 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1753,7 +1854,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1825,7 +1929,10 @@ mod tests {
         keys_changed.insert(commitment_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1840,7 +1947,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1919,7 +2029,10 @@ mod tests {
         keys_changed.insert(receipt_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1935,7 +2048,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
@@ -1970,7 +2086,10 @@ mod tests {
         keys_changed.insert(ack_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx { inner_tx: Some(tx.clone()), ..Tx::default() };
+        let outer_tx = Tx::new(vec![], SignedOuterTxData {
+            sig: None,
+            data: TxType::Raw(tx.clone())
+        });
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1986,7 +2105,10 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {inner_tx: Some(tx.clone()), ..Tx::default()},
+                &Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(tx)
+                }),
                 &keys_changed,
                 &verifiers
             )
