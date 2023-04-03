@@ -1194,7 +1194,7 @@ mod test_finalize_block {
                 transfer
             };
             let ethereum_event = EthereumEvent::TransfersToEthereum {
-                nonce: 1u64.into(),
+                nonce: 0u64.into(),
                 transfers: vec![transfer],
                 valid_transfers_map: vec![true],
                 relayer: bertha,

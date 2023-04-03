@@ -681,7 +681,7 @@ mod tests {
             ]),
         );
         let event = EthereumEvent::TransfersToNamada {
-            nonce: 1.into(),
+            nonce: 0.into(),
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,

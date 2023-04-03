@@ -596,7 +596,7 @@ mod test_vote_extensions {
     fn test_get_eth_events() {
         let (mut shell, _, oracle, _) = setup();
         let event_1 = EthereumEvent::TransfersToEthereum {
-            nonce: 1.into(),
+            nonce: 0.into(),
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
@@ -609,7 +609,7 @@ mod test_vote_extensions {
             relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
-            nonce: 2.into(),
+            nonce: 1.into(),
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
@@ -660,7 +660,7 @@ mod test_vote_extensions {
             .expect("Test failed")
             .clone();
         let event_1 = EthereumEvent::TransfersToEthereum {
-            nonce: 1.into(),
+            nonce: 0.into(),
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
@@ -722,7 +722,7 @@ mod test_vote_extensions {
         #[allow(clippy::redundant_clone)]
         let ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
-                nonce: 1.into(),
+                nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
                     sender: gen_established_address(),
@@ -895,7 +895,7 @@ mod test_vote_extensions {
         #[allow(clippy::redundant_clone)]
         let mut ethereum_events = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
-                nonce: 1.into(),
+                nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
                     sender: gen_established_address(),
@@ -973,7 +973,7 @@ mod test_vote_extensions {
         #[allow(clippy::redundant_clone)]
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
-                nonce: 1.into(),
+                nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
                     sender: gen_established_address(),
