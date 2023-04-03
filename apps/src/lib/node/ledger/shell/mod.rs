@@ -139,7 +139,7 @@ impl ErrorCodes {
     /// Checks if the given [`ErrorCodes`] value is a protocol level error,
     /// that can be recovered from at the finalize block stage.
     pub const fn is_recoverable(&self) -> bool {
-        (*self as u32) <= 3
+        (*self as u32) == 0
     }
 }
 

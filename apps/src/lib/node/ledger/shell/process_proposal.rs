@@ -456,7 +456,7 @@ mod test_process_proposal {
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, ProcessProposal, TestError, TestShell,
+        self, gen_keypair, ProcessProposal, TestError,
     };
 
     /// Test that if a wrapper tx is not signed, the block is rejected
@@ -600,7 +600,7 @@ mod test_process_proposal {
         let (mut shell, _) = test_utils::setup(1);
         shell
             .wl_storage
-            .storage
+            .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
                 token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
@@ -639,7 +639,7 @@ mod test_process_proposal {
                 );
                 assert_eq!(
                     response[0].result.info,
-                    "The given address does not have a sufficient balance to \
+                    "The address given does not have sufficient balance to \
                      pay fee"
                         .to_string(),
                 );
@@ -661,12 +661,12 @@ mod test_process_proposal {
         );
         shell
             .wl_storage
-            .storage
+            .write_log
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
             .unwrap();
         shell
             .wl_storage
-            .storage
+            .write_log
             .write(
                 &get_wrapper_tx_fees_key(),
                 token::Amount::whole(MIN_FEE).try_to_vec().unwrap(),
@@ -707,7 +707,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     String::from(
-                        "The given address does not have a sufficient balance \
+                        "The address given does not have sufficient balance \
                          to pay fee"
                     )
                 );
@@ -807,23 +807,22 @@ mod test_process_proposal {
             txs: vec![tx.to_bytes()],
         };
 
-        let response = if let [resp] = shell
-            .process_proposal(request)
-            .expect("Test failed")
-            .as_slice()
-        {
-            resp.clone()
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::Undecryptable));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "The encrypted payload of tx was incorrectly marked as \
-                 un-decryptable"
-            ),
-        )
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failes"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::Undecryptable)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    String::from(
+                        "The encrypted payload of tx was incorrectly marked \
+                         as un-decryptable"
+                    ),
+                );
+            }
+        }
     }
 
     /// Test that a wrapper tx whose inner_tx does not have
@@ -993,7 +992,7 @@ mod test_process_proposal {
     /// block is rejected
     #[test]
     fn test_wrapper_tx_hash() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -1052,7 +1051,7 @@ mod test_process_proposal {
     /// Test that a block containing two identical wrapper txs is rejected
     #[test]
     fn test_wrapper_tx_hash_same_block() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -1117,7 +1116,7 @@ mod test_process_proposal {
     /// block is rejected
     #[test]
     fn test_inner_tx_hash() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
@@ -1176,7 +1175,7 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_inner_tx_hash_same_block() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
