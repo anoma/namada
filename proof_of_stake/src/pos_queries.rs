@@ -135,15 +135,8 @@ where
         token: &Address,
         owner: &Address,
     ) -> token::Amount {
-        let balance = storage_api::StorageRead::read(
-            self.wl_storage,
-            &token::balance_key(token, owner),
-        );
-        // Storage read must not fail, but there might be no value, in which
-        // case default (0) is returned
-        balance
+        storage_api::token::read_balance(self.wl_storage, token, owner)
             .expect("Storage read in the protocol must not fail")
-            .unwrap_or_default()
     }
 
     /// Return evidence parameters.
