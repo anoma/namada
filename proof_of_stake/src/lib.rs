@@ -1095,7 +1095,8 @@ where
             get_max_below_capacity_validator_amount(
                 &below_capacity_val_handle,
                 storage,
-            )?;
+            )?
+            .unwrap_or_default();
 
         if tokens_post < max_below_capacity_validator_amount {
             tracing::debug!("Need to swap validators");
@@ -1403,10 +1404,11 @@ where
         .unwrap_or_default())
 }
 
+/// Returns `Ok(None)` when the below capacity set is empty.
 fn get_max_below_capacity_validator_amount<S>(
     handle: &BelowCapacityValidatorSet,
     storage: &S,
-) -> storage_api::Result<token::Amount>
+) -> storage_api::Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
@@ -1418,10 +1420,8 @@ where
             NestedSubKey::Data {
                 key,
                 nested_sub_key: _,
-            } => key,
-        })
-        .unwrap_or_default()
-        .into())
+            } => token::Amount::from(key),
+        }))
 }
 
 fn insert_validator_into_set<S>(
@@ -2969,12 +2969,14 @@ where
                 if epoch == pipeline_epoch {
                     let below_capacity_handle =
                         below_capacity_validator_set_handle().at(&epoch);
-                    if !below_capacity_handle.is_empty(storage)? {
-                        let max_below_capacity_amount =
-                            get_max_below_capacity_validator_amount(
-                                &below_capacity_handle,
-                                storage,
-                            )?;
+                    let max_below_capacity_amount =
+                        get_max_below_capacity_validator_amount(
+                            &below_capacity_handle,
+                            storage,
+                        )?;
+                    if let Some(max_below_capacity_amount) =
+                        max_below_capacity_amount
+                    {
                         let position_to_promote = find_first_position(
                             &below_capacity_handle
                                 .at(&max_below_capacity_amount.into()),
