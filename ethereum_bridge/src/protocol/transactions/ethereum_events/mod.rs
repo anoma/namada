@@ -10,7 +10,6 @@ use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
-use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
@@ -138,11 +137,16 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let eth_msg_keys = vote_tallies::Keys::from(&update.body);
-
-    // we arbitrarily look at whether the seen key is present to
-    // determine if the /eth_msg already exists in storage, but maybe there
-    // is a less arbitrary way to do this
-    let exists_in_storage = wl_storage.has_key(&eth_msg_keys.seen())?;
+    let exists_in_storage = 'exists: {
+        let Some(seen) = votes::storage::maybe_read_seen(wl_storage, &eth_msg_keys)? else {
+            break 'exists false;
+        };
+        if seen {
+            tracing::debug!(?update, "Ethereum event is already seen");
+            return Ok((ChangedKeys::default(), false));
+        }
+        true
+    };
 
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
@@ -265,6 +269,7 @@ mod tests {
     use borsh::BorshDeserialize;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_core::ledger::storage_api::StorageRead;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
