@@ -1238,11 +1238,9 @@ impl<E: GetEventNonce> Iterator for EthEventsQueueIter<'_, E> {
 }
 
 impl<E: GetEventNonce> InnerEthEventsQueue<E> {
-    /// Retrieve the next events to be processed, if any.
-    ///
-    /// This decision is based on the nonce of the next event to be
-    /// processed by the ledger, and the nonce of the event that was just
-    /// confirmed (i.e. achieved a quorum of votes behind it).
+    /// Push a new Ethereum event of type `E` into the queue,
+    /// and return a draining iterator over the next events to
+    /// be processed, if any.
     pub fn get_next_events(
         &mut self,
         latest_event: E,
