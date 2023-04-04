@@ -172,7 +172,7 @@ where
                                 bond_amount(storage, &params, &bond_id, epoch)?
                                     .1;
 
-                            if amount != token::Amount::default() {
+                            if !amount.is_zero() {
                                 if vote.is_yay() {
                                     let entry = yay_delegators
                                         .entry(voter_address.to_owned())

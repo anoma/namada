@@ -1624,9 +1624,9 @@ pub mod args {
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
-        arg_default("gas-amount", DefaultFn(|| token::Amount::default()));
+        arg_default("gas-amount", DefaultFn(|| token::Amount::zero()));
     const GAS_LIMIT: ArgDefault<token::Amount> =
-        arg_default("gas-limit", DefaultFn(|| token::Amount::default()));
+        arg_default("gas-limit", DefaultFn(|| token::Amount::zero()));
     const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");

@@ -45,7 +45,9 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, KeySeg, PrefixValue, TxIndex,
 };
-use namada::types::token::{balance_key, DenominatedAmount, MaspDenom, Transfer};
+use namada::types::token::{
+    balance_key, DenominatedAmount, MaspDenom, Transfer,
+};
 use namada::types::transaction::{
     process_tx, AffineCurve, DecryptedTx, EllipticCurve, PairingEngine, TxType,
     WrapperTx,
@@ -240,18 +242,22 @@ pub async fn query_tx_deltas(
                         // account and adds the same to another
                         let mut delta = TransferDelta::default();
                         for denom in MaspDenom::iter() {
-                            let denominated = denom.denominate(&transfer.amount);
-                            if denominated !=  0 {
+                            let denominated =
+                                denom.denominate(&transfer.amount);
+                            if denominated != 0 {
                                 let tfer_delta = Amount::from_nonnegative(
                                     (transfer.token.clone(), denom.into()),
                                     denominated,
                                 )
-                                    .expect("invalid value for amount");
+                                .expect("invalid value for amount");
                                 delta.insert(
                                     transfer.source.clone(),
                                     Amount::zero() - &tfer_delta,
                                 );
-                                delta.insert(transfer.target.clone(), tfer_delta);
+                                delta.insert(
+                                    transfer.target.clone(),
+                                    tfer_delta,
+                                );
                             }
                         }
                         // No shielded accounts are affected by this Transfer
@@ -259,7 +265,6 @@ pub async fn query_tx_deltas(
                             (height, idx),
                             (epoch, delta, TransactionDelta::new()),
                         );
-
                     }
                 }
                 // An incomplete page signifies no more transactions
@@ -328,8 +333,14 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
         // Check if this transfer pertains to the supplied token
         relevant &= match &query_token {
             Some(token) => {
-                tfer_delta.values().zip(MaspDenom::iter()).any(|(x, denom)| x[&(token.clone(), denom)] != 0)
-                    || shielded_accounts.values().zip(MaspDenom::iter()).any(|(x, denom)| x[&(token.clone(), denom)] != 0)
+                tfer_delta
+                    .values()
+                    .zip(MaspDenom::iter())
+                    .any(|(x, denom)| x[&(token.clone(), denom)] != 0)
+                    || shielded_accounts
+                        .values()
+                        .zip(MaspDenom::iter())
+                        .any(|(x, denom)| x[&(token.clone(), denom)] != 0)
             }
             None => true,
         };
@@ -354,7 +365,15 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                     print!(
                         " {}{} {}",
                         sign,
-                        format_denominated_amount(&client, addr,token::Amount::from_masp_denominated(val.unsigned_abs(), *denom)).await,
+                        format_denominated_amount(
+                            &client,
+                            addr,
+                            token::Amount::from_masp_denominated(
+                                val.unsigned_abs(),
+                                *denom
+                            )
+                        )
+                        .await,
                         readable
                     );
                 }
@@ -378,7 +397,15 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
                     print!(
                         " {}{} {}",
                         sign,
-                        format_denominated_amount(&client, addr, token::Amount::from_masp_denominated(val.unsigned_abs(), *denom)).await,
+                        format_denominated_amount(
+                            &client,
+                            addr,
+                            token::Amount::from_masp_denominated(
+                                val.unsigned_abs(),
+                                *denom
+                            )
+                        )
+                        .await,
                         readable
                     );
                 }
@@ -915,7 +942,7 @@ pub async fn query_shielded_balance(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(token), true) => {
-            let mut total_balance = token::Amount::default();
+            let mut total_balance = token::Amount::zero();
             let token = ctx.get(&token);
             for denom in MaspDenom::iter() {
                 // Query the multi-asset balance at the given spending key
@@ -943,7 +970,10 @@ pub async fn query_shielded_balance(
                         .as_ref(),
                 )
                 .unwrap();
-                total_balance += token::Amount::from_masp_denominated(balance[&asset_type] as u64, denom);
+                total_balance += token::Amount::from_masp_denominated(
+                    balance[&asset_type] as u64,
+                    denom,
+                );
             }
 
             let currency_code = tokens
@@ -956,7 +986,12 @@ pub async fn query_shielded_balance(
                     currency_code
                 );
             } else {
-                println!("{}: {}", currency_code, format_denominated_amount(&client, &token, total_balance).await);
+                println!(
+                    "{}: {}",
+                    currency_code,
+                    format_denominated_amount(&client, &token, total_balance)
+                        .await
+                );
             }
         }
         // Here the user wants to know the balance of all tokens across users
@@ -1416,8 +1451,8 @@ pub async fn query_and_print_unbonds(
         });
     let total_withdrawable = withdrawable
         .into_iter()
-        .fold(token::Amount::default(), |acc, (_, amount)| acc + amount);
-    if total_withdrawable != token::Amount::default() {
+        .fold(token::Amount::zero(), |acc, (_, amount)| acc + amount);
+    if total_withdrawable != token::Amount::zero() {
         println!("Total withdrawable now: {total_withdrawable}.");
     }
     if !not_yet_withdrawable.is_empty() {
@@ -1490,7 +1525,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
             total += bond.amount;
             total_slashed += bond.slashed_amount.unwrap_or_default();
         }
-        if total_slashed != token::Amount::default() {
+        if total_slashed != token::Amount::zero() {
             writeln!(
                 w,
                 "Active (slashed) bonds total: {}",
@@ -1502,7 +1537,7 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
         bonds_total += total;
         bonds_total_slashed += total_slashed;
 
-        let mut withdrawable = token::Amount::default();
+        let mut withdrawable = token::Amount::zero();
         if !details.unbonds.is_empty() {
             let mut total: token::Amount = 0.into();
             let mut total_slashed: token::Amount = 0.into();
@@ -2345,7 +2380,7 @@ pub async fn get_proposal_offline_votes(
                 },
             ) in bonds_and_unbonds
             {
-                let mut delegated_amount = token::Amount::default();
+                let mut delegated_amount = token::Amount::zero();
                 for delta in bonds {
                     if delta.start <= proposal.tally_epoch {
                         delegated_amount += delta.amount
@@ -2400,7 +2435,7 @@ pub async fn get_proposal_offline_votes(
             //                 continue;
             //             } else {
             //                 delta -= to_deduct;
-            //                 to_deduct = token::Amount::default();
+            //                 to_deduct = token::Amount::zero();
             //             }
 
             //             delta = apply_slashes(
@@ -2540,7 +2575,7 @@ pub async fn get_total_staked_tokens(
 /// Get the total stake of a validator at the given epoch. The total stake is a
 /// sum of validator's self-bonds and delegations to their address.
 /// Returns `None` when the given address is not a validator address. For a
-/// validator with `0` stake, this returns `Ok(token::Amount::default())`.
+/// validator with `0` stake, this returns `Ok(token::Amount::zero())`.
 async fn get_validator_stake(
     client: &HttpClient,
     epoch: Epoch,
@@ -2624,11 +2659,20 @@ fn unwrap_client_response<T>(response: Result<T, queries::tm::Error>) -> T {
 
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
-async fn format_denominated_amount(client: &HttpClient, token: &Address, amount: token::Amount) -> String {
-    let denom = unwrap_client_response( RPC.vp().token().denomination(client, token).await)
-        .unwrap_or_else(|| {
-            println!("No denomination found for token: {token}, defaulting to zero decimal places");
-            0.into()
-        });
-    DenominatedAmount{ amount, denom }.to_string()
+async fn format_denominated_amount(
+    client: &HttpClient,
+    token: &Address,
+    amount: token::Amount,
+) -> String {
+    let denom = unwrap_client_response(
+        RPC.vp().token().denomination(client, token).await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
+    DenominatedAmount { amount, denom }.to_string()
 }

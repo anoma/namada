@@ -11,8 +11,8 @@ use rust_decimal::prelude::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ledger::storage_api::StorageRead;
 use crate::ledger::storage_api::token::read_denom;
+use crate::ledger::storage_api::StorageRead;
 use crate::types::address::{masp, Address, DecodeError as AddressError};
 use crate::types::storage;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
@@ -88,6 +88,11 @@ impl Amount {
         Self {
             raw: uint::MAX_SIGNED_VALUE,
         }
+    }
+
+    /// Zero [`Amount`].
+    pub fn zero() -> Self {
+        Self::default()
     }
 
     /// Check if [`Amount`] is zero.
@@ -193,17 +198,22 @@ impl Amount {
         DenominatedAmount {
             amount: *self,
             denom: 6.into(),
-        }.to_string_precise()
+        }
+        .to_string_precise()
     }
 
     /// Add denomination info if it exists in storage.
-    pub fn denominated(&self, token: &Address, storage: &impl StorageRead) -> Option<DenominatedAmount> {
-        let denom = read_denom(storage, token).expect("Should be able to read storage");
-        denom.map(|denom|
-            DenominatedAmount {
-                amount: *self,
-                denom,
-            })
+    pub fn denominated(
+        &self,
+        token: &Address,
+        storage: &impl StorageRead,
+    ) -> Option<DenominatedAmount> {
+        let denom =
+            read_denom(storage, token).expect("Should be able to read storage");
+        denom.map(|denom| DenominatedAmount {
+            amount: *self,
+            denom,
+        })
     }
 
     /// Convert to an [`Amount`] under the assumption that the input
@@ -211,7 +221,6 @@ impl Amount {
     pub fn from_string_precise(string: &str) -> Result<Self, AmountParseError> {
         DenominatedAmount::from_str(string).map(|den| den.amount)
     }
-
 }
 
 /// Given a number represented as `M*B^D`, then
@@ -298,8 +307,8 @@ impl FromStr for DenominatedAmount {
     type Err = AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let decimal = Decimal::from_str(s)
-            .map_err(AmountParseError::InvalidDecimal)?;
+        let decimal =
+            Decimal::from_str(s).map_err(AmountParseError::InvalidDecimal)?;
         let denom = Denomination(decimal.scale() as u8);
         Ok(Self {
             amount: Amount::from_decimal(decimal, denom)?,
@@ -329,7 +338,9 @@ impl<'de> serde::Deserialize<'de> for Amount {
         use serde::de::Error;
         let amount_string: String =
             serde::Deserialize::deserialize(deserializer)?;
-        Ok(Self{raw: Uint::from_str(&amount_string).map_err(D::Error::custom)?})
+        Ok(Self {
+            raw: Uint::from_str(&amount_string).map_err(D::Error::custom)?,
+        })
     }
 }
 
@@ -471,7 +482,9 @@ impl KeySeg for Amount {
                 string, err
             ))
         })?;
-        Ok(Amount{ raw: Uint::from_big_endian(&bytes)})
+        Ok(Amount {
+            raw: Uint::from_big_endian(&bytes),
+        })
     }
 
     fn raw(&self) -> String {
@@ -501,7 +514,9 @@ pub enum AmountParseError {
     InvalidRange,
     #[error("Error converting amount to decimal, number too large.")]
     ConvertToDecimal,
-    #[error("Could not convert from string, expected an unsigned 256-bit integer.")]
+    #[error(
+        "Could not convert from string, expected an unsigned 256-bit integer."
+    )]
     FromString,
 }
 
@@ -513,13 +528,24 @@ impl From<Amount> for Change {
 
 impl From<Change> for Amount {
     fn from(change: Change) -> Self {
-        Amount{raw: change.abs()}
+        Amount { raw: change.abs() }
     }
 }
 
 /// The four possible u64 words in a [`Uint`].
 /// Used for converting to MASP amounts.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum MaspDenom {
@@ -543,7 +569,7 @@ impl From<u8> for MaspDenom {
 
 impl MaspDenom {
     /// Iterator over the possible denominations
-    pub fn iter() -> impl Iterator<Item=MaspDenom>{
+    pub fn iter() -> impl Iterator<Item = MaspDenom> {
         (0u8..3).into_iter().map(Self::from)
     }
 
@@ -757,8 +783,8 @@ impl TryFrom<crate::ledger::ibc::data::FungibleTokenPacketData> for Transfer {
             data.denom.split('/').last().ok_or(TransferError::NoToken)?;
         let token =
             Address::decode(token_str).map_err(TransferError::Address)?;
-        let amount =
-            DenominatedAmount::from_str(&data.amount).map_err(TransferError::Amount)?;
+        let amount = DenominatedAmount::from_str(&data.amount)
+            .map_err(TransferError::Amount)?;
         Ok(Self {
             source,
             target,
