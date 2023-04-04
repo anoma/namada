@@ -24,6 +24,7 @@
     - [Testnet launch procedure](./explore/design/testnet-launch-procedure/README.md)
   - [Dev](./explore/dev/README.md)
     - [Development considerations](./explore/dev/development-considerations.md)
+    - [Git](./explore/dev/git.md)
     - [Storage API](./explore/dev/storage_api.md)
     - [Maintenance](./explore/dev/maintenance.md)
   - [Libraries & Tools](./explore/libraries/README.md)
