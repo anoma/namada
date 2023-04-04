@@ -171,8 +171,8 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// The optional, unencrypted, unshielding tx for fee payment, protobuf encoded
-        pub unshield: Option<Vec<u8>>,
+        /// The optional, unencrypted, unshielding tx for fee payment
+        pub unshield: Option<Tx>,
         /// the encrypted payload
         pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
@@ -206,7 +206,7 @@ pub mod wrapper_tx {
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
-                unshield: unshield.map(|tx| tx.to_bytes()),
+                unshield,
                 inner_tx,
                 tx_hash: Hash(tx.unsigned_hash()),
                 #[cfg(not(feature = "mainnet"))]

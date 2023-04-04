@@ -8,6 +8,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(
@@ -99,6 +100,34 @@ pub struct Rfc3339String(pub String);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
+impl Serialize for DateTimeUtc {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        Serialize::serialize(&self.to_rfc3339(), serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTimeUtc {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let raw: String = Deserialize::deserialize(deserializer)?;
+        let actual = DateTime::parse_from_rfc3339(&raw).map_err(|e| {
+            D::Error::custom(format!(
+                "Could not deserialize DateTimeUtc: {}",
+                e
+            ))
+        })?;
+
+        Ok(Self(actual.into()))
+    }
+}
+
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
@@ -153,8 +182,7 @@ impl BorshSerialize for DateTimeUtc {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let raw = self.0.to_rfc3339();
-        raw.serialize(writer)
+        BorshSerialize::serialize(&self.to_rfc3339(), writer)
     }
 }
 

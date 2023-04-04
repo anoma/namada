@@ -233,7 +233,15 @@ impl From<Tx> for SigningTx {
 /// certainly be bigger than SigningTxs and contains enough information to
 /// execute the transaction.
 #[derive(
-    Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize, BorshSchema, Hash,
+    Clone,
+    Debug,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct Tx {
     pub code_or_hash: Vec<u8>,
