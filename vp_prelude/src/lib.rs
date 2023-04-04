@@ -45,6 +45,12 @@ pub fn verify_signatures(
     signed_tx_data: &SignedTxData,
     addr: &Address,
 ) -> bool {
+    let is_valid_total_signatures =
+        is_valid_max_signatures(ctx, signed_tx_data).unwrap_or(false);
+    if !is_valid_total_signatures {
+        return false;
+    }
+
     let threshold = match key::threshold(ctx, addr) {
         Ok(Some(threshold)) => threshold,
         _ => 1,
@@ -68,6 +74,16 @@ pub fn verify_signatures(
         }
     }
     valid_signatures >= threshold
+}
+
+pub fn is_valid_max_signatures(
+    ctx: &Ctx,
+    signed_tx_data: &SignedTxData,
+) -> VpResult {
+    let key = parameters::storage::get_max_signature_per_tx_key();
+    let max_signature_per_tx: u64 = ctx.read_pre(&key)?.unwrap();
+
+    Ok(signed_tx_data.total_signatures() <= max_signature_per_tx)
 }
 
 pub fn sha256(bytes: &[u8]) -> Hash {

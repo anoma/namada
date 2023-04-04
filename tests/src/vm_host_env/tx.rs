@@ -114,6 +114,10 @@ impl TestTxEnv {
             &mut self.wl_storage.storage,
             vp_whitelist.unwrap_or_default(),
         );
+        let _ = parameters::update_max_signature_per_tx(
+            &mut self.wl_storage.storage,
+            &15,
+        );
     }
 
     /// Fake accounts' existence by initializing their VP storage.

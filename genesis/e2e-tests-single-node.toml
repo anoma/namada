@@ -194,6 +194,8 @@ duplicate_vote_min_slash_rate = 0.001
 # Portion of a validator's stake that should be slashed on a light
 # client attack.
 light_client_attack_min_slash_rate = 0.001
+# Maximum amount of signature per transaction
+max_signature_per_tx = 15
 
 # Governance parameters.
 [gov_params]

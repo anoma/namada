@@ -80,6 +80,7 @@ where
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
+            max_signature_per_tx,
             pos_inflation_amount,
             wrapper_tx_fees,
         } = genesis.parameters;
@@ -133,6 +134,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_signature_per_tx,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]

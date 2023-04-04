@@ -52,6 +52,8 @@ pub struct Parameters {
     pub staked_ratio: Decimal,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: u64,
+    /// Maximum number of signature per transaction
+    pub max_signature_per_tx: u64,
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
@@ -119,6 +121,7 @@ impl Parameters {
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
+            max_signature_per_tx,
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
@@ -223,6 +226,15 @@ impl Parameters {
              block",
         );
 
+        let max_signature_per_tx_key = storage::get_max_signature_per_tx_key();
+        let max_signature_per_tx = encode(max_signature_per_tx);
+        storage
+            .write(&max_signature_per_tx_key, max_signature_per_tx)
+            .expect(
+                "Max signature per transaction parameter must be initialized \
+                 in the genesis block",
+            );
+
         #[cfg(not(feature = "mainnet"))]
         if let Some(faucet_account) = faucet_account {
             let faucet_account_key = storage::get_faucet_account_key();
@@ -302,6 +314,20 @@ where
             .collect::<Vec<String>>(),
         key,
     )
+}
+
+/// Update the max signature per tx parameter. Returns the parameters and gas
+/// cost.
+pub fn update_max_signature_per_tx<DB, H>(
+    storage: &mut Storage<DB, H>,
+    value: &u64,
+) -> std::result::Result<u64, WriteError>
+where
+    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: ledger_storage::StorageHasher,
+{
+    let key = storage::get_max_signature_per_tx_key();
+    update(storage, value, key)
 }
 
 /// Update the epoch parameter in storage. Returns the parameters and gas
@@ -586,6 +612,15 @@ where
         decode(value.ok_or(ReadError::ParametersMissing)?)
             .map_err(ReadError::StorageTypeError)?;
 
+    // read max signature per transaction
+    let max_signature_per_tx_key = storage::get_pos_inflation_amount_key();
+    let (value, gas_max_signature_per_tx) = storage
+        .read(&max_signature_per_tx_key)
+        .map_err(ReadError::StorageError)?;
+    let max_signature_per_tx: u64 =
+        decode(value.ok_or(ReadError::ParametersMissing)?)
+            .map_err(ReadError::StorageTypeError)?;
+
     // read faucet account
     #[cfg(not(feature = "mainnet"))]
     let (faucet_account, gas_faucet_account) =
@@ -613,6 +648,7 @@ where
         gas_reward,
         gas_proposal_bytes,
         gas_faucet_account,
+        gas_max_signature_per_tx,
         gas_wrapper_tx_fees,
     ]
     .into_iter()
@@ -635,6 +671,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
+            max_signature_per_tx,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
