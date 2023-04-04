@@ -137,15 +137,14 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let eth_msg_keys = vote_tallies::Keys::from(&update.body);
-    let exists_in_storage = 'exists: {
-        let Some(seen) = votes::storage::maybe_read_seen(wl_storage, &eth_msg_keys)? else {
-            break 'exists false;
-        };
+    let exists_in_storage =  if let Some(seen) = votes::storage::maybe_read_seen(wl_storage, &eth_msg_keys)? {
         if seen {
             tracing::debug!(?update, "Ethereum event is already seen");
             return Ok((ChangedKeys::default(), false));
         }
         true
+    } else {
+        false
     };
 
     let (vote_tracking, changed, confirmed, already_present) =
