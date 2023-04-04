@@ -13,13 +13,13 @@ pub mod wrapper_tx {
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
-    use crate::proto::Tx;
-    use crate::types::address::Address;
+    use crate::proto::{SignedTxData, Tx};
+    use crate::types::address::{self, Address};
     use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::time::DateTimeUtc;
-    use crate::types::token::Amount;
+    use crate::types::token::{Amount, Transfer};
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
 
@@ -46,6 +46,8 @@ pub mod wrapper_tx {
              differs from that in the WrapperTx"
         )]
         InvalidKeyPair,
+        #[error("The provided unshielding tx is invalid: {0}")]
+        InvalidUnshieldTx(String),
     }
 
     /// A fee is an amount of a specified token
@@ -285,6 +287,70 @@ pub mod wrapper_tx {
                         err
                     ))
                 })
+        }
+
+        /// Static checks on the optional unshielding transaction:
+        ///
+        /// - tx is signed
+        /// - tx encodes a [`Transfer`]
+        /// - shielded field of the transfer must be set to Some
+        /// - source address must be the masp
+        /// - target address must be that of the wrapper's signer
+        /// - token must match the one in the [`Fee`] struct
+        /// - amount must be the minimum required to match the required fee
+        ///
+        /// Returns [`Ok`] if unshield is not required
+        pub fn validate_fee_unshielding(
+            &self,
+            unshielded_balance: Amount,
+        ) -> Result<(), WrapperTxErr> {
+            let transfer = match &self.unshield {
+                Some(unshield_tx) => match &unshield_tx.data {
+                    Some(d) => SignedTxData::try_from_slice(d)
+                        .and_then(|signed| {
+                            Transfer::try_from_slice(
+                                &signed.data.unwrap_or_default(),
+                            )
+                        })
+                        .map_err(|e| {
+                            WrapperTxErr::InvalidUnshieldTx(e.to_string())
+                        }),
+                    None => Err(WrapperTxErr::InvalidUnshieldTx(
+                        "Missing unshielding tx data".to_string(),
+                    )),
+                },
+                None => return Ok(()),
+            }?;
+
+            if transfer.shielded.is_none() {
+                return Err(WrapperTxErr::InvalidUnshieldTx(
+                    "Shielded field of Transfer is None".to_string(),
+                ));
+            }
+
+            if transfer.source != address::masp() {
+                return Err(WrapperTxErr::InvalidUnshieldTx(
+                    "Source of unshielding is not the masp address".to_string(),
+                ));
+            }
+
+            if transfer.target != self.fee_payer() {
+                return Err(WrapperTxErr::InvalidUnshieldTx(
+                    "Target of unshielding is not the fee payer".to_string(),
+                ));
+            }
+
+            if transfer.token != self.fee.token {
+                return Err(WrapperTxErr::InvalidUnshieldTx(
+                    "Token of the unshielding tx doesn't match the fee token"
+                        .to_string(),
+                ));
+            }
+
+            match unshielded_balance.checked_add(transfer.amount) {
+                Some(v) if v == self.fee.amount => Ok(()),
+                _ => Err(WrapperTxErr::InvalidUnshieldTx(format!("The unshielded amount is not the minimum required for fee payment: required {}, found: {}", self.fee.amount - unshielded_balance, transfer.amount)))
+            }
         }
     }
 
