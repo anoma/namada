@@ -1027,6 +1027,7 @@ mod test_finalize_block {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             );
             let tx = wrapper
                 .sign(&keypair, shell.chain_id.clone(), None)
@@ -1107,6 +1108,7 @@ mod test_finalize_block {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed_wrapper = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1171,6 +1173,7 @@ mod test_finalize_block {
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
+            unshield: None,
         };
         let signed_wrapper = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1255,6 +1258,7 @@ mod test_finalize_block {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             );
             let signed_wrapper = wrapper_tx
                 .sign(&keypair, shell.chain_id.clone(), None)
@@ -1299,6 +1303,7 @@ mod test_finalize_block {
                 raw_tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             );
             let wrapper = wrapper_tx
@@ -1809,6 +1814,7 @@ mod test_finalize_block {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
 
         // Write inner hash in storage
@@ -1847,12 +1853,10 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(
-            !shell
-                .wl_storage
-                .has_key(&inner_hash_key)
-                .expect("Test failed")
-        )
+        assert!(!shell
+            .wl_storage
+            .has_key(&inner_hash_key)
+            .expect("Test failed"))
     }
 
     /// Test that a wrapper transaction rejected by [`process_proposal`] because
@@ -1885,6 +1889,7 @@ mod test_finalize_block {
             raw_tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         );
 

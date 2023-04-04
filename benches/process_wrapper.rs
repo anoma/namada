@@ -43,6 +43,7 @@ fn process_tx(c: &mut Criterion) {
         tx,
         Default::default(),
         None,
+        None,
     )
     .sign(&defaults::albert_keypair(), ChainId::default(), None)
     .unwrap()

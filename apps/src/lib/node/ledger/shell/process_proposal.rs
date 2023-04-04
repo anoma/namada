@@ -680,6 +680,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let tx = Tx::new(
             vec![],
@@ -732,6 +733,7 @@ mod test_process_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
@@ -840,6 +842,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed");
@@ -907,6 +910,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Test failed");
@@ -958,6 +962,7 @@ mod test_process_proposal {
                 tx.clone(),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             );
             let signed_wrapper = wrapper
@@ -1028,6 +1033,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed_wrapper = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1090,6 +1096,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         wrapper.tx_hash = Hash([0; 32]);
         let signed_wrapper = wrapper
@@ -1145,6 +1152,7 @@ mod test_process_proposal {
             tx_hash: hash_tx(&tx),
             #[cfg(not(feature = "mainnet"))]
             pow_solution: None,
+            unshield: None,
         };
 
         let signed_wrapper = wrapper
@@ -1278,6 +1286,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1352,6 +1361,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1409,6 +1419,7 @@ mod test_process_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
@@ -1496,6 +1507,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
         let signed = wrapper
@@ -1513,6 +1525,7 @@ mod test_process_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         );
         let new_signed = new_wrapper
@@ -1567,6 +1580,7 @@ mod test_process_proposal {
             tx.clone(),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         );
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
@@ -1637,6 +1651,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed_wrapper = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1699,6 +1714,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed = wrapper
             .sign(&keypair, shell.chain_id.clone(), Some(DateTimeUtc::now()))
@@ -1749,6 +1765,7 @@ mod test_process_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         );
         let signed_wrapper_tx = wrapper
@@ -1810,6 +1827,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let gas = u64::from(&wrapper.gas_limit);
         let wrapper_in_queue = WrapperTxInQueue {
@@ -1866,6 +1884,7 @@ mod test_process_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
@@ -1910,6 +1929,7 @@ mod test_process_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)

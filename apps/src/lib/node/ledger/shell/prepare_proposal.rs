@@ -347,6 +347,7 @@ mod test_prepare_proposal {
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
                     None,
+                    None,
                 )
                 .try_to_vec()
                 .expect("Test failed"),
@@ -403,6 +404,7 @@ mod test_prepare_proposal {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             );
             let wrapper = wrapper_tx
                 .sign(&keypair, shell.chain_id.clone(), None)
@@ -458,6 +460,7 @@ mod test_prepare_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let wrapper = wrapper_tx
             .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
@@ -512,6 +515,7 @@ mod test_prepare_proposal {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
@@ -552,6 +556,7 @@ mod test_prepare_proposal {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)

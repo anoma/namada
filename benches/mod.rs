@@ -570,6 +570,7 @@ impl BenchShieldedCtx {
             initialized_account_alias: None,
             fee_amount: Amount::whole(0),
             fee_token: FromContext::new(address::nam().to_string()),
+            fee_unshield: None,
             gas_limit: GasLimit::from(u64::MAX),
             expiration: None,
             signing_key: Some(FromContext::new(

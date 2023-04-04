@@ -149,8 +149,8 @@ pub mod wrapper_tx {
         }
     }
 
-    /// A transaction with an encrypted payload as well
-    /// as some non-encrypted metadata for inclusion
+    /// A transaction with an encrypted payload, an optional shielded pool unshielding tx for fee payment and
+    /// some non-encrypted metadata for inclusion
     /// and / or verification purposes
     #[derive(
         Debug,
@@ -171,6 +171,8 @@ pub mod wrapper_tx {
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
+        /// The optional, unencrypted, unshielding tx for fee payment, protobuf encoded
+        pub unshield: Option<Vec<u8>>,
         /// the encrypted payload
         pub inner_tx: EncryptedTx,
         /// sha-2 hash of the inner transaction acting as a commitment
@@ -182,7 +184,7 @@ pub mod wrapper_tx {
     }
 
     impl WrapperTx {
-        /// Create a new wrapper tx from unencrypted tx, the personal keypair,
+        /// Create a new wrapper tx from unencrypted tx, the personal keypair, an optional unshielding tx,
         /// and the metadata surrounding the inclusion of the tx. This method
         /// constructs the signature of relevant data and encrypts the
         /// transaction
@@ -196,6 +198,7 @@ pub mod wrapper_tx {
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 crate::ledger::testnet_pow::Solution,
             >,
+            unshield: Option<Tx>,
         ) -> WrapperTx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), encryption_key);
             Self {
@@ -203,6 +206,7 @@ pub mod wrapper_tx {
                 pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
+                unshield: unshield.map(|tx| tx.to_bytes()),
                 inner_tx,
                 tx_hash: Hash(tx.unsigned_hash()),
                 #[cfg(not(feature = "mainnet"))]
@@ -384,6 +388,7 @@ pub mod wrapper_tx {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             );
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -413,6 +418,7 @@ pub mod wrapper_tx {
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             );
             // give a incorrect commitment to the decrypted contents of the tx
@@ -449,6 +455,7 @@ pub mod wrapper_tx {
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             )
             .sign(&keypair, ChainId::default(), None)

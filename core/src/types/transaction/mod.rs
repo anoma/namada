@@ -462,6 +462,7 @@ pub mod tx_types {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             )
             .sign(&keypair, tx.chain_id.clone(), Some(DateTimeUtc::now()))
             .expect("Test failed");
@@ -500,6 +501,7 @@ pub mod tx_types {
                 tx,
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             );
 

@@ -1219,6 +1219,7 @@ mod test_utils {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         );
         let signed_wrapper = wrapper
             .sign(&keypair, shell.chain_id.clone(), None)
@@ -1297,6 +1298,7 @@ mod test_mempool_validate {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
@@ -1351,6 +1353,7 @@ mod test_mempool_validate {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
@@ -1453,6 +1456,7 @@ mod test_mempool_validate {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
@@ -1622,6 +1626,7 @@ mod test_mempool_validate {
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
@@ -1658,6 +1663,7 @@ mod test_mempool_validate {
             tx,
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         )
         .sign(&keypair, shell.chain_id.clone(), None)

@@ -1650,7 +1650,7 @@ pub mod args {
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::key::*;
-    use namada::types::masp::MaspValue;
+    use namada::types::masp::{ExtendedSpendingKey, MaspValue};
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
@@ -1700,6 +1700,8 @@ pub mod args {
     const DUMP_TX: ArgFlag = flag("dump-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<ExtendedSpendingKey> =
+        arg_opt("fee-spending-key");
     const FORCE: ArgFlag = flag("force");
     const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const FEE_AMOUNT: ArgDefault<token::Amount> =
@@ -3028,6 +3030,8 @@ pub mod args {
         pub fee_amount: token::Amount,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
+        /// The optional spending key for fee unshielding
+        pub fee_unshield: Option<ExtendedSpendingKey>,
         /// The max amount of gas used to process tx
         pub gas_limit: GasLimit,
         /// The optional expiration of the transaction
@@ -3071,6 +3075,11 @@ pub mod args {
                  this transaction",
             ))
             .arg(FEE_TOKEN.def().about("The token for paying the gas"))
+            .arg(
+                FEE_UNSHIELD_SPENDING_KEY
+                    .def()
+                    .about("The spending key to be used for fee unshielding. If none is provided, fee will be payed from the unshielded balance only."),
+            )
             .arg(GAS_LIMIT.def().about(
                 "The multiplier of the gas limit resolution defining the \
                  maximum amount of gas needed to run transaction",
@@ -3111,6 +3120,7 @@ pub mod args {
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let fee_amount = FEE_AMOUNT.parse(matches);
             let fee_token = FEE_TOKEN.parse(matches);
+            let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
 
@@ -3125,6 +3135,7 @@ pub mod args {
                 initialized_account_alias,
                 fee_amount,
                 fee_token,
+                fee_unshield,
                 gas_limit,
                 expiration,
                 signing_key,

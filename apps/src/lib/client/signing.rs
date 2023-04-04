@@ -5,7 +5,7 @@ use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
 use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
-use namada::types::address::{Address, ImplicitAddress};
+use namada::types::address::{self, Address, ImplicitAddress};
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::token;
@@ -13,7 +13,8 @@ use namada::types::token::Amount;
 use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 
 use super::rpc;
-use crate::cli::context::{WalletAddress, WalletKeypair};
+use super::tx;
+use crate::cli::context::{FromContext, WalletAddress, WalletKeypair};
 use crate::cli::{self, args, Context};
 use crate::client::tendermint_rpc_types::TxBroadcastData;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -156,7 +157,7 @@ pub async fn sign_tx(
         dump_tx_helper(&ctx, &tx, "unsigned", None);
     }
 
-    let keypair = tx_signer(&mut ctx, args, default).await;
+    let keypair = tx_signer(&mut ctx, &args, default).await;
     let tx = tx.sign(&keypair);
     if args.dump_tx {
         dump_tx_helper(&ctx, &tx, "signed", None);
@@ -170,7 +171,7 @@ pub async fn sign_tx(
         TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
-            &ctx,
+            &mut ctx,
             args,
             epoch,
             tx,
@@ -228,7 +229,7 @@ pub fn dump_tx_helper(
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 pub async fn sign_wrapper(
-    ctx: &Context,
+    ctx: &mut Context,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
@@ -252,15 +253,59 @@ pub async fn sign_wrapper(
         rpc::query_storage_value::<token::Amount>(&client, &balance_key)
             .await
             .unwrap_or_default();
-    if balance < fee_amount {
-        eprintln!(
+
+    let unshield = match fee_amount.checked_sub(balance) {
+        Some(diff) => {
+            if let Some(spending_key) = args.fee_unshield {
+                // Unshield funds for fee payment
+                let transfer_args = args::TxTransfer {
+                    tx: args.to_owned(),
+                    source: FromContext::new(spending_key.to_string()),
+                    target: FromContext::new(source.to_string()),
+                    token: args.fee_token.to_owned(),
+                    sub_prefix: None,
+                    amount: diff,
+                };
+                let (transaction, _, _) =
+                    tx::gen_shielded_transfer(ctx, &client, &transfer_args)
+                        .await
+                        .expect("Error while generating the fee unshielding tx")
+                        .expect("Failed to generate a fee unshielding tx");
+
+                let transfer = token::Transfer {
+                    source: address::masp(),
+                    target: source.clone(),
+                    token: fee_token.clone(),
+                    sub_prefix: None,
+                    amount: fee_amount,
+                    key: None,
+                    shielded: Some(transaction),
+                };
+                tracing::debug!("Fee unshielding transfer data {:?}", transfer);
+                let data = transfer
+                    .try_to_vec()
+                    .expect("Encoding tx data shouldn't fail");
+                let unsigned_tx = Tx::new(
+                    ctx.read_wasm(tx::TX_TRANSFER_WASM),
+                    Some(data),
+                    ctx.config.ledger.chain_id.clone(),
+                    args.expiration,
+                );
+                Some(unsigned_tx.sign(keypair))
+            } else {
+                eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {fee_amount}, got {balance}."
         );
-        if !args.force && cfg!(feature = "mainnet") {
-            cli::safe_exit(1);
+                if !args.force && cfg!(feature = "mainnet") {
+                    cli::safe_exit(1);
+                }
+
+                None
+            }
         }
-    }
+        None => None,
+    };
 
     #[cfg(not(feature = "mainnet"))]
     // A PoW solution can be used to allow zero-fee testnet transactions
@@ -300,6 +345,7 @@ pub async fn sign_wrapper(
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             pow_solution,
+            unshield,
         )
     };
 
