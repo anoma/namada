@@ -1240,7 +1240,7 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
             );
         }
 
-        self.push_event(latest_event);
+        self.try_push_event(latest_event);
 
         EthEventsQueueIter {
             current_nonce: self.next_nonce_to_process,
@@ -1254,9 +1254,12 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
         self.inner.front().map(GetEventNonce::get_event_nonce)
     }
 
-    /// Push a new transfer to Namada event to the queue.
+    /// Attempt to push a new Ethereum event to the queue.
+    ///
+    /// This operation may panic if a confirmed event is
+    /// already present in the queue.
     #[inline]
-    fn push_event(&mut self, new_event: E)
+    fn try_push_event(&mut self, new_event: E)
     where
         E: std::fmt::Debug,
     {
