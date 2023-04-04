@@ -25,6 +25,7 @@
   - [Dev](./explore/dev/README.md)
     - [Development considerations](./explore/dev/development-considerations.md)
     - [Storage API](./explore/dev/storage_api.md)
+    - [Maintenance](./explore/dev/maintenance.md)
   - [Libraries & Tools](./explore/libraries/README.md)
     - [Cryptography]()
     - [network](./explore/libraries/network.md)
