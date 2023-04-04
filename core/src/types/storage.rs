@@ -1241,7 +1241,7 @@ impl<E: GetEventNonce> InnerEthEventsQueue<E> {
     /// Push a new Ethereum event of type `E` into the queue,
     /// and return a draining iterator over the next events to
     /// be processed, if any.
-    pub fn get_next_events(
+    pub fn push_and_iter(
         &mut self,
         latest_event: E,
     ) -> EthEventsQueueIter<'_, E>
@@ -1368,7 +1368,7 @@ mod tests {
         };
         let next_event = queue
             .transfers_to_namada
-            .get_next_events(new_event.clone())
+            .push_and_iter(new_event.clone())
             .next();
         assert_eq!(next_event, Some(new_event));
     }
@@ -1386,7 +1386,7 @@ mod tests {
             transfers: vec![],
             nonce: 2u64.into(),
         };
-        _ = queue.transfers_to_namada.get_next_events(new_event);
+        _ = queue.transfers_to_namada.push_and_iter(new_event);
     }
 
     /// Test enqueueing transfer to Namada events to
@@ -1426,28 +1426,28 @@ mod tests {
         assert!(
             queue
                 .transfers_to_namada
-                .get_next_events(new_event_4.clone())
+                .push_and_iter(new_event_4.clone())
                 .next()
                 .is_none()
         );
         assert!(
             queue
                 .transfers_to_namada
-                .get_next_events(new_event_2.clone())
+                .push_and_iter(new_event_2.clone())
                 .next()
                 .is_none()
         );
         assert!(
             queue
                 .transfers_to_namada
-                .get_next_events(new_event_3.clone())
+                .push_and_iter(new_event_3.clone())
                 .next()
                 .is_none()
         );
         assert!(
             queue
                 .transfers_to_namada
-                .get_next_events(new_event_7.clone())
+                .push_and_iter(new_event_7.clone())
                 .next()
                 .is_none()
         );
@@ -1466,7 +1466,7 @@ mod tests {
             vec![new_event_1.clone(), new_event_2, new_event_3, new_event_4],
             queue
                 .transfers_to_namada
-                .get_next_events(new_event_1)
+                .push_and_iter(new_event_1)
                 .collect::<Vec<_>>()
         );
 

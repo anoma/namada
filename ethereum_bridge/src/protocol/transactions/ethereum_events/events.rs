@@ -92,7 +92,7 @@ where
         .storage
         .eth_events_queue
         .transfers_to_namada
-        .get_next_events(transfer_event)
+        .push_and_iter(transfer_event)
         .collect();
     for TransfersToNamada {
         transfers,
