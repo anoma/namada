@@ -1162,7 +1162,13 @@ pub struct EthEventsQueue {
     // TODO: add queue of update whitelist events
 }
 
-/// A queue of confirmed Ethereum events to be processed in order.
+/// A queue of confirmed Ethereum events of type `E`.
+///
+/// __INVARIANT:__ At any given moment, the queue holds the nonce `N`
+/// of the next confirmed event to be processed by the ledger, and any
+/// number of events that have been confirmed with a nonce greater than
+/// or equal to `N`. Events in the queue must be returned in asceding
+/// order of their nonce.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct InnerEthEventsQueue<E> {
     next_nonce_to_process: Uint,
@@ -1188,7 +1194,18 @@ impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
     }
 }
 
-/// Draining iterator over a queue of Ethereum events.
+/// Draining iterator over a queue of Ethereum events,
+///
+/// At each iteration step, we peek into the head of the
+/// queue, and if an event is present with a nonce equal
+/// to the local nonce maintained by the iterator object,
+/// we pop it and increment the local nonce. Otherwise,
+/// iteration stops.
+///
+/// Upon being dropped, the iterator object updates the
+/// nonce of the next event of type `E` to be processed
+/// by the ledger (stored in an [`InnerEthEventsQueue`]),
+/// if the iterator's nonce was incremented.
 pub struct EthEventsQueueIter<'queue, E> {
     current_nonce: Uint,
     queue: &'queue mut InnerEthEventsQueue<E>,
