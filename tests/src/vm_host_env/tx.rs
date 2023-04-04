@@ -19,6 +19,7 @@ use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::{BorshSerialize, Ctx};
 use tempfile::TempDir;
+use namada::types::hash::Hash;
 
 use crate::vp::TestVpEnv;
 
@@ -66,6 +67,7 @@ impl Default for TestTxEnv {
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let inner_tx = InnerTx::new(vec![], None);
         Self {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
@@ -78,10 +80,13 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(InnerTx::new(vec![], None))
-            }),
+            tx: Tx {
+                inner_tx: Some(inner_tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(inner_tx.partial_hash()))
+                })
+            },
         }
     }
 }

@@ -391,30 +391,30 @@ fn extract_payload(
         Ok(TxType::Wrapper(wrapper_tx)) => {
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             extract_payload(
-                Tx::from(
-                    match tx.inner_tx().and_then(|inner_tx| {
-                        wrapper_tx.decrypt(privkey, inner_tx).ok()
-                    }) {
-                        Some(tx) => DecryptedTx::Decrypted {
-                            tx: InnerTx::from(tx),
+                match tx.inner_tx().and_then(|inner_tx| {
+                    wrapper_tx.decrypt(privkey, inner_tx).ok()
+                }) {
+                    Some(tx) => Tx {
+                        inner_tx: Some(tx.clone()),
+                        ..Tx::from(DecryptedTx::Decrypted {
+                            tx: Hash(tx.partial_hash()),
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: false,
-                        },
-                        _ => DecryptedTx::Undecryptable(wrapper_tx.clone()),
+                        })
                     },
-                ),
+                    _ => Tx::from(DecryptedTx::Undecryptable(wrapper_tx.clone())),
+                },
                 wrapper,
                 transfer,
             );
             *wrapper = Some(wrapper_tx);
         }
         Ok(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
+            tx: _,
             #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: _,
         })) => {
-            let tx_data = tx.data.clone().unwrap_or_default();
-            let _ = tx_data.data.map(|signed| {
+            let _ = tx.data().map(|signed| {
                 Transfer::try_from_slice(&signed[..])
                     .map(|tfer| *transfer = Some(tfer))
             });

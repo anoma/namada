@@ -36,6 +36,7 @@ mod protocol_txs {
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::proto::{SignedTxData, SignedOuterTxData};
+    use crate::types::hash::Hash;
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
@@ -76,10 +77,10 @@ mod protocol_txs {
         /// Messages to be given to the DKG state machine
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
-        NewDkgKeypair(InnerTx),
+        NewDkgKeypair(Hash),
         /// Aggregation of Ethereum state changes
         /// voted on by validators in last block
-        EthereumStateUpdate(InnerTx),
+        EthereumStateUpdate(Hash),
     }
 
     impl ProtocolTxType {
@@ -108,7 +109,7 @@ mod protocol_txs {
             signing_key: &common::SecretKey,
             wasm_dir: &'a Path,
             wasm_loader: F,
-        ) -> Self
+        ) -> Tx
         where
             F: FnOnce(&'a str, &'static str) -> Vec<u8>,
         {
@@ -118,19 +119,26 @@ mod protocol_txs {
                     .expect("Converting path to string should not fail"),
                 TX_NEW_DKG_KP_WASM,
             );
-            Self::NewDkgKeypair(
-                InnerTx::new(
-                    code,
-                    Some(
-                        SignedTxData {
-                            data: Some(data.try_to_vec()
-                                .expect("Serializing request should not fail")),
-                            sig: None,
-                        }
-                    ),
-                )
-                .sign(signing_key),
+            let inner_tx = InnerTx::new(
+                code,
+                Some(
+                    SignedTxData {
+                        data: Some(data.try_to_vec()
+                                   .expect("Serializing request should not fail")),
+                        sig: None,
+                    }
+                ),
             )
+                .sign(signing_key);
+            let outer_tx = TxType::Protocol(ProtocolTx {
+                pk: signing_key.ref_to(),
+                tx: Self::NewDkgKeypair(Hash(inner_tx.partial_hash()))
+            });
+            Tx::new(vec![], SignedOuterTxData {
+                data: outer_tx,
+                sig: None,
+            }).sign(signing_key)
+            
         }
     }
 

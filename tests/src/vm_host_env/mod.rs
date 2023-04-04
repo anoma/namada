@@ -20,6 +20,7 @@ mod tests {
 
     use std::panic;
 
+    use namada::types::hash::Hash;
     use itertools::Itertools;
     use namada::core::ledger::ibc::actions::IbcActions;
     use namada::ibc::tx_msg::Msg;
@@ -450,10 +451,10 @@ mod tests {
                     code.clone(),
                     Some(SignedTxData {data:data.clone(), sig: None})
                 ).sign(&keypair);
-                env.tx = Tx::new(vec![], SignedOuterTxData {
+                env.tx = Tx { inner_tx: Some(tx.clone()), ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
-                    data: TxType::Raw(tx),
-                });
+                    data: TxType::Raw(Hash(tx.partial_hash())),
+                })};
                 let tx_data = env.tx.clone();
 
                 tx_data
@@ -513,10 +514,13 @@ mod tests {
         let empty_code = vec![];
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(empty_code, Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        })).unwrap();
+        let result = vp::CTX.eval(empty_code, Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
@@ -524,10 +528,13 @@ mod tests {
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(code, Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        })).unwrap();
+        let result = vp::CTX.eval(code, Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
@@ -536,10 +543,13 @@ mod tests {
             std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(code, Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        })).unwrap();
+        let result = vp::CTX.eval(code, Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }).unwrap();
         assert!(!result);
     }
 
@@ -582,10 +592,13 @@ mod tests {
 
         // Check should fail due to no client state
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
@@ -613,10 +626,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -668,10 +684,13 @@ mod tests {
 
         // Check should fail due to the invalid updating
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
@@ -698,10 +717,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -731,10 +753,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -784,10 +809,13 @@ mod tests {
 
         // Check should fail due to directly opening a connection
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ConnectionError(_),
@@ -814,10 +842,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -844,10 +875,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -884,10 +918,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -915,10 +952,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -971,10 +1011,13 @@ mod tests {
 
         // Check should fail due to no port binding
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
@@ -1022,10 +1065,13 @@ mod tests {
         // Check should fail due to directly opening a channel
 
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
@@ -1053,10 +1099,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1081,10 +1130,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1123,10 +1175,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1152,10 +1207,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1196,10 +1254,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1241,10 +1302,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1289,10 +1353,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was escrowed
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -1305,10 +1372,13 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let token_vp_result =
-            ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
+            ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
-                data: TxType::Raw(tx),
-            }), &escrow);
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &escrow);
         assert!(token_vp_result.expect("token validation failed unexpectedly"));
 
         // Commit
@@ -1336,10 +1406,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1389,10 +1462,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was burned
         let key_prefix =
@@ -1401,10 +1477,13 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcBurn),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }), &burn);
+        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &burn);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1461,10 +1540,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was minted
         let key_prefix =
@@ -1473,10 +1555,13 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcMint),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }), &mint);
+        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &mint);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1545,16 +1630,22 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was unescrowed
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }), &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1601,10 +1692,13 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1634,10 +1728,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1689,10 +1786,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1754,10 +1854,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -1769,10 +1872,13 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }), &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1833,10 +1939,13 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx.clone()),
-        }));
+        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        });
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -1848,10 +1957,13 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx),
-        }), &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash())),
+            })
+        }, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 }

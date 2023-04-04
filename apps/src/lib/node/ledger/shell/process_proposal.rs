@@ -487,11 +487,14 @@ mod test_process_proposal {
             )
             .bind(tx.clone());
             shell.enqueue_tx(wrapper, Some(tx.clone()));
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            })));
+            txs.push(Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: Hash(tx.partial_hash()),
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }))
+            });
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
@@ -705,11 +708,14 @@ mod test_process_proposal {
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        let tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(tx.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+        };
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -741,7 +747,10 @@ mod test_process_proposal {
             "wasm_code".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
-        let tx = Tx::from(TxType::Raw(tx));
+        let tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::from(TxType::Raw(Hash(tx.partial_hash())))
+        };
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };

@@ -13,6 +13,7 @@ use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
+use namada::types::hash::Hash;
 
 use crate::tx::{tx_host_env, TestTxEnv};
 
@@ -64,16 +65,20 @@ impl Default for TestVpEnv {
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
+        let inner_tx = InnerTx::new(vec![], None);
         Self {
             addr: address::testing::established_address_1(),
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(InnerTx::new(vec![], None)),
-            }),
+            tx: Tx {
+                inner_tx: Some(inner_tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(inner_tx.partial_hash())),
+                })
+            },
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),

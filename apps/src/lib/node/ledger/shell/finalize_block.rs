@@ -231,13 +231,15 @@ where
 
                     match inner {
                         DecryptedTx::Decrypted {
-                            tx,
+                            tx: _,
                             has_valid_pow: _,
                         } => {
-                            stats.increment_tx_type(
-                                namada::core::types::hash::Hash(tx.code_hash())
-                                    .to_string(),
-                            );
+                            if let Some(code_hash) = tx.code_hash() {
+                                stats.increment_tx_type(
+                                    namada::core::types::hash::Hash(code_hash)
+                                        .to_string(),
+                                );
+                            }
                         }
                         DecryptedTx::Undecryptable(_) => {
                             event["log"] =
@@ -456,6 +458,7 @@ where
 mod test_finalize_block {
     use namada::types::storage::Epoch;
     use namada::types::transaction::encrypted::EncryptedTx;
+    use namada::core::types::hash::Hash;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
     use namada::proto::InnerTx;
     use namada::proto::SignedTxData;
@@ -583,11 +586,14 @@ mod test_finalize_block {
         .bind(raw_tx.clone());
 
         let processed_tx = ProcessedTx {
-            tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: raw_tx.clone(),
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }))
+            tx: Tx {
+                inner_tx: Some(raw_tx.clone()),
+                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: Hash(raw_tx.partial_hash()),
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }))
+            }
             .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
@@ -717,11 +723,14 @@ mod test_finalize_block {
             .bind(raw_tx.clone());
             shell.enqueue_tx(wrapper_tx, Some(raw_tx.clone()));
             processed_txs.push(ProcessedTx {
-                tx: Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: raw_tx,
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                }))
+                tx: Tx {
+                    inner_tx: Some(raw_tx.clone()),
+                    ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                        tx: Hash(raw_tx.partial_hash()),
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    }))
+                }
                 .to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),

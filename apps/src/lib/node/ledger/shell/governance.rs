@@ -14,6 +14,7 @@ use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::proto::SignedTxData;
+use namada::types::hash::Hash;
 
 use super::*;
 
@@ -75,11 +76,14 @@ where
                     Some(proposal_code) => {
                         let tx = InnerTx::new(proposal_code, Some(SignedTxData { data: Some(encode(&id)), sig: None }));
                         let tx_type =
-                            TxType::Decrypted(DecryptedTx::Decrypted {
-                                tx,
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow: false,
-                            });
+                            Tx {
+                                inner_tx: Some(tx.clone()),
+                                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                                    tx: Hash(tx.partial_hash()),
+                                    #[cfg(not(feature = "mainnet"))]
+                                    has_valid_pow: false,
+                                }))
+                            };
                         let pending_execution_key =
                             gov_storage::get_proposal_execution_key(id);
                         shell
@@ -87,7 +91,7 @@ where
                             .write(&pending_execution_key, "")
                             .expect("Should be able to write to storage.");
                         let tx_result = protocol::apply_tx(
-                            tx_type.into(),
+                            tx_type,
                             0, /*  this is used to compute the fee
                                 * based on the code size. We dont
                                 * need it here. */

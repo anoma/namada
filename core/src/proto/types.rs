@@ -300,60 +300,45 @@ impl From<Tx> for ResponseDeliverTx {
         fn encode_string(x: String) -> String {
             x
         }
-        match process_tx(&tx).map(Tx::header) {
-            Ok(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
-                #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: _,
-            })) => {
-                let empty_vec = vec![];
-                let tx_data = tx.data.unwrap_or_default();
-                let signed =
-                    if let signed = tx_data {
-                        signed
-                    } else {
-                        return Default::default();
-                    };
-                if let Ok(transfer) = Transfer::try_from_slice(
-                    signed.data.as_ref().unwrap_or(&empty_vec),
-                ) {
-                    let events = vec![Event {
-                        r#type: "transfer".to_string(),
-                        attributes: vec![
-                            EventAttribute {
-                                key: encode_str("source"),
-                                value: encode_string(transfer.source.encode()),
-                                index: true,
-                            },
-                            EventAttribute {
-                                key: encode_str("target"),
-                                value: encode_string(transfer.target.encode()),
-                                index: true,
-                            },
-                            EventAttribute {
-                                key: encode_str("token"),
-                                value: encode_string(transfer.token.encode()),
-                                index: true,
-                            },
-                            EventAttribute {
-                                key: encode_str("amount"),
-                                value: encode_string(
-                                    transfer.amount.to_string(),
-                                ),
-                                index: true,
-                            },
-                        ],
-                    }];
-                    ResponseDeliverTx {
-                        events,
-                        info: "Transfer tx".to_string(),
-                        ..Default::default()
-                    }
-                } else {
-                    Default::default()
-                }
+        let empty_vec = vec![];
+        let tx_data = tx.data();
+        if let Ok(transfer) = Transfer::try_from_slice(
+            tx.data().as_ref().unwrap_or(&empty_vec),
+        ) {
+            let events = vec![Event {
+                r#type: "transfer".to_string(),
+                attributes: vec![
+                    EventAttribute {
+                        key: encode_str("source"),
+                        value: encode_string(transfer.source.encode()),
+                        index: true,
+                    },
+                    EventAttribute {
+                        key: encode_str("target"),
+                        value: encode_string(transfer.target.encode()),
+                        index: true,
+                    },
+                    EventAttribute {
+                        key: encode_str("token"),
+                        value: encode_string(transfer.token.encode()),
+                        index: true,
+                    },
+                    EventAttribute {
+                        key: encode_str("amount"),
+                        value: encode_string(
+                            transfer.amount.to_string(),
+                        ),
+                        index: true,
+                    },
+                ],
+            }];
+            ResponseDeliverTx {
+                events,
+                info: "Transfer tx".to_string(),
+                ..Default::default()
             }
-            _ => Default::default(),
+        } else {
+            Default::default()
         }
     }
 }
@@ -374,11 +359,6 @@ impl Tx {
     }
 
     pub fn code(&self) -> Option<Vec<u8>> {
-        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
-            return Some(tx.code);
-        } else if let TxType::Raw(tx) = self.header() {
-            return Some(tx.code);
-        }
         if let Some(inner_tx) = &self.inner_tx {
             Some(inner_tx.code.clone())
         } else {
@@ -387,11 +367,6 @@ impl Tx {
     }
 
     pub fn extra(&self) -> Option<Vec<u8>> {
-        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
-            return Some(tx.extra);
-        } else if let TxType::Raw(tx) = self.header() {
-            return Some(tx.extra);
-        }
         if let Some(inner_tx) = &self.inner_tx {
             Some(inner_tx.extra.clone())
         } else {
@@ -400,11 +375,6 @@ impl Tx {
     }
 
     pub fn data(&self) -> Option<Vec<u8>> {
-        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
-            return tx.data.and_then(|x| x.data);
-        } else if let TxType::Raw(tx) = self.header() {
-            return tx.data.and_then(|x| x.data);
-        }
         if let Some(InnerTx { data: Some(SignedTxData { data, ..}), .. }) = &self.inner_tx {
             data.clone()
         } else {
@@ -413,11 +383,6 @@ impl Tx {
     }
 
     pub fn data_hash(&self) -> Option<crate::types::hash::Hash> {
-        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
-            return Some(crate::types::hash::Hash(tx.partial_hash()));
-        } else if let TxType::Raw(tx) = self.header() {
-            return Some(crate::types::hash::Hash(tx.partial_hash()));
-        }
         if let Some(tx) = &self.inner_tx {
             Some(crate::types::hash::Hash(tx.partial_hash()))
         } else {
@@ -426,11 +391,6 @@ impl Tx {
     }
 
     pub fn inner_tx(&self) -> Option<InnerTx> {
-        if let TxType::Decrypted(DecryptedTx::Decrypted {tx, ..}) = self.header() {
-            return Some(tx);
-        } else if let TxType::Raw(tx) = self.header() {
-            return Some(tx);
-        }
         self.inner_tx.clone()
     }
 
@@ -470,8 +430,8 @@ impl Tx {
     }
 
     /// Get the hash of this transaction's code
-    pub fn code_hash(&self) -> [u8; 32] {
-        hash_tx(&self.outer_code).0
+    pub fn code_hash(&self) -> Option<[u8; 32]> {
+        self.code().map(|x| hash_tx(&x).0)
     }
 
     /// Get the hash of this transaction's extra data

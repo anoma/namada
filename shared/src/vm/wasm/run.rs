@@ -415,6 +415,7 @@ mod tests {
     use wasmer_vm::TrapCode;
     use crate::proto::{SignedOuterTxData, SignedTxData};
     use crate::types::transaction::TxType;
+    use crate::types::hash::Hash;
 
     use super::*;
     use crate::ledger::storage::testing::TestStorage;
@@ -498,10 +499,13 @@ mod tests {
             tx_code.clone(),
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(inner_tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(inner_tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(inner_tx.partial_hash()))
+            })
+        };
         let result = tx(
             &storage,
             &mut write_log,
@@ -520,10 +524,13 @@ mod tests {
             tx_code,
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(inner_tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(inner_tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(inner_tx.partial_hash()))
+            })
+        };
         let error = tx(
             &storage,
             &mut write_log,
@@ -566,17 +573,23 @@ mod tests {
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit.clone(),
-            input: Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(tx)
-            }),
+            input: Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(tx.partial_hash()))
+                })
+            },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
@@ -603,17 +616,23 @@ mod tests {
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit,
-            input: Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(tx)
-            }),
+            input: Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(tx.partial_hash()))
+                })
+            },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
@@ -659,10 +678,13 @@ mod tests {
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code.clone(),
@@ -684,10 +706,13 @@ mod tests {
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let error = vp(
             vp_code,
             &outer_tx,
@@ -733,10 +758,13 @@ mod tests {
             tx_no_op,
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
-        let outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(inner_tx)
-        });
+        let outer_tx = Tx {
+            inner_tx: Some(inner_tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(inner_tx.partial_hash()))
+            })
+        };
         let result = tx(
             &storage,
             &mut write_log,
@@ -788,10 +816,13 @@ mod tests {
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(tx_data.clone()), sig: None}));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code,
@@ -861,10 +892,13 @@ mod tests {
             tx_read_key,
             Some(SignedTxData {data: Some(tx_data), sig: None}),
         );
-        let outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(inner_tx)
-        });
+        let outer_tx = Tx {
+            inner_tx: Some(inner_tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(inner_tx.partial_hash()))
+            })
+        };
         let error = tx(
             &storage,
             &mut write_log,
@@ -908,10 +942,13 @@ mod tests {
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             vp_read_key,
@@ -967,17 +1004,23 @@ mod tests {
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(input), sig: None }));
         let eval_vp = EvalVp {
             vp_code: vp_read_key,
-            input: Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(tx)
-            }),
+            input: Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(tx.partial_hash()))
+                })
+            },
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
             vp_eval,
@@ -1045,10 +1088,13 @@ mod tests {
             tx_code,
             Some(SignedTxData {data: Some(tx_data), sig: None}),
         );
-        let outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(inner_tx)
-        });
+        let outer_tx = Tx {
+            inner_tx: Some(inner_tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(inner_tx.partial_hash()))
+            })
+        };
         tx(
             &storage,
             &mut write_log,
@@ -1090,10 +1136,13 @@ mod tests {
         .expect("unexpected error converting wat2wasm").into_owned();
 
         let tx = InnerTx::new(vec![], None);
-        let mut outer_tx = Tx::new(vec![], SignedOuterTxData {
-            sig: None,
-            data: TxType::Raw(tx)
-        });
+        let mut outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::new(vec![], SignedOuterTxData {
+                sig: None,
+                data: TxType::Raw(Hash(tx.partial_hash()))
+            })
+        };
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");

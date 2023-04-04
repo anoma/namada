@@ -28,7 +28,7 @@ pub mod decrypted_tx {
             // For some reason, we get `warning: fields `tx` and
             // `has_valid_pow` are never read` even though they are being used!
             #[allow(dead_code)]
-            tx: InnerTx,
+            tx: Hash,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -44,20 +44,6 @@ pub mod decrypted_tx {
     }
 
     impl DecryptedTx {
-        /// Convert the inner tx value to bytes
-        pub fn to_bytes(&self) -> Vec<u8> {
-            match self {
-                DecryptedTx::Decrypted {
-                    tx,
-                    #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: _,
-                } => tx.to_bytes(),
-                DecryptedTx::Undecryptable(wrapper) => {
-                    wrapper.try_to_vec().unwrap()
-                }
-            }
-        }
-
         /// Return the hash used as a commitment to the tx's contents in the
         /// wrapper tx that includes this tx as an encrypted payload.
         pub fn hash_commitment(&self) -> Hash {
@@ -66,7 +52,7 @@ pub mod decrypted_tx {
                     tx,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
-                } => Hash(tx.partial_hash()),
+                } => tx.clone(),
                 DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
             }
         }

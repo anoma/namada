@@ -80,6 +80,7 @@ use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::tendermint_rpc::{Client, HttpClient};
 use crate::node::ledger::tendermint_node;
+use namada::types::hash::Hash;
 
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
@@ -2176,13 +2177,16 @@ pub async fn submit_reveal_pk_aux(
     })
     .await;
     let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }).into())
+        TxBroadcastData::DryRun(Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(tx.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                // To be able to dry-run testnet faucet withdrawal, pretend 
+                // that we got a valid PoW
+                has_valid_pow: true,
+            }))
+        })
     } else {
         super::signing::sign_wrapper(
             ctx,

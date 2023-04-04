@@ -13,6 +13,7 @@ use namada::types::transaction::{hash_tx, Fee, WrapperTx, MIN_FEE};
 use namada::proto::InnerTx;
 use namada::types::transaction::TxType;
 use namada::types::transaction::decrypted::DecryptedTx;
+use namada::types::hash::Hash;
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -162,13 +163,16 @@ pub async fn sign_tx(
     })
     .await;
     let broadcast_data = if args.dry_run {
-        TxBroadcastData::DryRun(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }).into())
+        TxBroadcastData::DryRun(Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(tx.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                // To be able to dry-run testnet faucet withdrawal, pretend 
+                // that we got a valid PoW
+                has_valid_pow: true,
+            }))
+        })
     } else {
         sign_wrapper(
             &ctx,

@@ -335,6 +335,7 @@ mod test {
     use crate::types::{address, token};
     use crate::types::transaction::TxType;
     use crate::types::transaction::decrypted::DecryptedTx;
+    use crate::types::hash::Hash;
 
     const TX_NO_OP_WASM: &str = "../wasm_for_tests/tx_no_op.wasm";
 
@@ -373,13 +374,16 @@ mod test {
         // Request dry run tx
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
         let tx = InnerTx::new(tx_no_op, None);
-        let outer_tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx,
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend 
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }));
+        let outer_tx = Tx {
+            inner_tx: Some(tx.clone()),
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(tx.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                // To be able to dry-run testnet faucet withdrawal, pretend 
+                // that we got a valid PoW
+                has_valid_pow: true,
+            }))
+        };
         let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()

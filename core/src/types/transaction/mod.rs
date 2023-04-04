@@ -224,7 +224,7 @@ pub mod tx_types {
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, Serialize, Deserialize)]
     pub enum TxType {
         /// An ordinary tx
-        Raw(InnerTx),
+        Raw(Hash),
         /// A Tx that contains an encrypted raw tx
         Wrapper(WrapperTx),
         /// An attempted decryption of a wrapper tx
@@ -356,12 +356,15 @@ pub mod tx_types {
         #[test]
         fn test_process_tx_raw_tx_no_data() {
             let tx = InnerTx::new("wasm code".as_bytes().to_owned(), None);
-            let outer_tx = Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(tx.clone()),
-            });
+            let outer_tx = Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(tx.partial_hash())),
+                })
+            };
             match process_tx(&outer_tx).expect("Test failed").header() {
-                TxType::Raw(raw) => assert_eq!(InnerTx::from(tx), raw),
+                TxType::Raw(raw) => assert_eq!(tx.partial_hash(), raw.0),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
@@ -375,16 +378,18 @@ pub mod tx_types {
                 "code".as_bytes().to_owned(),
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                SignedOuterTxData {
-                    data: TxType::Raw(inner.clone()),
-                    sig: None,
-                },
-            );
+            let tx = Tx {
+                inner_tx: Some(inner.clone()),
+                ..Tx::new(
+                    "wasm code".as_bytes().to_owned(),
+                    SignedOuterTxData {
+                        data: TxType::Raw(Hash(inner.partial_hash())),
+                        sig: None,
+                    },
+                )};
 
             match process_tx(&tx).expect("Test failed").header() {
-                TxType::Raw(raw) => assert_eq!(inner, raw),
+                TxType::Raw(raw) => assert_eq!(inner.partial_hash(), raw.0),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
@@ -397,16 +402,18 @@ pub mod tx_types {
                 "code".as_bytes().to_owned(),
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
-            let tx = Tx::new(
-                "wasm code".as_bytes().to_owned(),
-                SignedOuterTxData {
-                    data: TxType::Raw(inner.clone()),
-                    sig: None,},
-            )
-                .sign(&gen_keypair());
+            let tx = Tx {
+                inner_tx: Some(inner.clone()),
+                ..Tx::new(
+                    "wasm code".as_bytes().to_owned(),
+                    SignedOuterTxData {
+                        data: TxType::Raw(Hash(inner.partial_hash())),
+                        sig: None,
+                    },
+                )}.sign(&gen_keypair());
 
             match process_tx(&tx).expect("Test failed").header() {
-                TxType::Raw(raw) => assert_eq!(inner, raw),
+                TxType::Raw(raw) => assert_eq!(inner.partial_hash(), raw.0),
                 _ => panic!("Test failed: Expected Raw Tx"),
             }
         }
@@ -488,19 +495,22 @@ pub mod tx_types {
             "transaction data".as_bytes().to_owned(),
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
-        let decrypted = DecryptedTx::Decrypted {
-            tx: payload.clone(),
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
+        let decrypted = Tx {
+            inner_tx: Some(payload.clone()),
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(payload.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
         };
-        let tx = Tx::from(TxType::Decrypted(decrypted));
+        let tx = decrypted;
         match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,
                 #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: _,
             }) => {
-                assert_eq!(payload, processed);
+                assert_eq!(payload.partial_hash(), processed.0);
             }
             _ => panic!("Test failed"),
         }
@@ -516,7 +526,7 @@ pub mod tx_types {
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let decrypted = DecryptedTx::Decrypted {
-            tx: payload.clone(),
+            tx: Hash(payload.partial_hash()),
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         };
@@ -528,14 +538,14 @@ pub mod tx_types {
             sig: Some(common::Signature::try_from_sig(&ed_sig).unwrap()),
         };
         // create the tx with signed decrypted data
-        let tx = Tx::new(vec![], signed);
+        let tx = Tx { inner_tx: Some(payload.clone()), ..Tx::new(vec![], signed) };
         match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,
                 #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: _,
             }) => {
-                assert_eq!(payload, processed);
+                assert_eq!(payload.partial_hash(), processed.0);
             }
             _ => panic!("Test failed"),
         }

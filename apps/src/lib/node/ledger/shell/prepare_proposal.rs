@@ -6,6 +6,7 @@ use namada::types::internal::TxInQueue;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
+use namada::types::hash::Hash;
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -105,22 +106,22 @@ where
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                  }| {
-                    Tx::from(
-                        match inner_tx
-                            .clone()
-                            .and_then(|x| tx.decrypt(privkey, x).ok())
-                        {
-                            Some(inner_tx) => DecryptedTx::Decrypted {
-                                tx: inner_tx,
+                    match inner_tx
+                        .clone()
+                        .and_then(|x| tx.decrypt(privkey, x).ok())
+                    {
+                        Some(inner_tx) => Tx {
+                            inner_tx: Some(inner_tx.clone()),
+                            ..Tx::from(DecryptedTx::Decrypted {
+                                tx: Hash(inner_tx.partial_hash()),
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
-                            },
-                            // An absent or undecryptable inner_tx are both
-                            // treated as undecryptable
-                            None => DecryptedTx::Undecryptable(tx.clone()),
+                            })
                         },
-                    )
-                    .to_bytes()
+                        // An absent or undecryptable inner_tx are both
+                        // treated as undecryptable
+                        None => Tx::from(DecryptedTx::Undecryptable(tx.clone())),
+                    }.to_bytes()
                 },
             );
             #[cfg(feature = "abcipp")]
@@ -286,11 +287,14 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
             );
-            expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
-                tx: tx.clone(),
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }));
+            expected_decrypted.push(Tx {
+                inner_tx: Some(tx.clone()),
+                ..Tx::from(DecryptedTx::Decrypted {
+                    tx: Hash(tx.partial_hash()),
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                })
+            });
             let wrapper_tx = WrapperTx::new(
                 Fee {
                     amount: 0.into(),
