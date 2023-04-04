@@ -394,9 +394,20 @@ impl From<DenominatedAmount> for Amount {
     }
 }
 
-impl From<Amount> for u128 {
-    fn from(amount: Amount) -> Self {
-        amount.raw.as_u128()
+impl TryFrom<Amount> for u128 {
+    type Error = std::io::Error;
+
+    fn try_from(value: Amount) -> Result<Self, Self::Error> {
+        let Uint(arr) = value.raw;
+        for i in 2..4 {
+            if arr[i] != 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Integer overflow when casting to u128",
+                ));
+            }
+        }
+        Ok(value.raw.low_u128())
     }
 }
 
