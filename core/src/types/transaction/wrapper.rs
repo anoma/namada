@@ -123,7 +123,8 @@ pub mod wrapper_tx {
     /// of GAS_LIMIT_RESOLUTION
     impl From<Amount> for GasLimit {
         fn from(amount: Amount) -> GasLimit {
-            GasLimit::from(u128::from(amount) as u64)
+            // TODO: this may panic.
+            GasLimit::from(u128::try_from(amount).unwrap() as u64)
         }
     }
 
