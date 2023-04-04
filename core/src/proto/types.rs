@@ -197,7 +197,7 @@ impl TryFrom<&[u8]> for Tx {
 
     fn try_from(tx_bytes: &[u8]) -> Result<Self> {
         let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
-        let timestamp = match tx.timestamp {
+        let timestamp = match tx.outer_timestamp {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
@@ -210,16 +210,16 @@ impl TryFrom<&[u8]> for Tx {
             .transpose()?;
         let data = BorshDeserialize::try_from_slice(
             &tx
-                .data
+                .outer_data
                 .ok_or(Error::TxDeserializingError(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Missing data",
                 )))?
         ).map_err(Error::TxDeserializingError)?;
         Ok(Tx {
-            outer_code: tx.code,
+            outer_code: tx.outer_code,
             outer_data: data,
-            outer_extra: tx.extra,
+            outer_extra: tx.outer_extra,
             outer_timestamp: timestamp,
             inner_tx,
         })
@@ -230,7 +230,7 @@ impl TryFrom<&[u8]> for InnerTx {
     type Error = Error;
 
     fn try_from(tx_bytes: &[u8]) -> Result<Self> {
-        let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+        let tx = types::InnerTx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         let timestamp = match tx.timestamp {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
@@ -263,10 +263,10 @@ impl From<Tx> for types::Tx {
                 .expect("Unable to serialize encrypted transaction")
         );
         types::Tx {
-            code: tx.outer_code,
-            data,
-            extra: tx.outer_extra,
-            timestamp,
+            outer_code: tx.outer_code,
+            outer_data: data,
+            outer_extra: tx.outer_extra,
+            outer_timestamp: timestamp,
             inner_tx,
         }
     }
@@ -410,10 +410,10 @@ impl Tx {
         let data = Some(self.outer_data.try_to_vec()
             .expect("Unable to serialize encrypted transaction"));
         types::Tx {
-            code: hash_tx(&self.outer_code).0.to_vec(),
-            extra: hash_tx(&self.outer_extra).0.to_vec(),
-            data,
-            timestamp,
+            outer_code: hash_tx(&self.outer_code).0.to_vec(),
+            outer_extra: hash_tx(&self.outer_extra).0.to_vec(),
+            outer_data: data,
+            outer_timestamp: timestamp,
             inner_tx: None,
         }
     }
@@ -554,18 +554,17 @@ impl InnerTx {
     /// Produce a reduced version of this transaction that is sufficient for
     /// signing. Specifically replaces code and extra with their hashes, and
     /// leaves out inner tx.
-    pub fn signing_tx(&self) -> types::Tx {
+    pub fn signing_tx(&self) -> types::InnerTx {
         let timestamp = Some(self.timestamp.into());
         let data = self.data.as_ref().map(|x| {
             x.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         });
-        types::Tx {
+        types::InnerTx {
             code: hash_tx(&self.code).0.to_vec(),
             extra: hash_tx(&self.extra).0.to_vec(),
             data,
             timestamp,
-            inner_tx: None,
         }
     }
 
@@ -724,11 +723,11 @@ mod tests {
         assert_eq!(tx_from_bytes, tx);
 
         let types_tx = types::Tx {
-            code,
-            data: Some(data),
-            timestamp: None,
+            outer_code: code,
+            outer_data: Some(data),
+            outer_timestamp: None,
             inner_tx: None,
-            extra: vec![],
+            outer_extra: vec![],
         };
         let mut bytes = vec![];
         types_tx.encode(&mut bytes).expect("encoding failed");

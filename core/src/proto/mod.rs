@@ -18,11 +18,11 @@ mod tests {
         let code = "wasm code".as_bytes().to_owned();
         let inner_tx = "arbitrary data".as_bytes().to_owned();
         let tx = Tx {
-            code,
-            data: Some("arbitrary data".as_bytes().to_owned()),
-            timestamp: Some(std::time::SystemTime::now().into()),
+            outer_code: code,
+            outer_data: Some("arbitrary data".as_bytes().to_owned()),
+            outer_timestamp: Some(std::time::SystemTime::now().into()),
             inner_tx: Some(inner_tx),
-            extra: vec![],
+            outer_extra: vec![],
         };
         let mut tx_bytes = vec![];
         tx.encode(&mut tx_bytes).unwrap();

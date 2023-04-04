@@ -5,11 +5,11 @@ import "google/protobuf/timestamp.proto";
 package types;
 
 message Tx {
-  bytes code = 1;
+  bytes outer_code = 1;
   // TODO this optional is useless because it's default on proto3
-  optional bytes data = 2;
-  google.protobuf.Timestamp timestamp = 3;
-  bytes extra = 4;
+  optional bytes outer_data = 2;
+  google.protobuf.Timestamp outer_timestamp = 3;
+  bytes outer_extra = 4;
   optional bytes inner_tx = 5;
 }
 
