@@ -20,17 +20,31 @@ where
     Ok(balance)
 }
 
-/// Read the denomination of a given token, if any.
+/// Read the denomination of a given token, if any. Note that native
+/// transparent tokens do not have this set and instead use the constant
+/// [`token::NATIVE_MAX_DECIMAL_PLACES`].
 pub fn read_denom<S>(
     storage: &S,
     token: &Address,
 ) -> storage_api::Result<Option<token::Denomination>>
-    where
-        S: StorageRead,
+where
+    S: StorageRead,
 {
     let key = token::denom_key(token);
-    let denom = storage.read::<u8>(&key)?;
-    Ok(denom.map(Into::into))
+    storage.read(&key)
+}
+
+/// Write the denomination of a given token.
+pub fn write_denom<S>(
+    storage: &mut S,
+    token: &Address,
+    denom: token::Denomination,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = token::denom_key(token);
+    storage.write(&key, denom)
 }
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
