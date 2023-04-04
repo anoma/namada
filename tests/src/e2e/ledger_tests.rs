@@ -380,7 +380,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA,
             "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
-            "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
+            "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168,Bertha-key",
             "--code-path",
             &vp_user,
             "--alias",
@@ -391,6 +391,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
+            "--signers",
+            BERTHA,
             "--ledger-address",
             &validator_one_rpc,
         ],
@@ -2263,8 +2265,8 @@ fn proposal_submission() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 1,
-                max_expected_time_per_block: 1,
+                min_num_of_blocks: 3,
+                max_expected_time_per_block: 2,
                 vp_whitelist: Some(get_all_wasms_hashes(
                     &working_dir,
                     Some("vp_"),

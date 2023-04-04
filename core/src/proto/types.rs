@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
@@ -38,7 +39,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+)]
 pub struct SignatureIndex {
     pub sig: common::Signature,
     pub index: u64,
@@ -51,6 +62,18 @@ impl SignatureIndex {
 
     pub fn to_vec(&self) -> Vec<Self> {
         vec![self.clone()]
+    }
+}
+
+impl Ord for SignatureIndex {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.index.cmp(&other.index)
+    }
+}
+
+impl PartialOrd for SignatureIndex {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
