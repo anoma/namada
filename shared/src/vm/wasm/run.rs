@@ -500,7 +500,9 @@ mod tests {
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
         let mut outer_tx = Tx {
-            inner_tx: Some(inner_tx.clone()),
+            code: inner_tx.code.clone(),
+            data: inner_tx.data.clone(),
+            timestamp: inner_tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(inner_tx.partial_hash()))
@@ -525,7 +527,9 @@ mod tests {
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
         let mut outer_tx = Tx {
-            inner_tx: Some(inner_tx.clone()),
+            code: inner_tx.code.clone(),
+            data: inner_tx.data.clone(),
+            timestamp: inner_tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(inner_tx.partial_hash()))
@@ -574,7 +578,9 @@ mod tests {
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit.clone(),
             input: Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash()))
@@ -584,7 +590,9 @@ mod tests {
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -617,7 +625,9 @@ mod tests {
         let eval_vp = EvalVp {
             vp_code: vp_memory_limit,
             input: Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash()))
@@ -627,7 +637,9 @@ mod tests {
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -679,7 +691,9 @@ mod tests {
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -707,7 +721,9 @@ mod tests {
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData { data: Some(tx_data), sig: None }));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -759,7 +775,9 @@ mod tests {
             Some(SignedTxData { data: Some(tx_data), sig: None }),
         );
         let outer_tx = Tx {
-            inner_tx: Some(inner_tx.clone()),
+            code: inner_tx.code.clone(),
+            data: inner_tx.data.clone(),
+            timestamp: inner_tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(inner_tx.partial_hash()))
@@ -817,7 +835,9 @@ mod tests {
         let tx_data: Vec<u8> = vec![6_u8; len];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(tx_data.clone()), sig: None}));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -893,7 +913,9 @@ mod tests {
             Some(SignedTxData {data: Some(tx_data), sig: None}),
         );
         let outer_tx = Tx {
-            inner_tx: Some(inner_tx.clone()),
+            code: inner_tx.code.clone(),
+            data: inner_tx.data.clone(),
+            timestamp: inner_tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(inner_tx.partial_hash()))
@@ -943,7 +965,9 @@ mod tests {
         let tx_data = key.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1005,7 +1029,9 @@ mod tests {
         let eval_vp = EvalVp {
             vp_code: vp_read_key,
             input: Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1015,7 +1041,9 @@ mod tests {
         let tx_data = eval_vp.try_to_vec().unwrap();
         let tx = InnerTx::new(vec![], Some(SignedTxData {data: Some(tx_data), sig: None}));
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1089,7 +1117,9 @@ mod tests {
             Some(SignedTxData {data: Some(tx_data), sig: None}),
         );
         let outer_tx = Tx {
-            inner_tx: Some(inner_tx.clone()),
+            code: inner_tx.code.clone(),
+            data: inner_tx.data.clone(),
+            timestamp: inner_tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(inner_tx.partial_hash()))
@@ -1137,7 +1167,9 @@ mod tests {
 
         let tx = InnerTx::new(vec![], None);
         let mut outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))

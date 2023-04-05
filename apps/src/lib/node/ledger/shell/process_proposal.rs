@@ -329,8 +329,11 @@ mod test_process_proposal {
                     data: new_data,
                 },
                 outer_timestamp: timestamp,
-                inner_tx: Some(tx),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
                 outer_extra: vec![],
+                extra: tx.extra.clone(),
+                timestamp: tx.timestamp,
             }
         } else {
             panic!("Test failed");
@@ -471,7 +474,10 @@ mod test_process_proposal {
         for i in 0..3 {
             let tx = InnerTx::new(
                 "wasm_code".as_bytes().to_owned(),
-                Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None }),
+                Some(SignedTxData {
+                    data: Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                    sig: None,
+                }),
             );
             let encrypted_tx = tx.to_bytes();
             let wrapper = WrapperTx::new(
@@ -488,7 +494,9 @@ mod test_process_proposal {
             .bind(tx.clone());
             shell.enqueue_tx(wrapper, Some(tx.clone()));
             txs.push(Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: Hash(tx.partial_hash()),
                     #[cfg(not(feature = "mainnet"))]
@@ -709,7 +717,9 @@ mod test_process_proposal {
         );
 
         let tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: Hash(tx.partial_hash()),
                 #[cfg(not(feature = "mainnet"))]
@@ -748,7 +758,9 @@ mod test_process_proposal {
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::from(TxType::Raw(Hash(tx.partial_hash())))
         };
         let request = ProcessProposal {

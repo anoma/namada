@@ -111,7 +111,10 @@ where
                         .and_then(|x| tx.decrypt(privkey, x).ok())
                     {
                         Some(inner_tx) => Tx {
-                            inner_tx: Some(inner_tx.clone()),
+                            code: inner_tx.code.clone(),
+                            data: inner_tx.data.clone(),
+                            extra: inner_tx.extra.clone(),
+                            timestamp: inner_tx.timestamp,
                             ..Tx::from(DecryptedTx::Decrypted {
                                 tx: Hash(inner_tx.partial_hash()),
                                 #[cfg(not(feature = "mainnet"))]
@@ -288,7 +291,9 @@ mod test_prepare_proposal {
                 Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
             );
             expected_decrypted.push(Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::from(DecryptedTx::Decrypted {
                     tx: Hash(tx.partial_hash()),
                     #[cfg(not(feature = "mainnet"))]

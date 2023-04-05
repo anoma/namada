@@ -21,7 +21,10 @@ mod tests {
             outer_code: code,
             outer_data: Some("arbitrary data".as_bytes().to_owned()),
             outer_timestamp: Some(std::time::SystemTime::now().into()),
-            inner_tx: Some(inner_tx),
+            data: None,
+            code: vec![],
+            extra: vec![],
+            timestamp: Some(std::time::SystemTime::now().into()),
             outer_extra: vec![],
         };
         let mut tx_bytes = vec![];

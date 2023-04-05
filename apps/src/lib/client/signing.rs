@@ -164,7 +164,10 @@ pub async fn sign_tx(
     .await;
     let broadcast_data = if args.dry_run {
         TxBroadcastData::DryRun(Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            extra: tx.extra.clone(),
+            timestamp: tx.timestamp.clone(),
             ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: Hash(tx.partial_hash()),
                 #[cfg(not(feature = "mainnet"))]

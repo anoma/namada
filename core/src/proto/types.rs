@@ -155,8 +155,10 @@ pub struct Tx {
     pub outer_data: SignedOuterTxData,
     pub outer_timestamp: DateTimeUtc,
     pub outer_extra: Vec<u8>,
-    /// the encrypted inner transaction if data contains a WrapperTx
-    pub inner_tx: Option<InnerTx>,
+    pub code: Vec<u8>,
+    pub data: Option<SignedTxData>,
+    pub timestamp: DateTimeUtc,
+    pub extra: Vec<u8>,
 }
 
 /// A SigningTx but with the full code embedded. This structure will almost
@@ -197,18 +199,11 @@ impl TryFrom<&[u8]> for Tx {
 
     fn try_from(tx_bytes: &[u8]) -> Result<Self> {
         let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
-        let timestamp = match tx.outer_timestamp {
+        let outer_timestamp = match tx.outer_timestamp {
             Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
             None => return Err(Error::NoTimestampError),
         };
-        let inner_tx = tx
-            .inner_tx
-            .map(|x| {
-                BorshDeserialize::try_from_slice(&x)
-                    .map_err(Error::TxDeserializingError)
-            })
-            .transpose()?;
-        let data = BorshDeserialize::try_from_slice(
+        let outer_data = BorshDeserialize::try_from_slice(
             &tx
                 .outer_data
                 .ok_or(Error::TxDeserializingError(std::io::Error::new(
@@ -216,12 +211,27 @@ impl TryFrom<&[u8]> for Tx {
                     "Missing data",
                 )))?
         ).map_err(Error::TxDeserializingError)?;
+        let timestamp = match tx.timestamp {
+            Some(t) => t.try_into().map_err(Error::InvalidTimestamp)?,
+            None => return Err(Error::NoTimestampError),
+        };
+        let data = BorshDeserialize::try_from_slice(
+            &tx
+                .data
+                .ok_or(Error::TxDeserializingError(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Missing data",
+                )))?
+        ).map_err(Error::TxDeserializingError)?;
         Ok(Tx {
             outer_code: tx.outer_code,
-            outer_data: data,
+            outer_data,
             outer_extra: tx.outer_extra,
-            outer_timestamp: timestamp,
-            inner_tx,
+            outer_timestamp,
+            timestamp,
+            data,
+            code: tx.code,
+            extra: tx.extra,
         })
     }
 }
@@ -253,21 +263,25 @@ impl TryFrom<&[u8]> for InnerTx {
 
 impl From<Tx> for types::Tx {
     fn from(tx: Tx) -> Self {
-        let timestamp = Some(tx.outer_timestamp.into());
-        let inner_tx = tx.inner_tx.map(|x| {
-            x.try_to_vec()
-                .expect("Unable to serialize encrypted transaction")
-        });
-        let data = Some(
+        let outer_timestamp = Some(tx.outer_timestamp.into());
+        let outer_data = Some(
             tx.outer_data.try_to_vec()
+                .expect("Unable to serialize encrypted transaction")
+        );
+        let timestamp = Some(tx.timestamp.into());
+        let data = Some(
+            tx.data.try_to_vec()
                 .expect("Unable to serialize encrypted transaction")
         );
         types::Tx {
             outer_code: tx.outer_code,
-            outer_data: data,
+            outer_data,
             outer_extra: tx.outer_extra,
-            outer_timestamp: timestamp,
-            inner_tx,
+            outer_timestamp,
+            data,
+            timestamp,
+            code: tx.code,
+            extra: tx.extra,
         }
     }
 }
@@ -349,8 +363,11 @@ impl Tx {
             outer_code: code,
             outer_data: data,
             outer_timestamp: DateTimeUtc::now(),
-            inner_tx: None,
             outer_extra: vec![],
+            code: vec![],
+            data: None,
+            timestamp: DateTimeUtc::now(),
+            extra: vec![],
         }
     }
 
@@ -359,39 +376,33 @@ impl Tx {
     }
 
     pub fn code(&self) -> Option<Vec<u8>> {
-        if let Some(inner_tx) = &self.inner_tx {
-            Some(inner_tx.code.clone())
-        } else {
-            None
-        }
+        Some(self.code.clone())
     }
 
     pub fn extra(&self) -> Option<Vec<u8>> {
-        if let Some(inner_tx) = &self.inner_tx {
-            Some(inner_tx.extra.clone())
-        } else {
-            None
-        }
+        Some(self.extra.clone())
     }
 
     pub fn data(&self) -> Option<Vec<u8>> {
-        if let Some(InnerTx { data: Some(SignedTxData { data, ..}), .. }) = &self.inner_tx {
-            data.clone()
-        } else {
-            None
-        }
+        self.data.clone().and_then(|x| x.data)
     }
 
     pub fn data_hash(&self) -> Option<crate::types::hash::Hash> {
-        if let Some(tx) = &self.inner_tx {
-            Some(crate::types::hash::Hash(tx.partial_hash()))
-        } else {
-            None
-        }
+        Some(crate::types::hash::Hash(InnerTx {
+            data: self.data.clone(),
+            code: self.code.clone(),
+            timestamp: self.timestamp,
+            extra: self.extra.clone(),
+        }.partial_hash()))
     }
 
     pub fn inner_tx(&self) -> Option<InnerTx> {
-        self.inner_tx.clone()
+        Some(InnerTx {
+            data: self.data.clone(),
+            code: self.code.clone(),
+            timestamp: self.timestamp,
+            extra: self.extra.clone(),
+        })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -413,8 +424,11 @@ impl Tx {
             outer_code: hash_tx(&self.outer_code).0.to_vec(),
             outer_extra: hash_tx(&self.outer_extra).0.to_vec(),
             outer_data: data,
-            outer_timestamp: timestamp,
-            inner_tx: None,
+            outer_timestamp: timestamp.clone(),
+            code: vec![],
+            extra: vec![],
+            data: None,
+            timestamp,
         }
     }
 
@@ -452,7 +466,10 @@ impl Tx {
             outer_data: signed,
             outer_extra: self.outer_extra,
             outer_timestamp: self.outer_timestamp,
-            inner_tx: self.inner_tx,
+            code: self.code,
+            data: self.data,
+            extra: self.extra,
+            timestamp: self.timestamp,
         }
     }
 
@@ -472,7 +489,10 @@ impl Tx {
             outer_extra: self.outer_extra.clone(),
             outer_data: data,
             outer_timestamp: self.outer_timestamp,
-            inner_tx: self.inner_tx.clone(),
+            code: self.code.clone(),
+            extra: self.extra.clone(),
+            data: self.data.clone(),
+            timestamp: self.timestamp.clone(),
         };
         let signed_data = tx.partial_hash();
         common::SigScheme::verify_signature_raw(pk, &signed_data, sig)
@@ -506,7 +526,10 @@ impl Tx {
         tx: &InnerTx,
         encryption_key: EncryptionKey,
     ) -> Self {
-        self.inner_tx = Some(tx.clone());
+        self.code = tx.code.clone();
+        self.data = tx.data.clone();
+        self.extra = tx.extra.clone();
+        self.timestamp = tx.timestamp;
         self
     }
 
@@ -726,7 +749,10 @@ mod tests {
             outer_code: code,
             outer_data: Some(data),
             outer_timestamp: None,
-            inner_tx: None,
+            code: vec![],
+            data: None,
+            timestamp: None,
+            extra: vec![],
             outer_extra: vec![],
         };
         let mut bytes = vec![];

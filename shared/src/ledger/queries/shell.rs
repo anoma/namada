@@ -375,7 +375,9 @@ mod test {
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
         let tx = InnerTx::new(tx_no_op, None);
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: Hash(tx.partial_hash()),
                 #[cfg(not(feature = "mainnet"))]

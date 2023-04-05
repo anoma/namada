@@ -451,10 +451,15 @@ mod tests {
                     code.clone(),
                     Some(SignedTxData {data:data.clone(), sig: None})
                 ).sign(&keypair);
-                env.tx = Tx { inner_tx: Some(tx.clone()), ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(tx.partial_hash())),
-                })};
+                env.tx = Tx {
+                    timestamp: tx.timestamp,
+                    data: tx.data.clone(),
+                    code: tx.code.clone(),
+                    ..Tx::new(vec![], SignedOuterTxData {
+                        sig: None,
+                        data: TxType::Raw(Hash(tx.partial_hash())),
+                    })
+                };
                 let tx_data = env.tx.clone();
 
                 tx_data
@@ -462,7 +467,7 @@ mod tests {
             assert_eq!(&signed_tx_data.data(), data);
             assert!(
                 signed_tx_data
-                    .verify_signature(&pk, &signed_tx_data.data_hash().unwrap())
+                    .verify_signature(&pk, &Hash(signed_tx_data.inner_tx().unwrap().partial_hash()))
                     .is_ok()
             );
 
@@ -515,7 +520,9 @@ mod tests {
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
         let result = vp::CTX.eval(empty_code, Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -529,7 +536,9 @@ mod tests {
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
         let result = vp::CTX.eval(code, Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -544,7 +553,9 @@ mod tests {
         let input_data = vec![];
         let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
         let result = vp::CTX.eval(code, Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -593,7 +604,9 @@ mod tests {
         // Check should fail due to no client state
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -627,7 +640,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -685,7 +700,9 @@ mod tests {
         // Check should fail due to the invalid updating
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -718,7 +735,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -754,7 +773,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -810,7 +831,9 @@ mod tests {
         // Check should fail due to directly opening a connection
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -843,7 +866,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -876,7 +901,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -919,7 +946,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -953,7 +982,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1012,7 +1043,9 @@ mod tests {
         // Check should fail due to no port binding
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1066,7 +1099,9 @@ mod tests {
 
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1100,7 +1135,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1131,7 +1168,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1176,7 +1215,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1208,7 +1249,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1255,7 +1298,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1303,7 +1348,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1354,7 +1401,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1373,11 +1422,13 @@ mod tests {
         );
         let token_vp_result =
             ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
+                data: tx.data.clone(),
+                code: tx.code.clone(),
+                timestamp: tx.timestamp,
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Raw(Hash(tx.partial_hash())),
+                })
         }, &escrow);
         assert!(token_vp_result.expect("token validation failed unexpectedly"));
 
@@ -1407,7 +1458,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1463,7 +1516,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1478,7 +1533,9 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcBurn),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1541,7 +1598,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1556,7 +1615,9 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcMint),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1631,7 +1692,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1640,7 +1703,9 @@ mod tests {
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was unescrowed
         let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1693,7 +1758,9 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1729,7 +1796,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1787,7 +1856,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1855,7 +1926,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1873,7 +1946,9 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1940,7 +2015,9 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),
@@ -1958,7 +2035,9 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash())),

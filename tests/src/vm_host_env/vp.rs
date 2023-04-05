@@ -73,7 +73,9 @@ impl Default for TestVpEnv {
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
             tx: Tx {
-                inner_tx: Some(inner_tx.clone()),
+                code: inner_tx.code.clone(),
+                data: inner_tx.data.clone(),
+                timestamp: inner_tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(inner_tx.partial_hash())),

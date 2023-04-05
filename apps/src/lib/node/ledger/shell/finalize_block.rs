@@ -587,7 +587,9 @@ mod test_finalize_block {
 
         let processed_tx = ProcessedTx {
             tx: Tx {
-                inner_tx: Some(raw_tx.clone()),
+                code: raw_tx.code.clone(),
+                data: raw_tx.data.clone(),
+                timestamp: raw_tx.timestamp,
                 ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                     tx: Hash(raw_tx.partial_hash()),
                     #[cfg(not(feature = "mainnet"))]
@@ -724,7 +726,9 @@ mod test_finalize_block {
             shell.enqueue_tx(wrapper_tx, Some(raw_tx.clone()));
             processed_txs.push(ProcessedTx {
                 tx: Tx {
-                    inner_tx: Some(raw_tx.clone()),
+                    code: raw_tx.code.clone(),
+                    data: raw_tx.data.clone(),
+                    timestamp: raw_tx.timestamp,
                     ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                         tx: Hash(raw_tx.partial_hash()),
                         #[cfg(not(feature = "mainnet"))]

@@ -286,7 +286,10 @@ pub mod tx_types {
                     sig: None,
                 },
                 outer_timestamp: tx.outer_timestamp,
-                inner_tx: tx.inner_tx.clone(),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                extra: tx.extra.clone(),
+                timestamp: tx.timestamp.clone(),
                 outer_extra: tx.outer_extra.clone(),
             }
             .partial_hash();
@@ -297,7 +300,10 @@ pub mod tx_types {
                     sig: None,
                 },
                 outer_timestamp: tx.outer_timestamp.clone(),
-                inner_tx: tx.inner_tx.clone(),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                extra: tx.extra.clone(),
+                timestamp: tx.timestamp.clone(),
                 outer_extra: tx.outer_extra.clone(),
             })
             .map_err(|err| TxError::Deserialization(err.to_string()))?
@@ -357,7 +363,8 @@ pub mod tx_types {
         fn test_process_tx_raw_tx_no_data() {
             let tx = InnerTx::new("wasm code".as_bytes().to_owned(), None);
             let outer_tx = Tx {
-                inner_tx: Some(tx.clone()),
+                code: "wasm code".as_bytes().to_owned(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash())),
@@ -379,7 +386,9 @@ pub mod tx_types {
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx {
-                inner_tx: Some(inner.clone()),
+                code: inner.code.clone(),
+                data: inner.data.clone(),
+                timestamp: inner.timestamp,
                 ..Tx::new(
                     "wasm code".as_bytes().to_owned(),
                     SignedOuterTxData {
@@ -403,7 +412,9 @@ pub mod tx_types {
                 Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
             );
             let tx = Tx {
-                inner_tx: Some(inner.clone()),
+                code: inner.code.clone(),
+                data: inner.data.clone(),
+                timestamp: inner.timestamp,
                 ..Tx::new(
                     "wasm code".as_bytes().to_owned(),
                     SignedOuterTxData {
@@ -447,7 +458,7 @@ pub mod tx_types {
             match process_tx(&wrapper_tx.clone()).expect("Test failed").header() {
                 TxType::Wrapper(wrapper) => {
                     let decrypted =
-                        wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(), wrapper_tx.inner_tx.unwrap())
+                        wrapper.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator(), wrapper_tx.inner_tx().unwrap())
                             .expect("Test failed");
                     assert_eq!(tx, decrypted);
                 }
@@ -496,7 +507,9 @@ pub mod tx_types {
             Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
         );
         let decrypted = Tx {
-            inner_tx: Some(payload.clone()),
+            code: payload.code.clone(),
+            data: payload.data.clone(),
+            timestamp: payload.timestamp,
             ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: Hash(payload.partial_hash()),
                 #[cfg(not(feature = "mainnet"))]
@@ -538,7 +551,12 @@ pub mod tx_types {
             sig: Some(common::Signature::try_from_sig(&ed_sig).unwrap()),
         };
         // create the tx with signed decrypted data
-        let tx = Tx { inner_tx: Some(payload.clone()), ..Tx::new(vec![], signed) };
+        let tx = Tx {
+            code: payload.code.clone(),
+            data: payload.data.clone(),
+            timestamp: payload.timestamp,
+            ..Tx::new(vec![], signed)
+        };
         match process_tx(&tx).expect("Test failed").header() {
             TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: processed,

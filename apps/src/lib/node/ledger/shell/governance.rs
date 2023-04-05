@@ -77,7 +77,9 @@ where
                         let tx = InnerTx::new(proposal_code, Some(SignedTxData { data: Some(encode(&id)), sig: None }));
                         let tx_type =
                             Tx {
-                                inner_tx: Some(tx.clone()),
+                                code: tx.code.clone(),
+                                data: tx.data.clone(),
+                                timestamp: tx.timestamp,
                                 ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                                     tx: Hash(tx.partial_hash()),
                                     #[cfg(not(feature = "mainnet"))]

@@ -581,7 +581,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -604,7 +606,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -635,7 +639,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -657,7 +663,9 @@ mod tests {
         // this should fail because no state is stored
         let result = ibc
             .validate_tx(&Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash()))
@@ -728,7 +736,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -750,7 +760,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -800,7 +812,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -822,7 +836,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -869,7 +885,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -890,7 +908,9 @@ mod tests {
         // this should fail because no client exists
         let result = ibc
             .validate_tx(&Tx {
-                inner_tx: Some(tx.clone()),
+                code: tx.code.clone(),
+                data: tx.data.clone(),
+                timestamp: tx.timestamp,
                 ..Tx::new(vec![], SignedOuterTxData {
                     sig: None,
                     data: TxType::Raw(Hash(tx.partial_hash()))
@@ -964,7 +984,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -986,7 +1008,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1065,7 +1089,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1086,7 +1112,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1153,7 +1181,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1174,7 +1204,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1227,7 +1259,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1248,7 +1282,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1320,7 +1356,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1341,7 +1379,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1421,7 +1461,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1442,7 +1484,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1519,7 +1563,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1540,7 +1586,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1573,7 +1621,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1594,7 +1644,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1629,7 +1681,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1651,7 +1705,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1725,7 +1781,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1746,7 +1804,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1827,7 +1887,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1848,7 +1910,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1934,7 +1998,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -1955,7 +2021,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2033,7 +2101,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2054,7 +2124,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2139,7 +2211,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2161,7 +2235,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2202,7 +2278,9 @@ mod tests {
 
         let verifiers = BTreeSet::new();
         let outer_tx = Tx {
-            inner_tx: Some(tx.clone()),
+            code: tx.code.clone(),
+            data: tx.data.clone(),
+            timestamp: tx.timestamp,
             ..Tx::new(vec![], SignedOuterTxData {
                 sig: None,
                 data: TxType::Raw(Hash(tx.partial_hash()))
@@ -2224,7 +2302,9 @@ mod tests {
         assert!(
             ibc.validate_tx(
                 &Tx {
-                    inner_tx: Some(tx.clone()),
+                    code: tx.code.clone(),
+                    data: tx.data.clone(),
+                    timestamp: tx.timestamp,
                     ..Tx::new(vec![], SignedOuterTxData {
                         sig: None,
                         data: TxType::Raw(Hash(tx.partial_hash()))

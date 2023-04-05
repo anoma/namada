@@ -2178,7 +2178,9 @@ pub async fn submit_reveal_pk_aux(
     .await;
     let to_broadcast = if args.dry_run {
         TxBroadcastData::DryRun(Tx {
-            inner_tx: Some(tx.clone()),
+            data: tx.data.clone(),
+            code: tx.code.clone(),
+            timestamp: tx.timestamp,
             ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
                 tx: Hash(tx.partial_hash()),
                 #[cfg(not(feature = "mainnet"))]

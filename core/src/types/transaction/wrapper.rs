@@ -382,7 +382,7 @@ pub mod wrapper_tx {
                 .attach_inner_tx(&tx, Default::default());
             assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
+            let encrypted_tx = stx.inner_tx().expect("inner tx was not attached");
             let decrypted =
                 wrapper.decrypt(privkey, encrypted_tx).expect("Test failed");
             assert_eq!(tx, decrypted);
@@ -417,7 +417,7 @@ pub mod wrapper_tx {
                 .attach_inner_tx(&tx, Default::default());
             assert!(stx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            let encrypted_tx = stx.inner_tx.expect("inner tx was not attached");
+            let encrypted_tx = stx.inner_tx().expect("inner tx was not attached");
             let err = wrapper
                 .decrypt(privkey, encrypted_tx)
                 .expect_err("Test failed");
