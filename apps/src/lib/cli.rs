@@ -47,7 +47,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -62,7 +62,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateVp::def())
+                .subcommand(TxUpdateAccount::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
                 .subcommand(TxRevealPk::def())
@@ -77,7 +77,8 @@ pub mod cmds {
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
+            let tx_update_account =
+                SubCmd::parse(matches).map(Self::TxUpdateAccount);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -89,7 +90,7 @@ pub mod cmds {
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
@@ -154,7 +155,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
-                .subcommand(TxUpdateVp::def().display_order(1))
+                .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
@@ -191,7 +192,8 @@ pub mod cmds {
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
+            let tx_update_account =
+                Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
@@ -227,7 +229,7 @@ pub mod cmds {
             tx_custom
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_account)
                 .or(tx_reveal_pk)
                 .or(tx_init_proposal)
@@ -291,7 +293,7 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxInitProposal(TxInitProposal),
@@ -1034,15 +1036,15 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp);
+    pub struct TxUpdateAccount(pub args::TxUpdateAccount);
 
-    impl SubCmd for TxUpdateVp {
+    impl SubCmd for TxUpdateAccount {
         const CMD: &'static str = "update";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdateVp(args::TxUpdateVp::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateAccount(args::TxUpdateAccount::parse(matches))
+            })
         }
 
         fn def() -> App {
@@ -1051,7 +1053,7 @@ pub mod cmds {
                     "Send a signed transaction to update account's validity \
                      predicate.",
                 )
-                .add_args::<args::TxUpdateVp>()
+                .add_args::<args::TxUpdateAccount>()
         }
     }
 
@@ -2234,23 +2236,31 @@ pub mod args {
 
     /// Transaction to update a VP arguments
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp {
+    pub struct TxUpdateAccount {
         /// Common tx arguments
         pub tx: Tx,
         /// Path to the VP WASM code file
-        pub vp_code_path: PathBuf,
+        pub vp_code_path: Option<PathBuf>,
+        /// New set of public keys to associate with the account
+        pub public_keys: Vec<WalletPublicKey>,
+        /// The new account threshold
+        pub threshold: Option<u64>,
         /// Address of the account whose VP is to be updated
         pub addr: WalletAddress,
     }
 
-    impl Args for TxUpdateVp {
+    impl Args for TxUpdateAccount {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             let addr = ADDRESS.parse(matches);
             Self {
                 tx,
                 vp_code_path,
+                public_keys,
+                threshold,
                 addr,
             }
         }
@@ -2261,6 +2271,14 @@ pub mod args {
                     CODE_PATH.def().about(
                         "The path to the new validity predicate WASM code.",
                     ),
+                )
+                .arg(PUBLIC_KEYS.def().about(
+                    "The new set of public keys to associate with the account.",
+                ))
+                .arg(
+                    THRESHOLD
+                        .def()
+                        .about("The new account multisig threshold."),
                 )
                 .arg(ADDRESS.def().about(
                     "The account's address. It's key is used to produce the \

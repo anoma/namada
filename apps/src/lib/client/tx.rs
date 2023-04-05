@@ -86,7 +86,7 @@ const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
-const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
@@ -145,7 +145,10 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     .await;
 }
 
-pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
+pub async fn submit_update_account(
+    mut ctx: Context,
+    args: args::TxUpdateAccount,
+) {
     let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
 
     let addr = ctx.get(&args.addr);
@@ -183,20 +186,32 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
         }
     }
 
-    let vp_code = ctx.read_wasm(args.vp_code_path);
-    // Validate the VP code
-    if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
-        eprintln!("Validity predicate code validation failed with {}", err);
-        if !args.tx.force {
-            safe_exit(1)
+    let vp_code = if let Some(path) = args.vp_code_path {
+        let vp_code = ctx.read_wasm(path);
+        if let Err(err) = vm::validate_untrusted_wasm(&vp_code) {
+            eprintln!("Validity predicate code validation failed with {}", err);
+            if !args.tx.force {
+                safe_exit(1)
+            }
         }
-    }
+        Some(vp_code)
+    } else {
+        None
+    };
 
-    let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
+    let public_keys = args
+        .public_keys
+        .iter()
+        .map(|account_key| ctx.get_cached(account_key))
+        .collect();
+
+    let tx_code = ctx.read_wasm(TX_UPDATE_ACCOUNT_WASM);
 
     let data = UpdateVp {
         addr: addr.clone(),
         vp_code,
+        public_keys,
+        threshold: args.threshold,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
