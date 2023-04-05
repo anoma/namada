@@ -2604,8 +2604,11 @@ where
             )?
             .unwrap_or_default();
             debug_assert_eq!(
-                stake_from_deltas,
-                token::Amount::from(validator_vp)
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    stake_from_deltas
+                ),
+                i64::try_from(validator_vp).unwrap_or_default(),
             );
         }
 
