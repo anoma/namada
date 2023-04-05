@@ -14,6 +14,7 @@ pub mod process_proposal;
 mod queries;
 mod stats;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
@@ -43,6 +44,7 @@ use namada::types::internal::WrapperTxInQueue;
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::transaction::WrapperTx;
 #[cfg(not(feature = "mainnet"))]
 use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
@@ -51,7 +53,7 @@ use namada::types::transaction::{
 };
 use namada::types::{address, hash, token};
 use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::WasmCacheRwAccess;
+use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
@@ -707,7 +709,7 @@ where
         };
 
         // Tx type check
-        if let TxType::Wrapper(mut wrapper) = tx_type {
+        if let TxType::Wrapper(wrapper) = tx_type {
             // Tx gas limit
             let mut gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
             if gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
@@ -773,79 +775,15 @@ where
             }
 
             // check that the fee payer has sufficient balance
-            //FIXME: extract the balance check to a function ot be reused?
-            let mut balance =
-                self.get_balance(&wrapper.fee.token, &wrapper.fee_payer());
-
-            if let Some(unshield) = wrapper.unshield.take() {
-                // Static checks
-                if let Err(e) = wrapper.validate_fee_unshielding(balance) {
-                    response.code = ErrorCodes::InvalidTx.into();
-                    response.log =
-                        format!("The unshielding tx is invalid: {}", e);
-                    return response;
-                }
-
-                let gas_table: BTreeMap<String, u64> = self
-                    .wl_storage
-                    .read(&parameters::storage::get_gas_table_storage_key())
-                    .expect("Error while reading from storage")
-                    .expect("Missing gas table in storage");
-
-                let mut temp_wl_storage =
-                    TempWlStorage::new(&self.wl_storage.storage);
-
-                let mut vp_wasm_cache = self.vp_wasm_cache.clone();
-                let mut tx_wasm_cache = self.tx_wasm_cache.clone();
-
-                // Runtime check
-                match apply_tx(
-                    TxType::Decrypted(DecryptedTx::Decrypted {
-                        tx: unshield,
-                        #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: false,
-                    }),
-                    TxIndex::default(),
-                    &mut TxGasMeter::new(u64::MAX),
-                    &gas_table,
-                    &mut temp_wl_storage.write_log,
-                    temp_wl_storage.storage,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                ) {
-                    Ok(result) => {
-                        if result.is_accepted() {
-                            // Update the balance
-                            balance = storage_api::token::read_balance(&temp_wl_storage, &wrapper.fee.token, &wrapper.fee_payer())
-            .expect("Token balance read in the protocol must not fail");
-                        } else {
-                            response.code = ErrorCodes::InvalidTx.into();
-                            response.log = format!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps);
-                            return response;
-                        }
-                    }
-                    Err(e) => {
-                        response.code = ErrorCodes::InvalidTx.into();
-                        response.log =
-                            format!("The unshielding tx in invalid: {}", e);
-                        return response;
-                    }
-                }
-            }
-
-            // In testnets with a faucet, tx is allowed to skip fees if
-            // it includes a valid PoW
-            #[cfg(not(feature = "mainnet"))]
-            let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-            #[cfg(feature = "mainnet")]
-            let has_valid_pow = false;
-
-            if !has_valid_pow && self.get_wrapper_tx_fees() > balance {
+            if let Err(e) = self.wrapper_fee_check(
+                wrapper,
+                &mut TempWlStorage::new(&self.wl_storage.storage),
+                None,
+                &mut self.vp_wasm_cache.clone(),
+                &mut self.tx_wasm_cache.clone(),
+            ) {
                 response.code = ErrorCodes::InvalidTx.into();
-                response.log = String::from(
-                    "The given address does not have a sufficient balance to \
-                     pay fee",
-                );
+                response.log = e;
                 return response;
             }
         } else {
@@ -1004,6 +942,96 @@ where
             }
         }
         false
+    }
+
+    /// Check that the Wrapper's signer has enough funds to pay fees. This method consumes the provided wrapper.
+    pub fn wrapper_fee_check<CA>(
+        &self,
+        mut wrapper: WrapperTx,
+        wl_storage: &mut TempWlStorage<D, H>,
+        gas_table: Option<Cow<BTreeMap<String, u64>>>,
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+    ) -> std::result::Result<(), String>
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        // In testnets with a faucet, tx is allowed to skip fees if
+        // it includes a valid PoW
+        #[cfg(not(feature = "mainnet"))]
+        if self.has_valid_pow_solution(&wrapper) {
+            return Ok(());
+        }
+
+        let mut balance = storage_api::token::read_balance(
+            wl_storage,
+            &wrapper.fee.token,
+            &wrapper.fee_payer(),
+        )
+        .expect("Token balance read in the protocol must not fail");
+
+        if let Some(unshield) = wrapper.unshield.take() {
+            // Static checks
+            wrapper.validate_fee_unshielding(balance).map_err(|e| {
+                format!(
+                    "The unshielding tx is invalid, failed static check: {}",
+                    e
+                )
+            })?;
+
+            let gas_table = gas_table.unwrap_or_else(|| {
+                wl_storage
+                    .read(&parameters::storage::get_gas_table_storage_key())
+                    .expect("Error while reading from storage")
+                    .expect("Missing gas table in storage")
+            });
+
+            // Runtime check
+            match apply_tx(
+                TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: unshield,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }),
+                TxIndex::default(),
+                &mut TxGasMeter::new(u64::MAX),
+                &gas_table,
+                &mut wl_storage.write_log,
+                &wl_storage.storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ) {
+                Ok(result) => {
+                    if result.is_accepted() {
+                        // Update the balance
+                        balance = storage_api::token::read_balance(
+                            wl_storage,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        )
+                        .expect(
+                            "Token balance read in the protocol must not fail",
+                        );
+                    } else {
+                        return Err(format!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps));
+                    }
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "The unshielding tx is invalid, wasm run failed: {}",
+                        e
+                    ))
+                }
+            }
+        }
+
+        if balance >= self.get_wrapper_tx_fees() {
+            Ok(())
+        } else {
+            Err("The given address does not have a sufficient balance to \
+                     pay fee"
+                .to_string())
+        }
     }
 }
 
