@@ -9,12 +9,13 @@ The Namada Ethereum bridge system consists of:
 * An Ethereum full node run by each Namada validator, for including relevant 
   Ethereum events into Namada.
 * A set of validity predicates on Namada which roughly implements 
-  [ICS20](https://docs.cosmos.network/v0.42/modules/ibc/) fungible token 
-  transfers.
+  [ICS20] fungible token transfers.
 * A set of Ethereum smart contracts.
 * An automated process to send validator set updates to the Ethereum smart 
   contracts.
 * A relayer binary to aid in submitting transactions to Ethereum
+
+[ICS20]: <https://github.com/cosmos/ibc/blob/ed849c7bacf16204e9509f0f0df325391f3ce25c/spec/app/ics-020-fungible-token-transfer/README.md>
 
 This basic bridge architecture should provide for almost-Namada consensus
 security for the bridge and free Ethereum state reads on Namada, plus
