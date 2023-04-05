@@ -2569,7 +2569,7 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    let mut total_consensus_stake = 0_u64;
+    let mut total_consensus_stake = token::Amount::default();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -2578,13 +2578,13 @@ where
             },
             _address,
         ) = validator?;
-        total_consensus_stake += u64::from(amount);
+        total_consensus_stake += amount;
     }
 
     // Get set of signing validator addresses and the combined stake of
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
-    let mut total_signing_stake: u64 = 0;
+    let mut total_signing_stake = token::Amount::default();
     for VoteInfo {
         validator_address,
         validator_vp,
@@ -2594,15 +2594,12 @@ where
             continue;
         }
 
+        let stake_from_deltas =
+            read_validator_stake(storage, &params, &validator_address, epoch)?
+                .unwrap_or_default();
+
         // Ensure TM stake updates properly with a debug_assert
         if cfg!(debug_assertions) {
-            let stake_from_deltas = read_validator_stake(
-                storage,
-                &params,
-                &validator_address,
-                epoch,
-            )?
-            .unwrap_or_default();
             debug_assert_eq!(
                 into_tm_voting_power(
                     params.tm_votes_per_token,
@@ -2613,7 +2610,7 @@ where
         }
 
         signer_set.insert(validator_address);
-        total_signing_stake += validator_vp;
+        total_signing_stake += stake_from_deltas;
     }
 
     // Get the block rewards coefficients (proposing, signing/voting,
@@ -2623,8 +2620,8 @@ where
     let rewards_calculator = PosRewardsCalculator {
         proposer_reward: params.block_proposer_reward,
         signer_reward: params.block_vote_reward,
-        signing_stake: total_signing_stake,
-        total_stake: total_consensus_stake,
+        signing_stake: u64::from(total_signing_stake),
+        total_stake: u64::from(total_consensus_stake),
     };
     let coeffs = rewards_calculator
         .get_reward_coeffs()
