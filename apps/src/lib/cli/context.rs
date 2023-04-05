@@ -12,6 +12,7 @@ use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
+use crate::cli::safe_exit;
 use crate::client::tx::ShieldedContext;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
@@ -184,8 +185,26 @@ impl Context {
     }
 
     /// Read the given WASM file from the WASM directory or an absolute path.
+    /// Exit if wasm blob is not found.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
-        wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
+        match self.try_read_wasm(&file_name) {
+            Some(bytes) => bytes,
+            None => {
+                println!(
+                    "Unable to read {}.",
+                    file_name.as_ref().to_string_lossy()
+                );
+                safe_exit(1)
+            }
+        }
+    }
+
+    /// Read the given WASM file from the WASM directory or an absolute path.
+    pub fn try_read_wasm(
+        &self,
+        file_name: impl AsRef<Path>,
+    ) -> Option<Vec<u8>> {
+        wasm_loader::read_wasm(self.wasm_dir(), file_name).ok()
     }
 }
 

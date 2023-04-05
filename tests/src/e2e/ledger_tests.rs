@@ -1694,6 +1694,8 @@ fn invalid_transactions() -> Result<()> {
         &tx_data_path,
         "--signing-keys",
         &daewon_lower,
+        "--address",
+        &daewon_lower,
         "--gas-amount",
         "0",
         "--gas-limit",
