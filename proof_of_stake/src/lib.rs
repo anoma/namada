@@ -2627,6 +2627,9 @@ where
         .get_reward_coeffs()
         .map_err(InflationError::Rewards)
         .into_storage_result()?;
+    tracing::debug!(
+        "PoS rewards coefficients {coeffs:?}, inputs: {rewards_calculator:?}."
+    );
 
     // println!(
     //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
