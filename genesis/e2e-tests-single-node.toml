@@ -179,7 +179,7 @@ pipeline_len = 2
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
 unbonding_len = 3
 # Votes per fundamental staking token (namnam)
-tm_votes_per_token = 1
+tm_votes_per_token = 0.1
 # Reward for proposing a block.
 block_proposer_reward = 0.125
 # Reward for voting on a block.
