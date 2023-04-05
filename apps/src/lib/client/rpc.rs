@@ -1416,19 +1416,46 @@ pub async fn sign_tx(
     let keypairs =
         tx_signers(&mut ctx, &tx, vec![super::signing::TxSigningKey::None])
             .await;
-    let keypair = keypairs.get(0).expect("One signer should be provided.");
+    let keypair = match keypairs.len() {
+        1 => keypairs.get(0).expect("One signer should be provided."),
+        _ => {
+            eprintln!("You can sign a tx only with one key at a time.");
+            safe_exit(1)
+        }
+    };
+
+    let tx_hash = Hash::sha256(data);
 
     let signature = signing_tx.compute_signature(keypair);
     let public_key = keypair.ref_to();
 
     let offline_signature = OfflineSignature {
         sig: signature,
-        public_key,
+        public_key: public_key.clone(),
     };
 
-    let offline_signature_out = File::create("offline_signature.tx").unwrap();
-    serde_json::to_writer_pretty(offline_signature_out, &offline_signature)
-        .expect("Signature should be deserializable.")
+    let signature_path = format!(
+        "{}-{}-signature.tx",
+        tx_hash.to_string(),
+        public_key.to_string()
+        tx_hash.to_string().to_ascii_lowercase(),
+        public_key
+    );
+    let offline_signature_out = File::create(&signature_path)
+        .expect("Should be able to create a file.");
+
+    match serde_json::to_writer_pretty(
+        offline_signature_out,
+        &offline_signature,
+    ) {
+        Ok(_) => {
+            println!("Signature has been serialized to {}", signature_path);
+        }
+        Err(_) => {
+            eprintln!("Couldn't serialize the signature.");
+            safe_exit(1)
+        }
+    }
 }
 
 pub async fn query_unbond_with_slashing(

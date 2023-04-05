@@ -59,7 +59,7 @@ use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{storage, token};
+use namada::types::{storage, token, hash::Hash};
 use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
@@ -2749,12 +2749,14 @@ async fn process_tx(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {
     if args.offline_tx {
-        // TODO: use async version of fs
-        tokio::fs::write("code.tx", tx.clone().code)
+        let tx_hash = Hash(tx.clone().hash()).to_string().to_ascii_lowercase();
+        let code_filename = format!("{}-code.tx", tx_hash);
+        let data_filename = format!("{}-data.tx", tx_hash);
+        tokio::fs::write(code_filename, tx.clone().code)
             .await
             .expect("Should be able to write a file to disk.");
         if let Some(ref data) = tx.data {
-            tokio::fs::write("data.tx", data)
+            tokio::fs::write(data_filename, data)
                 .await
                 .expect("Should be able to write a file to disk.");
         }

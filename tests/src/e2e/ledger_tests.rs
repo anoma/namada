@@ -385,6 +385,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             &vp_user,
             "--alias",
             "Test-Account",
+            "--threshold",
+            "1",
             "--gas-amount",
             "0",
             "--gas-limit",
