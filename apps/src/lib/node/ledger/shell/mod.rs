@@ -28,9 +28,10 @@ use namada::ledger::gas::{BlockGasMeter, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
+use namada::ledger::protocol::apply_tx;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, WlStorage, DB,
+    DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
 };
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{ibc, parameters, pos, protocol, replay_protection};
@@ -706,7 +707,7 @@ where
         };
 
         // Tx type check
-        if let TxType::Wrapper(wrapper) = tx_type {
+        if let TxType::Wrapper(mut wrapper) = tx_type {
             // Tx gas limit
             let mut gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
             if gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
@@ -772,8 +773,65 @@ where
             }
 
             // check that the fee payer has sufficient balance
-            let balance =
+            //FIXME: extract the balance check to a function ot be reused?
+            let mut balance =
                 self.get_balance(&wrapper.fee.token, &wrapper.fee_payer());
+
+            if let Some(unshield) = wrapper.unshield.take() {
+                // Static checks
+                if let Err(e) = wrapper.validate_fee_unshielding(balance) {
+                    response.code = ErrorCodes::InvalidTx.into();
+                    response.log =
+                        format!("The unshielding tx is invalid: {}", e);
+                    return response;
+                }
+
+                let gas_table: BTreeMap<String, u64> = self
+                    .wl_storage
+                    .read(&parameters::storage::get_gas_table_storage_key())
+                    .expect("Error while reading from storage")
+                    .expect("Missing gas table in storage");
+
+                let mut temp_wl_storage =
+                    TempWlStorage::new(&self.wl_storage.storage);
+
+                let mut vp_wasm_cache = self.vp_wasm_cache.clone();
+                let mut tx_wasm_cache = self.tx_wasm_cache.clone();
+
+                // Runtime check
+                match apply_tx(
+                    TxType::Decrypted(DecryptedTx::Decrypted {
+                        tx: unshield,
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    }),
+                    TxIndex::default(),
+                    &mut TxGasMeter::new(u64::MAX),
+                    &gas_table,
+                    &mut temp_wl_storage.write_log,
+                    temp_wl_storage.storage,
+                    &mut vp_wasm_cache,
+                    &mut tx_wasm_cache,
+                ) {
+                    Ok(result) => {
+                        if result.is_accepted() {
+                            // Update the balance
+                            balance = storage_api::token::read_balance(&temp_wl_storage, &wrapper.fee.token, &wrapper.fee_payer())
+            .expect("Token balance read in the protocol must not fail");
+                        } else {
+                            response.code = ErrorCodes::InvalidTx.into();
+                            response.log = format!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps);
+                            return response;
+                        }
+                    }
+                    Err(e) => {
+                        response.code = ErrorCodes::InvalidTx.into();
+                        response.log =
+                            format!("The unshielding tx in invalid: {}", e);
+                        return response;
+                    }
+                }
+            }
 
             // In testnets with a faucet, tx is allowed to skip fees if
             // it includes a valid PoW
