@@ -107,7 +107,7 @@ where
                      has_valid_pow,
                  }| {
                     match inner_tx
-                        .clone()
+                        .inner_tx()
                         .and_then(|x| tx.decrypt(privkey, x).ok())
                     {
                         Some(inner_tx) => Tx {
@@ -316,7 +316,7 @@ mod test_prepare_proposal {
                 .sign(&keypair)
                 .expect("Test failed")
                 .attach_inner_tx(&tx, Default::default());
-            shell.enqueue_tx(wrapper_tx, wrapper.inner_tx().clone());
+            shell.enqueue_tx(wrapper_tx, wrapper.clone());
             expected_wrapper.push(wrapper.clone());
             req.txs.push(wrapper.to_bytes());
         }

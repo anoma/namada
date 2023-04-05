@@ -125,7 +125,7 @@ where
                         } else if verify_decrypted_correctly(
                             &tx,
                             privkey,
-                            inner_tx.clone(),
+                            inner_tx.inner_tx(),
                         ) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
@@ -491,9 +491,8 @@ mod test_process_proposal {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .bind(tx.clone());
-            shell.enqueue_tx(wrapper, Some(tx.clone()));
-            txs.push(Tx {
+                .bind(tx.clone());
+            let outer_tx = Tx {
                 code: tx.code.clone(),
                 data: tx.data.clone(),
                 timestamp: tx.timestamp,
@@ -502,7 +501,9 @@ mod test_process_proposal {
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: false,
                 }))
-            });
+            };
+            shell.enqueue_tx(wrapper, outer_tx.clone());
+            txs.push(outer_tx);
         }
         let req_1 = ProcessProposal {
             txs: vec![txs[0].to_bytes()],
@@ -572,7 +573,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper, tx.inner_tx().clone());
+        shell.enqueue_tx(wrapper, tx.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -636,7 +637,7 @@ mod test_process_proposal {
         )))
         .attach_inner_tx(&tx, Default::default());
 
-        shell.enqueue_tx(wrapper, tx.inner_tx().clone());
+        shell.enqueue_tx(wrapper, tx.clone());
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],

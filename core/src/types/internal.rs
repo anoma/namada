@@ -49,7 +49,7 @@ mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
     use crate::types::transaction::encrypted::EncryptedTx;
-    use crate::proto::InnerTx;
+    use crate::proto::{Tx, InnerTx};
 
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
     /// add `has_valid_pow` flag for only used in testnets.
@@ -58,7 +58,7 @@ mod tx_queue {
         /// Wrapper tx
         pub tx: crate::types::transaction::WrapperTx,
         /// the encrypted payload
-        pub inner_tx: Option<InnerTx>,
+        pub inner_tx: Tx,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet
         /// transactions.

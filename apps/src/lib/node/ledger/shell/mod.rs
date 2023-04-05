@@ -771,7 +771,7 @@ mod test_utils {
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
     use namada::proto::InnerTx;
-    use namada::proto::SignedTxData;
+    use namada::proto::{SignedOuterTxData, SignedTxData};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -920,7 +920,7 @@ mod test_utils {
         pub fn enqueue_tx(
             &mut self,
             wrapper: WrapperTx,
-            inner_tx: Option<InnerTx>,
+            inner_tx: Tx,
         ) {
             self.shell.storage.tx_queue.push(TxInQueue {
                 tx: wrapper,
@@ -1007,8 +1007,16 @@ mod test_utils {
         )
         .bind(tx.clone());
         shell.storage.tx_queue.push(TxInQueue {
-            tx: wrapper,
-            inner_tx: Some(tx),
+            tx: wrapper.clone(),
+            inner_tx: Tx {
+                code: tx.code,
+                data: tx.data,
+                timestamp: tx.timestamp,
+                ..Tx::new(vec![], SignedOuterTxData {
+                    sig: None,
+                    data: TxType::Wrapper(wrapper),
+                })
+            },
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });

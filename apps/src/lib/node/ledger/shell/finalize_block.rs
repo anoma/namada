@@ -218,7 +218,7 @@ where
 
                     self.storage.tx_queue.push(TxInQueue {
                         tx: wrapper.clone(),
-                        inner_tx: tx.inner_tx().clone(),
+                        inner_tx: tx.clone(),
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
                     });
@@ -521,7 +521,7 @@ mod test_finalize_block {
                     },
                 });
             } else {
-                shell.enqueue_tx(wrapper.clone(), tx.inner_tx());
+                shell.enqueue_tx(wrapper.clone(), tx.clone());
             }
 
             if i != 3 {
@@ -583,26 +583,27 @@ mod test_finalize_block {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .bind(raw_tx.clone());
+            .bind(raw_tx.clone());
+        let outer_tx = Tx {
+            code: raw_tx.code.clone(),
+            data: raw_tx.data.clone(),
+            timestamp: raw_tx.timestamp,
+            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                tx: Hash(raw_tx.partial_hash()),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            }))
+        };
 
         let processed_tx = ProcessedTx {
-            tx: Tx {
-                code: raw_tx.code.clone(),
-                data: raw_tx.data.clone(),
-                timestamp: raw_tx.timestamp,
-                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: Hash(raw_tx.partial_hash()),
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                }))
-            }
+            tx: outer_tx
             .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper, Some(raw_tx));
+        shell.enqueue_tx(wrapper, outer_tx);
 
         // check that the decrypted tx was not applied
         for event in shell
@@ -722,19 +723,20 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .bind(raw_tx.clone());
-            shell.enqueue_tx(wrapper_tx, Some(raw_tx.clone()));
+                .bind(raw_tx.clone());
+            let outer_tx = Tx {
+                code: raw_tx.code.clone(),
+                data: raw_tx.data.clone(),
+                timestamp: raw_tx.timestamp,
+                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx: Hash(raw_tx.partial_hash()),
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }))
+            };
+            shell.enqueue_tx(wrapper_tx, outer_tx.clone());
             processed_txs.push(ProcessedTx {
-                tx: Tx {
-                    code: raw_tx.code.clone(),
-                    data: raw_tx.data.clone(),
-                    timestamp: raw_tx.timestamp,
-                    ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                        tx: Hash(raw_tx.partial_hash()),
-                        #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: false,
-                    }))
-                }
+                tx: outer_tx
                 .to_bytes(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
