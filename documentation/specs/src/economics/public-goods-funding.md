@@ -9,13 +9,13 @@
 There is a lot of existing research into public-goods funding to which justice cannot be done here. Most mechanisms fall into two categories: need-based and results-based, where need-based allocation schemes attempt to pay for particular public goods on the basis of cost-of-resources, and results-based allocation schemes attempt to pay (often retroactively) for particular public goods on the basis of expected or assessed benefits to a community and thus create incentives for the production of public goods providing substantial benefits (for a longer exposition on retroactive PGF, see [here](https://medium.com/ethereum-optimism/retroactive-public-goods-funding-33c9b7d00f0c), although the idea is [not new](https://astralcodexten.substack.com/p/lewis-carroll-invented-retroactive)). Additional constraints to consider include the cost-of-time of governance structures (which renders e.g. direct democracy on all funding proposals very inefficient), the necessity of predictable funding in order to make long-term organisational decision-making, the propensity for bike-shedding and damage to the information commons in large-scale public debate (especially without an identity layer or Sybil resistance), and the engineering costs of implementations.
 
 
-### Funding categories
+### Funding focuses
 
 > Note that the following is _social consensus_, precedent which can be set at genesis and ratified by governance but does not require any protocol changes.
 
-_Categories of public-goods funding_
+_Areas of public goods Namada may be interested in funding_
 
-Namada groups public goods into four categories, with earmarked pools of funding:
+These are intended to permit a great degree of flexibility and are in no way meant to represent strict guidelines.
 
 - Technical research
   _Technical research_ covers funding for technical research topics related to Namada and Namada, such as cryptography, distributed systems, programming language theory, and human-computer interface design, both inside and outside the academy. Possible funding forms could include PhD sponsorships, independent researcher grants, institutional funding, funding for experimental resources (e.g. compute resources for benchmarking), funding for prizes (e.g. theoretical cryptography optimisations), and similar.
@@ -36,7 +36,7 @@ _Meta public goods_ covers funding for any good that increases the production or
 
 The funding of public goods on Namada will be conducted through a structure we call "Public Goods Stewards".
 
-Stewards are elected by governance through a governance proposal. Each Steward will be specialised in funding a subset of categories, which they specify during their election. Stewards can then "propose" funding of various public goods, which will pass by default. However, Governance retains the power to veto any proposal, which would result in the Steward being removed from the set of Stewards.
+Each steward is elected by governance through separate governance proposals. Each steward will be responsible for covering a specific area of public goods, which they describe during their election. Stewards can then "propose" funding of various public goods, which will pass by default. However, Governance retains the power to veto any proposal, which would result in the Steward being removed from the set of Stewards.
 
 ## Voting for the Steward
 
@@ -61,7 +61,7 @@ There are 3 ways that a Steward be removed from the Steward Set:
 
 Resigning as a Steward is straight-forward. A simple CLI is implemented to allow for this so that the established account representing the Steward loses their priveleges as a PG Steward.
 
-When a Steward's funding proposal is rejected (remember that the threshold for this to occur is at lest $\frac{2/3}$), then the proposal does not pass. In addition to this, it is likely that there would only be such wide-speread disagreement if the proposal was misaligned with the users the Stewards is attempting to cater to. This is described in more detail under [its section](#proposing-funding).
+If the Steward's PGF proposal receives a significant number of `Nay` votes ($\frac{2}{3}$ as a fraction of voting-power), they will be removed from the Steward set. It is likely that there would only be such wide-speread disagreement if the proposal was misaligned with the users the Stewards is attempting to cater to. This is described in more detail under [its section](#proposing-funding).
 
 Finally, the Steward can be "voted-out" from its responsibility through a custom governance proposal similar to the one used to elect the Steward in the first place!
 
@@ -172,9 +172,9 @@ In order to propose funding, any Steward will be able to propose a PGFProposal t
 This governance proposal will be such that it passes by default **unless** the following conditions are met:
 
 Conditions to veto a PGF proposal:
-1. At least $\frac{1}{3}$ of voting power voted on the proposal
-2. Out of the votes, more than $50\%$ voted `Nay` on the proposal
-  - Further, if at least $\frac{2}{3}$ of voting power voted on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
+1. Out of the votes that voted for the proposal, more than $50\%$ voted `Nay` on the proposal
+2. At least $\frac{1}{3}$ of voting power voted `Nay` on the proposal
+  - Further, if at least $\frac{2}{3}$ of voting power voted `Nay` on the proposal, and the proposal was rejected, the Steward is removed from the set of stewards.
 
 
 The PGF Stewards should be able to propose both retroactive and continuous public funding transactions. Retroactive public funding transactions are straightforward and implement no additional logic to a normal transfer.
