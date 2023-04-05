@@ -401,6 +401,8 @@ async fn update_tendermint_config(
     } else {
         TxIndexer::Null
     };
+    #[cfg(feature = "abcipp")]
+    let indexer = [indexer];
     config.tx_index = TxIndexConfig { indexer };
 
     let mut file = OpenOptions::new()
