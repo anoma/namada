@@ -2615,8 +2615,6 @@ where
 
     // Get the block rewards coefficients (proposing, signing/voting,
     // consensus set status)
-    let consensus_stake: Decimal = total_consensus_stake.into();
-    let signing_stake: Decimal = total_signing_stake.into();
     let rewards_calculator = PosRewardsCalculator {
         proposer_reward: params.block_proposer_reward,
         signer_reward: params.block_vote_reward,
@@ -2638,6 +2636,9 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
+    let consensus_stake_unscaled: Decimal =
+        total_consensus_stake.as_dec_unscaled();
+    let signing_stake_unscaled: Decimal = total_signing_stake.as_dec_unscaled();
     let mut values: HashMap<Address, Decimal> = HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
@@ -2657,7 +2658,7 @@ where
         }
 
         let mut rewards_frac = Decimal::default();
-        let stake: Decimal = u64::from(stake).into();
+        let stake_unscaled: Decimal = stake.as_dec_unscaled();
         // println!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake
@@ -2669,11 +2670,12 @@ where
         }
         // Signer reward
         if signer_set.contains(&address) {
-            let signing_frac = stake / signing_stake;
+            let signing_frac = stake_unscaled / signing_stake_unscaled;
             rewards_frac += coeffs.signer_coeff * signing_frac;
         }
         // Consensus validator reward
-        rewards_frac += coeffs.active_val_coeff * (stake / consensus_stake);
+        rewards_frac += coeffs.active_val_coeff
+            * (stake_unscaled / consensus_stake_unscaled);
 
         // Update the rewards accumulator
         let prev = rewards_accumulator_handle()
