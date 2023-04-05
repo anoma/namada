@@ -36,9 +36,12 @@ Ethereum side.
 ## Resources which may be helpful
 
 There will be multiple types of events emitted. Validators should
-ignore improperly formatted events. Raw events from Ethereum are converted to a 
-Rust enum type (`EthereumEvent`) by Namada validators before being included 
-in vote extensions or stored on chain.
+ignore improperly formatted events. ABI encoded events from Ethereum
+are decoded by [`ethbridge-rs`], and converted to a Rust enum type
+(`EthereumEvent`) by Namada validators before being included in vote
+extensions or stored on chain.
+
+[`ethbridge-rs`]: <https://github.com/heliaxdev/ethbridge-rs>
 
 ```rust
 pub enum EthereumEvent {
@@ -49,8 +52,8 @@ pub enum EthereumEvent {
 }
 ```
 
-Each event will be stored with a list of the validators that have ever seen it 
-as well as the fraction of total voting power that has ever seen it. 
+Each event will be stored with a list of the consensus validators that have
+ever seen it as well as the fraction of total voting power that has ever seen it.
 Once an event has been seen by 2/3 of voting power, it is locked into a
 `seen` state, and acted upon.
 
