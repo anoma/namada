@@ -323,6 +323,7 @@ mod tests {
     fn test_credit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -454,6 +455,7 @@ mod tests {
 
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -504,6 +506,7 @@ mod tests {
     fn test_unsigned_debit_transfer_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -552,6 +555,7 @@ mod tests {
     fn test_signed_debit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -605,6 +609,7 @@ mod tests {
     fn test_transfer_between_other_parties_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -677,6 +682,7 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
@@ -714,6 +720,11 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(
+                None,
+                None,
+                None
+            );
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
@@ -752,6 +763,7 @@ mod tests {
     fn test_unsigned_vp_update_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -787,6 +799,7 @@ mod tests {
     fn test_tx_not_whitelisted_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -833,6 +846,7 @@ mod tests {
     fn test_tx_whitelisted_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();

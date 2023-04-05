@@ -137,6 +137,7 @@ mod tests {
     fn test_credit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
@@ -184,6 +185,7 @@ mod tests {
     fn test_unsigned_vp_update_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let vp_code =
@@ -218,6 +220,7 @@ mod tests {
     fn test_signed_vp_update_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -275,6 +278,7 @@ mod tests {
     fn test_unsigned_debit_over_limit_rejected(amount in (MAX_FREE_DEBIT as u64 + 1..)) {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         // Init the VP
         let vp_owner = address::testing::established_address_1();
@@ -315,6 +319,7 @@ mod tests {
     fn test_unsigned_debit_under_limit_accepted(amount in (..MAX_FREE_DEBIT as u64 + 1)) {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         // Init the VP
         let vp_owner = address::testing::established_address_1();
@@ -375,6 +380,11 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(
+                None,
+                None,
+                None
+            );
 
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();

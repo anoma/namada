@@ -116,7 +116,7 @@ impl TestTxEnv {
         );
         let _ = parameters::update_max_signature_per_tx(
             &mut self.wl_storage.storage,
-            &15,
+            &40,
         );
     }
 

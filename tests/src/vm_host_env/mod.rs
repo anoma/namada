@@ -284,6 +284,7 @@ mod tests {
     #[test]
     fn test_vp_read_and_has_key() {
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let addr = address::testing::established_address_1();
         let addr_key = storage::Key::from(addr.to_db_key());
@@ -369,6 +370,7 @@ mod tests {
     #[test]
     fn test_vp_iter_prefix() {
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let addr = address::testing::established_address_1();
         let addr_key = storage::Key::from(addr.to_db_key());
