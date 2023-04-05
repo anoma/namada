@@ -6,14 +6,16 @@ allows the minting of wrapped NAM (wNAM) tokens on Ethereum.
 
 The Namada Ethereum bridge system consists of:
 
-* An Ethereum full node run by each Namada validator, for including relevant 
-  Ethereum events into Namada.
-* A set of validity predicates on Namada which roughly implements 
-  [ICS20] fungible token transfers.
 * A set of Ethereum smart contracts.
-* An automated process to send validator set updates to the Ethereum smart 
-  contracts.
-* A relayer binary to aid in submitting transactions to Ethereum
+* An Ethereum full node run by each Namada validator, to watch Ethereum
+  events emitted by the bridge's smart contracts.
+* A set of validity predicates on Namada which roughly implement
+  [ICS20] fungible token transfers.
+* Two relayer utilities, to call the Ethereum smart contracts.
+    + One for performing validator set updates on the Ethereum
+      smart contracts.
+    + Another to aid in submitting batches of transactions
+      to Ethereum.
 
 [ICS20]: <https://github.com/cosmos/ibc/blob/ed849c7bacf16204e9509f0f0df325391f3ce25c/spec/app/ics-020-fungible-token-transfer/README.md>
 
