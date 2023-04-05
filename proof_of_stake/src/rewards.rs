@@ -8,12 +8,17 @@ const MIN_PROPOSER_REWARD: Decimal = dec!(0.01);
 
 /// Errors during rewards calculation
 #[derive(Debug, Error)]
+#[allow(missing_docs)]
 pub enum RewardsError {
     /// number of votes is less than the threshold of 2/3
     #[error(
-        "Insufficient votes, needed at least 2/3 of the total bonded stake"
+        "Insufficient votes. Got {signing_stake}, needed {votes_needed} (at \
+         least 2/3 of the total bonded stake)."
     )]
-    InsufficentVotes,
+    InsufficientVotes {
+        votes_needed: u64,
+        signing_stake: u64,
+    },
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
     CoeffsNotSet,
@@ -58,7 +63,10 @@ impl PosRewardsCalculator {
         } = *self;
 
         if signing_stake < votes_needed {
-            return Err(RewardsError::InsufficentVotes);
+            return Err(RewardsError::InsufficientVotes {
+                votes_needed,
+                signing_stake,
+            });
         }
 
         // Logic for determining the coefficients.

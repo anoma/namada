@@ -35,7 +35,7 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, OptionExt, StorageRead, StorageWrite,
+    self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::key::{
@@ -92,8 +92,8 @@ pub enum GenesisError {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum InflationError {
-    #[error("Error")]
-    Error,
+    #[error("Error in calculating rewards: {0}")]
+    Rewards(rewards::RewardsError),
 }
 
 #[allow(missing_docs)]
@@ -2626,10 +2626,10 @@ where
         signing_stake: total_signing_stake,
         total_stake: total_consensus_stake,
     };
-    let coeffs = match rewards_calculator.get_reward_coeffs() {
-        Ok(coeffs) => coeffs,
-        Err(_) => return Err(InflationError::Error.into()),
-    };
+    let coeffs = rewards_calculator
+        .get_reward_coeffs()
+        .map_err(InflationError::Rewards)
+        .into_storage_result()?;
 
     // println!(
     //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
