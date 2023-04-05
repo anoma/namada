@@ -36,7 +36,7 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, OptionExt, StorageRead, StorageWrite,
+    self, OptionExt, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::key::{
@@ -93,8 +93,8 @@ pub enum GenesisError {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum InflationError {
-    #[error("Error")]
-    Error,
+    #[error("Error in calculating rewards: {0}")]
+    Rewards(rewards::RewardsError),
 }
 
 #[allow(missing_docs)]
@@ -2570,7 +2570,7 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    let mut total_consensus_stake = 0_u64;
+    let mut total_consensus_stake = token::Amount::default();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -2579,13 +2579,13 @@ where
             },
             _address,
         ) = validator?;
-        total_consensus_stake += u64::from(amount);
+        total_consensus_stake += amount;
     }
 
     // Get set of signing validator addresses and the combined stake of
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
-    let mut total_signing_stake: u64 = 0;
+    let mut total_signing_stake = token::Amount::default();
     for VoteInfo {
         validator_address,
         validator_vp,
@@ -2595,39 +2595,40 @@ where
             continue;
         }
 
+        let stake_from_deltas =
+            read_validator_stake(storage, &params, &validator_address, epoch)?
+                .unwrap_or_default();
+
         // Ensure TM stake updates properly with a debug_assert
         if cfg!(debug_assertions) {
-            let stake_from_deltas = read_validator_stake(
-                storage,
-                &params,
-                &validator_address,
-                epoch,
-            )?
-            .unwrap_or_default();
             debug_assert_eq!(
-                stake_from_deltas,
-                token::Amount::from(validator_vp)
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    stake_from_deltas
+                ),
+                i64::try_from(validator_vp).unwrap_or_default(),
             );
         }
 
         signer_set.insert(validator_address);
-        total_signing_stake += validator_vp;
+        total_signing_stake += stake_from_deltas;
     }
 
     // Get the block rewards coefficients (proposing, signing/voting,
     // consensus set status)
-    let consensus_stake: Decimal = total_consensus_stake.into();
-    let signing_stake: Decimal = total_signing_stake.into();
     let rewards_calculator = PosRewardsCalculator {
         proposer_reward: params.block_proposer_reward,
         signer_reward: params.block_vote_reward,
-        signing_stake: total_signing_stake,
-        total_stake: total_consensus_stake,
+        signing_stake: u64::from(total_signing_stake),
+        total_stake: u64::from(total_consensus_stake),
     };
-    let coeffs = match rewards_calculator.get_reward_coeffs() {
-        Ok(coeffs) => coeffs,
-        Err(_) => return Err(InflationError::Error.into()),
-    };
+    let coeffs = rewards_calculator
+        .get_reward_coeffs()
+        .map_err(InflationError::Rewards)
+        .into_storage_result()?;
+    tracing::debug!(
+        "PoS rewards coefficients {coeffs:?}, inputs: {rewards_calculator:?}."
+    );
 
     // println!(
     //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
@@ -2636,6 +2637,9 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
+    let consensus_stake_unscaled: Decimal =
+        total_consensus_stake.as_dec_unscaled();
+    let signing_stake_unscaled: Decimal = total_signing_stake.as_dec_unscaled();
     let mut values: HashMap<Address, Decimal> = HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
@@ -2655,7 +2659,7 @@ where
         }
 
         let mut rewards_frac = Decimal::default();
-        let stake: Decimal = u64::from(stake).into();
+        let stake_unscaled: Decimal = stake.as_dec_unscaled();
         // println!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake
@@ -2667,11 +2671,12 @@ where
         }
         // Signer reward
         if signer_set.contains(&address) {
-            let signing_frac = stake / signing_stake;
+            let signing_frac = stake_unscaled / signing_stake_unscaled;
             rewards_frac += coeffs.signer_coeff * signing_frac;
         }
         // Consensus validator reward
-        rewards_frac += coeffs.active_val_coeff * (stake / consensus_stake);
+        rewards_frac += coeffs.active_val_coeff
+            * (stake_unscaled / consensus_stake_unscaled);
 
         // Update the rewards accumulator
         let prev = rewards_accumulator_handle()
