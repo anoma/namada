@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
+use namada_core::types::governance::{ProposalVote, VoteType};
+use namada_core::types::transaction::governance::ProposalType;
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
@@ -73,6 +75,9 @@ where
                 (KeyType::CONTENT, Some(proposal_id)) => {
                     self.is_valid_content_key(proposal_id)
                 }
+                (KeyType::TYPE, Some(proposal_id)) => {
+                    self.is_valid_proposal_type(proposal_id)
+                }
                 (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
                     self.is_valid_proposal_code(proposal_id)
                 }
@@ -133,6 +138,7 @@ where
                 counter_key.clone(),
                 gov_storage::get_content_key(counter),
                 gov_storage::get_author_key(counter),
+                gov_storage::get_proposal_type_key(counter),
                 gov_storage::get_funds_key(counter),
                 gov_storage::get_voting_start_epoch_key(counter),
                 gov_storage::get_voting_end_epoch_key(counter),
@@ -170,9 +176,16 @@ where
 
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
+        let vote: Option<ProposalVote> = self.ctx.read_post(key)?;
+
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: Option<ProposalType> =
+            self.ctx.read_pre(&proposal_type_key)?;
 
         match (
             pre_counter,
+            proposal_type,
+            vote,
             voter,
             delegation_address,
             current_epoch,
@@ -181,44 +194,90 @@ where
         ) {
             (
                 Some(pre_counter),
+                Some(proposal_type),
+                Some(vote),
                 Some(voter_address),
                 Some(delegation_address),
                 Some(current_epoch),
                 Some(pre_voting_start_epoch),
                 Some(pre_voting_end_epoch),
             ) => {
-                let is_delegator = self
-                    .is_delegator(
-                        pre_voting_start_epoch,
-                        verifiers,
-                        voter_address,
-                        delegation_address,
-                    )
-                    .unwrap_or(false);
+                if pre_counter <= proposal_id {
+                    // Invalid proposal id
+                    return Ok(false);
+                }
+                if current_epoch < pre_voting_start_epoch
+                    || current_epoch > pre_voting_end_epoch
+                {
+                    // Voted outside of voting window
+                    return Ok(false);
+                }
 
-                let is_validator = self
-                    .is_validator(
-                        pre_voting_start_epoch,
-                        verifiers,
-                        voter_address,
-                        delegation_address,
-                    )
-                    .unwrap_or(false);
+                if let ProposalVote::Yay(vote_type) = vote {
+                    if proposal_type != vote_type {
+                        return Ok(false);
+                    }
 
-                let is_valid_validator_voting_period =
-                    is_valid_validator_voting_period(
-                        current_epoch,
-                        pre_voting_start_epoch,
-                        pre_voting_end_epoch,
-                    );
+                    // Vote type specific checks
+                    if let VoteType::PGFCouncil(set) = vote_type {
+                        // Check that all the addresses are established
+                        for (address, _) in set {
+                            match address {
+                                Address::Established(_) => {
+                                    // Check that established address exists in
+                                    // storage
+                                    let vp_key =
+                                        Key::validity_predicate(&address);
+                                    if !self.ctx.has_key_pre(&vp_key)? {
+                                        return Ok(false);
+                                    }
+                                }
+                                _ => return Ok(false),
+                            }
+                        }
+                    } else if let VoteType::ETHBridge(_sig) = vote_type {
+                        // TODO: Check the validity of the signature with the
+                        // governance ETH key in storage for the given validator
+                        // <https://github.com/anoma/namada/issues/1166>
+                    }
+                }
 
-                let is_valid = pre_counter > proposal_id
-                    && current_epoch >= pre_voting_start_epoch
-                    && current_epoch <= pre_voting_end_epoch
-                    && (is_delegator
-                        || (is_validator && is_valid_validator_voting_period));
-
-                Ok(is_valid)
+                match proposal_type {
+                    ProposalType::Default(_) | ProposalType::PGFCouncil => {
+                        if self
+                            .is_validator(
+                                pre_voting_start_epoch,
+                                verifiers,
+                                voter_address,
+                                delegation_address,
+                            )
+                            .unwrap_or(false)
+                        {
+                            Ok(is_valid_validator_voting_period(
+                                current_epoch,
+                                pre_voting_start_epoch,
+                                pre_voting_end_epoch,
+                            ))
+                        } else {
+                            Ok(self
+                                .is_delegator(
+                                    pre_voting_start_epoch,
+                                    verifiers,
+                                    voter_address,
+                                    delegation_address,
+                                )
+                                .unwrap_or(false))
+                        }
+                    }
+                    ProposalType::ETHBridge => Ok(self
+                        .is_validator(
+                            pre_voting_start_epoch,
+                            verifiers,
+                            voter_address,
+                            delegation_address,
+                        )
+                        .unwrap_or(false)),
+                }
             }
             _ => Ok(false),
         }
@@ -248,9 +307,29 @@ where
         }
     }
 
-    /// Validate a proposal_code key
+    /// Validate the proposal type
+    pub fn is_valid_proposal_type(&self, proposal_id: u64) -> Result<bool> {
+        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+        Ok(self
+            .ctx
+            .read_post::<ProposalType>(&proposal_type_key)?
+            .is_some())
+    }
+
+    /// Validate a proposal code
     pub fn is_valid_proposal_code(&self, proposal_id: u64) -> Result<bool> {
-        let code_key: Key = gov_storage::get_proposal_code_key(proposal_id);
+        let proposal_type_key: Key =
+            gov_storage::get_proposal_type_key(proposal_id);
+        let proposal_type: Option<ProposalType> =
+            self.ctx.read_post(&proposal_type_key)?;
+
+        // Check that the proposal type admits wasm code
+        match proposal_type {
+            Some(ProposalType::Default(_)) => (),
+            _ => return Ok(false),
+        }
+
+        let code_key = gov_storage::get_proposal_code_key(proposal_id);
         let max_code_size_parameter_key =
             gov_storage::get_max_proposal_code_size_key();
 
@@ -608,6 +687,8 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     PROPOSAL_CODE,
     #[allow(non_camel_case_types)]
+    TYPE,
+    #[allow(non_camel_case_types)]
     PROPOSAL_COMMIT,
     #[allow(non_camel_case_types)]
     GRACE_EPOCH,
@@ -635,8 +716,10 @@ impl KeyType {
             Self::VOTE
         } else if gov_storage::is_content_key(key) {
             KeyType::CONTENT
+        } else if gov_storage::is_proposal_type_key(key) {
+            Self::TYPE
         } else if gov_storage::is_proposal_code_key(key) {
-            KeyType::PROPOSAL_CODE
+            Self::PROPOSAL_CODE
         } else if gov_storage::is_grace_epoch_key(key) {
             KeyType::GRACE_EPOCH
         } else if gov_storage::is_start_epoch_key(key) {

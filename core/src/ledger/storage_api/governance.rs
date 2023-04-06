@@ -4,7 +4,7 @@ use super::token;
 use crate::ledger::governance::{storage, ADDRESS as governance_address};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+    InitProposalData, ProposalType, VoteProposalData,
 };
 
 /// A proposal creation transaction.
@@ -28,6 +28,17 @@ where
     let author_key = storage::get_author_key(proposal_id);
     storage.write(&author_key, data.author.clone())?;
 
+    let proposal_type_key = storage::get_proposal_type_key(proposal_id);
+    match data.r#type {
+        ProposalType::Default(Some(ref code)) => {
+            // Remove wasm code and write it under a different subkey
+            storage.write(&proposal_type_key, ProposalType::Default(None))?;
+            let proposal_code_key = storage::get_proposal_code_key(proposal_id);
+            storage.write_bytes(&proposal_code_key, code)?
+        }
+        _ => storage.write(&proposal_type_key, data.r#type.clone())?,
+    }
+
     let voting_start_epoch_key =
         storage::get_voting_start_epoch_key(proposal_id);
     storage.write(&voting_start_epoch_key, data.voting_start_epoch)?;
@@ -38,7 +49,7 @@ where
     let grace_epoch_key = storage::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
 
-    if let Some(proposal_code) = data.proposal_code {
+    if let ProposalType::Default(Some(proposal_code)) = data.r#type {
         let proposal_code_key = storage::get_proposal_code_key(proposal_id);
         storage.write_bytes(&proposal_code_key, proposal_code)?;
     }

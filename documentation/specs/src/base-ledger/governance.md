@@ -105,13 +105,13 @@ At the moment, Namada supports 3 types of governance proposals:
 ```rust
 pub enum ProposalType {
   /// Carries the optional proposal code path
-  Custom(Option<String>),
+  Default(Option<String>),
   PGFCouncil,
   ETHBridge,
 }
 ```
 
-`Custom` represents a generic proposal with the following properties:
+`Default` represents a generic proposal with the following properties:
 
 - Can carry a wasm code to be executed in case the proposal passes
 - Allows both validators and delegators to vote
@@ -122,15 +122,15 @@ pub enum ProposalType {
 
 - Doesn't carry any wasm code
 - Allows both validators and delegators to vote
-- Requires 1/3 of the total voting power to vote for the same council
-- Expect every vote to carry a memo in the form of a tuple `Set<(Set<Address>, BudgetCap)>`
+- Requires 1/3 of the total voting power to vote `Yay`
+- Expect every vote to carry a memo in the form of `Set<(Address, BudgetCap)>`
 
 `ETHBridge` is aimed at regulating actions on the bridge like the update of the Ethereum smart contracts or the withdrawing of all the funds from the `Vault` :
 
 - Doesn't carry any wasm code
 - Allows only validators to vote
-- Requires 2/3 of the validators' total voting power to succeed
-- Expect every vote to carry a memo in the form of a tuple `(Action, Signature)`
+- Requires 2/3 of the total voting power to succeed
+- Expect every vote to carry a memo in the form of a `Signature` over some bytes provided in the proposal 
 
 ### GovernanceAddress VP
 
@@ -207,7 +207,8 @@ where `ProposalVote` is an enum representing a `Yay` or `Nay` vote: the yay vari
 
 The storage key will only be created if the transaction is signed either by a validator or a delegator. In case a vote misses a required memo or carries a memo with an invalid format, the vote will be discarded at validation time (VP) and it won't be written to storage.
 
-If delegators are allowed to vote, validators will be able to vote only for 2/3 of the total voting period, while delegators can vote until the end of the voting period.
+If delegators are allowed to vote, validators will be able to vote only for 2/3 of the total voting period, while delegators can vote until the end of the voting period. If only validators are allowed to vote
+for the `ProposalType` in exam, they are allowed to vote for the entire voting window.
 
 If a delegator votes differently than its validator, this will *override* the corresponding vote of this validator (e.g. if a delegator has a voting power of 200 and votes opposite to the delegator holding these tokens, than 200 will be subtracted from the voting power of the involved validator).
 
