@@ -1539,9 +1539,6 @@ pub fn become_validator<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // This will fail if the key is already being used
-    try_insert_consensus_key(storage, consensus_key)?;
-
     let BecomeValidator {
         storage,
         params,
@@ -1553,6 +1550,9 @@ where
         commission_rate,
         max_commission_rate_change,
     } = args;
+
+    // This will fail if the key is already being used
+    try_insert_consensus_key(storage, consensus_key)?;
 
     // Non-epoched validator data
     write_validator_address_raw_hash(storage, address, consensus_key)?;
@@ -1569,13 +1569,13 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_hot_key_handle(address).init(
+    validator_eth_hot_key_handle(address).set(
         storage,
         eth_hot_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
-    validator_eth_cold_key_handle(address).init(
+    validator_eth_cold_key_handle(address).set(
         storage,
         eth_cold_key.clone(),
         current_epoch,

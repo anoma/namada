@@ -99,8 +99,8 @@ impl<'db, DB> Copy for EthBridgeQueriesHook<'db, DB> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlStorage<D, H>>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: storage::DB + for<'iter> storage::DBIter<'iter> + 'static,
+    H: storage::StorageHasher + 'static,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -221,6 +221,7 @@ where
             .read_merkle_tree_stores(height)
             .expect("We should always be able to read the database")
             .expect("Every root should correspond to an existing block height")
+            .1
             .get_root(StoreType::BridgePool)
             .into()
     }
@@ -387,8 +388,8 @@ where
 
 impl<'db, D, H> ActiveEthAddresses<'db, D, H>
 where
-    D: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    D: storage::DB + for<'iter> storage::DBIter<'iter> + 'static,
+    H: storage::StorageHasher + 'static,
 {
     /// Iterate over the Ethereum addresses of the set of active validators
     /// in Namada, at some given epoch.

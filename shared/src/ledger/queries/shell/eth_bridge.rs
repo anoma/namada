@@ -210,7 +210,7 @@ where
         .expect(
             "Every signed root should correspond to an existing block height",
         );
-    let store = match stores.get_store(StoreType::BridgePool) {
+    let store = match stores.1.get_store(StoreType::BridgePool) {
         StoreRef::BridgePool(store) => store,
         _ => unreachable!(),
     };
@@ -261,7 +261,7 @@ where
                 .expect(
                     "Every signed root should correspond to an existing block \
                      height",
-                ),
+                ).1,
         );
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
@@ -297,7 +297,7 @@ where
             })
             .collect();
         // get the membership proof
-        match tree.get_sub_tree_existence_proof(
+        match tree.expect("expected a tree").get_sub_tree_existence_proof(
             &keys,
             values.iter().map(|v| v.as_slice()).collect(),
         ) {

@@ -731,12 +731,16 @@ where
             })
         } else {
             let tree = self.get_merkle_tree(height)?;
-            let MembershipProof::ICS23(proof) = tree
+            if let MembershipProof::ICS23(proof) = tree
                 .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)?;
-            tree.get_sub_tree_proof(key, proof)
-                .map(Into::into)
-                .map_err(Error::MerkleTreeError)
+                .map_err(Error::MerkleTreeError)?
+            {
+                tree.get_sub_tree_proof(key, proof)
+                    .map(Into::into)
+                    .map_err(Error::MerkleTreeError)
+            } else {
+                Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+            }
         }
     }
 

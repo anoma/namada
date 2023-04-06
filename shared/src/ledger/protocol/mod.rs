@@ -61,7 +61,7 @@ pub enum Error {
     #[error("SlashFund native VP error: {0}")]
     SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
     #[error("Ethereum bridge native VP error: {0}")]
-    EthBridgeNativeVpError(crate::ledger::eth_bridge::vp::Error),
+    EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Replay protection native VP error: {0}")]
     ReplayProtectionNativeVpError(
         crate::ledger::native_vp::replay_protection::Error,

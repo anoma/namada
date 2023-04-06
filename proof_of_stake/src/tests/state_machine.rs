@@ -658,6 +658,8 @@ impl AbstractStateMachine for AbstractPosState {
                     consensus_key: _,
                     commission_rate: _,
                     max_commission_rate_change: _,
+                    eth_cold_key: _,
+                    eth_hot_key: _,
                 } in state.genesis_validators.clone()
                 {
                     let bonds = state.bonds.entry(epoch).or_default();
