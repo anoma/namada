@@ -20,7 +20,7 @@ pub mod types;
 // pub mod validation;
 
 //#[cfg(test)]
-//mod tests;
+// mod tests;
 
 use core::fmt::Debug;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -42,6 +42,7 @@ use namada_core::types::key::{
 };
 pub use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rust_decimal::Decimal;
@@ -56,7 +57,6 @@ use storage::{
     ReverseOrdTokenAmount, UnbondDetails, WeightedValidator,
 };
 use thiserror::Error;
-use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
@@ -729,7 +729,10 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    tracing::debug!("Bonding token amount {} at epoch {current_epoch}", amount.to_string_native());
+    tracing::debug!(
+        "Bonding token amount {} at epoch {current_epoch}",
+        amount.to_string_native()
+    );
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     if let Some(source) = source {
@@ -1329,7 +1332,10 @@ where
     S: StorageRead + StorageWrite,
 {
     let amount = amount.change();
-    tracing::debug!("Unbonding token amount {} at epoch {current_epoch}", amount.to_string_native());
+    tracing::debug!(
+        "Unbonding token amount {} at epoch {current_epoch}",
+        amount.to_string_native()
+    );
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
     tracing::debug!(
@@ -1375,7 +1381,8 @@ where
     if amount > remaining_at_pipeline {
         return Err(UnbondError::UnbondAmountGreaterThanBond(
             token::Amount::from_change(amount).to_string_native(),
-            token::Amount::from_change(remaining_at_pipeline).to_string_native(),
+            token::Amount::from_change(remaining_at_pipeline)
+                .to_string_native(),
         )
         .into());
     }
@@ -1591,7 +1598,8 @@ where
         ) = unbond?;
 
         tracing::debug!(
-            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}", amount.to_string_native()
+            "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}",
+            amount.to_string_native()
         );
 
         // TODO: worry about updating this later after PR 740 perhaps
@@ -1615,10 +1623,14 @@ where
                         .unwrap_or_default()
             {
                 let slash_rate = slash_type.get_slash_rate(&params);
-                let to_slash = token::Amount::from_uint(decimal_mult_u128(
-                    slash_rate,
-                    u128::from(amount),
-                ), NATIVE_MAX_DECIMAL_PLACES).expect("Amount out of bounds");
+                let to_slash = token::Amount::from_uint(
+                    decimal_mult_u128(
+                        slash_rate,
+                        u128::try_from(amount).expect("Amount out of bounds"),
+                    ),
+                    NATIVE_MAX_DECIMAL_PLACES,
+                )
+                .expect("Amount out of bounds");
                 slashed += to_slash;
             }
         }
@@ -1626,7 +1638,10 @@ where
         unbonds_to_remove.push((withdraw_epoch, start_epoch));
     }
     withdrawable_amount -= slashed;
-    tracing::debug!("Withdrawing total {}", withdrawable_amount.to_string_native());
+    tracing::debug!(
+        "Withdrawing total {}",
+        withdrawable_amount.to_string_native()
+    );
 
     // Remove the unbond data from storage
     for (withdraw_epoch, start_epoch) in unbonds_to_remove {
@@ -1726,9 +1741,13 @@ where
         read_validator_stake(storage, params, validator, current_epoch)?
             .unwrap_or_default();
     let slashed_amount = Amount::from_uint(
-        decimal_mult_u128(rate, u128::from(current_stake)),
-        NATIVE_MAX_DECIMAL_PLACES
-    ).expect("Amount out of bounds");
+        decimal_mult_u128(
+            rate,
+            u128::try_from(current_stake).expect("Amount out of bounds"),
+        ),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .expect("Amount out of bounds");
     let token_change = -token::Change::from(slashed_amount);
 
     // Update validator sets and deltas at the pipeline length
@@ -1869,7 +1888,8 @@ where
                 continue;
             }
             let current_slashed =
-                mult_change_to_amount(slash_type.get_slash_rate(params), delta).change();
+                mult_change_to_amount(slash_type.get_slash_rate(params), delta)
+                    .change();
             let delta = token::Amount::from_change(delta - current_slashed);
             total += delta;
             if bond_epoch <= epoch {
@@ -1917,7 +1937,8 @@ where
             ) = validator.unwrap();
 
             tracing::debug!(
-                "Consensus validator address {address}, stake {}", cur_stake.to_string_native()
+                "Consensus validator address {address}, stake {}",
+                cur_stake.to_string_native()
             );
 
             // Check if the validator was consensus in the previous epoch with
@@ -1937,13 +1958,17 @@ where
                                 .unwrap_or_default();
                         into_tm_voting_power(
                             params.tm_votes_per_token,
-                            u128::from(prev_validator_stake) as u64,
+                            u128::try_from(prev_validator_stake)
+                                .expect("Amount out of bounds")
+                                as u64,
                         )
                     });
                     let cur_tm_voting_power = Lazy::new(|| {
                         into_tm_voting_power(
                             params.tm_votes_per_token,
-                            u128::from(cur_stake) as u64,
+                            u128::try_from(cur_stake)
+                                .expect("Amount out of bounds")
+                                as u64,
                         )
                     });
 
@@ -1980,7 +2005,9 @@ where
             );
             Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key,
-                bonded_stake: u128::from(cur_stake) as u64,
+                bonded_stake: u128::try_from(cur_stake)
+                    .expect("Amount out of bounds")
+                    as u64,
             }))
         });
     let cur_below_capacity_validators =
@@ -1999,7 +2026,8 @@ where
             let cur_stake = token::Amount::from(cur_stake);
 
             tracing::debug!(
-                "Below-capacity validator address {address}, stake {}", cur_stake.to_string_native()
+                "Below-capacity validator address {address}, stake {}",
+                cur_stake.to_string_native()
             );
 
             let prev_tm_voting_power = previous_epoch
@@ -2012,7 +2040,9 @@ where
                             .unwrap_or_default();
                     into_tm_voting_power(
                         params.tm_votes_per_token,
-                        u128::from(prev_validator_stake) as u64,
+                        u128::try_from(prev_validator_stake)
+                            .expect("Amount out of bounds")
+                            as u64,
                     )
                 })
                 .unwrap_or_default();

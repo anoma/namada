@@ -56,7 +56,9 @@ pub fn vp(
                 let this_change = post.change() - pre.change();
                 change += this_change;
                 // make sure that the spender approved the transaction
-                if !(this_change.non_negative() || verifiers.contains(owner) || *owner == address::masp())
+                if !(this_change.non_negative()
+                    || verifiers.contains(owner)
+                    || *owner == address::masp())
                 {
                     return reject();
                 }

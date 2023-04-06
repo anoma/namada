@@ -36,7 +36,9 @@ pub fn transfer(
             None => token::balance_key(token, dest),
         };
         let src_bal: Option<Amount> = match src {
-            Address::Internal(InternalAddress::IbcMint) => Some(Amount::max_signed()),
+            Address::Internal(InternalAddress::IbcMint) => {
+                Some(Amount::max_signed())
+            }
             Address::Internal(InternalAddress::IbcBurn) => {
                 log_string("invalid transfer from the burn address");
                 unreachable!()

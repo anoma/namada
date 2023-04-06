@@ -30,6 +30,7 @@ use masp_primitives::transaction::components::{Amount, OutPoint, TxOut};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
+use namada::core::types::uint::Uint;
 use namada::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::signer::Signer;
 use namada::ibc::timestamp::Timestamp as IbcTimestamp;
@@ -39,6 +40,7 @@ use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
+use namada::ledger::queries::RPC;
 use namada::proto::Tx;
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
@@ -50,7 +52,10 @@ use namada::types::storage::{
     BlockHeight, Epoch, Key, KeySeg, TxIndex, RESERVED_ADDRESS_PREFIX,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::{Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX, MaspDenom};
+use namada::types::token::{
+    DenominatedAmount, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX,
+    TX_KEY_PREFIX,
+};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -66,7 +71,10 @@ use super::rpc;
 use super::types::ShieldedTransferContext;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
-use crate::client::rpc::{query_conversion, query_storage_value};
+use crate::client::rpc::{
+    format_denominated_amount, make_asset_type, query_conversion,
+    query_storage_value, unwrap_client_response,
+};
 use crate::client::signing::{find_keypair, sign_tx, tx_signer, TxSigningKey};
 use crate::client::tendermint_rpc_types::{TxBroadcastData, TxResponse};
 use crate::client::types::ParsedTxTransferArgs;
@@ -475,10 +483,10 @@ pub type Conversions =
 pub type MaspDenominatedAmount = Amount<(Address, MaspDenom)>;
 
 /// Represents the changes that were made to a list of transparent accounts
-pub type TransferDelta = HashMap<Address, MaspDenominatedAmount>;
+pub type TransferDelta = HashMap<Address, Amount<(Address, MaspDenom)>>;
 
 /// Represents the changes that were made to a list of shielded accounts
-pub type TransactionDelta = HashMap<ViewingKey, MaspDenominatedAmount>;
+pub type TransactionDelta = HashMap<ViewingKey, Amount>;
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -511,7 +519,7 @@ pub struct ShieldedContext {
     /// The set of note positions that have been spent
     spents: HashSet<usize>,
     /// Maps asset types to their decodings
-    asset_types: HashMap<AssetType, (Address, Epoch)>,
+    asset_types: HashMap<AssetType, (Address, MaspDenom, Epoch)>,
     /// Maps note positions to their corresponding viewing keys
     vk_map: HashMap<usize, ViewingKey>,
 }
@@ -836,19 +844,25 @@ impl ShieldedContext {
                         .expect("found note with invalid value or asset type");
             }
         }
+
         // Record the changes to the transparent accounts
-        let transparent_delta =
-            Amount::from_nonnegative(tx.token.clone(), u64::from(tx.amount))
-                .expect("invalid value for amount");
         let mut transfer_delta = TransferDelta::new();
-        transfer_delta
-            .insert(tx.source.clone(), Amount::zero() - &transparent_delta);
-        transfer_delta.insert(tx.target.clone(), transparent_delta);
+        for denom in MaspDenom::iter() {
+            let transparent_delta =
+                Amount::from_nonnegative((tx.token.clone(), denom), denom.denominate(&tx.amount.amount))
+                    .expect("invalid value for amount");
+            if transparent_delta == Amount::zero() {
+                continue;
+            }
+            transfer_delta
+                .insert(tx.source.clone(), Amount::zero() - &transparent_delta);
+            transfer_delta.insert(tx.target.clone(), transparent_delta);
+            self.last_txidx += 1;
+        }
         self.delta_map.insert(
             (height, index),
             (epoch, transfer_delta, transaction_delta),
         );
-        self.last_txidx += 1;
     }
 
     /// Summarize the effects on shielded and transparent accounts of each
@@ -895,16 +909,22 @@ impl ShieldedContext {
         &mut self,
         client: HttpClient,
         asset_type: AssetType,
-    ) -> Option<(Address, Epoch)> {
+    ) -> Option<(Address, MaspDenom, Epoch)> {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
             return decoded.cloned();
         }
         // Query for the ID of the last accepted transaction
-        let (addr, ep, _conv, _path): (Address, _, Amount, MerklePath<Node>) =
-            query_conversion(client, asset_type).await?;
-        self.asset_types.insert(asset_type, (addr.clone(), ep));
-        Some((addr, ep))
+        let (addr, denom, ep, _conv, _path): (
+            Address,
+            MaspDenom,
+            _,
+            Amount,
+            MerklePath<Node>,
+        ) = query_conversion(client, asset_type).await?;
+        self.asset_types
+            .insert(asset_type, (addr.clone(), denom, ep));
+        Some((addr, denom, ep))
     }
 
     /// Query the ledger for the conversion that is allowed for the given asset
@@ -919,9 +939,9 @@ impl ShieldedContext {
             Entry::Occupied(conv_entry) => Some(conv_entry.into_mut()),
             Entry::Vacant(conv_entry) => {
                 // Query for the ID of the last accepted transaction
-                let (addr, ep, conv, path): (Address, _, _, _) =
+                let (addr, denom, ep, conv, path): (Address, _, _, _, _) =
                     query_conversion(client, asset_type).await?;
-                self.asset_types.insert(asset_type, (addr, ep));
+                self.asset_types.insert(asset_type, (addr, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv == Amount::zero() {
                     None
@@ -1004,7 +1024,7 @@ impl ShieldedContext {
     pub async fn compute_exchanged_amount(
         &mut self,
         client: HttpClient,
-        mut input: MaspDenominatedAmount,
+        mut input: Amount,
         target_epoch: Epoch,
         mut conversions: Conversions,
     ) -> (Amount, Conversions) {
@@ -1017,7 +1037,9 @@ impl ShieldedContext {
             let target_asset_type = self
                 .decode_asset_type(client.clone(), asset_type)
                 .await
-                .map(|(addr, _epoch)| make_asset_type(target_epoch, &addr))
+                .map(|(addr, denom, _epoch)| {
+                    make_asset_type(target_epoch, &addr, denom)
+                })
                 .unwrap_or(asset_type);
             let at_target_asset_type = asset_type == target_asset_type;
             if let (Some((conv, _wit, usage)), false) = (
@@ -1261,8 +1283,8 @@ impl ShieldedContext {
                 self.decode_asset_type(client.clone(), *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some((addr, epoch)) if epoch == target_epoch => {
-                    res += &Amount::from_pair(addr, *val).unwrap()
+                Some((addr, denom, epoch)) if epoch == target_epoch => {
+                    res += &Amount::from_pair((addr, denom), *val).unwrap()
                 }
                 _ => {}
             }
@@ -1276,40 +1298,31 @@ impl ShieldedContext {
         &mut self,
         client: HttpClient,
         amt: Amount,
-    ) -> Amount<(Address, Epoch)> {
+    ) -> Amount<(Address, MaspDenom, Epoch)> {
         let mut res = Amount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded =
                 self.decode_asset_type(client.clone(), *asset_type).await;
             // Only assets with the target timestamp count
-            if let Some((addr, epoch)) = decoded {
-                res += &Amount::from_pair((addr, epoch), *val).unwrap()
+            if let Some((addr, denom, epoch)) = decoded {
+                res += &Amount::from_pair((addr, denom, epoch), *val).unwrap()
             }
         }
         res
     }
 }
 
-/// Make asset type corresponding to given address and epoch
-fn make_asset_type(epoch: Epoch, token: &Address) -> AssetType {
-    // Typestamp the chosen token with the current epoch
-    let token_bytes = (token, epoch.0)
-        .try_to_vec()
-        .expect("token should serialize");
-    // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
-}
-
 /// Convert Namada amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
     token: &Address,
-    val: token::Amount,
+    val: u64,
+    denom: MaspDenom,
 ) -> (AssetType, Amount) {
-    let asset_type = make_asset_type(epoch, token);
+    let asset_type = make_asset_type(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, u64::from(val))
+    let amount = Amount::from_nonnegative(asset_type, val)
         .expect("invalid value for amount");
     (asset_type, amount)
 }
@@ -1335,106 +1348,13 @@ where
     let epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
     // Context required for storing which notes are in the source's possesion
     let consensus_branch_id = BranchId::Sapling;
-    let amt: u64 = args.amount.into();
     let memo: Option<Memo> = None;
-
-    // Now we build up the transaction within this object
-    let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
-    // Convert transaction amount into MASP types
-    let (asset_type, amount) = convert_amount(epoch, &args.token, args.amount);
-
     // Transactions with transparent input and shielded output
     // may be affected if constructed close to epoch boundary
     let mut epoch_sensitive: bool = false;
-    // If there are shielded inputs
-    if let Some(sk) = spending_key {
-        // Transaction fees need to match the amount in the wrapper Transfer
-        // when MASP source is used
-        let (_, fee) =
-            convert_amount(epoch, &args.tx.fee_token, args.tx.fee_amount);
-        builder.set_fee(fee.clone())?;
-        // If the gas is coming from the shielded pool, then our shielded inputs
-        // must also cover the gas fee
-        let required_amt = if shielded_gas { amount + fee } else { amount };
-        // Locate unspent notes that can help us meet the transaction amount
-        let (_, unspent_notes, used_convs) = ctx
-            .collect_unspent_notes(
-                args.tx.ledger_address.clone(),
-                &to_viewing_key(&sk).vk,
-                required_amt,
-                epoch,
-            )
-            .await;
-        // Commit the notes found to our transaction
-        for (diversifier, note, merkle_path) in unspent_notes {
-            builder.add_sapling_spend(sk, diversifier, note, merkle_path)?;
-        }
-        // Commit the conversion notes used during summation
-        for (conv, wit, value) in used_convs.values() {
-            if *value > 0 {
-                builder.add_convert(
-                    conv.clone(),
-                    *value as u64,
-                    wit.clone(),
-                )?;
-            }
-        }
-    } else {
-        // No transfer fees come from the shielded transaction for non-MASP
-        // sources
-        builder.set_fee(Amount::zero())?;
-        // We add a dummy UTXO to our transaction, but only the source of the
-        // parent Transfer object is used to validate fund availability
-        let secp_sk =
-            secp256k1::SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
-        let secp_ctx = secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
-        let secp_pk =
-            secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
-                .serialize();
-        let hash =
-            ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
-        let script = TransparentAddress::PublicKey(hash.into()).script();
-        epoch_sensitive = true;
-        builder.add_transparent_input(
-            secp_sk,
-            OutPoint::new([0u8; 32], 0),
-            TxOut {
-                asset_type,
-                value: amt,
-                script_pubkey: script,
-            },
-        )?;
-    }
-    // Now handle the outputs of this transaction
-    // If there is a shielded output
-    if let Some(pa) = payment_address {
-        let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-        builder.add_sapling_output(
-            ovk_opt,
-            pa.into(),
-            asset_type,
-            amt,
-            memo.clone(),
-        )?;
-    } else {
-        epoch_sensitive = false;
-        // Embed the transparent target address into the shielded transaction so
-        // that it can be signed
-        let target_enc = args
-            .target
-            .address()
-            .expect("target address should be transparent")
-            .try_to_vec()
-            .expect("target address encoding");
-        let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
-            target_enc.as_ref(),
-        ));
-        builder.add_transparent_output(
-            &TransparentAddress::PublicKey(hash.into()),
-            asset_type,
-            amt,
-        )?;
-    }
+
+    // Now we build up the transaction within this object
+    let mut builder = Builder::<TestNetwork, OsRng>::new(0u32);
     let prover = if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR)
     {
         let params_dir = PathBuf::from(params_dir);
@@ -1446,28 +1366,76 @@ where
         LocalTxProver::with_default_location()
             .expect("unable to load MASP Parameters")
     };
-    // Build and return the constructed transaction
-    let mut tx = builder.build(consensus_branch_id, &prover);
+    let fee = if spending_key.is_some() {
+        // Transaction fees need to match the amount in the wrapper Transfer
+        // when MASP source is used. This amount should be <= `u64::MAX`.
+        let (_, fee) = convert_amount(
+            epoch,
+            &args.tx.fee_token,
+            MaspDenom::Zero.denominate(&args.tx.fee_amount),
+            MaspDenom::Zero,
+        );
+        builder.set_fee(fee.clone())?;
+        fee
+    } else {
+        // No transfer fees come from the shielded transaction for non-MASP
+        // sources
+        builder.set_fee(Amount::zero())?;
+        Amount::zero()
+    };
+    let mut epoch_transitions = vec![];
+    // break up a transfer into a number of transfers with suitable
+    // denominations
+    for denom in MaspDenom::iter() {
+        let denom_amount = denom.denominate(&args.amount);
+        if denom_amount == 0 {
+            continue;
+        }
+        // Convert transaction amount into MASP types
+        let (asset_type, amount) =
+            convert_amount(epoch, &args.token, denom_amount, denom);
 
-    if epoch_sensitive {
-        let new_epoch = ctx.query_epoch(args.tx.ledger_address.clone()).await;
-
-        // If epoch has changed, recalculate shielded outputs to match new epoch
-        if new_epoch != epoch {
-            // Hack: build new shielded transfer with updated outputs
-            let mut replay_builder = Builder::<TestNetwork, OsRng>::new(0u32);
-            replay_builder.set_fee(Amount::zero())?;
-            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-            let (new_asset_type, _) =
-                convert_amount(new_epoch, &args.token, args.amount);
-            replay_builder.add_sapling_output(
-                ovk_opt,
-                payment_address.unwrap().into(),
-                new_asset_type,
-                amt,
-                memo,
-            )?;
-
+        // If there are shielded inputs
+        if let Some(sk) = spending_key {
+            // If the gas is coming from the shielded pool, then our shielded
+            // inputs must also cover the gas fee
+            let required_amt = if shielded_gas {
+                amount + fee.clone()
+            } else {
+                amount
+            };
+            // Locate unspent notes that can help us meet the transaction amount
+            let (_, unspent_notes, used_convs) = ctx
+                .collect_unspent_notes(
+                    args.tx.ledger_address.clone(),
+                    &to_viewing_key(&sk).vk,
+                    required_amt,
+                    epoch,
+                )
+                .await;
+            // Commit the notes found to our transaction
+            for (diversifier, note, merkle_path) in unspent_notes {
+                builder.add_sapling_spend(
+                    sk,
+                    diversifier,
+                    note,
+                    merkle_path,
+                )?;
+            }
+            // Commit the conversion notes used during summation
+            for (conv, wit, value) in used_convs.values() {
+                if *value > 0 {
+                    builder.add_convert(
+                        conv.clone(),
+                        *value as u64,
+                        wit.clone(),
+                    )?;
+                }
+            }
+        } else {
+            // We add a dummy UTXO to our transaction, but only the source of
+            // the parent Transfer object is used to validate fund
+            // availability
             let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
                 .expect("secret key");
             let secp_ctx =
@@ -1478,33 +1446,124 @@ where
             let hash =
                 ripemd160::Ripemd160::digest(&sha2::Sha256::digest(&secp_pk));
             let script = TransparentAddress::PublicKey(hash.into()).script();
-            replay_builder.add_transparent_input(
+            epoch_sensitive = true;
+            builder.add_transparent_input(
                 secp_sk,
                 OutPoint::new([0u8; 32], 0),
                 TxOut {
-                    asset_type: new_asset_type,
-                    value: amt,
+                    asset_type,
+                    value: denom_amount,
                     script_pubkey: script,
                 },
             )?;
+        }
 
-            let (replay_tx, _) =
-                replay_builder.build(consensus_branch_id, &prover)?;
-            tx = tx.map(|(t, tm)| {
-                let mut temp = t.deref().clone();
-                temp.shielded_outputs = replay_tx.shielded_outputs.clone();
-                temp.value_balance = temp.value_balance.reject(asset_type)
-                    - Amount::from_pair(new_asset_type, amt).unwrap();
-                (temp.freeze().unwrap(), tm)
-            });
+        // Now handle the outputs of this transaction
+        // If there is a shielded output
+        if let Some(pa) = payment_address {
+            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+            builder.add_sapling_output(
+                ovk_opt,
+                pa.into(),
+                asset_type,
+                denom_amount,
+                memo.clone(),
+            )?;
+        } else {
+            epoch_sensitive = false;
+            // Embed the transparent target address into the shielded
+            // transaction so that it can be signed
+            let target_enc = args
+                .target
+                .address()
+                .expect("target address should be transparent")
+                .try_to_vec()
+                .expect("target address encoding");
+            let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
+                target_enc.as_ref(),
+            ));
+            builder.add_transparent_output(
+                &TransparentAddress::PublicKey(hash.into()),
+                asset_type,
+                denom_amount,
+            )?;
+        }
+
+        if epoch_sensitive {
+            let new_epoch =
+                ctx.query_epoch(args.tx.ledger_address.clone()).await;
+
+            // If epoch has changed, recalculate shielded outputs to match new
+            // epoch
+            if new_epoch != epoch {
+                // Hack: build new shielded transfer with updated outputs
+                let mut replay_builder =
+                    Builder::<TestNetwork, OsRng>::new(0u32);
+                replay_builder.set_fee(Amount::zero())?;
+                let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+                let (new_asset_type, _) =
+                    convert_amount(new_epoch, &args.token, denom_amount, denom);
+                replay_builder.add_sapling_output(
+                    ovk_opt,
+                    payment_address.unwrap().into(),
+                    new_asset_type,
+                    denom_amount,
+                    memo.clone(),
+                )?;
+
+                let secp_sk = secp256k1::SecretKey::from_slice(&[0xcd; 32])
+                    .expect("secret key");
+                let secp_ctx =
+                    secp256k1::Secp256k1::<secp256k1::SignOnly>::gen_new();
+                let secp_pk =
+                    secp256k1::PublicKey::from_secret_key(&secp_ctx, &secp_sk)
+                        .serialize();
+                let hash = ripemd160::Ripemd160::digest(&sha2::Sha256::digest(
+                    &secp_pk,
+                ));
+                let script =
+                    TransparentAddress::PublicKey(hash.into()).script();
+                replay_builder.add_transparent_input(
+                    secp_sk,
+                    OutPoint::new([0u8; 32], 0),
+                    TxOut {
+                        asset_type: new_asset_type,
+                        value: denom_amount,
+                        script_pubkey: script,
+                    },
+                )?;
+                let (replay_tx, _) =
+                    replay_builder.build(consensus_branch_id, &prover)?;
+                epoch_transitions.push((
+                    replay_tx,
+                    asset_type,
+                    new_asset_type,
+                    denom_amount,
+                ));
+            }
         }
     }
-
+    // Build and return the constructed transaction
+    let mut tx = builder.build(consensus_branch_id, &prover);
+    tx = tx.map(|(t, tm)| {
+        let mut temp = t.deref().clone();
+        let mut shielded_outputs = vec![];
+        for (replay_tx, asset_type, new_asset_type, denom_amount) in
+            epoch_transitions
+        {
+            let mut replay_outputs = replay_tx.shielded_outputs.clone();
+            shielded_outputs.append(&mut replay_outputs);
+            temp.value_balance = temp.value_balance.reject(asset_type)
+                - Amount::from_pair(new_asset_type, denom_amount).unwrap();
+        }
+        temp.shielded_outputs = shielded_outputs;
+        (temp.freeze().unwrap(), tm)
+    });
     tx.map(Some)
 }
 
-pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
-    let parsed_args = args.parse_from_context(&mut ctx);
+pub async fn submit_transfer(mut ctx: Context, mut args: args::TxTransfer) {
+    let parsed_args = args.parse_from_context(&mut ctx).await;
     let source = parsed_args.source.effective_address();
     let target = parsed_args.target.effective_address();
     // Check that the source address exists on chain
@@ -1557,12 +1616,18 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
-            if balance < args.amount {
+            if balance < parsed_args.amount {
+                let balance_amount = format_denominated_amount(
+                    &client,
+                    &parsed_args.token,
+                    balance,
+                )
+                .await;
                 eprintln!(
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, parsed_args.token, args.amount, balance
+                    source, parsed_args.token, args.amount, balance_amount
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1590,19 +1655,19 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
             // TODO Refactor me, we shouldn't rely on any specific token here.
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
-                0.into(),
+                token::Amount::default(),
                 ctx.native_token.clone(),
             )
         } else if source == masp_addr {
             (
                 TxSigningKey::SecretKey(masp_tx_key()),
-                args.amount,
+                parsed_args.amount,
                 parsed_args.token.clone(),
             )
         } else {
             (
                 TxSigningKey::WalletAddress(args.source.to_address()),
-                args.amount,
+                parsed_args.amount,
                 parsed_args.token.clone(),
             )
         };
@@ -1621,13 +1686,25 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet =
         rpc::is_faucet_account(&source, args.tx.ledger_address.clone()).await;
-
+    let denom = unwrap_client_response(
+        RPC.vp()
+            .token()
+            .denomination(&client, &parsed_args.token)
+            .await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
     let transfer = token::Transfer {
         source,
         target,
         token,
         sub_prefix,
-        amount,
+        amount: DenominatedAmount { amount, denom },
         key,
         shielded: {
             let spending_key = parsed_args.source.spending_key();
@@ -1733,11 +1810,16 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     {
         Some(balance) => {
             if balance < args.amount {
+                let formatted_amount =
+                    format_denominated_amount(&client, &token, args.amount)
+                        .await;
+                let formatted_balance =
+                    format_denominated_amount(&client, &token, balance).await;
                 eprintln!(
                     "The balance of the source {} of token {} is lower than \
                      the amount to be transferred. Amount to transfer is {} \
                      and the balance is {}.",
-                    source, token, args.amount, balance
+                    source, token, formatted_amount, formatted_balance
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -1763,7 +1845,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     };
     let token = Some(Coin {
         denom,
-        amount: args.amount.to_string(),
+        amount: Uint::from(args.amount).to_string(),
     });
 
     // this height should be that of the destination chain, not this chain
@@ -1923,7 +2005,9 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         .await
         .unwrap_or_default();
         if balance
-            < token::Amount::from(governance_parameters.min_proposal_fund)
+            < token::Amount::native_whole(
+                governance_parameters.min_proposal_fund,
+            )
         {
             eprintln!(
                 "Address {} doesn't have enough funds.",
@@ -2329,13 +2413,15 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     match rpc::query_storage_value::<token::Amount>(&client, &balance_key).await
     {
         Some(balance) => {
-            println!("Found source balance {}", balance);
+            println!("Found source balance {}", balance.to_string_native());
             if balance < args.amount {
                 eprintln!(
                     "The balance of the source {} is lower than the amount to \
                      be transferred. Amount to transfer is {} and the balance \
                      is {}.",
-                    bond_source, args.amount, balance
+                    bond_source,
+                    args.amount.to_string_native(),
+                    balance.to_string_native()
                 );
                 if !args.tx.force {
                     safe_exit(1)
@@ -2392,13 +2478,13 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
     let bond_amount =
         rpc::query_bond(&client, &bond_source, &validator, None).await;
-    println!("BOND AMOUNT REMAINING IS {}", bond_amount);
-
     if args.amount > bond_amount {
         eprintln!(
             "The total bonds of the source {} is lower than the amount to be \
              unbonded. Amount to unbond is {} and the total bonds is {}.",
-            bond_source, args.amount, bond_amount
+            bond_source,
+            args.amount.to_string_native(),
+            bond_amount.to_string_native()
         );
         if !args.tx.force {
             safe_exit(1)
@@ -2459,7 +2545,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         Some(epoch),
     )
     .await;
-    if tokens == 0.into() {
+    if tokens.is_zero() {
         eprintln!(
             "There are no unbonded bonds ready to withdraw in the current \
              epoch {}.",
@@ -2470,7 +2556,10 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
             safe_exit(1)
         }
     } else {
-        println!("Found {tokens} tokens that can be withdrawn.");
+        println!(
+            "Found {} tokens that can be withdrawn.",
+            tokens.to_string_native()
+        );
         println!("Submitting transaction to withdraw them...");
     }
 

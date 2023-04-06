@@ -324,7 +324,7 @@ pub mod genesis_config {
             pos_data: GenesisValidator {
                 address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
-                tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
+                tokens: token::Amount::native_whole(config.tokens.unwrap_or_default()),
                 consensus_key: config
                     .consensus_public_key
                     .as_ref()
@@ -373,7 +373,7 @@ pub mod genesis_config {
                 .unwrap()
                 .to_dkg_public_key()
                 .unwrap(),
-            non_staked_balance: token::Amount::whole(
+            non_staked_balance: token::Amount::native_whole(
                 config.non_staked_balance.unwrap_or_default(),
             ),
             validator_vp_code_path: validator_vp_config.filename.to_owned(),
@@ -463,7 +463,7 @@ pub mod genesis_config {
                                 }
                             }
                         },
-                        token::Amount::whole(*amount),
+                        token::Amount::native_whole(*amount),
                     )
                 })
                 .collect(),
@@ -895,7 +895,7 @@ pub fn genesis() -> Genesis {
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            tokens: token::Amount::whole(200_000),
+            tokens: token::Amount::native_whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
             commission_rate: dec!(0.05),
             max_commission_rate_change: dec!(0.01),
@@ -903,7 +903,7 @@ pub fn genesis() -> Genesis {
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
-        non_staked_balance: token::Amount::whole(100_000),
+        non_staked_balance: token::Amount::native_whole(100_000),
         // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
@@ -925,7 +925,7 @@ pub fn genesis() -> Genesis {
         pos_gain_d: dec!(0.1),
         staked_ratio: dec!(0.0),
         pos_inflation_amount: 0,
-        wrapper_tx_fees: Some(token::Amount::whole(0)),
+        wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -958,8 +958,8 @@ pub fn genesis() -> Genesis {
     let implicit_accounts = vec![ImplicitAccount {
         public_key: wallet::defaults::daewon_keypair().ref_to(),
     }];
-    let default_user_tokens = token::Amount::whole(1_000_000);
-    let default_key_tokens = token::Amount::whole(1_000);
+    let default_user_tokens = token::Amount::native_whole(1_000_000);
+    let default_key_tokens = token::Amount::native_whole(1_000);
     let balances: HashMap<Address, token::Amount> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),

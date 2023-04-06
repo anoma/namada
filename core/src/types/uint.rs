@@ -8,6 +8,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use serde::{Deserialize, Serialize};
 use uint::construct_uint;
+
 use crate::types::token;
 
 construct_uint! {
@@ -51,7 +52,9 @@ pub const MAX_SIGNED_VALUE: Uint =
     Uint([u64::MAX, u64::MAX, u64::MAX, 9223372036854775807]);
 
 /// A signed 256 big integer.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize,
+)]
 pub struct SignedUint(Uint);
 
 impl SignedUint {
@@ -90,7 +93,8 @@ impl SignedUint {
 
 impl From<u64> for SignedUint {
     fn from(val: u64) -> Self {
-        SignedUint::try_from(Uint::from(val)).expect("A u64 will always fit in this type")
+        SignedUint::try_from(Uint::from(val))
+            .expect("A u64 will always fit in this type")
     }
 }
 

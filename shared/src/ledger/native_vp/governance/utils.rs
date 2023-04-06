@@ -15,7 +15,6 @@ use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::Epoch;
-use crate::types::token;
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
@@ -86,7 +85,8 @@ where
 {
     let params = read_pos_params(storage)?;
     let total_stake = read_total_stake(storage, &params, epoch)?;
-    let total_stake = VotePower::from(total_stake);
+    let total_stake =
+        VotePower::try_from(total_stake).expect("Amount out of bounds");
 
     let Votes {
         yay_validators,
@@ -156,7 +156,8 @@ where
                         epoch,
                     )?
                     .unwrap_or_default()
-                    .into();
+                    .try_into()
+                    .expect("Amount out of bounds");
 
                     yay_validators.insert(voter_address.clone(), amount);
                 } else if !validators.contains(voter_address) {
@@ -179,7 +180,8 @@ where
                                         .or_default();
                                     entry.insert(
                                         validator.to_owned(),
-                                        VotePower::from(amount),
+                                        VotePower::try_from(amount)
+                                            .expect("Amount out of bounds"),
                                     );
                                 } else {
                                     let entry = nay_delegators
@@ -187,7 +189,8 @@ where
                                         .or_default();
                                     entry.insert(
                                         validator.to_owned(),
-                                        VotePower::from(amount),
+                                        VotePower::try_from(amount)
+                                            .expect("Amount out of bounds"),
                                     );
                                 }
                             }

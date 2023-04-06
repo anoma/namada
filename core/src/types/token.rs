@@ -293,6 +293,41 @@ impl DenominatedAmount {
         }
         string
     }
+
+    /// Find the minimal precision that holds this value losslessly.
+    /// This equates to stripping trailing zeros after the decimal
+    /// place.
+    pub fn canonical(self) -> Self {
+        let mut value = self.amount.raw;
+        let ten = Uint::from(10);
+        let mut denom = self.denom.0;
+        for _ in 0..self.denom.0 {
+            let (div, rem) = value.div_mod(ten);
+            if rem == Uint::zero() {
+                value = div;
+                denom -= 1;
+            }
+        }
+        Self {
+            amount: Amount { raw: value },
+            denom: denom.into(),
+        }
+    }
+
+    /// Attempt to increase the precision of an amount. Can fail
+    /// if the resulting amount does not fit into 256 bits.
+    pub fn increase_precision(self, denom: Denomination) -> Option<Self> {
+        if denom.0 < self.denom.0 {
+            return None;
+        }
+        Uint::from(10)
+            .checked_pow(Uint::from(denom.0 - self.denom.0))
+            .and_then(|scaling| self.amount.raw.checked_mul(scaling))
+            .map(|amount| Self {
+                amount: Amount { raw: amount },
+                denom,
+            })
+    }
 }
 
 impl Display for DenominatedAmount {
@@ -307,11 +342,41 @@ impl FromStr for DenominatedAmount {
     type Err = AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let decimal =
-            Decimal::from_str(s).map_err(AmountParseError::InvalidDecimal)?;
-        let denom = Denomination(decimal.scale() as u8);
+        let precision = s.find('.').map(|pos| s.len() - pos);
+        let digits = s
+            .chars()
+            .filter_map(|c| {
+                if c.is_numeric() {
+                    c.to_digit(10).map(Uint::from)
+                } else {
+                    None
+                }
+            })
+            .rev()
+            .collect::<Vec<_>>();
+        if digits.len() != s.len() && precision.is_none()
+            || digits.len() != s.len() - 1 && precision.is_some()
+        {
+            return Err(AmountParseError::NotNumeric);
+        }
+        if digits.len() > 77 {
+            return Err(AmountParseError::ScaleTooLarge(
+                digits.len() as u32,
+                77,
+            ));
+        }
+        let mut value = Uint::default();
+        let ten = Uint::from(10);
+        for (pow, digit) in digits.into_iter().enumerate() {
+            value = ten
+                .checked_pow(Uint::from(pow))
+                .and_then(|scaling| scaling.checked_mul(digit))
+                .and_then(|scaled| value.checked_add(scaled))
+                .ok_or(AmountParseError::InvalidRange)?;
+        }
+        let denom = Denomination(precision.unwrap_or_default() as u8);
         Ok(Self {
-            amount: Amount::from_decimal(decimal, denom)?,
+            amount: Amount { raw: value },
             denom,
         })
     }
@@ -399,8 +464,8 @@ impl TryFrom<Amount> for u128 {
 
     fn try_from(value: Amount) -> Result<Self, Self::Error> {
         let Uint(arr) = value.raw;
-        for i in 2..4 {
-            if arr[i] != 0 {
+        for word in arr.iter().skip(2) {
+            if *word != 0 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Integer overflow when casting to u128",
@@ -529,6 +594,8 @@ pub enum AmountParseError {
         "Could not convert from string, expected an unsigned 256-bit integer."
     )]
     FromString,
+    #[error("Could not parse string as a correctly formatted number.")]
+    NotNumeric,
 }
 
 impl From<Amount> for Change {
@@ -540,6 +607,12 @@ impl From<Amount> for Change {
 impl From<Change> for Amount {
     fn from(change: Change) -> Self {
         Amount { raw: change.abs() }
+    }
+}
+
+impl From<Amount> for Uint {
+    fn from(amount: Amount) -> Self {
+        amount.raw
     }
 }
 
@@ -819,27 +892,34 @@ mod tests {
             /// starting to lose precision.
             #[test]
             fn test_token_amount_decimal_conversion(raw_amount in 0..2_u64.pow(51)) {
-                let amount = Amount::from(raw_amount);
+                let amount = Amount::from_uint(raw_amount, NATIVE_MAX_DECIMAL_PLACES).expect("Test failed");
                 // A round-trip conversion to and from Decimal should be an identity
-                let decimal = Decimal::from(amount);
-                let identity = Amount::from(decimal);
+                let decimal = Decimal::from(raw_amount);
+                let identity = Amount::from_decimal(decimal, NATIVE_MAX_DECIMAL_PLACES).expect("Test failed");
                 assert_eq!(amount, identity);
         }
     }
 
     #[test]
     fn test_token_display() {
-        let max = Amount::from(u64::MAX);
-        assert_eq!("18446744073709.551615", max.to_string());
+        let max = Amount::from_uint(u64::MAX, NATIVE_MAX_DECIMAL_PLACES)
+            .expect("Test failed");
+        assert_eq!("18446744073709.551615", max.to_string_native());
 
-        let whole = Amount::from(u64::MAX / NATIVE_SCALE * NATIVE_SCALE);
-        assert_eq!("18446744073709", whole.to_string());
+        let whole = Amount::from_uint(
+            u64::MAX / NATIVE_SCALE * NATIVE_SCALE,
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .expect("Test failed");
+        assert_eq!("18446744073709", whole.to_string_native());
 
-        let trailing_zeroes = Amount::from(123000);
-        assert_eq!("0.123", trailing_zeroes.to_string());
+        let trailing_zeroes =
+            Amount::from_uint(123000, NATIVE_MAX_DECIMAL_PLACES)
+                .expect("Test failed");
+        assert_eq!("0.123", trailing_zeroes.to_string_native());
 
-        let zero = Amount::from(0);
-        assert_eq!("0", zero.to_string());
+        let zero = Amount::default();
+        assert_eq!("0", zero.to_string_native());
     }
 
     #[test]

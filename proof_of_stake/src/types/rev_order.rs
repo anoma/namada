@@ -54,7 +54,8 @@ impl std::str::FromStr for ReverseOrdTokenAmount {
     type Err = token::AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let amount = token::Amount::from_str(s, token::NATIVE_MAX_DECIMAL_PLACES)?;
+        let amount =
+            token::Amount::from_str(s, token::NATIVE_MAX_DECIMAL_PLACES)?;
         Ok(Self(amount))
     }
 }

@@ -19,10 +19,10 @@ use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
+use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 pub use rev_order::ReverseOrdTokenAmount;
 use rust_decimal::prelude::{Decimal, ToPrimitive};
 use rust_decimal::RoundingStrategy;
-use namada_core::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 
 use crate::parameters::PosParams;
 
@@ -242,7 +242,8 @@ impl Display for WeightedValidator {
         write!(
             f,
             "{} with bonded stake {}",
-            self.address, self.bonded_stake.to_string_native()
+            self.address,
+            self.bonded_stake.to_string_native()
         )
     }
 }
@@ -469,21 +470,17 @@ pub fn mult_change_to_amount(
 ) -> token::Amount {
     // this function is used for slashing calculations. We want to err
     // on the side of slashing more, not less.
-    let dec = dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-    Amount::from_decimal(
-        dec,
-        NATIVE_MAX_DECIMAL_PLACES
-    ).unwrap() * change.abs()
+    let dec =
+        dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+    Amount::from_decimal(dec, NATIVE_MAX_DECIMAL_PLACES).unwrap() * change.abs()
 }
 
 /// Multiply a value of type Decimal with one of type Amount and then return the
 /// truncated Amount
 pub fn mult_amount(dec: Decimal, amount: token::Amount) -> token::Amount {
-    let dec = dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
-    Amount::from_decimal(
-        dec,
-        NATIVE_MAX_DECIMAL_PLACES
-    ).unwrap() * amount
+    let dec =
+        dec.round_dp_with_strategy(6, RoundingStrategy::ToPositiveInfinity);
+    Amount::from_decimal(dec, NATIVE_MAX_DECIMAL_PLACES).unwrap() * amount
 }
 
 /// Calculate voting power in the tendermint context (which is stored as i64)

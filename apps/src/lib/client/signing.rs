@@ -238,7 +238,7 @@ pub async fn sign_wrapper(
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
     let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::whole(MIN_FEE)
+        Amount::native_whole(MIN_FEE)
     } else {
         let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
         rpc::query_storage_value::<token::Amount>(&client, &wrapper_tx_fees_key)
@@ -255,7 +255,9 @@ pub async fn sign_wrapper(
     if balance < fee_amount {
         eprintln!(
             "The wrapper transaction source doesn't have enough balance to \
-             pay fee {fee_amount}, got {balance}."
+             pay fee {}, got {}.",
+            fee_amount.to_string_native(),
+            balance.to_string_native(),
         );
         if !args.force && cfg!(feature = "mainnet") {
             cli::safe_exit(1);

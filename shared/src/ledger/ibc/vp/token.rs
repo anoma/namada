@@ -122,7 +122,7 @@ where
                     changes.insert(sub_prefix, change + this_change);
                 }
             }
-            if changes.iter().all(|(_, c)|  c.is_zero()) {
+            if changes.iter().all(|(_, c)| c.is_zero()) {
                 return Ok(true);
             } else {
                 return Err(Error::TokenTransfer(
@@ -191,7 +191,8 @@ where
         }
         let token = ibc_storage::token(&data.denom)
             .map_err(|e| Error::Denom(e.to_string()))?;
-        let amount = Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
+        let amount =
+            Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
 
         let denom = if let Some(denom) = data
             .denom
@@ -276,7 +277,8 @@ where
                 .map_err(Error::DecodingPacketData)?;
         let token = ibc_storage::token(&data.denom)
             .map_err(|e| Error::Denom(e.to_string()))?;
-        let amount = Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
+        let amount =
+            Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
 
         let prefix = format!(
             "{}/{}/",
@@ -334,7 +336,8 @@ where
                 .map_err(Error::DecodingPacketData)?;
         let token_str = data.denom.split('/').last().ok_or(Error::NoToken)?;
         let token = Address::decode(token_str).map_err(Error::Address)?;
-        let amount = Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
+        let amount =
+            Amount::from_string_precise(&data.amount).map_err(Error::Amount)?;
 
         // check the denom field
         let prefix = format!(

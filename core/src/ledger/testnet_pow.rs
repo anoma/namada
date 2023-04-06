@@ -511,7 +511,7 @@ mod test_with_tx_and_vp_env {
     fn test_challenge_and_solution() -> storage_api::Result<()> {
         let faucet_address = address::testing::established_address_1();
         let difficulty = Difficulty::try_new(1).unwrap();
-        let withdrawal_limit = token::Amount::whole(1_000);
+        let withdrawal_limit = token::Amount::native_whole(1_000);
 
         let mut tx_env = TestTxEnv::default();
 

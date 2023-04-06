@@ -10,6 +10,7 @@ use masp_primitives::sapling::Node;
 
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
+use crate::types::token::MaspDenom;
 
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
@@ -19,7 +20,10 @@ pub struct ConversionState {
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
-    pub assets: BTreeMap<AssetType, (Address, Epoch, AllowedConversion, usize)>,
+    pub assets: BTreeMap<
+        AssetType,
+        ((Address, MaspDenom), Epoch, AllowedConversion, usize),
+    >,
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -55,16 +59,17 @@ where
     // with the zeroth epoch to minimize the number of convert notes clients
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
-    let reward_asset_bytes = (address::nam(), 0u64)
+    let reward_asset_bytes = (address::nam(), MaspDenom::Zero, 0u64)
         .try_to_vec()
         .expect("unable to serialize address and epoch");
     let reward_asset = AssetType::new(reward_asset_bytes.as_ref())
         .expect("unable to derive asset identifier");
     // Conversions from the previous to current asset for each address
-    let mut current_convs = BTreeMap::<Address, AllowedConversion>::new();
+    let mut current_convs =
+        BTreeMap::<(Address, MaspDenom), AllowedConversion>::new();
     // Reward all tokens according to above reward rates
-    for (addr, reward) in &masp_rewards {
-        // Dispence a transparent reward in parallel to the shielded rewards
+    for ((addr, denom), reward) in &masp_rewards {
+        // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: token::Amount = wl_storage
             .read(&token::balance_key(addr, &masp_addr))?
             .unwrap_or_default();
@@ -76,12 +81,18 @@ where
         // Provide an allowed conversion from previous timestamp. The
         // negative sign allows each instance of the old asset to be
         // cancelled out/replaced with the new asset
-        let old_asset =
-            encode_asset_type(addr.clone(), wl_storage.storage.last_epoch);
-        let new_asset =
-            encode_asset_type(addr.clone(), wl_storage.storage.block.epoch);
-        current_convs.insert(
+        let old_asset = encode_asset_type(
             addr.clone(),
+            *denom,
+            wl_storage.storage.last_epoch,
+        );
+        let new_asset = encode_asset_type(
+            addr.clone(),
+            *denom,
+            wl_storage.storage.block.epoch,
+        );
+        current_convs.insert(
+            (addr.clone(), *denom),
             (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
                 + MaspAmount::from_pair(new_asset, reward.1).unwrap()
                 + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
@@ -91,7 +102,7 @@ where
         wl_storage.storage.conversion_state.assets.insert(
             old_asset,
             (
-                addr.clone(),
+                (addr.clone(), *denom),
                 wl_storage.storage.last_epoch,
                 MaspAmount::zero().into(),
                 0,
@@ -119,9 +130,9 @@ where
         .into_par_iter()
         .with_min_len(notes_per_thread_min)
         .with_max_len(notes_per_thread_max)
-        .map(|(idx, (addr, _epoch, conv, pos))| {
+        .map(|(idx, (asset, _epoch, conv, pos))| {
             // Use transitivity to update conversion
-            *conv += current_convs[addr].clone();
+            *conv += current_convs[asset].clone();
             // Update conversion position to leaf we are about to create
             *pos = idx;
             // The merkle tree need only provide the conversion commitment,
@@ -162,15 +173,18 @@ where
 
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
-    for addr in masp_rewards.keys() {
+    for (addr, denom) in masp_rewards.keys() {
         // Add the decoding entry for the new asset type. An uncommited
         // node position is used since this is not a conversion.
-        let new_asset =
-            encode_asset_type(addr.clone(), wl_storage.storage.block.epoch);
+        let new_asset = encode_asset_type(
+            addr.clone(),
+            *denom,
+            wl_storage.storage.block.epoch,
+        );
         wl_storage.storage.conversion_state.assets.insert(
             new_asset,
             (
-                addr.clone(),
+                (addr.clone(), *denom),
                 wl_storage.storage.block.epoch,
                 MaspAmount::zero().into(),
                 wl_storage.storage.conversion_state.tree.size(),
@@ -195,8 +209,12 @@ where
 }
 
 /// Construct MASP asset type with given epoch for given token
-pub fn encode_asset_type(addr: Address, epoch: Epoch) -> AssetType {
-    let new_asset_bytes = (addr, epoch.0)
+pub fn encode_asset_type(
+    addr: Address,
+    denom: MaspDenom,
+    epoch: Epoch,
+) -> AssetType {
+    let new_asset_bytes = (addr, denom, epoch.0)
         .try_to_vec()
         .expect("unable to serialize address and epoch");
     AssetType::new(new_asset_bytes.as_ref())

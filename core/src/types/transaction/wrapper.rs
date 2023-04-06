@@ -20,6 +20,7 @@ pub mod wrapper_tx {
     use crate::types::transaction::{
         hash_tx, EncryptionKey, Hash, TxError, TxType,
     };
+    use crate::types::uint::Uint;
 
     /// Minimum fee amount in micro NAMs
     pub const MIN_FEE: u64 = 100;
@@ -81,39 +82,46 @@ pub mod wrapper_tx {
         BorshDeserialize,
         BorshSchema,
     )]
-    #[serde(from = "u64")]
-    #[serde(into = "u64")]
+    #[serde(from = "Uint")]
+    #[serde(into = "Uint")]
     pub struct GasLimit {
-        multiplier: u64,
+        multiplier: Uint,
     }
 
     impl GasLimit {
         /// We refund unused gas up to GAS_LIMIT_RESOLUTION
-        pub fn refund_amount(&self, used_gas: u64) -> Amount {
-            Amount::native_whole(if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
-                // we refund only up to GAS_LIMIT_RESOLUTION
-                GAS_LIMIT_RESOLUTION
-            } else if used_gas >= u64::from(self) {
-                // Gas limit was under estimated, no refund
-                0
-            } else {
-                // compute refund
-                u64::from(self) - used_gas
-            })
+        pub fn refund_amount(&self, used_gas: Uint) -> Amount {
+            Amount::from_uint(
+                if used_gas
+                    < (Uint::from(self) - Uint::from(GAS_LIMIT_RESOLUTION))
+                {
+                    // we refund only up to GAS_LIMIT_RESOLUTION
+                    Uint::from(GAS_LIMIT_RESOLUTION)
+                } else if used_gas >= Uint::from(self) {
+                    // Gas limit was under estimated, no refund
+                    Uint::from(0)
+                } else {
+                    // compute refund
+                    Uint::from(self) - used_gas
+                },
+                0,
+            )
+            .unwrap()
         }
     }
 
     /// Round the input number up to the next highest multiple
     /// of GAS_LIMIT_RESOLUTION
-    impl From<u64> for GasLimit {
-        fn from(amount: u64) -> GasLimit {
-            if GAS_LIMIT_RESOLUTION * (amount / GAS_LIMIT_RESOLUTION) < amount {
+    impl From<Uint> for GasLimit {
+        fn from(amount: Uint) -> GasLimit {
+            let gas_limit_resolution = Uint::from(GAS_LIMIT_RESOLUTION);
+            if gas_limit_resolution * (amount / gas_limit_resolution) < amount {
                 GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION) + 1,
+                    multiplier: (amount / gas_limit_resolution) + 1,
                 }
             } else {
                 GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION),
+                    multiplier: (amount / gas_limit_resolution),
                 }
             }
         }
@@ -123,21 +131,20 @@ pub mod wrapper_tx {
     /// of GAS_LIMIT_RESOLUTION
     impl From<Amount> for GasLimit {
         fn from(amount: Amount) -> GasLimit {
-            // TODO: this may panic.
-            GasLimit::from(u128::try_from(amount).unwrap() as u64)
+            GasLimit::from(Uint::from(amount))
         }
     }
 
     /// Get back the gas limit as a raw number
-    impl From<&GasLimit> for u64 {
-        fn from(limit: &GasLimit) -> u64 {
+    impl From<&GasLimit> for Uint {
+        fn from(limit: &GasLimit) -> Uint {
             limit.multiplier * GAS_LIMIT_RESOLUTION
         }
     }
 
     /// Get back the gas limit as a raw number
-    impl From<GasLimit> for u64 {
-        fn from(limit: GasLimit) -> u64 {
+    impl From<GasLimit> for Uint {
+        fn from(limit: GasLimit) -> Uint {
             limit.multiplier * GAS_LIMIT_RESOLUTION
         }
     }
@@ -145,7 +152,8 @@ pub mod wrapper_tx {
     /// Get back the gas limit as a raw number, viewed as an Amount
     impl From<GasLimit> for Amount {
         fn from(limit: GasLimit) -> Amount {
-            Amount::native_whole(limit.multiplier * GAS_LIMIT_RESOLUTION)
+            Amount::from_uint(limit.multiplier * GAS_LIMIT_RESOLUTION, 0)
+                .unwrap()
         }
     }
 

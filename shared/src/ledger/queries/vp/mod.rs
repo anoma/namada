@@ -1,8 +1,7 @@
 // Re-export to show in rustdoc!
 pub use pos::Pos;
-pub use token::Token;
-
 use pos::POS;
+pub use token::Token;
 use token::TOKEN;
 
 mod pos;

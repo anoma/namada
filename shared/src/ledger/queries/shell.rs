@@ -4,7 +4,8 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::BlockResults;
+use namada_core::types::storage::{BlockHeight, BlockResults};
+use namada_core::types::token::MaspDenom;
 
 use crate::ledger::events::log::dumb_queries;
 use crate::ledger::events::Event;
@@ -20,6 +21,7 @@ use crate::types::transaction::TxResult;
 
 type Conversion = (
     Address,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
@@ -28,6 +30,9 @@ type Conversion = (
 router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Epoch of the input block height
+    ( "epoch_at_height" / [height: BlockHeight]) -> Option<Epoch> = epoch_at_height,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
@@ -137,7 +142,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some((addr, epoch, conv, pos)) = ctx
+    if let Some(((addr, denom), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -146,6 +151,7 @@ where
     {
         Ok((
             addr.clone(),
+            *denom,
             *epoch,
             Into::<masp_primitives::transaction::components::Amount>::into(
                 conv.clone(),
@@ -179,6 +185,17 @@ where
 {
     let data = ctx.wl_storage.storage.last_epoch;
     Ok(data)
+}
+
+fn epoch_at_height<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    height: BlockHeight,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.block.pred_epochs.get_epoch(height))
 }
 
 /// Returns data with `vec![]` when the storage key is not found. For all
