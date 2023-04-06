@@ -89,6 +89,10 @@ out in storage, unless the number of confirmations was only off by a few
 block heights in Ethereum. Assuming that an honest quorum of validators is
 operating Namada, only confirmed events will eventually become `seen`.
 
+### Protocol transactions
+Ethereum votes confirmed at some block height `H`. TODO: describe protocol
+tx vote extensions
+
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
 the state with the new state rather than applying state diffs. The storage 
