@@ -95,14 +95,14 @@ the state with the new state rather than applying state diffs. The storage
 keys involved are:
 ```
 # all values are Borsh-serialized
-/eth_msgs/\$msg_hash/body : EthereumEvent
-/eth_msgs/\$msg_hash/seen_by : Vec<Address>
-/eth_msgs/\$msg_hash/voting_power: (u64, u64)  # reduced fraction < 1 e.g. (2, 3)
-/eth_msgs/\$msg_hash/seen: bool
+/eth_msgs/$msg_hash/body: EthereumEvent # the event to be voted on
+/eth_msgs/$msg_hash/seen_by: BTreeMap<Address, BlockHeight> # mapping from a validator to the Namada height at which the event was observed to be confirmed by said validator
+/eth_msgs/$msg_hash/voting_power: FractionalVotingPower  # reduced fraction < 1 e.g. (2, 3)
+/eth_msgs/$msg_hash/seen: bool # >= 2/3 voting power across all epochs it was voted on
 ```
 
-`\$msg_hash` is the SHA256 digest of the Borsh serialization of the relevant 
-`EthereumEvent`.
+Where `$msg_hash` is the SHA256 digest of the Borsh serialization of
+some `EthereumEvent`.
 
 Changes to this `/eth_msgs` storage subspace are only ever made by internal 
 transactions crafted and applied by all nodes based on the aggregate of vote 
