@@ -7,6 +7,8 @@ use namada::ledger::{protocol, replay_protection};
 use namada::types::hash;
 use namada::types::storage::{BlockHash, BlockResults, Header};
 use namada::types::token::Amount;
+use namada::types::transaction::protocol::ProtocolTxType;
+use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -45,7 +47,6 @@ where
     ) -> Result<shim::response::FinalizeBlock> {
         // reset gas meter before we start
         self.gas_meter.reset();
-
         let mut response = shim::response::FinalizeBlock::default();
         // begin the next block and check if a new epoch began
         let (height, new_epoch) =
@@ -288,16 +289,59 @@ where
                     );
                     continue;
                 }
-                TxType::Protocol(_) => {
-                    tracing::error!(
-                        "Internal logic error: FinalizeBlock received a \
-                         TxType::Protocol transaction"
-                    );
-                    continue;
-                }
+                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::EthEventsVext(ref ext) => {
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
+                        {
+                            for event in ext.data.ethereum_events.iter() {
+                                self.mode.dequeue_eth_event(event);
+                            }
+                        }
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ProtocolTxType::BridgePoolVext(_)
+                    | ProtocolTxType::BridgePool(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ProtocolTxType::ValSetUpdateVext(_)
+                    | ProtocolTxType::ValidatorSetUpdate(_) => {
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ProtocolTxType::EthereumEvents(ref digest) => {
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
+                        {
+                            let this_signer =
+                                &(address, self.wl_storage.storage.last_height);
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
+                            {
+                                if signers.contains(this_signer) {
+                                    self.mode.dequeue_eth_event(event);
+                                }
+                            }
+                        }
+                        Event::new_tx_event(&tx_type, height.0)
+                    }
+                    ref protocol_tx_type => {
+                        tracing::error!(
+                            ?protocol_tx_type,
+                            "Internal logic error: FinalizeBlock received an \
+                             unsupported TxType::Protocol transaction: {:?}",
+                            protocol_tx
+                        );
+                        continue;
+                    }
+                },
             };
 
-            match protocol::apply_tx(
+            match protocol::dispatch_tx(
                 tx_type,
                 tx_length,
                 TxIndex(
@@ -306,8 +350,7 @@ where
                         .expect("transaction index out of bounds"),
                 ),
                 &mut self.gas_meter,
-                &mut self.wl_storage.write_log,
-                &self.wl_storage.storage,
+                &mut self.wl_storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
             )
@@ -417,6 +460,9 @@ where
 
         if new_epoch {
             self.update_epoch(&mut response);
+            // send the latest oracle configs. These may have changed due to
+            // governance.
+            self.update_eth_oracle();
         }
 
         let _ = self
@@ -469,7 +515,7 @@ where
 
     /// If a new epoch begins, we update the response to include
     /// changes to the validator sets and consensus parameters
-    fn update_epoch(&self, response: &mut shim::response::FinalizeBlock) {
+    fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
@@ -519,19 +565,35 @@ where
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::BTreeMap;
+    use std::num::NonZeroU64;
     use std::str::FromStr;
 
+    use namada::eth_bridge::storage::bridge_pool::{
+        get_key_from_hash, get_nonce_key, get_signed_root_key,
+    };
+    use namada::eth_bridge::storage::min_confirmations_key;
+    use namada::ledger::eth_bridge::{EthBridgeQueries, MinimumConfirmations};
+    use namada::ledger::gas::VpGasMeter;
+    use namada::ledger::native_vp::parameters::ParametersVp;
+    use namada::ledger::native_vp::NativeVp;
     use namada::ledger::parameters::EpochDuration;
+    use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
+    use namada::ledger::storage_api::StorageWrite;
+    use namada::types::ethereum_events::{EthAddress, Uint};
     use namada::types::governance::ProposalVote;
+    use namada::types::keccak::KeccakHash;
     use namada::types::storage::Epoch;
-    use namada::types::time::DurationSecs;
+    use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use namada::types::vote_extensions::ethereum_events;
+    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
     use super::*;
+    use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -542,7 +604,7 @@ mod test_finalize_block {
     /// not appear in the queue of txs to be decrypted
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_wrappers = vec![];
@@ -631,7 +693,7 @@ mod test_finalize_block {
     /// proposal
     #[test]
     fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
@@ -685,7 +747,7 @@ mod test_finalize_block {
     /// but the tx result contains the appropriate error code.
     #[test]
     fn test_undecryptable_returns_error_code() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _, _) = setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let pubkey = EncryptionKey::default();
@@ -744,7 +806,7 @@ mod test_finalize_block {
     /// decrypted txs are de-queued.
     #[test]
     fn test_mixed_txs_queued_in_correct_order() {
-        let (mut shell, _) = setup();
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
         let mut valid_txs = vec![];
@@ -882,11 +944,247 @@ mod test_finalize_block {
         assert_eq!(counter, 2);
     }
 
+    /// Test if a rejected protocol tx is applied and emits
+    /// the correct event
+    #[test]
+    fn test_rejected_protocol_tx() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+        let (mut shell, _, _, _) = setup_at_height(LAST_HEIGHT);
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+
+        let tx = ProtocolTxType::EthereumEvents(ethereum_events::VextDigest {
+            signatures: Default::default(),
+            events: vec![],
+        })
+        .sign(&protocol_key)
+        .to_bytes();
+
+        let req = FinalizeBlock {
+            txs: vec![ProcessedTx {
+                tx,
+                result: TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: Default::default(),
+                },
+            }],
+            ..Default::default()
+        };
+        let mut resp = shell.finalize_block(req).expect("Test failed");
+        assert_eq!(resp.len(), 1);
+        let event = resp.remove(0);
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed");
+        assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
+    }
+
+    /// Test that once a validator's vote for an Ethereum event lands
+    /// on-chain from a vote extension digest, it dequeues from the
+    /// list of events to vote on.
+    #[test]
+    fn test_eth_events_dequeued_digest() {
+        let (mut shell, _, oracle, _) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        // ---- the ledger receives a new Ethereum event
+        let event = EthereumEvent::NewContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
+        let [queued_event]: [EthereumEvent; 1] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        assert_eq!(queued_event, event);
+
+        // ---- The protocol tx that includes this event on-chain
+        let ext = ethereum_events::Vext {
+            block_height: shell.wl_storage.storage.last_height,
+            ethereum_events: vec![event.clone()],
+            validator_addr: address.clone(),
+        }
+        .sign(&protocol_key);
+
+        let processed_tx = {
+            let signed = MultiSignedEthEvent {
+                event,
+                signers: BTreeSet::from([(
+                    address.clone(),
+                    shell.wl_storage.storage.last_height,
+                )]),
+            };
+
+            let digest = ethereum_events::VextDigest {
+                signatures: vec![(
+                    (address, shell.wl_storage.storage.last_height),
+                    ext.sig,
+                )]
+                .into_iter()
+                .collect(),
+                events: vec![signed],
+            };
+            ProcessedTx {
+                tx: ProtocolTxType::EthereumEvents(digest)
+                    .sign(&protocol_key)
+                    .to_bytes(),
+                result: TxResult {
+                    code: ErrorCodes::Ok.into(),
+                    info: "".into(),
+                },
+            }
+        };
+
+        // ---- This protocol tx is accepted
+        let [result]: [Event; 1] = shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        let code = result.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // --- The event is removed from the queue
+        assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Test that once a validator's vote for an Ethereum event lands
+    /// on-chain from a protocol tx, it dequeues from the
+    /// list of events to vote on.
+    #[test]
+    fn test_eth_events_dequeued_protocol_tx() {
+        let (mut shell, _, oracle, _) = setup();
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let address = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+
+        // ---- the ledger receives a new Ethereum event
+        let event = EthereumEvent::NewContract {
+            name: "Test".to_string(),
+            address: EthAddress([0; 20]),
+        };
+        tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
+        let [queued_event]: [EthereumEvent; 1] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        assert_eq!(queued_event, event);
+
+        // ---- The protocol tx that includes this event on-chain
+        let ext = ethereum_events::Vext {
+            block_height: shell.wl_storage.storage.last_height,
+            ethereum_events: vec![event],
+            validator_addr: address,
+        }
+        .sign(&protocol_key);
+        let processed_tx = ProcessedTx {
+            tx: ProtocolTxType::EthEventsVext(ext)
+                .sign(&protocol_key)
+                .to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        // ---- This protocol tx is accepted
+        let [result]: [Event; 1] = shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        let code = result.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // --- The event is removed from the queue
+        assert!(shell.new_ethereum_events().is_empty());
+    }
+
+    /// Helper function for testing the relevant protocol tx
+    /// for signing bridge pool roots and nonces
+    fn test_bp_roots<F>(craft_tx: F)
+    where
+        F: FnOnce(&TestShell) -> Tx,
+    {
+        let (mut shell, _, _, _) = setup_at_height(3u64);
+        namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
+            &mut shell.wl_storage.storage,
+            &KeccakHash([1; 32]),
+            3.into(),
+        );
+        let value = BlockHeight(4).try_to_vec().expect("Test failed");
+        shell
+            .wl_storage
+            .storage
+            .block
+            .tree
+            .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
+            .expect("Test failed");
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &get_nonce_key(),
+                Uint::from(1).try_to_vec().expect("Test failed"),
+            )
+            .expect("Test failed");
+        let tx = craft_tx(&shell);
+        let processed_tx = ProcessedTx {
+            tx: tx.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+        let req = FinalizeBlock {
+            txs: vec![processed_tx],
+            ..Default::default()
+        };
+        let root = shell
+            .wl_storage
+            .read_bytes(&get_signed_root_key())
+            .expect("Reading signed Bridge pool root shouldn't fail.");
+        assert!(root.is_none());
+        _ = shell.finalize_block(req).expect("Test failed");
+        let (root, _) = shell
+            .wl_storage
+            .ethbridge_queries()
+            .get_signed_bridge_pool_root()
+            .expect("Test failed");
+        assert_eq!(root.data.0, KeccakHash([1; 32]));
+        assert_eq!(root.data.1, Uint::from(1));
+    }
+
+    #[test]
+    /// Test that the generated protocol tx passes Finalize Block
+    /// and effects the expected storage changes.
+    fn test_bp_roots_protocol_tx() {
+        test_bp_roots(|shell: &TestShell| {
+            let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
+            ProtocolTxType::BridgePoolVext(vext)
+                .sign(shell.mode.get_protocol_key().expect("Test failed"))
+        });
+    }
+
     /// Test that the finalize block handler never commits changes directly to
     /// the DB.
     #[test]
     fn test_finalize_doesnt_commit_db() {
-        let (mut shell, _) = setup();
+        let (mut shell, _broadcaster, _, _eth_control) = setup();
 
         // Update epoch duration to make sure we go through couple epochs
         let epoch_duration = EpochDuration {
@@ -943,9 +1241,8 @@ mod test_finalize_block {
             let prefix: Key = FromStr::from_str("").unwrap();
             shell
                 .wl_storage
-                .storage
-                .db
                 .iter_prefix(&prefix)
+                .expect("Test failed")
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
         };
@@ -1047,5 +1344,64 @@ mod test_finalize_block {
         //         .expect("Test failed")
         //         .0
         // )
+    }
+
+    /// Test that updating the ethereum bridge params via governance works.
+    #[tokio::test]
+    async fn test_eth_bridge_param_updates() {
+        use namada::ledger::governance::storage as gov_storage;
+        let (mut shell, _broadcaster, _, mut control_receiver) =
+            setup_at_height(3u64);
+        let proposal_execution_key = gov_storage::get_proposal_execution_key(0);
+        shell
+            .wl_storage
+            .write(&proposal_execution_key, ())
+            .expect("Test failed.");
+        let tx = Tx::new(vec![], None);
+        let new_min_confirmations = MinimumConfirmations::from(unsafe {
+            NonZeroU64::new_unchecked(42)
+        });
+        shell
+            .wl_storage
+            .write(&min_confirmations_key(), new_min_confirmations)
+            .expect("Test failed");
+        let gas_meter = VpGasMeter::new(0);
+        let keys_changed = BTreeSet::from([min_confirmations_key()]);
+        let verifiers = BTreeSet::default();
+        let ctx = namada::ledger::native_vp::Ctx::new(
+            shell.mode.get_validator_address().expect("Test failed"),
+            &shell.wl_storage.storage,
+            &shell.wl_storage.write_log,
+            &tx,
+            &TxIndex(0),
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        );
+        let parameters = ParametersVp { ctx };
+        let result = parameters
+            .validate_tx(
+                0u64.try_to_vec().expect("Test failed").as_slice(),
+                &keys_changed,
+                &verifiers,
+            )
+            .expect("Test failed");
+        assert!(result);
+
+        // we advance forward to the next epoch
+        let mut req = FinalizeBlock::default();
+        req.header.time = namada::types::time::DateTimeUtc::now();
+        shell.wl_storage.storage.last_height =
+            shell.wl_storage.pos_queries().get_current_decision_height() + 11;
+        shell.finalize_block(req).expect("Test failed");
+        shell.commit();
+        let _ = control_receiver.recv().await.expect("Test failed");
+        let mut req = FinalizeBlock::default();
+        req.header.time = namada::types::time::DateTimeUtc::now();
+        shell.finalize_block(req).expect("Test failed");
+        let Command::UpdateConfig(cmd) =
+            control_receiver.recv().await.expect("Test failed");
+        assert_eq!(u64::from(cmd.min_confirmations), 42);
     }
 }

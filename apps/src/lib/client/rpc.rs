@@ -7,6 +7,7 @@ use std::convert::TryInto;
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
 use async_std::fs;
@@ -65,6 +66,7 @@ use crate::facade::tendermint_rpc::query::Query;
 use crate::facade::tendermint_rpc::{
     Client, HttpClient, Order, SubscriptionClient, WebSocketClient,
 };
+use crate::timeouts::TimeoutStrategy;
 
 /// Query the status of a given transaction.
 ///
@@ -75,45 +77,40 @@ pub async fn query_tx_status(
     address: TendermintAddress,
     deadline: Instant,
 ) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        tokio::time::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
+    let client = HttpClient::new(address).unwrap();
+    TimeoutStrategy::LinearBackoff {
+        delta: Duration::from_secs(1),
     }
-    tokio::time::timeout_at(deadline, async move {
-        let client = HttpClient::new(address).unwrap();
-        let mut backoff = ONE_SECOND;
-
-        loop {
-            tracing::debug!(query = ?status, "Querying tx status");
-            let maybe_event = match query_tx_events(&client, status).await {
-                Ok(response) => response,
-                Err(err) => {
-                    tracing::debug!(%err, "ABCI query failed");
-                    sleep_update(status, &mut backoff).await;
-                    continue;
-                }
-            };
-            if let Some(e) = maybe_event {
-                break Ok(e);
+    .timeout(deadline, || async {
+        tracing::debug!(query = ?status, "Querying tx status");
+        let maybe_event = match query_tx_events(&client, status).await {
+            Ok(response) => response,
+            Err(err) => {
+                tracing::debug!(
+                    query = ?status,
+                    %err,
+                    "ABCI query failed, retrying tx status query \
+                     after timeout",
+                );
+                return ControlFlow::Continue(());
             }
-            sleep_update(status, &mut backoff).await;
+        };
+        if let Some(e) = maybe_event {
+            tracing::debug!(event = ?e, "Found tx event");
+            ControlFlow::Break(e)
+        } else {
+            tracing::debug!(
+                query = ?status,
+                "No tx events found, retrying tx status query \
+                 after timeout",
+            );
+            ControlFlow::Continue(())
         }
     })
     .await
     .map_err(|_| {
         eprintln!("Transaction status query deadline of {deadline:?} exceeded");
     })
-    .and_then(|result| result)
     .unwrap_or_else(|_| cli::safe_exit(1))
 }
 

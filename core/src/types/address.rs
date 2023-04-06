@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;
 
@@ -71,6 +72,8 @@ mod internal {
         "ano::ETH Bridge Address                      ";
     pub const REPLAY_PROTECTION: &str =
         "ano::Replay Protection                       ";
+    pub const ETH_BRIDGE_POOL: &str =
+        "ano::ETH Bridge Pool Address                 ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -203,6 +206,9 @@ impl Address {
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
+                    InternalAddress::EthBridgePool => {
+                        internal::ETH_BRIDGE_POOL.to_string()
+                    }
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -258,6 +264,9 @@ impl Address {
                 }
                 internal::REPLAY_PROTECTION => {
                     Ok(Address::Internal(InternalAddress::ReplayProtection))
+                }
+                internal::ETH_BRIDGE_POOL => {
+                    Ok(Address::Internal(InternalAddress::EthBridgePool))
                 }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
@@ -476,6 +485,8 @@ pub enum InternalAddress {
     EthBridge,
     /// Replay protection contains transactions' hash
     ReplayProtection,
+    /// The pool of transactions to be relayed to Ethereum
+    EthBridgePool,
 }
 
 impl InternalAddress {
@@ -511,6 +522,7 @@ impl Display for InternalAddress {
                 Self::IbcMint => "IbcMint".to_string(),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
+                Self::EthBridgePool => "EthBridgePool".to_string(),
             }
         )
     }
@@ -565,6 +577,16 @@ pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
         58, 94, 56,
     ];
     common::SecretKey::try_from_slice(bytes.as_ref()).unwrap()
+}
+
+/// Temporary helper for testing
+pub const fn wnam() -> EthAddress {
+    // TODO: Replace this with the real wNam ERC20 address once it exists
+    // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
+    EthAddress([
+        222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173,
+        190, 239, 222, 173, 190, 239,
+    ])
 }
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
@@ -795,9 +817,9 @@ pub mod testing {
             InternalAddress::IbcBurn => {}
             InternalAddress::IbcMint => {}
             InternalAddress::EthBridge => {}
-            InternalAddress::ReplayProtection => {} /* Add new addresses in
-                                                     * the
-                                                     * `prop_oneof` below. */
+            InternalAddress::ReplayProtection => {}
+            InternalAddress::EthBridgePool => {} /* Add new addresses in the
+                                                  * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -813,6 +835,7 @@ pub mod testing {
             Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::ReplayProtection)
+            Just(InternalAddress::EthBridgePool),
         ]
     }
 

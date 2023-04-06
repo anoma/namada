@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "apps",
   "core",
+  "ethereum_bridge",
   "proof_of_stake",
   "shared",
   "test_utils",
@@ -37,18 +38,18 @@ async-process = {git = "https://github.com/heliaxdev/async-process.git", rev = "
 # borsh-schema-derive-internal = {path = "../borsh-rs/borsh-schema-derive-internal"}
 
 # patched to a commit on the `eth-bridge-integration+consensus-timeout` branch of our fork
-tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
-tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "e6c684731f21bffd89886d3e91074b96aee074ba"}
+tendermint = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-rpc = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-testgen = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
+tendermint-light-client-verifier = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "c364f4d0c3bb6f357ea48549e7a5b1cb49dbc2b4"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
-ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
-ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "f4703dfe2c1f25cc431279ab74f10f3e0f6827e2"}
+ibc = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
+ibc-relayer = {git = "https://github.com/heliaxdev/ibc-rs.git", rev = "9a79bc0dce207fd7d3477ebd2197fe79a4d5eb8a"}
 
 # patched to a commit on the `eth-bridge-integration` branch of our fork
 tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "fcc0014d0bda707109901abfa1b2f782d242f082"}

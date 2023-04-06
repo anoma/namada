@@ -13,7 +13,8 @@ use vp::VP;
 // Re-export to show in rustdoc!
 pub use vp::{Pos, Vp};
 
-use super::storage::{DBIter, StorageHasher, DB};
+use super::storage::traits::StorageHasher;
+use super::storage::{DBIter, DB};
 use super::storage_api;
 use crate::types::storage::BlockHeight;
 
@@ -242,8 +243,11 @@ mod testing {
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
                 storage_read_past_height_limit: None,
             };
-            let response = self.rpc.handle(ctx, &request).unwrap();
-            Ok(response)
+            // TODO: this is a hack to propagate errors to the caller, we should
+            // really permit error types other than [`std::io::Error`]
+            self.rpc.handle(ctx, &request).map_err(|err| {
+                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
+            })
         }
     }
 }

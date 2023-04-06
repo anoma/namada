@@ -2,12 +2,15 @@
 
 pub mod vp;
 
+use std::convert::TryFrom;
+
 pub use namada_core::ledger::storage_api;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 pub use namada_core::types::key::common;
 pub use namada_core::types::token;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
 pub use namada_proof_of_stake::types;
 use rust_decimal::Decimal;

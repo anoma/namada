@@ -24,12 +24,15 @@ const APP_NAME: &str = "Namada";
 const NODE_CMD: &str = "node";
 const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
+const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
     use clap::AppSettings;
 
     use super::utils::*;
-    use super::{args, ArgMatches, CLIENT_CMD, NODE_CMD, WALLET_CMD};
+    use super::{
+        args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
+    };
 
     /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
@@ -37,11 +40,15 @@ pub mod cmds {
     pub enum Namada {
         // Sub-binary-commands
         Node(NamadaNode),
+        Relayer(NamadaRelayer),
         Client(NamadaClient),
         Wallet(NamadaWallet),
 
         // Inlined commands from the node.
         Ledger(Ledger),
+
+        // Inlined commands from the relayer.
+        EthBridgePool(EthBridgePool),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
@@ -56,8 +63,10 @@ pub mod cmds {
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
             app.subcommand(NamadaNode::def())
+                .subcommand(NamadaRelayer::def())
                 .subcommand(NamadaClient::def())
                 .subcommand(NamadaWallet::def())
+                .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
@@ -71,6 +80,9 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let node = SubCmd::parse(matches).map(Self::Node);
             let client = SubCmd::parse(matches).map(Self::Client);
+            let relayer = SubCmd::parse(matches).map(Self::Relayer);
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
@@ -84,6 +96,8 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
+                .or(relayer)
+                .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
@@ -134,6 +148,47 @@ pub mod cmds {
         }
     }
 
+    /// Used as top-level commands (`Cmd` instance) in `namadar` binary.
+    /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
+    #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
+    pub enum NamadaRelayer {
+        EthBridgePool(EthBridgePool),
+        ValidatorSet(ValidatorSet),
+    }
+
+    impl Cmd for NamadaRelayer {
+        fn add_sub(app: App) -> App {
+            app.subcommand(EthBridgePool::def())
+                .subcommand(ValidatorSet::def())
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            let eth_bridge_pool =
+                SubCmd::parse(matches).map(Self::EthBridgePool);
+            let validator_set = SubCmd::parse(matches).map(Self::ValidatorSet);
+            eth_bridge_pool.or(validator_set)
+        }
+    }
+
+    impl SubCmd for NamadaRelayer {
+        const CMD: &'static str = RELAYER_CMD;
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .and_then(<Self as Cmd>::parse)
+        }
+
+        fn def() -> App {
+            <Self as Cmd>::add_sub(
+                App::new(Self::CMD)
+                    .about("Relayer sub-commands.")
+                    .setting(AppSettings::SubcommandRequiredElseHelp),
+            )
+        }
+    }
+
     /// Used as top-level commands (`Cmd` instance) in `namadac` binary.
     /// Used as sub-commands (`SubCmd` instance) in `namada` binary.
     #[derive(Clone, Debug)]
@@ -165,21 +220,23 @@ pub mod cmds {
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
+                // Ethereum bridge pool
+                .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(3))
-                .subcommand(QueryTransfers::def().display_order(3))
-                .subcommand(QueryConversions::def().display_order(3))
-                .subcommand(QueryBlock::def().display_order(3))
-                .subcommand(QueryBalance::def().display_order(3))
-                .subcommand(QueryBonds::def().display_order(3))
-                .subcommand(QueryBondedStake::def().display_order(3))
-                .subcommand(QuerySlashes::def().display_order(3))
-                .subcommand(QueryDelegations::def().display_order(3))
-                .subcommand(QueryResult::def().display_order(3))
-                .subcommand(QueryRawBytes::def().display_order(3))
-                .subcommand(QueryProposal::def().display_order(3))
-                .subcommand(QueryProposalResult::def().display_order(3))
-                .subcommand(QueryProtocolParameters::def().display_order(3))
+                .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryTransfers::def().display_order(4))
+                .subcommand(QueryConversions::def().display_order(4))
+                .subcommand(QueryBlock::def().display_order(4))
+                .subcommand(QueryBalance::def().display_order(4))
+                .subcommand(QueryBonds::def().display_order(4))
+                .subcommand(QueryBondedStake::def().display_order(4))
+                .subcommand(QuerySlashes::def().display_order(4))
+                .subcommand(QueryDelegations::def().display_order(4))
+                .subcommand(QueryResult::def().display_order(4))
+                .subcommand(QueryRawBytes::def().display_order(4))
+                .subcommand(QueryProposal::def().display_order(4))
+                .subcommand(QueryProposalResult::def().display_order(4))
+                .subcommand(QueryProtocolParameters::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -220,6 +277,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let add_to_eth_bridge_pool =
+                Self::parse_with_ctx(matches, AddToEthBridgePool);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -233,6 +292,7 @@ pub mod cmds {
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
+                .or(add_to_eth_bridge_pool)
                 .or(query_epoch)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -296,6 +356,7 @@ pub mod cmds {
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
+        AddToEthBridgePool(AddToEthBridgePool),
         QueryEpoch(QueryEpoch),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
@@ -1584,24 +1645,367 @@ pub mod cmds {
                 .add_args::<args::PkToTmAddress>()
         }
     }
+
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
+    #[derive(Clone, Debug)]
+    pub enum EthBridgePool {
+        /// Get a recommendation on a batch of transfers
+        /// to relay.
+        RecommendBatch(args::RecommendBatch),
+        /// Construct a proof that a set of transfers is in the pool.
+        /// This can be used to relay transfers across the
+        /// bridge to Ethereum.
+        ConstructProof(args::BridgePoolProof),
+        /// Construct and relay a bridge pool proof to
+        /// Ethereum directly.
+        RelayProof(args::RelayBridgePoolProof),
+        /// Query the contents of the pool.
+        QueryPool(args::Query),
+        /// Query to provable contents of the pool.
+        QuerySigned(args::Query),
+        /// Check the confirmation status of `TransferToEthereum`
+        /// events.
+        QueryRelays(args::Query),
+    }
+
+    impl Cmd for EthBridgePool {
+        fn add_sub(app: App) -> App {
+            app.subcommand(ConstructProof::def().display_order(1))
+                .subcommand(QueryEthBridgePool::def().display_order(1))
+                .subcommand(QuerySignedBridgePool::def().display_order(1))
+                .subcommand(QueryRelayProgress::def().display_order(1))
+        }
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            let recommend = RecommendBatch::parse(matches)
+                .map(|query| Self::RecommendBatch(query.0));
+            let construct_proof = ConstructProof::parse(matches)
+                .map(|proof| Self::ConstructProof(proof.0));
+            let relay_proof = RelayProof::parse(matches)
+                .map(|proof| Self::RelayProof(proof.0));
+            let query_pool = QueryEthBridgePool::parse(matches)
+                .map(|q| Self::QueryPool(q.0));
+            let query_signed = QuerySignedBridgePool::parse(matches)
+                .map(|q| Self::QuerySigned(q.0));
+            let query_relays = QueryRelayProgress::parse(matches)
+                .map(|q| Self::QueryRelays(q.0));
+            construct_proof
+                .or(recommend)
+                .or(relay_proof)
+                .or(query_pool)
+                .or(query_signed)
+                .or(query_relays)
+        }
+    }
+
+    impl SubCmd for EthBridgePool {
+        const CMD: &'static str = "ethereum-bridge-pool";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(Cmd::parse)
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Functionality for interacting with the Ethereum bridge \
+                     pool. This pool holds transfers waiting to be relayed to \
+                     Ethereum.",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(ConstructProof::def().display_order(1))
+                .subcommand(RecommendBatch::def().display_order(1))
+                .subcommand(RelayProof::def().display_order(1))
+                .subcommand(QueryEthBridgePool::def().display_order(1))
+                .subcommand(QuerySignedBridgePool::def().display_order(1))
+                .subcommand(QueryRelayProgress::def().display_order(1))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct AddToEthBridgePool(pub args::EthereumBridgePool);
+
+    impl SubCmd for AddToEthBridgePool {
+        const CMD: &'static str = "add-erc20-transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::EthereumBridgePool::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Add a new transfer to the Ethereum bridge pool.")
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .add_args::<args::EthereumBridgePool>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ConstructProof(pub args::BridgePoolProof);
+
+    impl SubCmd for ConstructProof {
+        const CMD: &'static str = "construct-proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::BridgePoolProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Construct a merkle proof that the given transfers are in \
+                     the pool.",
+                )
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .add_args::<args::BridgePoolProof>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct RelayProof(pub args::RelayBridgePoolProof);
+
+    impl SubCmd for RelayProof {
+        const CMD: &'static str = "relay-proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::RelayBridgePoolProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Construct a merkle proof that the given transfers are in \
+                     the pool and relay it to Ethereum.",
+                )
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .add_args::<args::RelayBridgePoolProof>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct RecommendBatch(pub args::RecommendBatch);
+
+    impl SubCmd for RecommendBatch {
+        const CMD: &'static str = "recommend-batch";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::RecommendBatch::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Get a recommended batch of transfers from the bridge \
+                     pool to relay to Ethereum.",
+                )
+                .setting(AppSettings::ArgRequiredElseHelp)
+                .add_args::<args::RecommendBatch>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryEthBridgePool(args::Query);
+
+    impl SubCmd for QueryEthBridgePool {
+        const CMD: &'static str = "query";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Get the contents of the Ethereum bridge pool.")
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QuerySignedBridgePool(args::Query);
+
+    impl SubCmd for QuerySignedBridgePool {
+        const CMD: &'static str = "query-signed";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Get the contents of the Ethereum bridge pool with a \
+                     signed Merkle root.",
+                )
+                .add_args::<args::Query>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryRelayProgress(args::Query);
+
+    impl SubCmd for QueryRelayProgress {
+        const CMD: &'static str = "query-relayed";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Get the confirmation status of transfers to Ethereum.")
+                .add_args::<args::Query>()
+        }
+    }
+
+    /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
+    #[derive(Clone, Debug)]
+    pub enum ValidatorSet {
+        /// Query an Ethereum ABI encoding of the active validator
+        /// set in Namada, at the given epoch, or the latest
+        /// one, if none is provided.
+        ActiveValidatorSet(args::ActiveValidatorSet),
+        /// Query an Ethereum ABI encoding of a proof of the active
+        /// validator set in Namada, at the given epoch, or the next
+        /// one, if none is provided.
+        ValidatorSetProof(args::ValidatorSetProof),
+        /// Relay a validator set update to Namada's Ethereum bridge
+        /// smart contracts.
+        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay),
+    }
+
+    impl SubCmd for ValidatorSet {
+        const CMD: &'static str = "validator-set";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let active_validator_set = ActiveValidatorSet::parse(matches)
+                    .map(|args| Self::ActiveValidatorSet(args.0));
+                let validator_set_proof = ValidatorSetProof::parse(matches)
+                    .map(|args| Self::ValidatorSetProof(args.0));
+                let relay = ValidatorSetUpdateRelay::parse(matches)
+                    .map(|args| Self::ValidatorSetUpdateRelay(args.0));
+                active_validator_set.or(validator_set_proof).or(relay)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Validator set queries, that return data in a format to \
+                     be consumed by the Namada Ethereum bridge smart \
+                     contracts.",
+                )
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(ActiveValidatorSet::def().display_order(1))
+                .subcommand(ValidatorSetProof::def().display_order(1))
+                .subcommand(ValidatorSetUpdateRelay::def().display_order(1))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ActiveValidatorSet(args::ActiveValidatorSet);
+
+    impl SubCmd for ActiveValidatorSet {
+        const CMD: &'static str = "active";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ActiveValidatorSet::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of the active validator \
+                     set in Namada, at the requested epoch, or the current \
+                     one, if no epoch is provided.",
+                )
+                .add_args::<args::ActiveValidatorSet>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidatorSetProof(args::ValidatorSetProof);
+
+    impl SubCmd for ValidatorSetProof {
+        const CMD: &'static str = "proof";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ValidatorSetProof::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query an Ethereum ABI encoding of a proof of the active \
+                     validator set in Namada, at the requested epoch, or the \
+                     next one, if no epoch is provided.",
+                )
+                .add_args::<args::ValidatorSetProof>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay);
+
+    impl SubCmd for ValidatorSetUpdateRelay {
+        const CMD: &'static str = "relay";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::ValidatorSetUpdateRelay::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Relay a validator set update to Namada's Ethereum bridge \
+                     smart contracts.",
+                )
+                .add_args::<args::ValidatorSetUpdateRelay>()
+        }
+    }
 }
 
 pub mod args {
 
+    use std::convert::TryFrom;
     use std::env;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
+    use std::time::Duration as StdDuration;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
+    use namada::types::ethereum_events::EthAddress;
     use namada::types::governance::ProposalVote;
+    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::masp::MaspValue;
     use namada::types::storage::{self, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
+    use namada::types::token::Amount;
     use namada::types::transaction::GasLimit;
     use rust_decimal::Decimal;
 
@@ -1640,15 +2044,32 @@ pub mod args {
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
+    const DAEMON_MODE: ArgFlag = flag("daemon");
+    const DAEMON_MODE_RETRY_DUR: ArgOpt<Duration> = arg_opt("retry-sleep");
+    const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> = arg_opt("success-sleep");
     const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     const DATA_PATH: Arg<PathBuf> = arg("data-path");
     const DECRYPT: ArgFlag = flag("decrypt");
     const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
+    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const DRY_RUN_TX: ArgFlag = flag("dry-run");
     const DUMP_TX: ArgFlag = flag("dump-tx");
     const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
+    const ERC20: Arg<EthAddress> = arg("erc20");
+    const ETH_CONFIRMATIONS: Arg<u64> = arg("confirmations");
+    const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
+    const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
+    const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
+    const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = arg_opt("ethereum-address");
+    const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
+        "eth-rpc-endpoint",
+        DefaultFn(|| "http://localhost:8545".into()),
+    );
+    const ETH_SYNC: ArgFlag = flag("sync");
+    const FEE_AMOUNT: ArgDefault<token::Amount> =
+        arg_default("fee-amount", DefaultFn(|| token::Amount::from(0)));
+    const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     const FORCE: ArgFlag = flag("force");
-    const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     const GAS_AMOUNT: ArgDefault<token::Amount> =
         arg_default("gas-amount", DefaultFn(|| token::Amount::from(0)));
     const GAS_LIMIT: ArgDefault<token::Amount> =
@@ -1657,6 +2078,7 @@ pub mod args {
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".into()));
     const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     const GENESIS_VALIDATOR: ArgOpt<String> = arg("genesis-validator").opt();
+    const HASH_LIST: Arg<String> = arg("hash-list");
     const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -1668,10 +2090,12 @@ pub mod args {
 
     const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("ledger-address");
     const LOCALHOST: ArgFlag = flag("localhost");
+    const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     const MASP_VALUE: Arg<MaspValue> = arg("value");
     const MAX_COMMISSION_RATE_CHANGE: Arg<Decimal> =
         arg("max-commission-rate-change");
     const MODE: ArgOpt<String> = arg_opt("mode");
+    const NAM_PER_ETH: Arg<f64> = arg("nam-per-eth");
     const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -1695,6 +2119,7 @@ pub mod args {
     const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = RAW_PUBLIC_KEY.opt();
     const RECEIVER: Arg<String> = arg("receiver");
+    const RELAYER: Arg<Address> = arg("relayer");
     const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
@@ -1719,11 +2144,27 @@ pub mod args {
         arg_opt("account-key");
     const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
+    const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
+        arg_opt("eth-cold-key");
+    const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> = arg_opt("eth-hot-key");
     const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> = arg_opt("validator-code-path");
     const VALUE: ArgOpt<String> = arg_opt("value");
     const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+    #[repr(transparent)]
+    pub struct Duration(pub StdDuration);
+
+    impl ::std::str::FromStr for Duration {
+        type Err = ::parse_duration::parse::Error;
+
+        #[inline]
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            ::parse_duration::parse(s).map(Duration)
+        }
+    }
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -1848,6 +2289,419 @@ pub mod args {
                     .def()
                     .about("The hash of the transaction being looked up."),
             )
+        }
+    }
+
+    /// A transfer to be added to the Ethereum bridge pool.
+    #[derive(Clone, Debug)]
+    pub struct EthereumBridgePool {
+        /// The args for building a tx to the bridge pool
+        pub tx: Tx,
+        /// The type of token
+        pub asset: EthAddress,
+        /// The recipient address
+        pub recipient: EthAddress,
+        /// The sender of the transfer
+        pub sender: WalletAddress,
+        /// The amount to be transferred
+        pub amount: Amount,
+        /// The amount of fees (in NAM)
+        pub gas_amount: Amount,
+        /// The account of fee payer.
+        pub gas_payer: WalletAddress,
+    }
+
+    impl Args for EthereumBridgePool {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let asset = ERC20.parse(matches);
+            let recipient = ETH_ADDRESS.parse(matches);
+            let sender = ADDRESS.parse(matches);
+            let amount = AMOUNT.parse(matches);
+            let gas_amount = FEE_AMOUNT.parse(matches);
+            let gas_payer = FEE_PAYER.parse(matches);
+            Self {
+                tx,
+                asset,
+                recipient,
+                sender,
+                amount,
+                gas_amount,
+                gas_payer,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx>()
+                .arg(
+                    ERC20
+                        .def()
+                        .about("The Ethereum address of the ERC20 token."),
+                )
+                .arg(
+                    ETH_ADDRESS
+                        .def()
+                        .about("The Ethereum address receiving the tokens."),
+                )
+                .arg(
+                    ADDRESS
+                        .def()
+                        .about("The Namada address sending the tokens."),
+                )
+                .arg(AMOUNT.def().about(
+                    "The amount of tokens being sent across the bridge.",
+                ))
+                .arg(FEE_AMOUNT.def().about(
+                    "The amount of NAM you wish to pay to have this transfer \
+                     relayed to Ethereum.",
+                ))
+                .arg(
+                    FEE_PAYER.def().about(
+                        "The Namada address of the account paying the fee.",
+                    ),
+                )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RecommendBatch {
+        /// The query parameters.
+        pub query: Query,
+        /// The maximum amount of gas to spend.
+        pub max_gas: Option<u64>,
+        /// An optional parameter indicating how much net
+        /// gas the relayer is willing to pay.
+        pub gas: Option<u64>,
+        /// Estimate of amount of NAM a single ETH is worth.
+        pub nam_per_eth: f64,
+    }
+
+    impl Args for RecommendBatch {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let max_gas = MAX_ETH_GAS.parse(matches);
+            let gas = ETH_GAS.parse(matches);
+            let nam_to_eth = NAM_PER_ETH.parse(matches);
+            Self {
+                query,
+                max_gas,
+                gas,
+                nam_per_eth: nam_to_eth,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(MAX_ETH_GAS.def().about(
+                    "The maximum amount Ethereum gas that can be spent during \
+                     the relay call.",
+                ))
+                .arg(ETH_GAS.def().about(
+                    "Under ideal conditions, relaying transfers will yield a \
+                     net profit. If that is not possible, setting this \
+                     optional value will result in a batch transfer that \
+                     costs as close to the given value as possible without \
+                     exceeding it.",
+                ))
+                .arg(NAM_PER_ETH.def().about(
+                    "The amount of NAM that one ETH is worth, represented as \
+                     a decimal number.",
+                ))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct BridgePoolProof {
+        /// The query parameters.
+        pub query: Query,
+        pub transfers: Vec<KeccakHash>,
+        pub relayer: Address,
+    }
+
+    impl Args for BridgePoolProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let hashes = HASH_LIST.parse(matches);
+            let relayer = RELAYER.parse(matches);
+            Self {
+                query,
+                transfers: hashes
+                    .split(' ')
+                    .map(|hash| {
+                        KeccakHash::try_from(hash).unwrap_or_else(|_| {
+                            tracing::info!(
+                                "Could not parse '{}' as a Keccak hash.",
+                                hash
+                            );
+                            safe_exit(1)
+                        })
+                    })
+                    .collect(),
+                relayer,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(HASH_LIST.def().about(
+                    "List of Keccak hashes of transfers in the bridge pool.",
+                ))
+                .arg(
+                    RELAYER
+                        .def()
+                        .about("The rewards address for relaying this proof."),
+                )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct RelayBridgePoolProof {
+        /// The query parameters.
+        pub query: Query,
+        /// The hashes of the transfers to be relayed
+        pub transfers: Vec<KeccakHash>,
+        /// The Namada address for receiving fees for relaying
+        pub relayer: Address,
+        /// The number of confirmations to wait for on Ethereum
+        pub confirmations: u64,
+        /// The Ethereum RPC endpoint.
+        pub eth_rpc_endpoint: String,
+        /// The Ethereum gas that can be spent during
+        /// the relay call.
+        pub gas: Option<u64>,
+        /// The price of Ethereum gas, during the
+        /// relay call.
+        pub gas_price: Option<u64>,
+        /// The address of the Ethereum wallet to pay the gas fees.
+        /// If unset, the default wallet is used.
+        pub eth_addr: Option<EthAddress>,
+        /// Synchronize with the network, or exit immediately,
+        /// if the Ethereum node has fallen behind.
+        pub sync: bool,
+    }
+
+    impl Args for RelayBridgePoolProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let hashes = HASH_LIST.parse(matches);
+            let relayer = RELAYER.parse(matches);
+            let gas = ETH_GAS.parse(matches);
+            let gas_price = ETH_GAS_PRICE.parse(matches);
+            let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
+            let eth_addr = ETH_ADDRESS_OPT.parse(matches);
+            let confirmations = ETH_CONFIRMATIONS.parse(matches);
+            let sync = ETH_SYNC.parse(matches);
+            Self {
+                query,
+                sync,
+                transfers: hashes
+                    .split(' ')
+                    .map(|hash| {
+                        KeccakHash::try_from(hash).unwrap_or_else(|_| {
+                            tracing::info!(
+                                "Could not parse '{}' as a Keccak hash.",
+                                hash
+                            );
+                            safe_exit(1)
+                        })
+                    })
+                    .collect(),
+                relayer,
+                gas,
+                gas_price,
+                eth_rpc_endpoint,
+                eth_addr,
+                confirmations,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(HASH_LIST.def().about(
+                    "List of Keccak hashes of transfers in the bridge pool.",
+                ))
+                .arg(
+                    RELAYER
+                        .def()
+                        .about("The rewards address for relaying this proof."),
+                )
+                .arg(ETH_ADDRESS_OPT.def().about(
+                    "The address of the Ethereum wallet to pay the gas fees. \
+                     If unset, the default wallet is used.",
+                ))
+                .arg(ETH_GAS.def().about(
+                    "The Ethereum gas that can be spent during the relay call.",
+                ))
+                .arg(
+                    ETH_GAS_PRICE.def().about(
+                        "The price of Ethereum gas, during the relay call.",
+                    ),
+                )
+                .arg(ETH_RPC_ENDPOINT.def().about("The Ethereum RPC endpoint."))
+                .arg(
+                    ETH_CONFIRMATIONS.def().about(
+                        "The number of block confirmations on Ethereum.",
+                    ),
+                )
+                .arg(ETH_SYNC.def().about(
+                    "Synchronize with the network, or exit immediately, if \
+                     the Ethereum node has fallen behind.",
+                ))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ActiveValidatorSet {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ActiveValidatorSet {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH.def().about(
+                    "The epoch of the active set of validators to query.",
+                ),
+            )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ValidatorSetProof {
+        /// The query parameters.
+        pub query: Query,
+        /// The epoch to query.
+        pub epoch: Option<Epoch>,
+    }
+
+    impl Args for ValidatorSetProof {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>().arg(
+                EPOCH
+                    .def()
+                    .about("The epoch of the set of validators to be proven."),
+            )
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ValidatorSetUpdateRelay {
+        /// Run in daemon mode, which will continuously
+        /// perform validator set updates.
+        pub daemon: bool,
+        /// The query parameters.
+        pub query: Query,
+        /// The number of block confirmations on Ethereum.
+        pub confirmations: u64,
+        /// The Ethereum RPC endpoint.
+        pub eth_rpc_endpoint: String,
+        /// The epoch of the validator set to relay.
+        pub epoch: Option<Epoch>,
+        /// The Ethereum gas that can be spent during
+        /// the relay call.
+        pub gas: Option<u64>,
+        /// The price of Ethereum gas, during the
+        /// relay call.
+        pub gas_price: Option<u64>,
+        /// The address of the Ethereum wallet to pay the gas fees.
+        /// If unset, the default wallet is used.
+        pub eth_addr: Option<EthAddress>,
+        /// Synchronize with the network, or exit immediately,
+        /// if the Ethereum node has fallen behind.
+        pub sync: bool,
+        /// The amount of time to sleep between failed
+        /// daemon mode relays.
+        pub retry_dur: Option<StdDuration>,
+        /// The amount of time to sleep between successful
+        /// daemon mode relays.
+        pub success_dur: Option<StdDuration>,
+    }
+
+    impl Args for ValidatorSetUpdateRelay {
+        fn parse(matches: &ArgMatches) -> Self {
+            let daemon = DAEMON_MODE.parse(matches);
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            let gas = ETH_GAS.parse(matches);
+            let gas_price = ETH_GAS_PRICE.parse(matches);
+            let eth_rpc_endpoint = ETH_RPC_ENDPOINT.parse(matches);
+            let eth_addr = ETH_ADDRESS_OPT.parse(matches);
+            let confirmations = ETH_CONFIRMATIONS.parse(matches);
+            let sync = ETH_SYNC.parse(matches);
+            let retry_dur =
+                DAEMON_MODE_RETRY_DUR.parse(matches).map(|dur| dur.0);
+            let success_dur =
+                DAEMON_MODE_SUCCESS_DUR.parse(matches).map(|dur| dur.0);
+            Self {
+                sync,
+                daemon,
+                query,
+                epoch,
+                gas,
+                gas_price,
+                confirmations,
+                eth_rpc_endpoint,
+                eth_addr,
+                retry_dur,
+                success_dur,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(DAEMON_MODE.def().about(
+                    "Run in daemon mode, which will continuously perform \
+                     validator set updates.",
+                ))
+                .arg(DAEMON_MODE_RETRY_DUR.def().about(
+                    "The amount of time to sleep between failed daemon mode \
+                     relays.",
+                ))
+                .arg(DAEMON_MODE_SUCCESS_DUR.def().about(
+                    "The amount of time to sleep between successful daemon \
+                     mode relays.",
+                ))
+                .arg(ETH_ADDRESS_OPT.def().about(
+                    "The address of the Ethereum wallet to pay the gas fees. \
+                     If unset, the default wallet is used.",
+                ))
+                .arg(
+                    EPOCH
+                        .def()
+                        .about("The epoch of the set of validators to relay."),
+                )
+                .arg(ETH_GAS.def().about(
+                    "The Ethereum gas that can be spent during the relay call.",
+                ))
+                .arg(
+                    ETH_GAS_PRICE.def().about(
+                        "The price of Ethereum gas, during the relay call.",
+                    ),
+                )
+                .arg(ETH_RPC_ENDPOINT.def().about("The Ethereum RPC endpoint."))
+                .arg(
+                    ETH_CONFIRMATIONS.def().about(
+                        "The number of block confirmations on Ethereum.",
+                    ),
+                )
+                .arg(ETH_SYNC.def().about(
+                    "Synchronize with the network, or exit immediately, if \
+                     the Ethereum node has fallen behind.",
+                ))
         }
     }
 
@@ -2081,6 +2935,8 @@ pub mod args {
         pub scheme: SchemeType,
         pub account_key: Option<WalletPublicKey>,
         pub consensus_key: Option<WalletKeypair>,
+        pub eth_cold_key: Option<WalletKeypair>,
+        pub eth_hot_key: Option<WalletKeypair>,
         pub protocol_key: Option<WalletPublicKey>,
         pub commission_rate: Decimal,
         pub max_commission_rate_change: Decimal,
@@ -2095,6 +2951,8 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
+            let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
             let protocol_key = PROTOCOL_KEY.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
@@ -2107,6 +2965,8 @@ pub mod args {
                 scheme,
                 account_key,
                 consensus_key,
+                eth_cold_key,
+                eth_hot_key,
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
@@ -2130,7 +2990,18 @@ pub mod args {
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().about(
                     "A consensus key for the validator account. A new one \
-                     will be generated if none given.",
+                     will be generated if none given. Note that this must be \
+                     ed25519.",
+                ))
+                .arg(VALIDATOR_ETH_COLD_KEY.def().about(
+                    "An Eth cold key for the validator account. A new one \
+                     will be generated if none given. Note that this must be \
+                     secp256k1.",
+                ))
+                .arg(VALIDATOR_ETH_HOT_KEY.def().about(
+                    "An Eth hot key for the validator account. A new one will \
+                     be generated if none given. Note that this must be \
+                     secp256k1.",
                 ))
                 .arg(PROTOCOL_KEY.def().about(
                     "A public key for signing protocol transactions. A new \
@@ -2888,7 +3759,7 @@ pub mod args {
         /// save it in the wallet.
         pub initialized_account_alias: Option<String>,
         /// The amount being payed to include the transaction
-        pub fee_amount: token::Amount,
+        pub fee_amount: Amount,
         /// The token in which the fee is being paid
         pub fee_token: WalletAddress,
         /// The max amount of gas used to process tx
@@ -2947,7 +3818,7 @@ pub mod args {
             .arg(GAS_AMOUNT.def().about(
                 "The amount being paid for the inclusion of this transaction",
             ))
-            .arg(GAS_TOKEN.def().about("The token for paying the gas"))
+            .arg(GAS_TOKEN.def().about("The token for paying the fee"))
             .arg(
                 GAS_LIMIT.def().about(
                     "The maximum amount of gas needed to run transaction",
@@ -3645,6 +4516,11 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
+pub fn namada_relayer_cli() -> Result<(cmds::NamadaRelayer, Context)> {
+    let app = namada_relayer_app();
+    cmds::NamadaRelayer::parse_or_print_help(app)
+}
+
 fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
@@ -3675,4 +4551,12 @@ fn namada_wallet_app() -> App {
         .about("Namada wallet command line interface.")
         .setting(AppSettings::SubcommandRequiredElseHelp);
     cmds::NamadaWallet::add_sub(args::Global::def(app))
+}
+
+fn namada_relayer_app() -> App {
+    let app = App::new(APP_NAME)
+        .version(namada_version())
+        .about("Namada relayer command line interface.")
+        .setting(AppSettings::SubcommandRequiredElseHelp);
+    cmds::NamadaRelayer::add_sub(args::Global::def(app))
 }

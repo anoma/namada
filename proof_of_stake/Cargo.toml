@@ -10,8 +10,13 @@ version = "0.14.2"
 
 [features]
 default = ["abciplus"]
+abcipp = [
+  "namada_core/abcipp",
+  "tendermint-proto-abcipp",
+]
 abciplus = [
   "namada_core/abciplus",
+  "tendermint-proto",
 ]
 # testing helpers
 testing = ["proptest"]
@@ -25,6 +30,8 @@ once_cell = "1.8.0"
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm", optional = true}
 rust_decimal = { version = "1.26.1", features = ["borsh"] }
 rust_decimal_macros = "1.26.1"
+tendermint-proto-abcipp = {package = "tendermint-proto", git = "https://github.com/heliaxdev/tendermint-rs", rev = "95c52476bc37927218374f94ac8e2a19bd35bec9", optional = true}
+tendermint-proto = {version = "0.23.6", optional = true}
 thiserror = "1.0.30"
 tracing = "0.1.30"
 
@@ -33,5 +40,7 @@ itertools = "0.10.5"
 namada_core = {path = "../core", features = ["testing"]}
 # A fork with state machine testing
 proptest = {git = "https://github.com/heliaxdev/proptest", branch = "tomas/sm"}
+rand = "0.8"
+rand_core = "0.6"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}

@@ -431,6 +431,8 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
+    // N.B. Calling this when testing pre- and post- reads in
+    // regards to testing native vps is incorrect.
     fn write_bytes(
         &mut self,
         key: &storage::Key,
@@ -627,6 +629,241 @@ mod tests {
         .prop_map(|kvs| {
             kvs.into_iter()
                 .map(|(key, val)| (key, Level::Storage(val)))
+                .collect::<Vec<_>>()
+        });
+
+        // Select some indices to override in write log
+        let overrides = prop::collection::vec(
+            (any::<prop::sample::Index>(), any::<i8>(), any::<bool>()),
+            1..len / 2,
+        );
+
+        // Select some indices to delete
+        let deletes = prop::collection::vec(
+            (any::<prop::sample::Index>(), any::<bool>()),
+            1..len / 3,
+        );
+
+        // Combine them all together
+        (storage_kvs, overrides, deletes).prop_map(
+            |(mut kvs, overrides, deletes)| {
+                for (ix, val, is_tx) in overrides {
+                    let (key, _) = ix.get(&kvs);
+                    let wl_mod = WlMod::Write(val);
+                    let lvl = if is_tx {
+                        Level::TxWriteLog(wl_mod)
+                    } else {
+                        Level::BlockWriteLog(wl_mod)
+                    };
+                    kvs.push((key.clone(), lvl));
+                }
+                for (ix, is_tx) in deletes {
+                    let (key, _) = ix.get(&kvs);
+                    // We have to skip validity predicate keys as they cannot be
+                    // deleted
+                    if key.is_validity_predicate().is_some() {
+                        continue;
+                    }
+                    let wl_mod = WlMod::Delete;
+                    let lvl = if is_tx {
+                        Level::TxWriteLog(wl_mod)
+                    } else {
+                        Level::BlockWriteLog(wl_mod)
+                    };
+                    kvs.push((key.clone(), lvl));
+                }
+                kvs
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use proptest::prelude::*;
+    use proptest::test_runner::Config;
+    // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to
+    // see `tracing` logs from tests
+    use test_log::test;
+
+    use super::*;
+    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::InternalAddress;
+    use crate::types::storage::DbKeySeg;
+
+    proptest! {
+        // Generate arb valid input for `test_prefix_iters_aux`
+        #![proptest_config(Config {
+            cases: 10,
+            .. Config::default()
+        })]
+        #[test]
+        fn test_prefix_iters(
+            key_vals in arb_key_vals(50),
+        ) {
+            test_prefix_iters_aux(key_vals)
+        }
+    }
+
+    /// Check the `prefix_iter_pre` and `prefix_iter_post` return expected
+    /// values, generated in the input to this function
+    fn test_prefix_iters_aux(kvs: Vec<KeyVal<i8>>) {
+        let mut s = TestWlStorage::default();
+
+        // Partition the tx and storage kvs
+        let (tx_kvs, rest): (Vec<_>, Vec<_>) = kvs
+            .into_iter()
+            .partition(|(_key, val)| matches!(val, Level::TxWriteLog(_)));
+        // Partition the kvs to only apply block level first
+        let (block_kvs, storage_kvs): (Vec<_>, Vec<_>) = rest
+            .into_iter()
+            .partition(|(_key, val)| matches!(val, Level::BlockWriteLog(_)));
+
+        // Apply the kvs in order of the levels
+        apply_to_wl_storage(&mut s, &storage_kvs);
+        apply_to_wl_storage(&mut s, &block_kvs);
+        apply_to_wl_storage(&mut s, &tx_kvs);
+
+        // Collect the expected values in prior state - storage level then block
+        let mut expected_pre = BTreeMap::new();
+        for (key, val) in storage_kvs {
+            if let Level::Storage(val) = val {
+                expected_pre.insert(key, val);
+            }
+        }
+        for (key, val) in &block_kvs {
+            if let Level::BlockWriteLog(WlMod::Write(val)) = val {
+                expected_pre.insert(key.clone(), *val);
+            }
+        }
+        for (key, val) in &block_kvs {
+            // Deletes have to be applied last
+            if let Level::BlockWriteLog(WlMod::Delete) = val {
+                expected_pre.remove(key);
+            }
+        }
+
+        // Collect the values from prior state prefix iterator
+        let (iter_pre, _gas) =
+            iter_prefix_pre(&s.write_log, &s.storage, &storage::Key::default());
+        let mut read_pre = BTreeMap::new();
+        for (key, val, _gas) in iter_pre {
+            let key = storage::Key::parse(key).unwrap();
+            let val: i8 = BorshDeserialize::try_from_slice(&val).unwrap();
+            read_pre.insert(key, val);
+        }
+
+        // A helper for dbg
+        let keys_to_string = |kvs: &BTreeMap<storage::Key, i8>| {
+            kvs.iter()
+                .map(|(key, val)| (key.to_string(), *val))
+                .collect::<Vec<_>>()
+        };
+        dbg!(keys_to_string(&expected_pre), keys_to_string(&read_pre));
+        // Clone the prior expected kvs for posterior state check
+        let mut expected_post = expected_pre.clone();
+        itertools::assert_equal(expected_pre, read_pre);
+
+        // Collect the expected values in posterior state - all the levels
+        for (key, val) in &tx_kvs {
+            if let Level::TxWriteLog(WlMod::Write(val)) = val {
+                expected_post.insert(key.clone(), *val);
+            }
+        }
+        for (key, val) in &tx_kvs {
+            // Deletes have to be applied last
+            if let Level::TxWriteLog(WlMod::Delete) = val {
+                expected_post.remove(key);
+            }
+        }
+
+        // Collect the values from posterior state prefix iterator
+        let (iter_post, _gas) = iter_prefix_post(
+            &s.write_log,
+            &s.storage,
+            &storage::Key::default(),
+        );
+        let mut read_post = BTreeMap::new();
+        for (key, val, _gas) in iter_post {
+            let key = storage::Key::parse(key).unwrap();
+            let val: i8 = BorshDeserialize::try_from_slice(&val).unwrap();
+            read_post.insert(key, val);
+        }
+        dbg!(keys_to_string(&expected_post), keys_to_string(&read_post));
+        itertools::assert_equal(expected_post, read_post);
+    }
+
+    fn apply_to_wl_storage(s: &mut TestWlStorage, kvs: &[KeyVal<i8>]) {
+        for (key, val) in kvs {
+            match val {
+                Level::TxWriteLog(WlMod::Delete)
+                | Level::BlockWriteLog(WlMod::Delete) => {}
+                Level::TxWriteLog(WlMod::Write(val)) => {
+                    s.write_log.write(key, val.try_to_vec().unwrap()).unwrap();
+                }
+                Level::BlockWriteLog(WlMod::Write(val)) => {
+                    s.write_log
+                        // protocol only writes at block level
+                        .protocol_write(key, val.try_to_vec().unwrap())
+                        .unwrap();
+                }
+                Level::Storage(val) => {
+                    s.storage.write(key, val.try_to_vec().unwrap()).unwrap();
+                }
+            }
+        }
+        for (key, val) in kvs {
+            match val {
+                Level::TxWriteLog(WlMod::Delete) => {
+                    s.write_log.delete(key).unwrap();
+                }
+                Level::BlockWriteLog(WlMod::Delete) => {
+                    s.write_log.protocol_delete(key).unwrap();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// WlStorage key written in the write log or storage
+    type KeyVal<VAL> = (storage::Key, Level<VAL>);
+
+    /// WlStorage write level
+    #[derive(Clone, Copy, Debug)]
+    enum Level<VAL> {
+        TxWriteLog(WlMod<VAL>),
+        BlockWriteLog(WlMod<VAL>),
+        Storage(VAL),
+    }
+
+    /// Write log modification
+    #[derive(Clone, Copy, Debug)]
+    enum WlMod<VAL> {
+        Write(VAL),
+        Delete,
+    }
+
+    fn arb_key_vals(len: usize) -> impl Strategy<Value = Vec<KeyVal<i8>>> {
+        // Start with some arb. storage key-vals
+        let storage_kvs = prop::collection::vec(
+            (storage::testing::arb_key(), any::<i8>()),
+            1..len,
+        )
+        .prop_map(|kvs| {
+            kvs.into_iter()
+                .filter_map(|(key, val)| {
+                    if let DbKeySeg::AddressSeg(Address::Internal(
+                        InternalAddress::EthBridgePool,
+                    )) = key.segments[0]
+                    {
+                        None
+                    } else {
+                        Some((key, Level::Storage(val)))
+                    }
+                })
                 .collect::<Vec<_>>()
         });
 

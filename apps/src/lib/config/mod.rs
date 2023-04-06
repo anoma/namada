@@ -1,5 +1,6 @@
 //! Node and client configuration
 
+pub mod ethereum_bridge;
 pub mod genesis;
 pub mod global;
 pub mod utils;
@@ -74,6 +75,7 @@ pub struct Ledger {
     pub chain_id: ChainId,
     pub shell: Shell,
     pub tendermint: Tendermint,
+    pub ethereum_bridge: ethereum_bridge::ledger::Config,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -166,6 +168,7 @@ impl Ledger {
                 ),
                 instrumentation_namespace: "namadan_tm".to_string(),
             },
+            ethereum_bridge: ethereum_bridge::ledger::Config::default(),
         }
     }
 

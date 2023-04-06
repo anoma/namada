@@ -80,7 +80,7 @@ pub struct Context {
 impl Context {
     pub fn new(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
-        tracing::info!("Chain ID: {}", global_config.default_chain_id);
+        tracing::debug!("Chain ID: {}", global_config.default_chain_id);
 
         let mut config = Config::load(
             &global_args.base_dir,

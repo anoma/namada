@@ -1944,7 +1944,8 @@ pub mod testing {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::ledger::storage::{self, StorageHasher};
+    use crate::ledger::storage::traits::StorageHasher;
+    use crate::ledger::storage::{self};
     use crate::vm::memory::testing::NativeMemory;
 
     /// Setup a transaction environment

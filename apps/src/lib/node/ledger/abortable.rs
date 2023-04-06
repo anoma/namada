@@ -23,6 +23,13 @@ pub struct WithCleanup<'a, A> {
     spawner: &'a mut AbortableSpawner,
 }
 
+impl Default for AbortableSpawner {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AbortableSpawner {
     /// Creates a new [`AbortableSpawner`].
     pub fn new() -> Self {

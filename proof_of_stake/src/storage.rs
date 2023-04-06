@@ -12,6 +12,8 @@ const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
+const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
+const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_DELTAS_STORAGE_KEY: &str = "validator_deltas";
 const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
@@ -107,6 +109,56 @@ pub fn is_validator_consensus_key_key(key: &Key) -> Option<&Address> {
     }
 }
 
+/// Storage key for validator's eth cold key.
+pub fn validator_eth_cold_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_COLD_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth cold key?
+pub fn is_validator_eth_cold_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_COLD_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's eth hot key.
+pub fn validator_eth_hot_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_HOT_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth hot key?
+pub fn is_validator_eth_hot_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_HOT_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
 /// Storage key for validator's commission rate.
 pub fn validator_commission_rate_key(validator: &Address) -> Key {
     validator_prefix(validator)
@@ -159,7 +211,7 @@ pub fn is_validator_max_commission_rate_change_key(
     }
 }
 
-/// Storage key for validator's consensus key.
+/// Storage key for validator's state.
 pub fn validator_state_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_STATE_STORAGE_KEY.to_owned())
