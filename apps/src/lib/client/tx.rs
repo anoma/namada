@@ -2108,26 +2108,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
         "yay" => {
-            if let Some(pgf) = args.proposal_pgf {
-                let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().into_iter().step_by(2);
-                let cap_iter = splits.into_iter().skip(1).step_by(2);
-                let mut set = HashSet::new();
-                for (address, cap) in
-                    address_iter.zip(cap_iter).map(|(addr, cap)| {
-                        (
-                            addr.parse()
-                                .expect("Failed to parse pgf council address"),
-                            cap.parse::<u64>()
-                                .expect("Failed to parse pgf spending cap"),
-                        )
-                    })
-                {
-                    set.insert((address, cap.into()));
-                }
-
-                ProposalVote::Yay(VoteType::PGFCouncil(set))
-            } else if let Some(eth) = args.proposal_eth {
+            if args.proposal_pgf {
+                ProposalVote::Yay(VoteType::PGFSteward)
+            } else if let Some(eth) = args.proposal_stewards_eth {
                 let mut splits = eth.trim().split_ascii_whitespace();
                 // Sign the message
                 let sigkey = splits
@@ -2263,34 +2246,6 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     proposal_type, args.vote
                 );
                 safe_exit(1);
-            } else if let VoteType::PGFCouncil(set) = vote_type {
-                // Check that addresses proposed as council are established and
-                // are present in storage
-                for (address, _) in set {
-                    match address {
-                        Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(address);
-                            if !rpc::query_has_storage_key(&client, &vp_key)
-                                .await
-                            {
-                                eprintln!(
-                                    "Proposed PGF council {} cannot be found \
-                                     in storage",
-                                    address
-                                );
-                                safe_exit(1);
-                            }
-                        }
-                        _ => {
-                            eprintln!(
-                                "PGF council vote contains a non-established \
-                                 address: {}",
-                                address
-                            );
-                            safe_exit(1);
-                        }
-                    }
-                }
             }
         }
 

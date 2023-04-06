@@ -1716,7 +1716,7 @@ pub mod args {
     const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
-    const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
+    const PROPOSAL_VOTE_PGF_OPT: ArgFlag = flag("pgf");
     const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     const PROPOSAL_VOTE: Arg<String> = arg("vote");
     const RAW_ADDRESS: Arg<Address> = arg("address");
@@ -2442,9 +2442,9 @@ pub mod args {
         /// The vote
         pub vote: String,
         /// PGF proposal
-        pub proposal_pgf: Option<String>,
+        pub proposal_pgf: bool,
         /// ETH proposal
-        pub proposal_eth: Option<String>,
+        pub proposal_stewards_eth: Option<String>,
         /// Flag if proposal vote should be run offline
         pub offline: bool,
         /// The proposal file path
@@ -2469,7 +2469,7 @@ pub mod args {
                 proposal_id,
                 vote,
                 proposal_pgf,
-                proposal_eth,
+                proposal_stewards_eth: proposal_eth,
                 offline,
                 proposal_data,
                 address,

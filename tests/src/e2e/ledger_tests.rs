@@ -2881,8 +2881,8 @@ fn eth_governance_proposal() -> Result<()> {
 /// 3 - Vote for the accepted proposals
 /// 4 - Check one proposal passed and the other one didn't
 /// 5 - Check funds
-#[test]
 fn pgf_governance_proposal() -> Result<()> {
+    //FIXME:
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::governance::{
-    self, Proposal, ProposalError, ProposalVote, VoteType,
+    self, Proposal, ProposalError, ProposalVote, Stewards, VoteType,
 };
 use crate::types::storage::Epoch;
 
@@ -22,8 +22,8 @@ use crate::types::storage::Epoch;
 pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
     Default(Option<Vec<u8>>),
-    /// PGF council proposal
-    PGFCouncil,
+    /// PGF stewards proposal
+    PGFSteward(Stewards),
     /// ETH proposal
     ETHBridge,
 }
@@ -32,7 +32,7 @@ impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ProposalType::Default(_) => write!(f, "Default"),
-            ProposalType::PGFCouncil => write!(f, "PGF Council"),
+            ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
             ProposalType::ETHBridge => write!(f, "ETH Bridge"),
         }
     }
@@ -44,8 +44,8 @@ impl PartialEq<VoteType> for ProposalType {
             Self::Default(_) => {
                 matches!(other, VoteType::Default)
             }
-            Self::PGFCouncil => {
-                matches!(other, VoteType::PGFCouncil(..))
+            Self::PGFSteward(_) => {
+                matches!(other, VoteType::PGFSteward)
             }
             Self::ETHBridge => {
                 matches!(other, VoteType::ETHBridge(_))
@@ -69,7 +69,7 @@ impl TryFrom<governance::ProposalType> for ProposalType {
                     Ok(Self::Default(None))
                 }
             }
-            governance::ProposalType::PGFCouncil => Ok(Self::PGFCouncil),
+            governance::ProposalType::PGFSteward(s) => Ok(Self::PGFSteward(s)),
             governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
         }
     }

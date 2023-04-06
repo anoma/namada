@@ -13,7 +13,7 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::read_total_stake;
 use namada::types::address::Address;
-use namada::types::governance::{Council, Tally, TallyResult, VotePower};
+use namada::types::governance::{Stewards, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
 
 use super::*;
@@ -68,7 +68,7 @@ where
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)
                 .map_err(|msg| Error::BadProposal(id, msg.to_string()))?;
         let total_stake = VotePower::from(u64::from(total_stake));
-        let tally_result = compute_tally(votes, total_stake, &proposal_type)
+        let tally_result = compute_tally(votes, total_stake, proposal_type)
             .map_err(|msg| Error::BadProposal(id, msg.to_string()))?
             .result;
 
@@ -77,8 +77,8 @@ where
             TallyResult::Passed(tally) => {
                 let (successful_execution, proposal_event) = match tally {
                     Tally::Default => execute_default_proposal(shell, id),
-                    Tally::PGFCouncil(council) => {
-                        execute_pgf_proposal(id, council)
+                    Tally::PGFSteward(stewards) => {
+                        execute_pgf_steward_proposal(id, stewards)
                     }
                     Tally::ETHBridge => execute_eth_proposal(id),
                 };
@@ -221,14 +221,14 @@ where
     }
 }
 
-fn execute_pgf_proposal(id: u64, council: Council) -> (bool, Event) {
+fn execute_pgf_steward_proposal(id: u64, stewards: Stewards) -> (bool, Event) {
     // TODO: implement when PGF is in place, update the PGF
     // council in storage
     (
         true,
         ProposalEvent::new(
             EventType::Proposal.to_string(),
-            TallyResult::Passed(Tally::PGFCouncil(council)),
+            TallyResult::Passed(Tally::PGFSteward(stewards)),
             id,
             false,
             false,

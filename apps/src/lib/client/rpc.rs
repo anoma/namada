@@ -797,7 +797,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                 println!("{:4}Status: pending", "");
             } else if start_epoch <= current_epoch && current_epoch <= end_epoch
             {
-                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                match utils::compute_tally(votes, total_stake, proposal_type) {
                     Ok(partial_proposal_result) => {
                         println!(
                             "{:4}Yay votes: {}",
@@ -814,7 +814,7 @@ pub async fn query_proposal(_ctx: Context, args: args::QueryProposal) {
                     }
                 }
             } else {
-                match utils::compute_tally(votes, total_stake, &proposal_type) {
+                match utils::compute_tally(votes, total_stake, proposal_type) {
                     Ok(proposal_result) => {
                         println!("{:4}Status: done", "");
                         println!("{:4}Result: {}", "", proposal_result);
@@ -1220,7 +1220,7 @@ pub async fn query_proposal_result(
                         match utils::compute_tally(
                             votes,
                             total_stake,
-                            &proposal_type,
+                            proposal_type,
                         ) {
                             Ok(proposal_result) => {
                                 println!("{:4}Result: {}", "", proposal_result)
@@ -1332,7 +1332,7 @@ pub async fn query_proposal_result(
                         match utils::compute_tally(
                             votes,
                             total_stake,
-                            &ProposalType::Default(None),
+                            ProposalType::Default(None),
                         ) {
                             Ok(proposal_result) => {
                                 println!("{:4}Result: {}", "", proposal_result)

@@ -17,13 +17,26 @@ use crate::types::key::{
     SigScheme,
 };
 use crate::types::storage::Epoch;
-use crate::types::token::{Amount, SCALE};
+use crate::types::token::SCALE;
+use crate::types::transaction::governance::ProposalType as TransactionProposalType;
 
 /// Type alias for vote power
 pub type VotePower = u128;
 
-/// A PGF cocuncil composed of the address and spending cap
-pub type Council = (Address, Amount);
+/// The two sets of proposed Stewards, those to add and those to remove
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct Stewards {
+    pub add: HashSet<Address>,
+    pub remove: HashSet<Address>,
+}
 
 /// The type of a governance vote with the optional associated Memo
 #[derive(
@@ -39,8 +52,8 @@ pub type Council = (Address, Amount);
 pub enum VoteType {
     /// A default vote without Memo
     Default,
-    /// A vote for the PGF council
-    PGFCouncil(HashSet<Council>),
+    /// A vote for the PGF stewards
+    PGFSteward,
     /// A vote for ETH bridge carrying the signature over the proposed message
     ETHBridge(Signature),
 }
@@ -82,19 +95,7 @@ impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProposalVote::Yay(vote_type) => match vote_type {
-                VoteType::Default => write!(f, "yay"),
-                VoteType::PGFCouncil(councils) => {
-                    writeln!(f, "yay with councils:")?;
-                    for (address, spending_cap) in councils {
-                        writeln!(
-                            f,
-                            "Council: {}, spending cap: {}",
-                            address, spending_cap
-                        )?
-                    }
-
-                    Ok(())
-                }
+                VoteType::Default | VoteType::PGFSteward => write!(f, "yay"),
                 VoteType::ETHBridge(sig) => {
                     write!(f, "yay with signature: {:#?}", sig)
                 }
@@ -116,10 +117,20 @@ pub enum ProposalVoteParseError {
 pub enum Tally {
     /// Default proposal
     Default,
-    /// PGF proposal
-    PGFCouncil(Council),
+    /// PGF stewards proposal
+    PGFSteward(Stewards),
     /// ETH Bridge proposal
     ETHBridge,
+}
+
+impl From<TransactionProposalType> for Tally {
+    fn from(proposal: TransactionProposalType) -> Self {
+        match proposal {
+            TransactionProposalType::Default(_) => Tally::Default,
+            TransactionProposalType::PGFSteward(s) => Tally::PGFSteward(s),
+            TransactionProposalType::ETHBridge => Tally::ETHBridge,
+        }
+    }
 }
 
 /// The result of a proposal
@@ -164,14 +175,7 @@ impl Display for ProposalResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TallyResult::Passed(vote) => match vote {
-                Tally::Default | Tally::ETHBridge => write!(f, "passed"),
-                Tally::PGFCouncil((council, cap)) => write!(
-                    f,
-                    "passed with PGF council address: {}, spending cap: {}",
-                    council, cap
-                ),
-            },
+            TallyResult::Passed(_) => write!(f, "passed"),
             TallyResult::Rejected => write!(f, "rejected"),
         }
     }
@@ -184,8 +188,8 @@ impl Display for TallyResult {
 pub enum ProposalType {
     /// A default proposal with the optional path to wasm code
     Default(Option<String>),
-    /// A PGF council proposal
-    PGFCouncil,
+    /// A PGF stewards proposal
+    PGFSteward(Stewards),
     /// An ETH bridge proposal
     ETHBridge,
 }
