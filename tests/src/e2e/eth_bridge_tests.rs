@@ -552,7 +552,8 @@ async fn test_dai_transfer_implicit() -> Result<()> {
         receiver: albert_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -590,7 +591,8 @@ async fn test_dai_transfer_established() -> Result<()> {
         receiver: established_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let established_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -619,7 +621,8 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         receiver: albert_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -685,7 +688,8 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         receiver: albert_established_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -739,7 +743,8 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         receiver: albert_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -801,7 +806,8 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         receiver: albert_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -886,7 +892,8 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         receiver: albert_established_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
@@ -962,7 +969,8 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         receiver: albert_established_addr.to_owned(),
     };
     let _bg_ledger =
-        send_transfer_to_namada_event(bg_ledger, dai_transfer).await?;
+        send_transfer_to_namada_event(bg_ledger, dai_transfer, 0.into())
+            .await?;
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
