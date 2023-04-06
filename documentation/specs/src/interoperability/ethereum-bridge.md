@@ -65,7 +65,10 @@ minimum of the total voting power across all epochs it was voted on.
 
 Validators may never vote more than once for a given event. To ensure that this
 invariant is held, events are timed out if they are not `seen` within the span
-of `unbonding_len` epochs.
+of `unbonding_length` epochs. The parameter `unbonding_length` is described in
+the [proof-of-stake section].
+
+[proof-of-stake section]: ../../../economics/proof-of-stake/bonding-mechanism.html
 
 ### Minimum confirmations
 There will be a protocol-specified minimum number of confirmations that events
