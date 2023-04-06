@@ -46,6 +46,7 @@ use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
 };
+use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{PaymentAddress, TransferTarget};
 use namada::types::storage::{
@@ -59,7 +60,7 @@ use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::{pos, InitAccount, InitValidator, UpdateVp};
-use namada::types::{storage, token, hash::Hash};
+use namada::types::{storage, token};
 use namada::vm;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;

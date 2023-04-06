@@ -176,6 +176,7 @@ pub mod cmds {
                 .subcommand(QueryBondedStake::def().display_order(3))
                 .subcommand(QuerySlashes::def().display_order(3))
                 .subcommand(QueryDelegations::def().display_order(3))
+                .subcommand(QueryAccount::def().display_order(4))
                 .subcommand(QueryResult::def().display_order(3))
                 .subcommand(QueryRawBytes::def().display_order(3))
                 .subcommand(QueryProposal::def().display_order(3))
@@ -224,6 +225,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
@@ -252,6 +254,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_account)
                 .or(sign_tx)
                 .or(utils)
         }
@@ -315,6 +318,7 @@ pub mod cmds {
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
+        QueryAccount(QueryAccount),
         QueryProtocolParameters(QueryProtocolParameters),
         SignTx(SignTx),
     }
@@ -1448,6 +1452,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryAccount(pub args::QueryAccount);
+
+    impl SubCmd for QueryAccount {
+        const CMD: &'static str = "query-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryAccount(args::QueryAccount::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query data associated with an enstablished address..")
+                .add_args::<args::QueryAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -2495,6 +2521,28 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx>()
                 .arg(PUBLIC_KEY.def().about("A public key to reveal."))
+        }
+    }
+
+    /// Query enstablished account storage
+    #[derive(Clone, Debug)]
+    pub struct QueryAccount {
+        /// Common query args
+        pub query: Query,
+        /// Address of the account
+        pub address: WalletAddress,
+    }
+
+    impl Args for QueryAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let address = ADDRESS.parse(matches);
+            Self { query, address }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query>()
+                .arg(ADDRESS.def().about("The address of the account to query"))
         }
     }
 

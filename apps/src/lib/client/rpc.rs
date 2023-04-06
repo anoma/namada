@@ -1436,8 +1436,6 @@ pub async fn sign_tx(
 
     let signature_path = format!(
         "{}-{}-signature.tx",
-        tx_hash.to_string(),
-        public_key.to_string()
         tx_hash.to_string().to_ascii_lowercase(),
         public_key
     );
@@ -1469,6 +1467,32 @@ pub async fn query_unbond_with_slashing(
             .unbond_with_slashing(client, source, validator)
             .await,
     )
+}
+
+pub async fn query_account(ctx: Context, args: args::QueryAccount) {
+    let client = HttpClient::new(args.query.ledger_address).unwrap();
+
+    let account_address = ctx.get(&args.address);
+    let pks_map = get_address_pks_map(&client, &account_address).await;
+    let threshold = get_address_threshold(&client, &account_address).await;
+
+    match pks_map.len() {
+        0 => {
+            eprintln!(
+                "Account {} doesn't exist on-chain.",
+                account_address.to_pretty_string()
+            );
+            safe_exit(1)
+        }
+        _ => {
+            println!("Address {}", account_address.to_pretty_string());
+            println!("Threshold: {}", threshold);
+            println!("Public keys:");
+            for pk in pks_map.keys() {
+                println!("-{:2 }{}", "", pk);
+            }
+        }
+    }
 }
 
 pub async fn query_and_print_unbonds(
