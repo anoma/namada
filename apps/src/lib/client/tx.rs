@@ -2587,7 +2587,7 @@ async fn process_tx(
 ) -> (Context, Vec<Address>) {
     let (ctx, to_broadcast) = sign_tx(
         ctx,
-        tx,
+        tx.compress(),
         args,
         default_signer,
         #[cfg(not(feature = "mainnet"))]

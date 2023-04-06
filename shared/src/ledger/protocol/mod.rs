@@ -161,6 +161,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    let tx = tx.decompress();
     gas_meter
         .add_compiling_fee(tx.code.len())
         .map_err(Error::GasError)?;

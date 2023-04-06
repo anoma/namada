@@ -3782,6 +3782,7 @@ dependencies = [
  "ed25519-consensus",
  "ferveo",
  "ferveo-common",
+ "flate2",
  "group-threshold-cryptography",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs?rev=9fcc1c8c19db6af50806ffe5b2f6c214adcbfd5d)",
  "ibc 0.14.0 (git+https://github.com/heliaxdev/ibc-rs.git?rev=f4703dfe2c1f25cc431279ab74f10f3e0f6827e2)",

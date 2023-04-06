@@ -1,7 +1,11 @@
 use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -225,6 +229,46 @@ pub struct Tx {
     pub code: Vec<u8>,
     pub data: Option<Vec<u8>>,
     pub timestamp: DateTimeUtc,
+}
+
+impl Tx {
+    pub fn compress(&self) -> Self {
+        if self.code.is_empty() {
+            return self.clone();
+        }
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(&self.code)
+            .expect("code compression failed");
+        let code = encoder.finish().expect("code compression failed");
+        Self {
+            code,
+            data: self.data.clone(),
+            timestamp: self.timestamp,
+        }
+    }
+
+    pub fn decompress(&self) -> Self {
+        let code = if self.code.is_empty() {
+            self.code.clone()
+        } else {
+            let mut decoder = GzDecoder::new(&self.code[..]);
+            let mut decompressed = Vec::new();
+            match decoder.read_to_end(&mut decompressed) {
+                Ok(_) => decompressed,
+                Err(_) => {
+                    // the code should be uncompressed
+                    self.code.clone()
+                }
+            }
+        };
+
+        Self {
+            code,
+            data: self.data.clone(),
+            timestamp: self.timestamp,
+        }
+    }
 }
 
 impl TryFrom<&[u8]> for Tx {
