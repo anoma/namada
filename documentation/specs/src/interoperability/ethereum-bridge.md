@@ -84,8 +84,10 @@ confirmations, that must be at least the protocol-specified minimum number of
 confirmations.
 
 Validators must not vote to include events that have not met the required 
-number of confirmations. Voting on unconfirmed events is considered a 
-slashable offence.
+number of confirmations. Votes on unconfirmed events will eventually time
+out in storage, unless the number of confirmations was only off by a few
+block heights in Ethereum. Assuming that an honest quorum of validators is
+operating Namada, only confirmed events will eventually become `seen`.
 
 ### Storage
 To make including new events easy, we take the approach of always overwriting 
