@@ -65,10 +65,13 @@ minimum of the total voting power across all epochs it was voted on.
 
 Validators may never vote more than once for a given event. To ensure that this
 invariant is held, events are timed out if they are not `seen` within the span
-of `unbonding_length` epochs. The parameter `unbonding_length` is described in
-the [proof-of-stake section].
+of `unbonding_length` epochs, which corresponds to the period of time necessary
+for bonded tokens to be returned to an address (check the [relevant proof-of-stake section]
+for more details). Timing out an event consists in removing all its associated
+state from storage. Therefore, this mechanism serves another purpose: purging
+forged events from storage, voted on by Byzantine validators.
 
-[proof-of-stake section]: ../../../economics/proof-of-stake/bonding-mechanism.html
+[relevant proof-of-stake section]: ../../../economics/proof-of-stake/bonding-mechanism.html
 
 ### Minimum confirmations
 There will be a protocol-specified minimum number of confirmations that events
