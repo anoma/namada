@@ -2384,7 +2384,7 @@ pub async fn get_proposal_votes(
     let vote_iter =
         query_storage_prefix::<ProposalVote>(client, &vote_prefix_key).await;
 
-    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
+    let mut validators_votes: HashMap<Address, (VotePower, ProposalVote)> =
         HashMap::new();
     let mut delegators: HashMap<
         Address,
@@ -2396,13 +2396,13 @@ pub async fn get_proposal_votes(
             let voter_address = gov_storage::get_voter_address(&key)
                 .expect("Vote key should contain the voting address.")
                 .clone();
-            if vote.is_yay() && validators.contains(&voter_address) {
+            if validators.contains(&voter_address) {
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
                         .unwrap_or_default()
                         .into();
-                yay_validators.insert(voter_address, (amount, vote));
+                validators_votes.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
                     gov_storage::get_vote_delegation_address(&key)
@@ -2429,7 +2429,7 @@ pub async fn get_proposal_votes(
     }
 
     Votes {
-        yay_validators,
+        validators: validators_votes,
         delegators,
     }
 }
@@ -2612,7 +2612,7 @@ pub async fn get_proposal_offline_votes(
     }
 
     Votes {
-        yay_validators,
+        validators: yay_validators,
         delegators,
     }
 }

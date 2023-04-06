@@ -3,11 +3,44 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
+use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
 use crate::types::governance::{
     self, Proposal, ProposalError, ProposalVote, Stewards, VoteType,
 };
 use crate::types::storage::Epoch;
+
+/// The target of a PGF payment
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct PGFTarget {
+    target: Address,
+    amount: Amount,
+}
+
+/// The actions that a PGF Steward can propose to execute
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum PGFAction {
+    /// A continuous payment
+    Continuous(PGFTarget),
+    /// A retro payment
+    Retro(PGFTarget),
+}
 
 /// The type of a Proposal
 #[derive(
@@ -24,6 +57,8 @@ pub enum ProposalType {
     Default(Option<Vec<u8>>),
     /// PGF stewards proposal
     PGFSteward(Stewards),
+    /// PGF funding proposal
+    PGFPayment(Vec<PGFAction>),
     /// ETH proposal
     ETHBridge,
 }
@@ -33,6 +68,7 @@ impl Display for ProposalType {
         match self {
             ProposalType::Default(_) => write!(f, "Default"),
             ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
+            ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
             ProposalType::ETHBridge => write!(f, "ETH Bridge"),
         }
     }
@@ -46,6 +82,9 @@ impl PartialEq<VoteType> for ProposalType {
             }
             Self::PGFSteward(_) => {
                 matches!(other, VoteType::PGFSteward)
+            }
+            Self::PGFPayment(_) => {
+                matches!(other, VoteType::PGFPayment)
             }
             Self::ETHBridge => {
                 matches!(other, VoteType::ETHBridge(_))
@@ -70,6 +109,15 @@ impl TryFrom<governance::ProposalType> for ProposalType {
                 }
             }
             governance::ProposalType::PGFSteward(s) => Ok(Self::PGFSteward(s)),
+            governance::ProposalType::PGFPayment(p) => {
+                match serde_json::from_reader(
+                    std::fs::File::open(p)
+                        .map_err(|_| Self::Error::InvalidProposalData)?,
+                ) {
+                    Ok(actions) => Ok(Self::PGFPayment(actions)),
+                    Err(_) => Err(Self::Error::InvalidProposalData),
+                }
+            }
             governance::ProposalType::ETHBridge => Ok(Self::ETHBridge),
         }
     }

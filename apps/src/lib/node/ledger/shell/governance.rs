@@ -15,6 +15,7 @@ use namada::proof_of_stake::read_total_stake;
 use namada::types::address::Address;
 use namada::types::governance::{Stewards, Tally, TallyResult, VotePower};
 use namada::types::storage::Epoch;
+use namada::types::transaction::governance::PGFAction;
 
 use super::*;
 
@@ -79,6 +80,9 @@ where
                     Tally::Default => execute_default_proposal(shell, id),
                     Tally::PGFSteward(stewards) => {
                         execute_pgf_steward_proposal(id, stewards)
+                    }
+                    Tally::PGFPayment(actions) => {
+                        execute_pgf_payment_proposal(id, actions)
                     }
                     Tally::ETHBridge => execute_eth_proposal(id),
                 };
@@ -229,6 +233,24 @@ fn execute_pgf_steward_proposal(id: u64, stewards: Stewards) -> (bool, Event) {
         ProposalEvent::new(
             EventType::Proposal.to_string(),
             TallyResult::Passed(Tally::PGFSteward(stewards)),
+            id,
+            false,
+            false,
+        )
+        .into(),
+    )
+}
+
+fn execute_pgf_payment_proposal(
+    id: u64,
+    actions: Vec<PGFAction>,
+) -> (bool, Event) {
+    // TODO: implement when PGF is in place,
+    (
+        true,
+        ProposalEvent::new(
+            EventType::Proposal.to_string(),
+            TallyResult::Passed(Tally::PGFPayment(actions)),
             id,
             false,
             false,

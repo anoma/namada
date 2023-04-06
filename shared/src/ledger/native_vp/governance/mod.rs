@@ -226,7 +226,9 @@ where
                 }
 
                 match proposal_type {
-                    ProposalType::Default(_) | ProposalType::PGFSteward(_) => {
+                    ProposalType::Default(_)
+                    | ProposalType::PGFSteward(_)
+                    | ProposalType::PGFPayment(_) => {
                         if self
                             .is_validator(
                                 pre_voting_start_epoch,
@@ -304,6 +306,7 @@ where
             ProposalType::PGFSteward(ref changes) => {
                 self.validate_pgf_steward_proposal(changes)
             }
+            ProposalType::PGFPayment(_) => Ok(true),
             ProposalType::ETHBridge => Ok(true),
         }
     }

@@ -18,6 +18,7 @@ use crate::types::key::{
 };
 use crate::types::storage::Epoch;
 use crate::types::token::SCALE;
+use crate::types::transaction::governance::PGFAction;
 use crate::types::transaction::governance::ProposalType as TransactionProposalType;
 
 /// Type alias for vote power
@@ -34,7 +35,9 @@ pub type VotePower = u128;
     Deserialize,
 )]
 pub struct Stewards {
+    /// The stewards to be added
     pub add: HashSet<Address>,
+    /// The stewards to be removed
     pub remove: HashSet<Address>,
 }
 
@@ -54,6 +57,8 @@ pub enum VoteType {
     Default,
     /// A vote for the PGF stewards
     PGFSteward,
+    /// A vote for a PGF payment proposal
+    PGFPayment,
     /// A vote for ETH bridge carrying the signature over the proposed message
     ETHBridge(Signature),
 }
@@ -95,7 +100,9 @@ impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProposalVote::Yay(vote_type) => match vote_type {
-                VoteType::Default | VoteType::PGFSteward => write!(f, "yay"),
+                VoteType::Default
+                | VoteType::PGFSteward
+                | VoteType::PGFPayment => write!(f, "yay"),
                 VoteType::ETHBridge(sig) => {
                     write!(f, "yay with signature: {:#?}", sig)
                 }
@@ -119,6 +126,8 @@ pub enum Tally {
     Default,
     /// PGF stewards proposal
     PGFSteward(Stewards),
+    /// PGF payment proposal
+    PGFPayment(Vec<PGFAction>),
     /// ETH Bridge proposal
     ETHBridge,
 }
@@ -127,7 +136,12 @@ impl From<TransactionProposalType> for Tally {
     fn from(proposal: TransactionProposalType) -> Self {
         match proposal {
             TransactionProposalType::Default(_) => Tally::Default,
-            TransactionProposalType::PGFSteward(s) => Tally::PGFSteward(s),
+            TransactionProposalType::PGFSteward(stewards) => {
+                Tally::PGFSteward(stewards)
+            }
+            TransactionProposalType::PGFPayment(actions) => {
+                Tally::PGFPayment(actions)
+            }
             TransactionProposalType::ETHBridge => Tally::ETHBridge,
         }
     }
@@ -190,6 +204,8 @@ pub enum ProposalType {
     Default(Option<String>),
     /// A PGF stewards proposal
     PGFSteward(Stewards),
+    /// A PGF funding proposal with the path to the [`PGFAction`]
+    PGFPayment(String),
     /// An ETH bridge proposal
     ETHBridge,
 }
