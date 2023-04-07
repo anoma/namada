@@ -2871,7 +2871,7 @@ fn eth_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 999500")?;
+    client.exp_string("nam: 999500")?;
     client.assert_success();
 
     // Query token balance governance
@@ -2886,7 +2886,7 @@ fn eth_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 500")?;
+    client.exp_string("nam: 500")?;
     client.assert_success();
 
     // 2 - Vote with delegator and check failure
@@ -2969,7 +2969,7 @@ fn eth_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 1000000")?;
+    client.exp_string("nam: 1000000")?;
     client.assert_success();
 
     // Check if governance funds are 0
@@ -2984,7 +2984,7 @@ fn eth_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 0")?;
+    client.exp_string("nam: 0")?;
     client.assert_success();
 
     Ok(())
@@ -3124,7 +3124,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 999000")?;
+    client.exp_string("nam: 999000")?;
     client.assert_success();
 
     // Query token balance governance
@@ -3139,7 +3139,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("NAM: 1000")?;
+    client.exp_string("nam: 1000")?;
     client.assert_success();
 
     // 3 - Send a yay vote from a validator
@@ -3268,7 +3268,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 999500")?;
+    client.exp_string("nam: 999500")?;
     client.assert_success();
 
     // Check if governance funds are 0
@@ -3283,7 +3283,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("NAM: 0")?;
+    client.exp_string("nam: 0")?;
     client.assert_success();
 
     Ok(())
