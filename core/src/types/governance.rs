@@ -9,36 +9,21 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::RefTo;
+use super::transaction::governance::AddRemove;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::key::common::{self, Signature};
-use crate::types::key::SigScheme;
+use crate::types::key::{
+    common::{self, Signature},
+    SigScheme,
+};
 use crate::types::storage::Epoch;
 use crate::types::token::SCALE;
-use crate::types::transaction::governance::{
-    PGFAction, ProposalType as TransactionProposalType,
-};
+use crate::types::transaction::governance::PGFAction;
+use crate::types::transaction::governance::ProposalType as TransactionProposalType;
 
 /// Type alias for vote power
 pub type VotePower = u128;
-
-/// The two sets of proposed Stewards, those to add and those to remove
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshDeserialize,
-    BorshSerialize,
-    Serialize,
-    Deserialize,
-)]
-pub struct Stewards {
-    /// The stewards to be added
-    pub add: HashSet<Address>,
-    /// The stewards to be removed
-    pub remove: HashSet<Address>,
-}
 
 /// The type of a governance vote with the optional associated Memo
 #[derive(
@@ -124,7 +109,7 @@ pub enum Tally {
     /// Default proposal
     Default,
     /// PGF stewards proposal
-    PGFSteward(Stewards),
+    PGFSteward(HashSet<AddRemove<Address>>),
     /// PGF payment proposal
     PGFPayment(Vec<PGFAction>),
     /// ETH Bridge proposal
@@ -196,13 +181,13 @@ impl Display for TallyResult {
 
 /// The type of a governance proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub enum ProposalType {
     /// A default proposal with the optional path to wasm code
     Default(Option<String>),
     /// A PGF stewards proposal
-    PGFSteward(Stewards),
+    PGFSteward(String),
     /// A PGF funding proposal with the path to the [`PGFAction`]
     PGFPayment(String),
     /// An ETH bridge proposal
@@ -437,7 +422,11 @@ fn compute_total_valid_signatures(
                 hashed_data,
                 &signature_index.sig,
             );
-            if sig_check.is_ok() { acc + 1 } else { acc }
+            if sig_check.is_ok() {
+                acc + 1
+            } else {
+                acc
+            }
         } else {
             acc
         }
