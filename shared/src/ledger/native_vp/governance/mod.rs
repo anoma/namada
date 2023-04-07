@@ -2,13 +2,13 @@
 
 pub mod utils;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use namada_core::ledger::governance::storage as gov_storage;
 use namada_core::ledger::storage;
 use namada_core::ledger::vp_env::VpEnv;
-use namada_core::types::governance::{ProposalVote, Stewards, VoteType};
-use namada_core::types::transaction::governance::ProposalType;
+use namada_core::types::governance::{ProposalVote, VoteType};
+use namada_core::types::transaction::governance::{AddRemove, ProposalType};
 use thiserror::Error;
 use utils::is_valid_validator_voting_period;
 
@@ -318,10 +318,13 @@ where
     /// - The addresses to remove are already part of the PGF Steward set
     fn validate_pgf_steward_proposal(
         &self,
-        changes: &Stewards,
+        changes: &HashSet<AddRemove<Address>>,
     ) -> Result<bool> {
         // Check that all the addresses are established
-        for address in changes.add.iter().chain(changes.remove.iter()) {
+        for address in changes.iter().map(|x| match x {
+            AddRemove::Add(v) => v,
+            AddRemove::Remove(v) => v,
+        }) {
             match address {
                 Address::Established(_) => {
                     // Check that established address exists in
