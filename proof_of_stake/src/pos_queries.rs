@@ -20,25 +20,25 @@ use crate::{consensus_validator_set_handle, PosParams};
 /// Errors returned by [`PosQueries`] operations.
 #[derive(Error, Debug)]
 pub enum Error {
-    /// The given address is not among the set of active validators for
+    /// The given address is not among the set of consensus validators for
     /// the corresponding epoch.
     #[error(
-        "The address '{0:?}' is not among the active validator set for epoch \
-         {1}"
+        "The address '{0:?}' is not among the consensus validator set for \
+         epoch {1}"
     )]
     NotValidatorAddress(Address, Epoch),
-    /// The given public key does not correspond to any active validator's
+    /// The given public key does not correspond to any consensus validator's
     /// key at the provided epoch.
     #[error(
-        "The public key '{0}' is not among the active validator set for epoch \
-         {1}"
+        "The public key '{0}' is not among the consensus validator set for \
+         epoch {1}"
     )]
     NotValidatorKey(String, Epoch),
-    /// The given public key hash does not correspond to any active validator's
-    /// key at the provided epoch.
+    /// The given public key hash does not correspond to any consensus
+    /// validator's key at the provided epoch.
     #[error(
-        "The public key hash '{0}' is not among the active validator set for \
-         epoch {1}"
+        "The public key hash '{0}' is not among the consensus validator set \
+         for epoch {1}"
     )]
     NotValidatorKeyHash(String, Epoch),
     /// An invalid Tendermint validator address was detected.
@@ -50,7 +50,7 @@ pub enum Error {
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 /// Methods used to query blockchain proof-of-stake related state,
-/// such as the currently active set of validators.
+/// such as the current set of consensus validators.
 pub trait PosQueries {
     /// The underlying storage type.
     type Storage;
@@ -103,16 +103,16 @@ where
         self.wl_storage
     }
 
-    /// Get the set of active validators for a given epoch (defaulting to the
+    /// Get the set of consensus validators for a given epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     #[inline]
-    pub fn get_active_validators(
+    pub fn get_consensus_validators(
         self,
         epoch: Option<Epoch>,
-    ) -> ActiveValidators<'db, D, H> {
+    ) -> ConsensusValidators<'db, D, H> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        ActiveValidators {
+        ConsensusValidators {
             wl_storage: self.wl_storage,
             validator_set: consensus_validator_set_handle().at(&epoch),
         }
@@ -121,7 +121,7 @@ where
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
-        self.get_active_validators(epoch)
+        self.get_consensus_validators(epoch)
             .iter()
             .map(|validator| u64::from(validator.bonded_stake))
             .sum::<u64>()
@@ -135,15 +135,8 @@ where
         token: &Address,
         owner: &Address,
     ) -> token::Amount {
-        let balance = storage_api::StorageRead::read(
-            self.wl_storage,
-            &token::balance_key(token, owner),
-        );
-        // Storage read must not fail, but there might be no value, in which
-        // case default (0) is returned
-        balance
+        storage_api::token::read_balance(self.wl_storage, token, owner)
             .expect("Storage read in the protocol must not fail")
-            .unwrap_or_default()
     }
 
     /// Return evidence parameters.
@@ -179,7 +172,7 @@ where
     ) -> Result<(token::Amount, key::common::PublicKey)> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        self.get_active_validators(Some(epoch))
+        self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
@@ -279,9 +272,9 @@ where
     }
 }
 
-/// A handle to the set of active validators in Namada,
+/// A handle to the set of consensus validators in Namada,
 /// at some given epoch.
-pub struct ActiveValidators<'db, D, H>
+pub struct ConsensusValidators<'db, D, H>
 where
     D: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: storage::StorageHasher,
@@ -290,19 +283,19 @@ where
     validator_set: ConsensusValidatorSet,
 }
 
-impl<'db, D, H> ActiveValidators<'db, D, H>
+impl<'db, D, H> ConsensusValidators<'db, D, H>
 where
     D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
     H: 'static + storage::StorageHasher,
 {
-    /// Iterate over the set of active validators in Namada, at some given
+    /// Iterate over the set of consensus validators in Namada, at some given
     /// epoch.
     pub fn iter<'this: 'db>(
         &'this self,
     ) -> impl Iterator<Item = WeightedValidator> + 'db {
         self.validator_set
             .iter(self.wl_storage)
-            .expect("Must be able to iterate over active validators")
+            .expect("Must be able to iterate over consensus validators")
             .map(|res| {
                 let (
                     NestedSubKey::Data {

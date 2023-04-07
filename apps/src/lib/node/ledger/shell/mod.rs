@@ -131,15 +131,21 @@ pub enum ErrorCodes {
     ExtraTxs = 5,
     Undecryptable = 6,
     AllocationError = 7,
-    ReplayTx = 8, /* NOTE: keep these values in sync with
-                   * [`ErrorCodes::is_recoverable`] */
+    ReplayTx = 8,
 }
 
 impl ErrorCodes {
     /// Checks if the given [`ErrorCodes`] value is a protocol level error,
     /// that can be recovered from at the finalize block stage.
     pub const fn is_recoverable(&self) -> bool {
-        (*self as u32) == 0
+        use ErrorCodes::*;
+        // NOTE: pattern match on all `ErrorCodes` variants, in order
+        // to catch potential bugs when adding new codes
+        match self {
+            Ok | InvalidTx | InvalidSig | WasmRuntimeError => true,
+            InvalidOrder | ExtraTxs | Undecryptable | AllocationError
+            | ReplayTx => false,
+        }
     }
 }
 
