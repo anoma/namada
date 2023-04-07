@@ -22,8 +22,8 @@ use masp_primitives::transaction::components::Amount;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::core::types::transaction::governance::ProposalType;
 use namada::core::types::key;
+use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;

@@ -8,8 +8,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::key::RefTo;
 use super::key::common::Signature;
+use super::key::RefTo;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;

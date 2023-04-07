@@ -11,8 +11,7 @@ use std::{env, fs};
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER_PERMISSIVE;
-use data_encoding::HEXLOWER;
+use data_encoding::{HEXLOWER, HEXLOWER_PERMISSIVE};
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -138,7 +137,13 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     // let address = ctx.get(&args.address);
     let pks_index_map = rpc::get_address_pks_map(&client, &address).await;
 
-    let tx = Tx::new_with_timestamp(tx_code, Some(tx_data), ctx.config.ledger.chain_id.clone(), timestamp, args.tx.expiration);
+    let tx = Tx::new_with_timestamp(
+        tx_code,
+        Some(tx_data),
+        ctx.config.ledger.chain_id.clone(),
+        timestamp,
+        args.tx.expiration,
+    );
 
     let (_ctx, _initialized_accounts) = process_tx(
         ctx,

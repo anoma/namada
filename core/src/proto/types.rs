@@ -271,7 +271,7 @@ impl SigningTx {
             data: signed.try_to_vec().ok(),
             timestamp: self.timestamp,
             chain_id: self.chain_id,
-            expiration: self.expiration
+            expiration: self.expiration,
         }
     }
 
@@ -292,7 +292,7 @@ impl SigningTx {
             data: signed.try_to_vec().ok(),
             timestamp: self.timestamp,
             chain_id: self.chain_id,
-            expiration: self.expiration
+            expiration: self.expiration,
         }
     }
 
@@ -548,7 +548,7 @@ impl Tx {
             data,
             timestamp,
             chain_id,
-            expiration
+            expiration,
         }
     }
 
