@@ -415,7 +415,7 @@ mod test_prepare_proposal {
     /// Test that expired wrapper transactions are not included in the block
     #[test]
     fn test_expired_wrapper_tx() {
-        let (shell, _) = TestShell::new();
+        let (shell, _) = test_utils::setup(1);
         let keypair = gen_keypair();
         let tx_time = DateTimeUtc::now();
         let tx = Tx::new(

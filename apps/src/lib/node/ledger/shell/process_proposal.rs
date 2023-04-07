@@ -1532,7 +1532,7 @@ mod test_process_proposal {
     /// Test that an expired wrapper transaction causes a block rejection
     #[test]
     fn test_expired_wrapper() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
@@ -1573,11 +1573,11 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that an expired decrypted transaction is correctlye marked as so
+    /// Test that an expired decrypted transaction is correctly marked as so
     /// without rejecting the entire block
     #[test]
     fn test_expired_decrypted() {
-        let (mut shell, _) = TestShell::new();
+        let (mut shell, _) = test_utils::setup(1);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let tx = Tx::new(
