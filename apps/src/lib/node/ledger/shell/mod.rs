@@ -1003,6 +1003,7 @@ where
             ) {
                 Ok(result) => {
                     if result.is_accepted() {
+                        wl_storage.write_log.commit_tx();
                         // Update the balance
                         balance = storage_api::token::read_balance(
                             wl_storage,
@@ -1013,14 +1014,16 @@ where
                             "Token balance read in the protocol must not fail",
                         );
                     } else {
+                        wl_storage.write_log.drop_tx();
                         return Err(format!("The unshielding tx is invalid, some VPs rejected it: {:#?}", result.vps_result.rejected_vps));
                     }
                 }
                 Err(e) => {
+                    wl_storage.write_log.drop_tx();
                     return Err(format!(
                         "The unshielding tx is invalid, wasm run failed: {}",
                         e
-                    ))
+                    ));
                 }
             }
         }

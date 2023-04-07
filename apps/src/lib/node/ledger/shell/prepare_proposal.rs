@@ -1,10 +1,13 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
+use std::borrow::Cow;
+use std::collections::BTreeMap;
+
 use namada::core::ledger::gas::TxGasMeter;
 use namada::core::ledger::parameters;
 use namada::ledger::gas::BlockGasMeter;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
+use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
@@ -136,6 +139,14 @@ where
                 .expect("Error while reading from storage")
                 .expect("Missing max_block_gas parameter in storage"),
         );
+        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
+        let gas_table: BTreeMap<String, u64> = self
+            .wl_storage
+            .read(&parameters::storage::get_gas_table_storage_key())
+            .expect("Error while reading from storage")
+            .expect("Missing gas table in storage");
+        let mut vp_wasm_cache = self.vp_wasm_cache.clone();
+        let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
         let txs = txs
             .iter()
@@ -150,15 +161,25 @@ where
                     if let Ok(TxType::Wrapper(wrapper)) = process_tx(tx) {
 
         // Check tx gas limit
-        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
+        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit.clone().into());
         if tx_gas_meter
             .add_tx_size_gas(tx_bytes.len()).is_err() {
                             return None;
                         }
 
-                    if temp_block_gas_meter.try_finalize_transaction(tx_gas_meter).is_ok() {
-                        return Some(tx_bytes.clone());
+                    if temp_block_gas_meter.try_finalize_transaction(tx_gas_meter).is_err() {
+                        return None;
         }
+            // Check fees
+            if self.wrapper_fee_check(
+                wrapper,
+                &mut temp_wl_storage,
+                Some(Cow::Borrowed(&gas_table)),
+                &mut vp_wasm_cache,
+                &mut tx_wasm_cache,
+            ).is_ok() {
+                        return Some(tx_bytes.clone())
+                    }
                     }
                 }
                 None
