@@ -147,7 +147,11 @@ where
     let proposal_code = shell.read_storage_key_bytes(&proposal_code_key);
     match proposal_code {
         Some(proposal_code) => {
-            let tx = Tx::new(proposal_code, Some(encode(&id)));
+            let tx = Tx::new(
+                proposal_code,
+                Some(encode(&id)),
+                shell.chain_id.clone(),
+            );
             let tx_type = TxType::Decrypted(DecryptedTx::Decrypted {
                 tx,
                 #[cfg(not(feature = "mainnet"))]

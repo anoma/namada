@@ -221,17 +221,19 @@ where
                 })
             },
             |tx| {
-                process_tx(tx).map_err(|err| {
+                let tx_chain_id = tx.chain_id.clone();
+                let tx_type = process_tx(tx).map_err(|err| {
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     TxResult {
                         code: ErrorCodes::InvalidSig.into(),
                         info: err.to_string(),
                     }
-                })
+                })?;
+                Ok((tx_chain_id, tx_type))
             },
         );
-        let tx = match maybe_tx {
+        let (tx_chain_id, tx) = match maybe_tx {
             Ok(tx) => tx,
             Err(tx_result) => return tx_result,
         };
@@ -247,12 +249,24 @@ where
                        not supported"
                     .into(),
             },
-            TxType::Protocol(_) => TxResult {
-                code: ErrorCodes::InvalidTx.into(),
-                info: "Protocol transactions are a fun new feature that is \
-                       coming soon to a blockchain near you. Patience."
-                    .into(),
-            },
+            TxType::Protocol(_) => {
+                if tx_chain_id != self.chain_id {
+                    return TxResult {
+                        code: ErrorCodes::InvalidChainId.into(),
+                        info: format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            self.chain_id, tx_chain_id
+                        ),
+                    };
+                }
+                TxResult {
+                    code: ErrorCodes::InvalidTx.into(),
+                    info: "Protocol transactions are a fun new feature that \
+                           is coming soon to a blockchain near you. Patience."
+                        .into(),
+                }
+            }
             TxType::Decrypted(tx) => {
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
@@ -266,6 +280,24 @@ where
                                     .into(),
                             }
                         } else if verify_decrypted_correctly(&tx, privkey) {
+                            if let DecryptedTx::Decrypted {
+                                tx,
+                                has_valid_pow: _,
+                            } = tx
+                            {
+                                if tx.chain_id != self.chain_id {
+                                    return TxResult {
+                                        code:
+                                            ErrorCodes::InvalidDecryptedChainId
+                                                .into(),
+                                        info: format!(
+                                            "Decrypted tx carries a wrong \
+                                             chain id: expected {}, found {}",
+                                            self.chain_id, tx.chain_id
+                                        ),
+                                    };
+                                }
+                            }
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -322,6 +354,18 @@ where
                         info: "Wrapper txs not allowed at the current block \
                                height"
                             .into(),
+                    };
+                }
+
+                // ChainId check
+                if tx_chain_id != self.chain_id {
+                    return TxResult {
+                        code: ErrorCodes::InvalidChainId.into(),
+                        info: format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            self.chain_id, tx_chain_id
+                        ),
                     };
                 }
 
@@ -452,6 +496,7 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
+    use namada::types::transaction::protocol::ProtocolTxType;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
@@ -468,6 +513,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -485,6 +531,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             vec![],
             Some(TxType::Wrapper(wrapper).try_to_vec().expect("Test failed")),
+            shell.chain_id.clone(),
         )
         .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -516,6 +563,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let timestamp = tx.timestamp;
         let mut wrapper = WrapperTx::new(
@@ -531,7 +579,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
         let new_tx = if let Some(Ok(SignedTxData {
             data: Some(data),
@@ -566,6 +614,7 @@ mod test_process_proposal {
                     .expect("Test failed"),
                 ),
                 timestamp,
+                chain_id: shell.chain_id.clone(),
             }
         } else {
             panic!("Test failed");
@@ -610,6 +659,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -624,7 +674,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
         let request = ProcessProposal {
             txs: vec![wrapper.to_bytes()],
@@ -676,6 +726,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -690,7 +741,7 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair)
+        .sign(&keypair, shell.chain_id.clone())
         .expect("Test failed");
 
         let request = ProcessProposal {
@@ -726,6 +777,7 @@ mod test_process_proposal {
             let tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -741,11 +793,14 @@ mod test_process_proposal {
                 None,
             );
             shell.enqueue_tx(wrapper);
-            txs.push(Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            })));
+            let mut decrypted_tx =
+                Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+                    tx,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }));
+            decrypted_tx.chain_id = shell.chain_id.clone();
+            txs.push(decrypted_tx);
         }
         let response = {
             let request = ProcessProposal {
@@ -784,6 +839,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -800,8 +856,9 @@ mod test_process_proposal {
         );
         shell.enqueue_tx(wrapper.clone());
 
-        let tx =
+        let mut tx =
             Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(wrapper)));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -836,6 +893,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let mut wrapper = WrapperTx::new(
             Fee {
@@ -853,10 +911,11 @@ mod test_process_proposal {
         wrapper.tx_hash = Hash([0; 32]);
 
         shell.enqueue_tx(wrapper.clone());
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
         )));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -899,10 +958,12 @@ mod test_process_proposal {
         };
 
         shell.enqueue_tx(wrapper.clone());
-        let signed = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-            #[allow(clippy::redundant_clone)]
-            wrapper.clone(),
-        )));
+        let mut signed =
+            Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+                #[allow(clippy::redundant_clone)]
+                wrapper.clone(),
+            )));
+        signed.chain_id = shell.chain_id.clone();
         let request = ProcessProposal {
             txs: vec![signed.to_bytes()],
         };
@@ -927,13 +988,15 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
+        let mut tx = Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
             tx,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
+        tx.chain_id = shell.chain_id.clone();
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -964,8 +1027,10 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
-        let tx = Tx::from(TxType::Raw(tx));
+        let mut tx = Tx::from(TxType::Raw(tx));
+        tx.chain_id = shell.chain_id.clone();
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
@@ -999,6 +1064,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1013,7 +1079,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = Hash(signed.unsigned_hash());
@@ -1069,6 +1137,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1083,7 +1152,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Run validation
         let request = ProcessProposal {
@@ -1123,6 +1194,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1138,7 +1210,9 @@ mod test_process_proposal {
             None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Write inner hash to storage
         let hash_key = replay_protection::get_tx_hash_key(&inner_unsigned_hash);
@@ -1205,6 +1279,7 @@ mod test_process_proposal {
         let tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1220,7 +1295,9 @@ mod test_process_proposal {
             None,
         );
         let inner_unsigned_hash = wrapper.tx_hash.clone();
-        let signed = wrapper.sign(&keypair).expect("Test failed");
+        let signed = wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         let new_wrapper = WrapperTx::new(
             Fee {
@@ -1235,7 +1312,9 @@ mod test_process_proposal {
             #[cfg(not(feature = "mainnet"))]
             None,
         );
-        let new_signed = new_wrapper.sign(&keypair).expect("Test failed");
+        let new_signed = new_wrapper
+            .sign(&keypair, shell.chain_id.clone())
+            .expect("Test failed");
 
         // Run validation
         let request = ProcessProposal {
@@ -1258,6 +1337,129 @@ mod test_process_proposal {
                     )
                 );
             }
+        }
+    }
+
+    /// Test that a wrapper or protocol transaction with a mismatching chain id
+    /// causes the entire block to be rejected
+    #[test]
+    fn test_wong_chain_id() {
+        let (mut shell, _) = test_utils::setup(1);
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+        );
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx.clone(),
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let signed = wrapper
+            .sign(&keypair, wrong_chain_id.clone())
+            .expect("Test failed");
+
+        let protocol_tx = ProtocolTxType::EthereumStateUpdate(tx).sign(
+            &keypair.ref_to(),
+            &keypair,
+            wrong_chain_id.clone(),
+        );
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed.to_bytes(), protocol_tx.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                for res in response {
+                    assert_eq!(
+                        res.result.code,
+                        u32::from(ErrorCodes::InvalidChainId)
+                    );
+                    assert_eq!(
+                        res.result.info,
+                        format!(
+                            "Tx carries a wrong chain id: expected {}, found \
+                             {}",
+                            shell.chain_id, wrong_chain_id
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /// Test that a decrypted transaction with a mismatching chain id gets
+    /// rejected without rejecting the entire block
+    #[test]
+    fn test_decrypted_wong_chain_id() {
+        let (mut shell, _) = test_utils::setup(1);
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let wrong_chain_id = ChainId("Wrong chain id".to_string());
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("new transaction data".as_bytes().to_owned()),
+            wrong_chain_id.clone(),
+        );
+        let decrypted: Tx = DecryptedTx::Decrypted {
+            tx: tx.clone(),
+            has_valid_pow: false,
+        }
+        .into();
+        let signed_decrypted = decrypted.sign(&keypair);
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper_in_queue = WrapperTxInQueue {
+            tx: wrapper,
+            has_valid_pow: false,
+        };
+        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![signed_decrypted.to_bytes()],
+        };
+
+        match shell.process_proposal(request) {
+            Ok(response) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::InvalidDecryptedChainId)
+                );
+                assert_eq!(
+                    response[0].result.info,
+                    format!(
+                        "Decrypted tx carries a wrong chain id: expected {}, \
+                         found {}",
+                        shell.chain_id, wrong_chain_id
+                    )
+                )
+            }
+            Err(_) => panic!("Test failed"),
         }
     }
 }

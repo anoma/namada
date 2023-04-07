@@ -409,6 +409,7 @@ fn get_gas_rules() -> rules::Set {
 mod tests {
     use borsh::BorshSerialize;
     use itertools::Either;
+    use namada_core::types::chain::ChainId;
     use namada_test_utils::TestWasms;
     use test_log::test;
     use wasmer_vm::TrapCode;
@@ -539,7 +540,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
@@ -568,7 +569,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
@@ -612,7 +613,7 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code.clone(),
@@ -633,7 +634,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let error = vp(
             vp_code,
             &tx,
@@ -725,7 +726,7 @@ mod tests {
         // limit and should fail
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             vp_code,
@@ -832,7 +833,7 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             vp_read_key,
@@ -889,7 +890,7 @@ mod tests {
             input,
         };
         let tx_data = eval_vp.try_to_vec().unwrap();
-        let tx = Tx::new(vec![], Some(tx_data));
+        let tx = Tx::new(vec![], Some(tx_data), storage.chain_id.clone());
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
             vp_eval,
@@ -994,7 +995,7 @@ mod tests {
         )
         .expect("unexpected error converting wat2wasm").into_owned();
 
-        let tx = Tx::new(vec![], None);
+        let tx = Tx::new(vec![], None, ChainId::default());
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
