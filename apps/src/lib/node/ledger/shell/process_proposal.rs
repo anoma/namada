@@ -154,6 +154,8 @@ where
             .read(&parameters::storage::get_gas_table_storage_key())
             .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
+        let mut vp_wasm_cache = self.vp_wasm_cache.clone();
+        let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
         let mut wrapper_index = 0;
 
@@ -169,6 +171,8 @@ where
                     block_time,
                     &gas_table,
                     &mut wrapper_index,
+                    &mut vp_wasm_cache,
+                    &mut tx_wasm_cache,
                 );
                 if let ErrorCodes::Ok =
                     ErrorCodes::from_u32(result.code).unwrap()
@@ -208,7 +212,7 @@ where
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
     #[allow(clippy::too_many_arguments)]
-    pub fn process_single_tx<'a>(
+    pub fn process_single_tx<'a, CA>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a WrapperTxInQueue>,
@@ -218,7 +222,12 @@ where
         block_time: DateTimeUtc,
         gas_table: &BTreeMap<String, u64>,
         wrapper_index: &mut usize,
-    ) -> TxResult {
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+    ) -> TxResult
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {
@@ -414,15 +423,15 @@ where
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
-                                       transaction"
+                                    tranasction"
                                     .into(),
                             }
                         } else {
-                            // Wrong inner tx commitment
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
+                                    incorrectly marked as \
+                                    un-decryptable"
                                     .into(),
                             }
                         }
@@ -438,7 +447,7 @@ where
                 // Account for gas. This is done even if the transaction is
                 // later deemed invalid, to incentivize the proposer to
                 // include only valid transaction and avoid wasting block
-                // gas limit (ABCI)
+                // gas limit (ABCI only)
                 let mut tx_gas_meter =
                     TxGasMeter::new(u64::from(&wrapper.gas_limit));
                 if tx_gas_meter.add_tx_size_gas(tx_bytes.len()).is_err() {
@@ -587,29 +596,27 @@ where
                         .expect("Couldn't write wrapper tx hash to write log");
 
                     // check that the fee payer has sufficient balance
-                    let balance = self
-                        .get_balance(&wrapper.fee.token, &wrapper.fee_payer());
-
-                    // In testnets, tx is allowed to skip fees if it
-                    // includes a valid PoW
-                    #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow = self.has_valid_pow_solution(&wrapper);
-                    #[cfg(feature = "mainnet")]
-                    let has_valid_pow = false;
-
-                    if has_valid_pow || self.get_wrapper_tx_fees() <= balance {
-                        TxResult {
+                    match self.wrapper_fee_check(
+                        wrapper,
+                        temp_wl_storage,
+                        Some(Cow::Borrowed(gas_table)),
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    ) {
+                        Ok(()) => TxResult {
                             code: ErrorCodes::Ok.into(),
-                            info: "Process proposal accepted this transaction"
+                            info: "Process Proposal accepted this \
+                                       transaction"
                                 .into(),
-                        }
-                    } else {
-                        TxResult {
+                        },
+                        Err(e) => TxResult {
                             code: ErrorCodes::InvalidTx.into(),
-                            info: "The address given does not have sufficient \
-                                   balance to pay fee"
-                                .into(),
-                        }
+                            info: format!(
+                                "The given address does not have a \
+                                       sufficient balance to pay fee: {}",
+                                e
+                            ),
+                        },
                     }
                 }
             }
