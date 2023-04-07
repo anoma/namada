@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::RefTo;
+use super::transaction::governance::AddRemove;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -23,23 +24,6 @@ use crate::types::transaction::governance::ProposalType as TransactionProposalTy
 
 /// Type alias for vote power
 pub type VotePower = u128;
-
-/// The two sets of proposed Stewards, those to add and those to remove
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshDeserialize,
-    BorshSerialize,
-    Serialize,
-    Deserialize,
-)]
-pub struct Stewards {
-    /// The stewards to be added
-    pub add: HashSet<Address>,
-    /// The stewards to be removed
-    pub remove: HashSet<Address>,
-}
 
 /// The type of a governance vote with the optional associated Memo
 #[derive(
@@ -125,7 +109,7 @@ pub enum Tally {
     /// Default proposal
     Default,
     /// PGF stewards proposal
-    PGFSteward(Stewards),
+    PGFSteward(HashSet<AddRemove<Address>>),
     /// PGF payment proposal
     PGFPayment(Vec<PGFAction>),
     /// ETH Bridge proposal
@@ -203,7 +187,7 @@ pub enum ProposalType {
     /// A default proposal with the optional path to wasm code
     Default(Option<String>),
     /// A PGF stewards proposal
-    PGFSteward(Stewards),
+    PGFSteward(String),
     /// A PGF funding proposal with the path to the [`PGFAction`]
     PGFPayment(String),
     /// An ETH bridge proposal
