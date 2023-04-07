@@ -15,9 +15,7 @@ use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::pos::BondId;
 use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::governance::{
-    ProposalVote, TallyResult, VotePower, VoteType,
-};
+use crate::types::governance::{ProposalVote, TallyResult, VotePower};
 use crate::types::storage::Epoch;
 use crate::types::token;
 
@@ -81,223 +79,122 @@ impl ProposalEvent {
     }
 }
 
-/// Return a proposal result
+enum ExpectedVote {
+    /// The expected vote for the tally
+    Expected,
+    /// The opposite of the expected (e.g. Nay if expected is Yay)
+    Opposite,
+    /// Unexpected vote, i.e. a Yay vote carrying a wrong [`VoteType`]
+    Wrong,
+}
+
+impl ExpectedVote {
+    /// Get the inverse of an expected vote
+    fn reverse(&mut self) {
+        *self = match self {
+            Self::Expected => Self::Opposite,
+            Self::Opposite => Self::Expected,
+            // A wrong vote inverse is still a wrong vote
+            Self::Wrong => Self::Wrong,
+        }
+    }
+}
+
+/// Computes whether the proposal passed or not
 pub fn compute_tally(
     votes: Votes,
     total_stake: VotePower,
     proposal_type: ProposalType,
-) -> Result<ProposalResult, Error> {
-    // FIXME: update specs
-
-    match proposal_type {
-        ProposalType::Default(_) => {
-            let total_staked_voted =
-                dispatch_normal_tally(votes, &proposal_type);
-            Ok(threshold_tally(
-                proposal_type,
-                total_staked_voted,
-                total_stake,
-                2,
-                3,
-            ))
-        }
-        ProposalType::ETHBridge => {
-            let total_staked_voted = dispatch_eth_tally(votes);
-            Ok(threshold_tally(
-                proposal_type,
-                total_staked_voted,
-                total_stake,
-                2,
-                3,
-            ))
-        }
-        ProposalType::PGFSteward(_) => {
-            let total_staked_voted =
-                dispatch_normal_tally(votes, &proposal_type);
-            Ok(threshold_tally(
-                proposal_type,
-                total_staked_voted,
-                total_stake,
-                1,
-                3,
-            ))
-        }
-        ProposalType::PGFPayment(_) => {
-            let total_staked_voted = dispatch_pgf_actions_tally(votes);
-            Ok(threshold_tally(
-                proposal_type,
-                total_staked_voted,
-                total_stake,
-                2,
-                3,
-            ))
-        }
-    }
-}
-
-fn threshold_tally(
-    proposal_type: ProposalType,
-    total_staked_voted: VotePower,
-    total_stake: VotePower,
-    num: u128,
-    denum: u128,
 ) -> ProposalResult {
-    // Proposal passes if threshold of total voting power voted the desired vote
-    if total_staked_voted >= (total_stake / denum) * num {
-        ProposalResult {
-            result: TallyResult::Passed(proposal_type.into()),
-            total_voting_power: total_stake,
-            total_yay_power: total_staked_voted,
-            total_nay_power: 0,
-        }
-    } else {
-        ProposalResult {
-            result: TallyResult::Rejected,
-            total_voting_power: total_stake,
-            total_yay_power: total_staked_voted,
-            total_nay_power: 0,
-        }
-    }
-}
-
-fn dispatch_normal_tally(
-    votes: Votes,
-    proposal_type: &ProposalType,
-) -> VotePower {
     let Votes {
         validators,
         delegators,
     } = votes;
 
-    let mut total_yay_staked_tokens = VotePower::default();
+    let mut total_target_vote_staked_tokens = VotePower::default();
 
     for (_, (amount, validator_vote)) in validators.iter() {
-        match validator_vote {
-            ProposalVote::Yay(vote_type) if proposal_type == vote_type => {
-                total_yay_staked_tokens += amount
-            }
-            _ => {
+        match expected_vote(&proposal_type, validator_vote) {
+            ExpectedVote::Expected => total_target_vote_staked_tokens += amount,
+            ExpectedVote::Opposite => (),
+            ExpectedVote::Wrong => {
                 // Log the error and continue
                 tracing::error!(
                     "Unexpected vote type. Expected: {}, Found: {}",
                     proposal_type,
                     validator_vote
                 );
-                continue;
             }
         }
     }
 
-    for (_, vote_map) in delegators.iter() {
-        for (validator_address, (vote_power, delegator_vote)) in vote_map.iter()
-        {
-            match delegator_vote {
-                ProposalVote::Yay(vote_type) if proposal_type == vote_type => {
-                    if !validators.contains_key(validator_address) {
-                        // YAY: Add delegator amount whose validator
-                        // didn't vote / voted nay
-                        total_yay_staked_tokens += vote_power;
+    if let ProposalType::ETHBridge = proposal_type {
+        for (_, vote_map) in delegators.iter() {
+            for (validator_address, (vote_power, delegator_vote)) in
+                vote_map.iter()
+            {
+                match expected_vote(&proposal_type, delegator_vote) {
+                    ExpectedVote::Expected => {
+                        if !validators.contains_key(validator_address) {
+                            // Add delegator amount whose validator
+                            // didn't vote / voted opposite
+                            total_target_vote_staked_tokens += vote_power;
+                        }
                     }
-                }
-                ProposalVote::Nay => {
-                    // NAY: Remove delegator amount whose validator
-                    // validator vote yay
-                    if validators.contains_key(validator_address) {
-                        total_yay_staked_tokens -= vote_power;
+                    ExpectedVote::Opposite => {
+                        // Remove delegator amount whose validator
+                        // validator voted opposite
+                        if validators.contains_key(validator_address) {
+                            total_target_vote_staked_tokens -= vote_power;
+                        }
                     }
-                }
-
-                _ => {
-                    // Log the error and continue
-                    tracing::error!(
-                        "Unexpected vote type. Expected: {}, Found: {}",
-                        proposal_type,
-                        delegator_vote
-                    );
-                    continue;
+                    ExpectedVote::Wrong => {
+                        // Log the error and continue
+                        tracing::error!(
+                            "Unexpected vote type. Expected: {}, Found: {}",
+                            proposal_type,
+                            delegator_vote
+                        );
+                    }
                 }
             }
         }
     }
 
-    total_yay_staked_tokens
+    // Proposal passes if threshold of total voting power voted the desired vote
+    if total_target_vote_staked_tokens >= (total_stake / 3) * 2 {
+        ProposalResult {
+            result: TallyResult::Passed(proposal_type.into()),
+            total_voting_power: total_stake,
+            total_yay_power: total_target_vote_staked_tokens,
+            total_nay_power: 0,
+        }
+    } else {
+        ProposalResult {
+            result: TallyResult::Rejected,
+            total_voting_power: total_stake,
+            total_yay_power: total_target_vote_staked_tokens,
+            total_nay_power: 0,
+        }
+    }
 }
 
-fn dispatch_eth_tally(votes: Votes) -> VotePower {
-    let Votes {
-        validators,
-        delegators: _,
-    } = votes;
+fn expected_vote(
+    proposal_type: &ProposalType,
+    vote: &ProposalVote,
+) -> ExpectedVote {
+    let mut result = match vote {
+        ProposalVote::Yay(t) if proposal_type == t => ExpectedVote::Expected,
+        ProposalVote::Yay(_) => ExpectedVote::Wrong,
+        ProposalVote::Nay => ExpectedVote::Opposite,
+    };
 
-    let mut total_yay_staked_tokens = VotePower::default();
-
-    // Only validators are allowed to vote
-    for (_, (amount, validator_vote)) in validators.iter() {
-        if let ProposalVote::Yay(VoteType::ETHBridge(_)) = validator_vote {
-            total_yay_staked_tokens += amount;
-        }
+    // For PGF payment tally the Nay votes
+    if let ProposalType::PGFPayment(_) = proposal_type {
+        result.reverse();
     }
 
-    total_yay_staked_tokens
-}
-
-fn dispatch_pgf_actions_tally(votes: Votes) -> VotePower {
-    let Votes {
-        validators,
-        delegators,
-    } = votes;
-
-    let mut total_nay_staked_tokens = VotePower::default();
-
-    for (_, (amount, validator_vote)) in validators.iter() {
-        if let ProposalVote::Nay = validator_vote {
-            total_nay_staked_tokens += amount;
-        }
-    }
-
-    for (_, vote_map) in delegators.iter() {
-        for (validator_address, (vote_power, delegator_vote)) in vote_map.iter()
-        {
-            match delegator_vote {
-                ProposalVote::Yay(VoteType::PGFPayment) => {
-                    // YAY: Remove delegator amount whose validator voted nay or
-                    // didn't vote
-                    match validators.get(validator_address) {
-                        Some((_, vote)) => {
-                            if !vote.is_yay() {
-                                total_nay_staked_tokens -= vote_power;
-                            }
-                        }
-                        None => total_nay_staked_tokens -= vote_power,
-                    }
-                }
-                ProposalVote::Nay => {
-                    // NAY: Remove delegator amount whose validator
-                    // validator vote yay
-                    match validators.get(validator_address) {
-                        Some((_, vote)) => {
-                            if vote.is_yay() {
-                                total_nay_staked_tokens += vote_power;
-                            }
-                        }
-                        None => total_nay_staked_tokens += vote_power,
-                    }
-                }
-
-                _ => {
-                    // Log the error and continue
-                    tracing::error!(
-                        "Unexpected vote type. Expected: {}, Found: {}",
-                        ProposalType::PGFPayment(vec![]),
-                        delegator_vote
-                    );
-                    continue;
-                }
-            }
-        }
-    }
-
-    total_nay_staked_tokens
+    result
 }
 
 /// Prepare Votes structure to compute proposal tally
