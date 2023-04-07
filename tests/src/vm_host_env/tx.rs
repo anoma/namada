@@ -119,6 +119,10 @@ impl TestTxEnv {
             vp_whitelist.unwrap_or_default(),
         )
         .unwrap();
+        parameters::update_max_signature_per_tx(
+            &mut self.wl_storage,
+            &40,
+        ).unwrap();
     }
 
     /// Fake accounts' existence by initializing their VP storage.
@@ -191,11 +195,25 @@ impl TestTxEnv {
         &mut self,
         address: &Address,
         public_key: &key::common::PublicKey,
+        index: u64,
     ) {
-        let storage_key = key::pk_key(address);
+        let storage_key = key::pk_key(address, index);
         self.wl_storage
             .storage
             .write(&storage_key, public_key.try_to_vec().unwrap())
+            .unwrap();
+    }
+
+    /// Set public key for the address.
+    pub fn write_account_threshold(
+        &mut self,
+        address: &Address,
+        threshold: u64,
+    ) {
+        let storage_key = key::threshold_key(address);
+        self.wl_storage
+            .storage
+            .write(&storage_key, threshold.try_to_vec().unwrap())
             .unwrap();
     }
 

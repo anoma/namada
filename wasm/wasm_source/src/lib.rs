@@ -16,8 +16,8 @@ pub mod tx_reveal_pk;
 pub mod tx_transfer;
 #[cfg(feature = "tx_unbond")]
 pub mod tx_unbond;
-#[cfg(feature = "tx_update_vp")]
-pub mod tx_update_vp;
+#[cfg(feature = "tx_update_account")]
+pub mod tx_update_account;
 #[cfg(feature = "tx_vote_proposal")]
 pub mod tx_vote_proposal;
 #[cfg(feature = "tx_withdraw")]

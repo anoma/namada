@@ -144,7 +144,11 @@ pub struct UpdateVp {
     /// An address of the account
     pub addr: Address,
     /// The new VP code
-    pub vp_code: Vec<u8>,
+    pub vp_code: Option<Vec<u8>>,
+    /// Public keys
+    pub public_keys: Vec<common::PublicKey>,
+    /// Account threshold
+    pub threshold: Option<u64>,
 }
 
 /// A tx data type to initialize a new established account
@@ -162,9 +166,11 @@ pub struct InitAccount {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub public_key: common::PublicKey,
+    pub public_keys: Vec<common::PublicKey>,
     /// The VP code
     pub vp_code: Vec<u8>,
+    /// The multisignature threshold
+    pub threshold: u64,
 }
 
 /// A tx data type to initialize a new validator account.
@@ -182,7 +188,7 @@ pub struct InitValidator {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub account_key: common::PublicKey,
+    pub account_keys: Vec<common::PublicKey>,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
     /// Public key used to sign protocol transactions
@@ -194,6 +200,8 @@ pub struct InitValidator {
     /// The maximum change allowed per epoch to the commission rate. This is
     /// immutable once set here.
     pub max_commission_rate_change: Decimal,
+    /// The multisignature threshold
+    pub threshold: u64,
     /// The VP code for validator account
     pub validator_vp_code: Vec<u8>,
 }
@@ -293,17 +301,14 @@ pub mod tx_types {
     /// indicating it is a wrapper. Otherwise, an error is
     /// returned indicating the signature was not valid
     pub fn process_tx(tx: Tx) -> Result<TxType, TxError> {
-        if let Some(Ok(SignedTxData {
-            data: Some(data),
-            ref sig,
-        })) = tx
+        if let Some(Ok(tx_data)) = tx
             .data
             .as_ref()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
             let signed_hash = Tx {
                 code: tx.code,
-                data: Some(data.clone()),
+                data: tx_data.data.clone(),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id.clone(),
                 expiration: tx.expiration,
@@ -311,7 +316,7 @@ pub mod tx_types {
             .hash();
             match TxType::try_from(Tx {
                 code: vec![],
-                data: Some(data),
+                data: tx_data.data.clone(),
                 timestamp: tx.timestamp,
                 chain_id: tx.chain_id,
                 expiration: tx.expiration,
@@ -320,12 +325,20 @@ pub mod tx_types {
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    wrapper.validate_sig(signed_hash, sig)?;
+                    let sig =
+                        tx_data.get_signature_by_index(0).ok_or_else(|| {
+                            TxError::SigError("Unsigned wrappr".to_string())
+                        })?;
+                    wrapper.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
                 // verify signature and extract signed data
                 TxType::Protocol(protocol) => {
-                    protocol.validate_sig(signed_hash, sig)?;
+                    let sig =
+                        tx_data.get_signature_by_index(0).ok_or_else(|| {
+                            TxError::SigError("Unsigned protocol".to_string())
+                        })?;
+                    protocol.validate_sig(signed_hash, &sig)?;
                     Ok(TxType::Protocol(protocol))
                 }
                 // we extract the signed data, but don't check the signature
@@ -561,16 +574,13 @@ pub mod tx_types {
             has_valid_pow: false,
         };
         // Invalid signed data
+        let data = TxType::Decrypted(decrypted)
+            .try_to_vec()
+            .expect("Test failed");
         let ed_sig =
             ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-        let signed = SignedTxData {
-            data: Some(
-                TxType::Decrypted(decrypted)
-                    .try_to_vec()
-                    .expect("Test failed"),
-            ),
-            sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
-        };
+        let signature = common::Signature::try_from_sig(&ed_sig).unwrap();
+        let signed = SignedTxData::from_single_signature(Some(data), signature);
         // create the tx with signed decrypted data
         let tx = Tx::new(
             vec![],

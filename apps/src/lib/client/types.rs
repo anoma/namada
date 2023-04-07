@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::primitives::{Diversifier, Note, ViewingKey};
@@ -35,10 +37,14 @@ pub struct ParsedTxArgs {
     pub fee_token: Address,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
+    /// Dump the signing tx to file
+    pub offline_tx: bool,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_key: Option<key::common::SecretKey>,
+    pub signing_keys: Vec<key::common::SecretKey>,
     /// Sign the tx with the keypair of the public key of the given address
-    pub signer: Option<Address>,
+    pub signers: Vec<Address>,
+    /// The path to signatures
+    pub signatures: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug)]

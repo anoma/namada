@@ -68,18 +68,7 @@ fn validate_tx(
         Lazy::new(|| SignedTxData::try_from_slice(&tx_data[..]));
 
     let valid_sig = Lazy::new(|| match &*signed_tx_data {
-        Ok(signed_tx_data) => {
-            let pk = key::get(ctx, &addr);
-            match pk {
-                Ok(Some(pk)) => {
-                    matches!(
-                        ctx.verify_tx_signature(&pk, &signed_tx_data.sig),
-                        Ok(true)
-                    )
-                }
-                _ => false,
-            }
-        }
+        Ok(signed_tx_data) => verify_signatures(ctx, signed_tx_data, &addr),
         _ => false,
     });
 
@@ -190,6 +179,8 @@ fn validate_tx(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::types::storage::Epoch;
@@ -201,8 +192,9 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
-    use namada_vp_prelude::key::RefTo;
+    use namada_vp_prelude::key::{common, ed25519, RefTo, SecretKey};
     use proptest::prelude::*;
+    use rand::seq::SliceRandom;
     use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
@@ -228,6 +220,7 @@ mod tests {
     fn test_credit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
@@ -274,6 +267,7 @@ mod tests {
     fn test_unsigned_debit_transfer_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
@@ -320,6 +314,7 @@ mod tests {
     fn test_signed_debit_transfer_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -335,7 +330,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -456,6 +451,7 @@ mod tests {
 
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
+        tx_env.init_parameters(None, None, None);
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -473,7 +469,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -506,6 +502,7 @@ mod tests {
     fn test_transfer_between_other_parties_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
@@ -576,6 +573,7 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
@@ -613,6 +611,11 @@ mod tests {
         ) {
             // Initialize a tx environment
             let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(
+                None,
+                None,
+                None
+            );
 
             let keypair = key::testing::keypair_1();
             let public_key = keypair.ref_to();
@@ -622,7 +625,7 @@ mod tests {
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, &public_key);
+            tx_env.write_public_key(&vp_owner, &public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -653,6 +656,7 @@ mod tests {
     fn test_unsigned_vp_update_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
@@ -696,7 +700,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -736,7 +740,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -766,6 +770,7 @@ mod tests {
     fn test_signed_vp_update_whitelisted_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -778,7 +783,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -808,6 +813,7 @@ mod tests {
     fn test_tx_not_whitelisted_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -824,7 +830,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -853,6 +859,7 @@ mod tests {
     fn test_tx_whitelisted_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -865,7 +872,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
 
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.write_public_key(&vp_owner, &public_key, 0);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -888,5 +895,129 @@ mod tests {
             validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
                 .unwrap()
         );
+    }
+
+    proptest! {
+        /// Test that a signed tx that performs arbitrary storage writes or
+        /// deletes to the account is accepted.
+        #[test]
+        fn test_multisignature_accept(
+            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            // Generate bytes to write. If `None`, delete from the key instead
+            storage_value in any::<Option<Vec<u8>>>(),
+            signers_total in (1u64..40)
+        ) {
+            let mut random = rand::thread_rng();
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
+
+            let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
+                common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
+            }).collect();
+
+            let public_keys: Vec<common::PublicKey> = keypairs.iter().map(|keypair| {
+                keypair.ref_to()
+            }).collect();
+
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
+
+            let mut pks_index_map = HashMap::new();
+            for (pk, index) in public_keys.iter().zip(0u64..) {
+                tx_env.write_public_key(&vp_owner, pk, index);
+                pks_index_map.insert(pk.to_owned(), index);
+            }
+
+            let threshold: u64 = random.gen_range(1..=signers_total);
+            tx_env.write_account_threshold(&vp_owner, threshold);
+
+            // Initialize VP environment from a transaction
+            vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+                // Write or delete some data in the transaction
+                if let Some(value) = &storage_value {
+                    tx::ctx().write(&storage_key, value).unwrap();
+                } else {
+                    tx::ctx().delete(&storage_key).unwrap();
+                }
+            });
+
+            let mut vp_env = vp_host_env::take();
+            let tx = vp_env.tx.clone();
+
+            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, threshold as usize).cloned().collect::<Vec<common::SecretKey>>(), pks_index_map);
+            let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+            vp_env.tx = signed_tx;
+            let keys_changed: BTreeSet<storage::Key> = vp_env.all_touched_storage_keys();
+            let verifiers: BTreeSet<Address> = BTreeSet::default();
+            vp_host_env::set(vp_env);
+            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+        }
+    }
+
+    proptest! {
+        /// Test that a signed tx that performs arbitrary storage writes or
+        /// deletes to the account is accepted.
+        #[test]
+        fn test_multisignature_reject(
+            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+            // Generate bytes to write. If `None`, delete from the key instead
+            storage_value in any::<Option<Vec<u8>>>(),
+            signers_total in (0u64..15)
+        ) {
+            let mut random = rand::thread_rng();
+            // Initialize a tx environment
+            let mut tx_env = TestTxEnv::default();
+            tx_env.init_parameters(None, None, None);
+
+            let keypairs: Vec<common::SecretKey> = (0..=signers_total).map(|_| {
+                common::SecretKey::try_from_sk(&key::testing::gen_keypair::<ed25519::SigScheme>()).unwrap()
+            }).collect();
+
+            let public_keys: Vec<common::PublicKey> = keypairs.iter().map(|keypair| {
+                keypair.ref_to()
+            }).collect();
+
+            // Spawn all the accounts in the storage key to be able to modify
+            // their storage
+            let storage_key_addresses = storage_key.find_addresses();
+            tx_env.spawn_accounts(storage_key_addresses);
+
+            let mut pks_index_map = HashMap::new();
+            for (pk, index) in public_keys.iter().zip(0u64..) {
+                tx_env.write_public_key(&vp_owner, pk, index);
+                pks_index_map.insert(pk.to_owned(), index);
+            }
+
+            let threshold: u64 = if signers_total == 0 {
+                1
+            } else {
+                random.gen_range(1..=signers_total)
+            };
+            tx_env.write_account_threshold(&vp_owner, threshold);
+
+            // Initialize VP environment from a transaction
+            vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+                // Write or delete some data in the transaction
+                if let Some(value) = &storage_value {
+                    tx::ctx().write(&storage_key, value).unwrap();
+                } else {
+                    tx::ctx().delete(&storage_key).unwrap();
+                }
+            });
+
+            let mut vp_env = vp_host_env::take();
+            let tx = vp_env.tx.clone();
+
+            let signed_tx = tx.sign_multisignature(&keypairs.choose_multiple(&mut random, (threshold - 1) as usize).cloned().collect::<Vec<common::SecretKey>>(), pks_index_map);
+            let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+            vp_env.tx = signed_tx;
+            let keys_changed: BTreeSet<storage::Key> = vp_env.all_touched_storage_keys();
+            let verifiers: BTreeSet<Address> = BTreeSet::default();
+            vp_host_env::set(vp_env);
+            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+        }
     }
 }

@@ -514,6 +514,7 @@ mod test_with_tx_and_vp_env {
         let withdrawal_limit = token::Amount::whole(1_000);
 
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         // Source address that's using PoW (this would be derived from the tx
         // wrapper pk)

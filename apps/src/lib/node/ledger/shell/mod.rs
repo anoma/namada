@@ -826,7 +826,7 @@ where
         self.mode.get_validator_address().map(|addr| {
             let sk: common::SecretKey = self
                 .wl_storage
-                .read(&pk_key(addr))
+                .read(&pk_key(addr, 0))
                 .expect(
                     "A validator should have a public key associated with \
                      it's established account",
@@ -1247,7 +1247,7 @@ mod test_mempool_validate {
 
         let unsigned_wrapper = if let Some(Ok(SignedTxData {
             data: Some(data),
-            sig: _,
+            sigs: _,
         })) = wrapper
             .data
             .take()
@@ -1302,7 +1302,7 @@ mod test_mempool_validate {
 
         let invalid_wrapper = if let Some(Ok(SignedTxData {
             data: Some(data),
-            sig,
+            sigs,
         })) = wrapper
             .data
             .take()
@@ -1326,7 +1326,7 @@ mod test_mempool_validate {
                 vec![],
                 Some(
                     SignedTxData {
-                        sig,
+                        sigs,
                         data: Some(new_data),
                     }
                     .try_to_vec()
