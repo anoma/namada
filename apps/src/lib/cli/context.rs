@@ -5,13 +5,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
+use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::masp::*;
 
-use super::args;
+use super::args::{self};
 use crate::cli::safe_exit;
 use crate::client::tx::ShieldedContext;
 use crate::config::genesis::genesis_config;
@@ -205,6 +207,19 @@ impl Context {
         file_name: impl AsRef<Path>,
     ) -> Option<Vec<u8>> {
         wasm_loader::read_wasm(self.wasm_dir(), file_name).ok()
+    }
+
+    /// Build a [`Tx`].
+    pub fn build_tx(
+        &self,
+        data: impl BorshSerialize,
+        tx_code_type: &str,
+    ) -> Tx {
+        let data = data
+            .try_to_vec()
+            .expect("Encoding proposal data shouldn't fail");
+        let tx_code = self.read_wasm(tx_code_type);
+        Tx::new(tx_code, Some(data))
     }
 }
 

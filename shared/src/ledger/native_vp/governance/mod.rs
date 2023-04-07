@@ -326,7 +326,7 @@ where
                 Address::Established(_) => {
                     // Check that established address exists in
                     // storage
-                    let vp_key = Key::validity_predicate(&address);
+                    let vp_key = Key::validity_predicate(address);
                     if !self.ctx.has_key_pre(&vp_key)? {
                         return Ok(false);
                     }
@@ -336,7 +336,8 @@ where
         }
 
         // TODO:
-        // Check that the added addresses are not already part of the Stewards' set
+        // Check that the added addresses are not already part of the Stewards'
+        // set
 
         // TODO:
         // Check that the removed addresses are part of the Stewards' set

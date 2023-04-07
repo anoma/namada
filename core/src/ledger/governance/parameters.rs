@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use super::storage as gov_storage;
 use crate::ledger::storage::types::encode;
 use crate::ledger::storage::{self, Storage};
-use crate::types::token::Amount;
+use crate::types::token;
 
 #[derive(
     Clone,
@@ -21,7 +21,7 @@ use crate::types::token::Amount;
 /// Governance parameter structure
 pub struct GovParams {
     /// Minimum amount of locked funds
-    pub min_proposal_fund: u64,
+    pub min_proposal_fund: token::Amount,
     /// Maximum kibibyte length for proposal code
     pub max_proposal_code_size: u64,
     /// Minimum proposal voting period in epochs
@@ -54,7 +54,7 @@ impl Display for GovParams {
 impl Default for GovParams {
     fn default() -> Self {
         Self {
-            min_proposal_fund: 500,
+            min_proposal_fund: token::Amount::whole(500),
             max_proposal_code_size: 300_000,
             min_proposal_period: 3,
             max_proposal_period: 27,
@@ -81,9 +81,8 @@ impl GovParams {
         } = self;
 
         let min_proposal_fund_key = gov_storage::get_min_proposal_fund_key();
-        let amount = Amount::whole(*min_proposal_fund);
         storage
-            .write(&min_proposal_fund_key, encode(&amount))
+            .write(&min_proposal_fund_key, encode(&min_proposal_fund))
             .unwrap();
 
         let max_proposal_code_size_key =

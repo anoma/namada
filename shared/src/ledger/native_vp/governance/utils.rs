@@ -87,7 +87,7 @@ pub fn compute_tally(
     total_stake: VotePower,
     proposal_type: ProposalType,
 ) -> Result<ProposalResult, Error> {
-    //FIXME: update specs
+    // FIXME: update specs
 
     match proposal_type {
         ProposalType::Default(_) => {
@@ -260,7 +260,8 @@ fn dispatch_pgf_actions_tally(votes: Votes) -> VotePower {
         {
             match delegator_vote {
                 ProposalVote::Yay(VoteType::PGFPayment) => {
-                    // YAY: Remove delegator amount whose validator voted nay or didn't vote
+                    // YAY: Remove delegator amount whose validator voted nay or
+                    // didn't vote
                     match validators.get(validator_address) {
                         Some((_, vote)) => {
                             if !vote.is_yay() {

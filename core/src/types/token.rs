@@ -56,6 +56,11 @@ impl Amount {
         self.micro = self.micro.checked_sub(amount.micro).unwrap();
     }
 
+    /// Check if can spend a given amount.
+    pub fn can_spend(&self, amount: &Amount) -> bool {
+        self.micro.checked_sub(amount.micro).is_some()
+    }
+
     /// Receive a given amount.
     /// Panics on overflow.
     pub fn receive(&mut self, amount: &Amount) {

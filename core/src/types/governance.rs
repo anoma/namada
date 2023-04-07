@@ -12,14 +12,13 @@ use super::key::RefTo;
 use crate::proto::SignatureIndex;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::key::{
-    common::{self, Signature},
-    SigScheme,
-};
+use crate::types::key::common::{self, Signature};
+use crate::types::key::SigScheme;
 use crate::types::storage::Epoch;
 use crate::types::token::SCALE;
-use crate::types::transaction::governance::PGFAction;
-use crate::types::transaction::governance::ProposalType as TransactionProposalType;
+use crate::types::transaction::governance::{
+    PGFAction, ProposalType as TransactionProposalType,
+};
 
 /// Type alias for vote power
 pub type VotePower = u128;
@@ -438,11 +437,7 @@ fn compute_total_valid_signatures(
                 hashed_data,
                 &signature_index.sig,
             );
-            if sig_check.is_ok() {
-                acc + 1
-            } else {
-                acc
-            }
+            if sig_check.is_ok() { acc + 1 } else { acc }
         } else {
             acc
         }

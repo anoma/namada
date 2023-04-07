@@ -142,7 +142,6 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct GovernanceParamsConfig {
         // Min funds to stake to submit a proposal
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_fund: u64,
         // Maximum size of proposal in kibibytes (KiB)
         // XXX: u64 doesn't work with toml-rs!
@@ -632,7 +631,7 @@ pub mod genesis_config {
             max_proposal_period,
         } = gov_params;
         let gov_params = GovParams {
-            min_proposal_fund,
+            min_proposal_fund: token::Amount::whole(min_proposal_fund),
             max_proposal_code_size,
             min_proposal_period,
             max_proposal_content_size,

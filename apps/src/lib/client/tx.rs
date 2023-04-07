@@ -11,8 +11,7 @@ use std::{env, fs};
 use async_std::io::prelude::WriteExt;
 use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER;
-use data_encoding::HEXLOWER_PERMISSIVE;
+use data_encoding::{HEXLOWER, HEXLOWER_PERMISSIVE};
 use itertools::Either::*;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -40,6 +39,9 @@ use namada::ibc::tx_msg::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::governance::utils::{
+    check_offline_proposal_invariant, check_proposal_invariant,
+};
 use namada::ledger::masp;
 use namada::ledger::pos::{CommissionPair, PosParams};
 use namada::proto::Tx;
@@ -1947,7 +1949,10 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     .await;
 }
 
-pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
+pub async fn submit_init_nam_proposal(
+    mut ctx: Context,
+    args: args::InitProposal,
+) {
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -1961,61 +1966,17 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     })
     .await;
 
-    if proposal.voting_start_epoch <= current_epoch
-        || proposal.voting_start_epoch.0
-            % governance_parameters.min_proposal_period
-            != 0
-    {
-        println!("{}", proposal.voting_start_epoch <= current_epoch);
-        println!(
-            "{}",
-            proposal.voting_start_epoch.0
-                % governance_parameters.min_proposal_period
-                == 0
-        );
-        eprintln!(
-            "Invalid proposal start epoch: {} must be greater than current \
-             epoch {} and a multiple of {}",
-            proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < governance_parameters.min_proposal_period
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            > governance_parameters.max_proposal_period
-        || proposal.voting_end_epoch.0 % 3 != 0
-    {
-        eprintln!(
-            "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and at max {} and end epoch \
-             must be a multiple of {}",
-            governance_parameters.min_proposal_period,
-            governance_parameters.max_proposal_period,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.grace_epoch <= proposal.voting_end_epoch
-        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-            < governance_parameters.min_proposal_grace_epochs
-    {
-        eprintln!(
-            "Invalid proposal grace epoch: difference between proposal grace \
-             and end epoch must be at least {}",
-            governance_parameters.min_proposal_grace_epochs
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
-
     if args.offline {
+        let proposal_invariants = check_offline_proposal_invariant(
+            &proposal,
+            &governance_parameters,
+            current_epoch,
+        );
+        if !proposal_invariants.ok() && !args.tx.force {
+            eprintln!("{}", proposal_invariants);
+            safe_exit(1)
+        }
+
         let signing_keys = tx_signers(
             &mut ctx,
             &args.tx,
@@ -2049,13 +2010,10 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             }
         }
     } else {
-        let tx_data: Result<InitProposalData, _> = proposal.clone().try_into();
-        let init_proposal_data = if let Ok(data) = tx_data {
-            data
-        } else {
-            eprintln!("Invalid data for init proposal transaction.");
-            safe_exit(1)
-        };
+        let init_proposal_data: InitProposalData = proposal
+            .clone()
+            .try_into()
+            .expect("Invalid data for init proposal transaction.");
 
         let balance = rpc::get_token_balance(
             &client,
@@ -2064,28 +2022,19 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
         )
         .await
         .unwrap_or_default();
-        if balance
-            < token::Amount::from(governance_parameters.min_proposal_fund)
-        {
-            eprintln!(
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
-            safe_exit(1);
+
+        let proposal_invariants = check_proposal_invariant(
+            &proposal,
+            &governance_parameters,
+            current_epoch,
+            balance,
+        );
+        if !proposal_invariants.ok() && !args.tx.force {
+            eprintln!("{}", proposal_invariants);
+            safe_exit(1)
         }
 
-        if init_proposal_data.content.len()
-            > governance_parameters.max_proposal_content_size as usize
-        {
-            eprintln!("Proposal content size too big.",);
-            safe_exit(1);
-        }
-
-        let data = init_proposal_data
-            .try_to_vec()
-            .expect("Encoding proposal data shouldn't fail");
-        let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let tx = Tx::new(tx_code, Some(data));
+        let tx = ctx.build_tx(init_proposal_data, TX_INIT_PROPOSAL);
 
         let pks_map = rpc::get_address_pks_map(&client, &proposal.author).await;
 

@@ -48,8 +48,6 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         TxUpdateAccount(TxUpdateAccount),
-        TxInitProposal(TxInitProposal),
-        TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
     }
 
@@ -79,10 +77,6 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
             let tx_update_account =
                 SubCmd::parse(matches).map(Self::TxUpdateAccount);
-            let tx_init_proposal =
-                SubCmd::parse(matches).map(Self::TxInitProposal);
-            let tx_vote_proposal =
-                SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
                 .or(wallet)
@@ -91,8 +85,6 @@ pub mod cmds {
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
                 .or(tx_update_account)
-                .or(tx_init_proposal)
-                .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
         }
     }
@@ -1710,6 +1702,9 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
+    const PROPOSAL_ETH: ArgFlag = flag("eth");
+    const PROPOSAL_PGF_STEWARDS: ArgFlag = flag("pgf-stewards");
+    const PROPOSAL_PGF_PAYMENTS: ArgFlag = flag("pgf-payments");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
@@ -2403,8 +2398,14 @@ pub mod args {
         pub tx: Tx,
         /// The proposal file path
         pub proposal_data: PathBuf,
-        /// Flag if proposal should be run offline
+        /// Flag if proposal should run offline
         pub offline: bool,
+        /// Flag if proposal should be of type ethereum
+        pub eth: bool,
+        /// Flag if proposal should be o type pgf stewards
+        pub pgf_stewards: bool,
+        /// Flag if proposal should of type pgf payments
+        pub pgf_payments: bool,
     }
 
     impl Args for InitProposal {
@@ -2412,11 +2413,17 @@ pub mod args {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
+            let eth = PROPOSAL_ETH.parse(matches);
+            let pgf_stewards = PROPOSAL_PGF_STEWARDS.parse(matches);
+            let pgf_payments = PROPOSAL_PGF_PAYMENTS.parse(matches);
 
             Self {
                 tx,
                 proposal_data,
                 offline,
+                eth,
+                pgf_stewards,
+                pgf_payments,
             }
         }
 
@@ -2428,8 +2435,19 @@ pub mod args {
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .about("Flag if the proposal vote should run offline."),
+                        .about("Flag if the proposal should be run offline."),
                 )
+                .arg(
+                    PROPOSAL_ETH
+                        .def()
+                        .about("Flag if the proposal should be of type eth."),
+                )
+                .arg(PROPOSAL_PGF_STEWARDS.def().about(
+                    "Flag if the proposal should be of type pgf-stewards.",
+                ))
+                .arg(PROPOSAL_PGF_PAYMENTS.def().about(
+                    "Flag if the proposal should be of type pgf-payments.",
+                ))
         }
     }
 

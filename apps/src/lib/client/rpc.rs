@@ -2712,7 +2712,7 @@ pub async fn get_governance_parameters(client: &HttpClient) -> GovParams {
         .expect("Parameter should be definied.");
 
     GovParams {
-        min_proposal_fund: u64::from(min_proposal_fund),
+        min_proposal_fund,
         max_proposal_code_size,
         min_proposal_period,
         max_proposal_period,
