@@ -96,7 +96,9 @@ where
     match tx.header() {
         TxType::Raw(_) => Err(Error::TxTypeError),
         TxType::Decrypted(DecryptedTx::Decrypted {
-            tx: _,
+            code_hash: _,
+            data_hash: _,
+            header_hash: _,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow,
         }) => {
@@ -280,7 +282,6 @@ where
                     .map_err(Error::VpRunnerError)
                 }
                 Address::Internal(internal_addr) => {
-                    let inner_tx = tx.inner_tx().ok_or(Error::MissingCode)?;
                     let ctx = native_vp::Ctx::new(
                         addr,
                         storage,

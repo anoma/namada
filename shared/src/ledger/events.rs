@@ -14,6 +14,8 @@ use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::{hash_tx, TxType};
+use crate::types::hash::Hash;
+use sha2::{Digest, Sha256};
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -76,7 +78,7 @@ impl Event {
                     attributes: HashMap::new(),
                 };
                 event["hash"] = hash_tx(
-                    &wrapper
+                    &tx
                         .try_to_vec()
                         .expect("Serializing wrapper should not fail"),
                 )
@@ -89,7 +91,11 @@ impl Event {
                     level: EventLevel::Tx,
                     attributes: HashMap::new(),
                 };
-                event["hash"] = decrypted.hash_commitment().to_string();
+                event["hash"] = hash_tx(
+                    &tx
+                        .try_to_vec()
+                        .expect("Serializing wrapper should not fail"),
+                ).to_string();
                 event
             }
             tx @ TxType::Protocol(_) => {

@@ -283,24 +283,6 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(HostEnvResult::is_success(result))
     }
 
-    fn verify_tx_signature(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
-    ) -> Result<bool, Error> {
-        let pk = BorshSerialize::try_to_vec(pk).unwrap();
-        let sig = BorshSerialize::try_to_vec(sig).unwrap();
-        let valid = unsafe {
-            namada_vp_verify_tx_signature(
-                pk.as_ptr() as _,
-                pk.len() as _,
-                sig.as_ptr() as _,
-                sig.len() as _,
-            )
-        };
-        Ok(HostEnvResult::is_success(valid))
-    }
-
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {
         let result = Vec::with_capacity(HASH_LENGTH+1);
         unsafe {

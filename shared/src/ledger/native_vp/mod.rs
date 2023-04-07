@@ -488,14 +488,6 @@ where
         }
     }
 
-    fn verify_tx_signature(
-        &self,
-        pk: &crate::types::key::common::PublicKey,
-        sig: &crate::types::key::common::Signature,
-    ) -> Result<bool, storage_api::Error> {
-        Ok(self.tx.inner_tx().as_ref().map(|x| x.verify_sig(pk, sig).is_ok()).unwrap_or(false))
-    }
-
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
     }

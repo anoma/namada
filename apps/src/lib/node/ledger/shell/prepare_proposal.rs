@@ -7,6 +7,7 @@ use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
 use namada::types::hash::Hash;
+use sha2::{Digest, Sha256};
 
 use super::super::*;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -105,25 +106,30 @@ where
                      inner_tx,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
-                 }| {
-                    match inner_tx
-                        .inner_tx()
-                        .and_then(|x| tx.decrypt(privkey, x).ok())
+                }| {
+                    let mut inner_tx = inner_tx.clone();
+                    match inner_tx.decrypt(privkey).ok()
                     {
-                        Some(inner_tx) => Tx {
-                            code: inner_tx.code.clone(),
-                            data: inner_tx.data.clone(),
-                            extra: inner_tx.extra.clone(),
-                            timestamp: inner_tx.timestamp,
-                            ..Tx::from(DecryptedTx::Decrypted {
-                                tx: Hash(inner_tx.partial_hash()),
+                        Some(()) => {
+                            let mut inner_tx = inner_tx.clone();
+                            inner_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+                                header_hash: inner_tx.header_hash(),
+                                code_hash: tx.code_hash.clone(),
+                                data_hash: tx.data_hash.clone(),
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow: *has_valid_pow,
-                            })
+                            });
+                            inner_tx
                         },
                         // An absent or undecryptable inner_tx are both
                         // treated as undecryptable
-                        None => Tx::from(DecryptedTx::Undecryptable(tx.clone())),
+                        None => {
+                            let mut inner_tx = inner_tx.clone();
+                            inner_tx.outer_data = TxType::Decrypted(
+                                DecryptedTx::Undecryptable(tx.clone())
+                            );
+                            inner_tx
+                        },
                     }.to_bytes()
                 },
             );
@@ -192,7 +198,7 @@ mod test_prepare_proposal {
     use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
     use namada::proto::InnerTx;
-    use namada::proto::{SignedOuterTxData, SignedTxData};
+    use namada::proto::{SignedOuterTxData, SignedTxData, Code, Data, Section, Signature};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{gen_keypair, TestShell};
@@ -228,31 +234,24 @@ mod test_prepare_proposal {
     fn test_error_in_processing_tx() {
         let (shell, _) = TestShell::new();
         let keypair = gen_keypair();
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data:Some("transaction_data".as_bytes().to_owned()), sig: None}),
-        );
         // an unsigned wrapper will cause an error in processing
-        let wrapper = Tx::new(
-            "".as_bytes().to_owned(),
-            SignedOuterTxData {
-                data: TxType::Wrapper(WrapperTx::new(
-                    Fee {
-                        amount: 0.into(),
-                        token: shell.storage.native_token.clone(),
-                    },
-                    &keypair,
-                    Epoch(0),
-                    0.into(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
-                )
-                                           .bind(tx.clone())),
-                sig: None,
-            },
-        )
-        .attach_inner_tx(&tx, Default::default())
-        .to_bytes();
+        let mut wrapper = Tx::new(
+            TxType::Wrapper(WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: shell.storage.native_token.clone(),
+                },
+                &keypair,
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))
+        );
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction_data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
+        let wrapper = wrapper.to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
             txs: vec![wrapper.clone()],
@@ -286,21 +285,7 @@ mod test_prepare_proposal {
         // create a request with two new wrappers from mempool and
         // two wrappers from the previous block to be decrypted
         for i in 0..2 {
-            let tx = InnerTx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(SignedTxData {data: Some(format!("transaction data: {}", i).as_bytes().to_owned()), sig: None}),
-            );
-            expected_decrypted.push(Tx {
-                code: tx.code.clone(),
-                data: tx.data.clone(),
-                timestamp: tx.timestamp,
-                ..Tx::from(DecryptedTx::Decrypted {
-                    tx: Hash(tx.partial_hash()),
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                })
-            });
-            let wrapper_tx = WrapperTx::new(
+            let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
                 Fee {
                     amount: 0.into(),
                     token: shell.storage.native_token.clone(),
@@ -310,21 +295,32 @@ mod test_prepare_proposal {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            )
-            .bind(tx.clone());
-            let wrapper = wrapper_tx
-                .sign(&keypair)
-                .expect("Test failed")
-                .attach_inner_tx(&tx, Default::default());
-            shell.enqueue_tx(wrapper_tx, wrapper.clone());
-            expected_wrapper.push(wrapper.clone());
-            req.txs.push(wrapper.to_bytes());
+            )));
+            tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            tx.set_data(Data::new(format!("transaction data: {}", i).as_bytes().to_owned()));
+            tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), &keypair)));
+            tx.encrypt(&Default::default());
+            shell.enqueue_tx(tx.header().wrapper().expect("expected wrapper"), tx.clone());
+            expected_wrapper.push(tx.clone());
+            req.txs.push(tx.to_bytes());
+            let decrypted_tx = TxType::Decrypted(DecryptedTx::Decrypted {
+                header_hash: tx.header_hash(),
+                code_hash: tx.code_hash().clone(),
+                data_hash: tx.data_hash().clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            });
+            std::mem::replace(
+                &mut tx.outer_data,
+                decrypted_tx,
+            );
+            expected_decrypted.push(tx.clone());
         }
         // we extract the inner data from the txs for testing
         // equality since otherwise changes in timestamps would
         // fail the test
         expected_wrapper.append(&mut expected_decrypted);
-        let expected_txs: Vec<SignedOuterTxData> = expected_wrapper
+        let expected_txs: Vec<TxType> = expected_wrapper
             .iter()
             .map(|tx| tx.outer_data.clone())
             .collect();
@@ -345,7 +341,7 @@ mod test_prepare_proposal {
                             Some(
                                 Tx::try_from(tx_bytes.as_slice())
                                     .expect("Test failed")
-                                    .data
+                                    .outer_data
                                     .expect("Test failed"),
                             )
                         } else {
@@ -359,7 +355,7 @@ mod test_prepare_proposal {
         }
         #[cfg(not(feature = "abcipp"))]
         {
-            let received: Vec<SignedOuterTxData> = shell
+            let received: Vec<TxType> = shell
                 .prepare_proposal(req)
                 .txs
                 .into_iter()

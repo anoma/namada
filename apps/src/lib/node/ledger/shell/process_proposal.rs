@@ -7,6 +7,8 @@ use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use namada::types::hash::Hash;
+use sha2::{Digest, Sha256};
 
 impl<D, H> Shell<D, H>
 where
@@ -114,7 +116,9 @@ where
                         #[cfg(not(feature = "mainnet"))]
                             has_valid_pow: _,
                     }) => {
-                        if wrapper.tx_hash != tx.hash_commitment() {
+                        if inner_tx.header_hash() !=
+                            tx.hash_commitment()
+                        {
                             TxResult {
                                 code: ErrorCodes::InvalidOrder.into(),
                                 info: "Process proposal rejected a decrypted \
@@ -124,8 +128,8 @@ where
                             }
                         } else if verify_decrypted_correctly(
                             &tx,
+                            inner_tx.clone(),
                             privkey,
-                            inner_tx.inner_tx(),
                         ) {
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
@@ -150,7 +154,7 @@ where
                 },
                 TxType::Wrapper(wtx) => {
                     // validate the ciphertext via Ferveo
-                    if tx.inner_tx().is_none() || !tx.validate_ciphertext() {
+                    if !tx.validate_ciphertext() {
                         TxResult {
                             code: ErrorCodes::InvalidTx.into(),
                             info: format!(
@@ -222,8 +226,8 @@ mod test_process_proposal {
     use namada::types::storage::Epoch;
     use namada::types::token::Amount;
     use namada::types::transaction::encrypted::EncryptedTx;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
-    use namada::proto::InnerTx;
+    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, RawHeader};
+    use namada::proto::{InnerTx, Code, Data, Section, Signature};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::RequestInitChain;
@@ -238,11 +242,7 @@ mod test_process_proposal {
     fn test_unsigned_wrapper_rejected() {
         let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let wrapper = WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.storage.native_token.clone(),
@@ -252,14 +252,11 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone());
-        let tx = Tx::new(
-            vec![],
-            SignedOuterTxData {data: TxType::Wrapper(wrapper), sig: None},
-        )
-        .attach_inner_tx(&tx, Default::default())
-        .to_bytes();
+        )));
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.encrypt(&Default::default());
+        let tx = outer_tx.to_bytes();
         #[allow(clippy::redundant_clone)]
         let request = ProcessProposal {
             txs: vec![tx.clone()],
@@ -277,7 +274,7 @@ mod test_process_proposal {
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
-            String::from("Wrapper transactions must be signed")
+            String::from("WrapperTx signature verification failed: Transaction doesn't have any data with a signature.")
         );
     }
 
@@ -286,12 +283,7 @@ mod test_process_proposal {
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let timestamp = tx.timestamp;
-        let mut wrapper = WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 100.into(),
                 token: shell.storage.native_token.clone(),
@@ -301,43 +293,19 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone())
-        .sign(&keypair)
-        .expect("Test failed")
-        .attach_inner_tx(&tx, Default::default());
-        let new_tx = if let SignedOuterTxData {
-            data,
-            sig,
-        } = wrapper
-            .outer_data
-        {
-            let mut new_wrapper = if let TxType::Wrapper(wrapper) = data {
-                wrapper
-            } else {
-                panic!("Test failed")
-            };
-
+        )));
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.add_section(Section::Signature(Signature::new(&outer_tx.header_hash(), &keypair)));
+        outer_tx.encrypt(&Default::default());
+        let mut new_tx = outer_tx.clone();
+        if let TxType::Wrapper(wrapper) = &mut new_tx.outer_data {
             // we mount a malleability attack to try and remove the fee
-            new_wrapper.fee.amount = 0.into();
-            let new_data = TxType::Wrapper(new_wrapper);
-            Tx {
-                outer_code: vec![],
-                outer_data:
-                SignedOuterTxData {
-                    sig,
-                    data: new_data,
-                },
-                outer_timestamp: timestamp,
-                code: tx.code.clone(),
-                data: tx.data.clone(),
-                outer_extra: vec![],
-                extra: tx.extra.clone(),
-                timestamp: tx.timestamp,
-            }
+            wrapper.fee.amount = 0.into();
         } else {
-            panic!("Test failed");
+            panic!("Test failed")
         };
+        
         let request = ProcessProposal {
             txs: vec![new_tx.to_bytes()],
         };
@@ -350,7 +318,7 @@ mod test_process_proposal {
         } else {
             panic!("Test failed")
         };
-        let expected_error = "Signature verification failed: Invalid signature";
+        let expected_error = "WrapperTx signature verification failed: Transaction doesn't have any data with a signature.";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert!(
             response.result.info.contains(expected_error),
@@ -366,11 +334,7 @@ mod test_process_proposal {
     fn test_wrapper_unknown_address() {
         let (mut shell, _) = TestShell::new();
         let keypair = crate::wallet::defaults::keys().remove(0).1;
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let wrapper = WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 1.into(),
                 token: shell.storage.native_token.clone(),
@@ -380,13 +344,13 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone())
-        .sign(&keypair)
-        .expect("Test failed")
-        .attach_inner_tx(&tx, Default::default());
+        )));
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.add_section(Section::Signature(Signature::new(&outer_tx.header_hash(), &keypair)));
+        outer_tx.encrypt(&Default::default());
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![outer_tx.to_bytes()],
         };
         let response = if let [resp] = shell
             .process_proposal(request)
@@ -422,11 +386,7 @@ mod test_process_proposal {
             .write(&balance_key, Amount::whole(99).try_to_vec().unwrap())
             .unwrap();
 
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let wrapper = WrapperTx::new(
+        let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: Amount::whole(100),
                 token: shell.storage.native_token.clone(),
@@ -436,14 +396,14 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone())
-        .sign(&keypair)
-        .expect("Test failed")
-        .attach_inner_tx(&tx, Default::default());
+        )));
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        outer_tx.add_section(Section::Signature(Signature::new(&outer_tx.header_hash(), &keypair)));
+        outer_tx.encrypt(&Default::default());
 
         let request = ProcessProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![outer_tx.to_bytes()],
         };
 
         let response = if let [resp] = shell
@@ -472,15 +432,7 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut txs = vec![];
         for i in 0..3 {
-            let tx = InnerTx::new(
-                "wasm_code".as_bytes().to_owned(),
-                Some(SignedTxData {
-                    data: Some(format!("transaction data: {}", i).as_bytes().to_owned()),
-                    sig: None,
-                }),
-            );
-            let encrypted_tx = tx.to_bytes();
-            let wrapper = WrapperTx::new(
+            let mut outer_tx = Tx::new(TxType::Wrapper(WrapperTx::new(
                 Fee {
                     amount: i.into(),
                     token: shell.storage.native_token.clone(),
@@ -490,19 +442,19 @@ mod test_process_proposal {
                 0.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-            )
-                .bind(tx.clone());
-            let outer_tx = Tx {
-                code: tx.code.clone(),
-                data: tx.data.clone(),
-                timestamp: tx.timestamp,
-                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                    tx: Hash(tx.partial_hash()),
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                }))
-            };
-            shell.enqueue_tx(wrapper, outer_tx.clone());
+            )));
+            outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            outer_tx.set_data(Data::new(format!("transaction data: {}", i).as_bytes().to_owned()));
+            outer_tx.encrypt(&Default::default());
+            shell.enqueue_tx(outer_tx.header().wrapper().expect("expected wrapper"), outer_tx.clone());
+
+            outer_tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+                header_hash: outer_tx.header_hash(),
+                code_hash: outer_tx.code_hash().clone(),
+                data_hash: outer_tx.data_hash().clone(),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow: false,
+            });
             txs.push(outer_tx);
         }
         let req_1 = ProcessProposal {
@@ -551,11 +503,7 @@ mod test_process_proposal {
         let (mut shell, _) = TestShell::new();
         let keypair = gen_keypair();
 
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let wrapper = WrapperTx::new(
+        let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.storage.native_token.clone(),
@@ -565,16 +513,14 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone());
+        )));
+        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        tx.encrypt(&Default::default());
+        let wrapper = tx.header().wrapper().expect("expected wrapper");
+        shell.enqueue_tx(wrapper.clone(), tx.clone());
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
-            wrapper.clone(),
-        )))
-        .attach_inner_tx(&tx, Default::default());
-
-        shell.enqueue_tx(wrapper, tx.clone());
-
+        tx.outer_data = TxType::Decrypted(DecryptedTx::Undecryptable(wrapper.clone()));
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
@@ -614,11 +560,7 @@ mod test_process_proposal {
         });
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let mut wrapper = WrapperTx::new(
+        let mut tx = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.storage.native_token.clone(),
@@ -628,17 +570,20 @@ mod test_process_proposal {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        );
-        wrapper.tx_hash = Hash([0; 32]);
+        )));
+        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        tx.set_code_hash(Hash([0u8; 32]));
+        tx.set_data_hash(Hash([0u8; 32]));
+        tx.encrypt(&Default::default());
 
-        let tx = Tx::from(TxType::Decrypted(DecryptedTx::Undecryptable(
+        let wrapper = tx.header().wrapper().expect("expected wrapper");
+        shell.enqueue_tx(wrapper.clone(), tx.clone());
+
+        tx.outer_data = TxType::Decrypted(DecryptedTx::Undecryptable(
             #[allow(clippy::redundant_clone)]
             wrapper.clone(),
-        )))
-        .attach_inner_tx(&tx, Default::default());
-
-        shell.enqueue_tx(wrapper, tx.clone());
-
+        ));
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };
@@ -712,21 +657,15 @@ mod test_process_proposal {
     fn test_too_many_decrypted_txs() {
         let (mut shell, _) = TestShell::new();
 
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-
-        let tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Hash(tx.partial_hash()),
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }))
-        };
+        let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            header_hash: Hash::default(),
+            data_hash: Hash::default(),
+            code_hash: Hash::default(),
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        }));
+        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
 
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
@@ -754,16 +693,9 @@ mod test_process_proposal {
     fn test_raw_tx_rejected() {
         let (mut shell, _) = TestShell::new();
 
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData {data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::from(TxType::Raw(Hash(tx.partial_hash())))
-        };
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let request = ProcessProposal {
             txs: vec![tx.to_bytes()],
         };

@@ -72,7 +72,7 @@ where
     use crate::ledger::gas::BlockGasMeter;
     use crate::ledger::protocol;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::proto::{InnerTx, Tx};
+    use crate::proto::{InnerTx, Tx, Code, Data};
     use crate::types::storage::TxIndex;
     use crate::types::transaction::{DecryptedTx, TxType};
 
@@ -331,7 +331,7 @@ mod test {
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
     use crate::ledger::storage_api::{self, StorageWrite};
-    use crate::proto::{InnerTx, Tx};
+    use crate::proto::{InnerTx, Tx, Code, Data};
     use crate::types::{address, token};
     use crate::types::transaction::TxType;
     use crate::types::transaction::decrypted::DecryptedTx;
@@ -373,19 +373,17 @@ mod test {
 
         // Request dry run tx
         let tx_no_op = std::fs::read(TX_NO_OP_WASM).expect("cannot load wasm");
-        let tx = InnerTx::new(tx_no_op, None);
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Hash(tx.partial_hash()),
-                #[cfg(not(feature = "mainnet"))]
-                // To be able to dry-run testnet faucet withdrawal, pretend 
-                // that we got a valid PoW
-                has_valid_pow: true,
-            }))
-        };
+        let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            code_hash: Hash::default(),
+            data_hash: Hash::default(),
+            header_hash: Hash::default(),
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        }));
+        outer_tx.set_code(Code::new(tx_no_op));
+        outer_tx.set_data(Data::new(vec![]));
         let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()

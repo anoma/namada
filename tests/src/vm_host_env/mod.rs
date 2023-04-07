@@ -40,11 +40,12 @@ mod tests {
         BorshDeserialize, BorshSerialize, StorageRead, StorageWrite,
     };
     use namada::types::transaction::tx_types::TxType;
+    use namada::types::transaction::RawHeader;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
 
-    use namada::proto::{SignedOuterTxData};
+    use namada::proto::{SignedOuterTxData, Code, Section, Data, Signature};
 
     use super::{ibc, tx, vp};
     use crate::tx::{tx_host_env, TestTxEnv};
@@ -442,32 +443,31 @@ mod tests {
         let code = vec![4, 3, 2, 1, 0];
         for data in &[
             // Tx with some arbitrary data
-            Some(vec![1, 2, 3, 4].repeat(10)),
+            vec![1, 2, 3, 4].repeat(10),
             // Tx without any data
-            None,
+            vec![],
         ] {
             let signed_tx_data = vp_host_env::with(|env| {
-                let tx = InnerTx::new(
-                    code.clone(),
-                    Some(SignedTxData {data:data.clone(), sig: None})
-                ).sign(&keypair);
-                env.tx = Tx {
-                    timestamp: tx.timestamp,
-                    data: tx.data.clone(),
-                    code: tx.code.clone(),
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash())),
-                    })
-                };
+                let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+                tx.set_code(Code::new(code.clone()));
+                tx.set_data(Data::new(data.clone()));
+                tx.add_section(Section::Signature(Signature::new(
+                    tx.code_hash(),
+                    &keypair,
+                )));
+                tx.add_section(Section::Signature(Signature::new(
+                    tx.data_hash(),
+                    &keypair,
+                )));
+                env.tx = tx;
                 let tx_data = env.tx.clone();
 
                 tx_data
             });
-            assert_eq!(&signed_tx_data.data(), data);
+            assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
                 signed_tx_data
-                    .verify_signature(&pk, &Hash(signed_tx_data.inner_tx().unwrap().partial_hash()))
+                    .verify_signature(&pk, signed_tx_data.data_hash())
                     .is_ok()
             );
 
@@ -476,7 +476,7 @@ mod tests {
                 !signed_tx_data
                     .verify_signature(
                         &other_keypair.ref_to(),
-                        signed_tx_data.data_hash().as_ref().unwrap()
+                        signed_tx_data.data_hash()
                     )
                     .is_ok()
             );
@@ -518,32 +518,36 @@ mod tests {
         // evaluating without any code should fail
         let empty_code = vec![];
         let input_data = vec![];
-        let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(empty_code, Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }).unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
         let code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
         let input_data = vec![];
-        let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(code, Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }).unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(code, tx).unwrap();
         assert!(result);
 
         // evaluating the VP template which always returns `false` shouldn't
@@ -551,16 +555,18 @@ mod tests {
         let code =
             std::fs::read(VP_ALWAYS_FALSE_WASM).expect("cannot load wasm");
         let input_data = vec![];
-        let tx = InnerTx::new(vec![], Some(SignedTxData {data:Some(input_data), sig: None}));
-        let result = vp::CTX.eval(code, Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }).unwrap();
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(input_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
+        let result = vp::CTX.eval(code, tx).unwrap();
         assert!(!result);
     }
 
@@ -578,13 +584,17 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // get and increment the connection counter
         let counter_key = ibc::client_counter_key();
         let counter = tx::ctx()
@@ -603,15 +613,7 @@ mod tests {
 
         // Check should fail due to no client state
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
@@ -624,13 +626,17 @@ mod tests {
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
 
         // create a client with the message
         tx::ctx()
@@ -639,15 +645,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -666,13 +664,17 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // get and update the client without a header
         let client_id = msg.client_id.clone();
         // update the client with the same state
@@ -699,15 +701,7 @@ mod tests {
 
         // Check should fail due to the invalid updating
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ClientError(_),
@@ -720,13 +714,17 @@ mod tests {
         let msg = ibc::msg_update_client(client_id.clone());
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // update the client with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -734,15 +732,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -758,13 +748,17 @@ mod tests {
         let msg = ibc::msg_upgrade_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // upgrade the client with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -772,15 +766,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -805,13 +791,17 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // get and increment the connection counter
         let counter_key = ibc::connection_counter_key();
         let counter = tx::ctx()
@@ -830,15 +820,7 @@ mod tests {
 
         // Check should fail due to directly opening a connection
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ConnectionError(_),
@@ -851,13 +833,17 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // init a connection with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -865,15 +851,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -886,13 +864,17 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // open the connection with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -900,15 +882,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -931,13 +905,17 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // open try a connection with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -945,15 +923,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -967,13 +937,17 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // open the connection with the mssage
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -981,15 +955,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1017,13 +983,17 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // not bind a port
         // get and increment the channel counter
         let counter_key = ibc::channel_counter_key();
@@ -1042,15 +1012,7 @@ mod tests {
 
         // Check should fail due to no port binding
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
@@ -1067,13 +1029,17 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // bind a port
         tx::ctx()
             .bind_port(&port_id)
@@ -1098,15 +1064,7 @@ mod tests {
         // Check should fail due to directly opening a channel
 
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
             IbcError::ChannelError(_),
@@ -1120,13 +1078,17 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // init a channel with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1134,15 +1096,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1153,13 +1107,17 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // open the channle with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1167,15 +1125,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1200,13 +1150,17 @@ mod tests {
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // try open a channel with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1214,15 +1168,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1234,13 +1180,18 @@ mod tests {
         let msg = ibc::msg_channel_open_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // open a channel with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1248,15 +1199,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1283,13 +1226,18 @@ mod tests {
         let msg = ibc::msg_channel_close_init(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // close the channel with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1297,15 +1245,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1332,13 +1272,18 @@ mod tests {
         let msg = ibc::msg_channel_close_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
 
         // close the channel with the message
         tx::ctx()
@@ -1347,15 +1292,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1386,13 +1323,18 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // send the token and a packet with the data
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1400,15 +1342,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was escrowed
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -1421,15 +1355,7 @@ mod tests {
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
         let token_vp_result =
-            ibc::validate_token_vp_from_tx(&env, &Tx {
-                data: tx.data.clone(),
-                code: tx.code.clone(),
-                timestamp: tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(tx.partial_hash())),
-                })
-        }, &escrow);
+            ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
         assert!(token_vp_result.expect("token validation failed unexpectedly"));
 
         // Commit
@@ -1443,13 +1369,18 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // ack the packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1457,15 +1388,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1501,13 +1424,18 @@ mod tests {
             ibc::msg_transfer(port_id.clone(), channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // send the token and a packet with the data
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1515,15 +1443,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was burned
         let key_prefix =
@@ -1532,15 +1452,7 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcBurn),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }, &burn);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &burn);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1583,13 +1495,18 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1597,15 +1514,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was minted
         let key_prefix =
@@ -1614,15 +1523,7 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcMint),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }, &mint);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &mint);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1677,13 +1578,17 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1691,26 +1596,10 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was unescrowed
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }, &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1741,13 +1630,18 @@ mod tests {
             .to_any()
             .encode(&mut tx_data)
             .expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // send a packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1757,15 +1651,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
 
         // Commit
@@ -1779,13 +1665,17 @@ mod tests {
         let msg = ibc::msg_packet_ack(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // ack the packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1795,15 +1685,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1839,13 +1721,18 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
         // receive a packet with the message
         tx::ctx()
             .dispatch_ibc_action(&tx_data)
@@ -1855,15 +1742,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
     }
 
@@ -1910,13 +1789,17 @@ mod tests {
         let msg = ibc::msg_timeout(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
 
         // close the channel with the message
         tx::ctx()
@@ -1925,15 +1808,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -1945,15 +1820,7 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }, &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 
@@ -1999,13 +1866,17 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet.clone(), ibc::sequence(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx {
-            code: vec![],
-            data: Some(SignedTxData {data:Some(tx_data.clone()), sig: None}),
-            timestamp: DateTimeUtc::now(),
-            extra: vec![],
-        }
-        .sign(&key::testing::keypair_1());
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_code(Code::new(vec![]));
+        tx.set_data(Data::new(tx_data.clone()));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_hash(),
+            &key::testing::keypair_1(),
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_hash(),
+            &key::testing::keypair_1(),
+        )));
 
         // close the channel with the message
         tx::ctx()
@@ -2014,15 +1885,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        });
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
         let key_prefix = ibc_storage::ibc_account_prefix(
@@ -2034,15 +1897,7 @@ mod tests {
             &key_prefix,
             &address::Address::Internal(address::InternalAddress::IbcEscrow),
         );
-        let result = ibc::validate_token_vp_from_tx(&env, &Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash())),
-            })
-        }, &escrow);
+        let result = ibc::validate_token_vp_from_tx(&env, &tx, &escrow);
         assert!(result.expect("token validation failed unexpectedly"));
     }
 }

@@ -315,8 +315,8 @@ mod tests {
     use core::time::Duration;
     use std::convert::TryFrom;
     use std::str::FromStr;
-    use crate::types::transaction::TxType;
-    use crate::proto::{SignedOuterTxData, SignedTxData};
+    use crate::types::transaction::{TxType, RawHeader};
+    use crate::proto::{SignedOuterTxData, SignedTxData, Code, Data, Signature, Section};
 
     use crate::ibc::applications::ics20_fungible_token_transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::core::ics02_client::client_consensus::ConsensusState;
@@ -571,7 +571,6 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -580,15 +579,17 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -605,15 +606,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -628,7 +621,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -638,15 +641,6 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -662,15 +656,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
         let result = ibc
-            .validate_tx(&Tx {
-                code: tx.code.clone(),
-                data: tx.data.clone(),
-                timestamp: tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(tx.partial_hash()))
-                })
-            }, &keys_changed, &verifiers)
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -726,7 +712,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -735,15 +731,6 @@ mod tests {
         keys_changed.insert(client_state_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -759,15 +746,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -802,7 +781,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -811,15 +800,6 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -835,15 +815,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -875,7 +847,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -884,15 +866,6 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -907,15 +880,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should fail because no client exists
         let result = ibc
-            .validate_tx(&Tx {
-                code: tx.code.clone(),
-                data: tx.data.clone(),
-                timestamp: tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(tx.partial_hash()))
-                })
-            }, &keys_changed, &verifiers)
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
             .unwrap_err();
         assert_matches!(
             result,
@@ -974,7 +939,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -983,15 +958,6 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1007,15 +973,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1079,7 +1037,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1088,15 +1056,6 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1111,15 +1070,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1171,7 +1122,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1180,15 +1141,6 @@ mod tests {
         keys_changed.insert(conn_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1203,15 +1155,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1249,7 +1193,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1258,15 +1212,6 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1281,15 +1226,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1346,7 +1283,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1355,15 +1302,6 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1378,15 +1316,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1451,7 +1381,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1460,15 +1400,6 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1483,15 +1414,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1553,7 +1476,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1562,15 +1495,6 @@ mod tests {
         keys_changed.insert(channel_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1585,15 +1509,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1611,7 +1527,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1620,15 +1546,6 @@ mod tests {
         keys_changed.insert(port_key(&get_port_id()));
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1643,15 +1560,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1670,7 +1579,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1680,15 +1599,6 @@ mod tests {
         keys_changed.insert(cap_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1704,15 +1614,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1771,7 +1673,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1780,15 +1692,6 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1803,15 +1706,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1877,7 +1772,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1886,15 +1791,6 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -1909,15 +1805,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -1988,7 +1876,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1997,15 +1895,6 @@ mod tests {
         keys_changed.insert(seq_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -2020,15 +1909,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -2091,7 +1972,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2100,15 +1991,6 @@ mod tests {
         keys_changed.insert(commitment_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -2123,15 +2005,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -2202,7 +2076,17 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2210,15 +2094,6 @@ mod tests {
         keys_changed.insert(receipt_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -2234,15 +2109,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )
@@ -2269,7 +2136,17 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = vec![];
-        let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None})).sign(&keypair_1());
+        let mut outer_tx = Tx::new(TxType::Raw(RawHeader::default()));
+        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.code_hash(),
+            &keypair_1(),
+        )));
+        outer_tx.add_section(Section::Signature(Signature::new(
+            outer_tx.data_hash(),
+            &keypair_1(),
+        )));
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2277,15 +2154,6 @@ mod tests {
         keys_changed.insert(ack_key);
 
         let verifiers = BTreeSet::new();
-        let outer_tx = Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::new(vec![], SignedOuterTxData {
-                sig: None,
-                data: TxType::Raw(Hash(tx.partial_hash()))
-            })
-        };
         let ctx = Ctx::new(
             &ADDRESS,
             &storage,
@@ -2301,15 +2169,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(
-                &Tx {
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
-                    timestamp: tx.timestamp,
-                    ..Tx::new(vec![], SignedOuterTxData {
-                        sig: None,
-                        data: TxType::Raw(Hash(tx.partial_hash()))
-                    })
-                },
+                &outer_tx,
                 &keys_changed,
                 &verifiers
             )

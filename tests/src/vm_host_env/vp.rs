@@ -5,7 +5,7 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::proto::{InnerTx, Tx, SignedOuterTxData};
-use namada::types::transaction::TxType;
+use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
 use namada::vm::prefix_iter::PrefixIterators;
@@ -72,15 +72,10 @@ impl Default for TestVpEnv {
             write_log: WriteLog::default(),
             iterators: PrefixIterators::default(),
             gas_meter: VpGasMeter::default(),
-            tx: Tx {
-                code: inner_tx.code.clone(),
-                data: inner_tx.data.clone(),
-                timestamp: inner_tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(inner_tx.partial_hash())),
-                })
-            },
+            tx: Tx::new(TxType::Raw(RawHeader {
+                code_hash: Hash::default(),
+                data_hash: Hash::default(),
+            })),
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),
@@ -364,12 +359,6 @@ mod native_vp_host_env {
     native_host_fn!(vp_get_tx_code_hash(result_ptr: u64));
     native_host_fn!(vp_get_block_epoch() -> u64);
     native_host_fn!(vp_get_native_token(result_ptr: u64));
-    native_host_fn!(vp_verify_tx_signature(
-            pk_ptr: u64,
-            pk_len: u64,
-            sig_ptr: u64,
-            sig_len: u64,
-        ) -> i64);
     native_host_fn!(vp_eval(
             vp_code_ptr: u64,
             vp_code_len: u64,

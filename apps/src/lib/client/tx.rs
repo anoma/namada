@@ -39,8 +39,8 @@ use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::masp;
 use namada::ledger::pos::{BondId, Bonds, CommissionRates, Unbonds};
-use namada::proto::Tx;
-use namada::types::transaction::TxType;
+use namada::proto::{Data, Code, Signature, Tx, Section};
+use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::governance::{
     OfflineProposal, OfflineVote, Proposal, ProposalVote,
@@ -63,7 +63,7 @@ use namada::types::{storage, token};
 use namada::{ledger, vm};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rust_decimal::Decimal;
-use sha2::Digest;
+use sha2::{Sha256, Digest};
 use tokio::time::{Duration, Instant};
 use namada::proto::{InnerTx, SignedTxData};
 
@@ -110,7 +110,9 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data, sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    data.map(|data| tx.set_data(Data::new(data)));
+    tx.set_code(Code::new(tx_code));
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
@@ -170,11 +172,13 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
 
     let tx_code = ctx.read_wasm(TX_UPDATE_VP_WASM);
 
-    let data = UpdateVp { addr };
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    let extra = tx.add_section(Section::ExtraData(Data::new(vp_code)));
+    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    let data = UpdateVp { addr, vp_code: extra_hash };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-
-    let mut tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
-    tx.extra = vp_code;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     process_tx(
         ctx,
         &args.tx,
@@ -201,11 +205,14 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     }
 
     let tx_code = ctx.read_wasm(TX_INIT_ACCOUNT_WASM);
-    let data = InitAccount { public_key };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let mut tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
-    tx.extra = vp_code;
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    let extra = tx.add_section(Section::ExtraData(Data::new(vp_code)));
+    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
+    let data = InitAccount { public_key, vp_code: extra_hash };
+    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
@@ -328,6 +335,9 @@ pub async fn submit_init_validator(
     }
     let tx_code = ctx.read_wasm(TX_INIT_VALIDATOR_WASM);
 
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    let extra = tx.add_section(Section::ExtraData(Data::new(validator_vp_code)));
+    let extra_hash = Hash(extra.hash(&mut Sha256::new()).finalize_reset().into());
     let data = InitValidator {
         account_key,
         consensus_key: consensus_key.ref_to(),
@@ -335,10 +345,11 @@ pub async fn submit_init_validator(
         dkg_key,
         commission_rate,
         max_commission_rate_change,
+        validator_vp_code: extra_hash,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let mut tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
-    tx.extra = validator_vp_code;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let (mut ctx, initialized_accounts) = process_tx(
         ctx,
         &tx_args,
@@ -1680,7 +1691,9 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
     process_tx(
@@ -1800,7 +1813,9 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     process_tx(
         ctx,
         &args.tx,
@@ -1946,8 +1961,10 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let mut tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
-        tx.extra = proposal_code;
+        let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+        tx.set_data(Data::new(data));
+        tx.set_code(Code::new(tx_code));
+        tx.add_section(Section::ExtraData(Data::new(proposal_code)));
 
         process_tx(
             ctx,
@@ -2087,7 +2104,9 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     .try_to_vec()
                     .expect("Encoding proposal data shouldn't fail");
                 let tx_code = ctx.read_wasm(TX_VOTE_PROPOSAL);
-                let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+                let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+                tx.set_data(Data::new(data));
+                tx.set_code(Code::new(tx_code));
 
                 process_tx(
                     ctx,
@@ -2159,7 +2178,17 @@ pub async fn submit_reveal_pk_aux(
         .try_to_vec()
         .expect("Encoding a public key shouldn't fail");
     let tx_code = ctx.read_wasm(TX_REVEAL_PK);
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(tx_data), sig: None}));
+    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+        header_hash: Hash::default(),
+        data_hash: Hash::default(),
+        code_hash: Hash::default(),
+        #[cfg(not(feature = "mainnet"))]
+        // To be able to dry-run testnet faucet withdrawal, pretend 
+        // that we got a valid PoW
+        has_valid_pow: true,
+    }));
+    tx.set_data(Data::new(tx_data));
+    tx.set_code(Code::new(tx_code));
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
@@ -2171,24 +2200,14 @@ pub async fn submit_reveal_pk_aux(
     } else {
         find_keypair(&mut ctx.wallet, &addr, args.ledger_address.clone()).await
     };
-    let tx = tx.sign(&keypair);
+    tx.add_section(Section::Signature(Signature::new(&tx.data_hash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(&tx.code_hash(), &keypair)));
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;
     let to_broadcast = if args.dry_run {
-        TxBroadcastData::DryRun(Tx {
-            data: tx.data.clone(),
-            code: tx.code.clone(),
-            timestamp: tx.timestamp,
-            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Hash(tx.partial_hash()),
-                #[cfg(not(feature = "mainnet"))]
-                // To be able to dry-run testnet faucet withdrawal, pretend 
-                // that we got a valid PoW
-                has_valid_pow: true,
-            }))
-        })
+        TxBroadcastData::DryRun(tx)
     } else {
         super::signing::sign_wrapper(
             ctx,
@@ -2371,7 +2390,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2446,7 +2467,9 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2521,7 +2544,9 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = pos::Withdraw { validator, source };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2605,7 +2630,9 @@ pub async fn submit_validator_commission_change(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = InnerTx::new(tx_code, Some(SignedTxData {data: Some(data), sig: None}));
+    let mut tx = Tx::new(TxType::Raw(RawHeader::default()));
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::new(tx_code));
     let default_signer = args.validator;
     process_tx(
         ctx,
@@ -2623,7 +2650,7 @@ pub async fn submit_validator_commission_change(
 async fn process_tx(
     ctx: Context,
     args: &args::Tx,
-    tx: InnerTx,
+    tx: Tx,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, Vec<Address>) {

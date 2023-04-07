@@ -771,7 +771,7 @@ mod test_utils {
     use tempfile::tempdir;
     use tokio::sync::mpsc::UnboundedReceiver;
     use namada::proto::InnerTx;
-    use namada::proto::{SignedOuterTxData, SignedTxData};
+    use namada::proto::{SignedOuterTxData, SignedTxData, Code, Data};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::{
@@ -989,12 +989,7 @@ mod test_utils {
         );
         let keypair = gen_keypair();
         // enqueue a wrapper tx
-        let tx = InnerTx::new(
-            "wasm_code".as_bytes().to_owned(),
-            Some(SignedTxData { data: Some("transaction data".as_bytes().to_owned()), sig: None}),
-        );
-        let encrypted_tx = tx.to_bytes();
-        let wrapper = WrapperTx::new(
+        let mut wrapper = Tx::new(TxType::Wrapper(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: native_token,
@@ -1004,19 +999,14 @@ mod test_utils {
             0.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-        )
-        .bind(tx.clone());
+        )));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.encrypt(&Default::default());
+        
         shell.storage.tx_queue.push(TxInQueue {
-            tx: wrapper.clone(),
-            inner_tx: Tx {
-                code: tx.code,
-                data: tx.data,
-                timestamp: tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Wrapper(wrapper),
-                })
-            },
+            tx: wrapper.header().wrapper().expect("expected wrapper"),
+            inner_tx: wrapper,
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         });

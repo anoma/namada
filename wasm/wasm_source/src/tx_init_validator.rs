@@ -12,10 +12,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .wrap_err("failed to decode InitValidator")?;
     debug_log!("apply_tx called to init a new validator account");
 
+    // Get the validator vp code from the extra section
+    let validator_vp_code = signed
+        .get_section(&init_validator.validator_vp_code)
+        .ok_or_err_msg("validator vp section not found")?
+        .extra_data()
+        .ok_or_err_msg("validator vp section must be tagged as extra")?
+        .data;
     // Register the validator in PoS
     match ctx.init_validator(
         init_validator,
-        signed.extra().ok_or_err_msg("extra data containing code not found")?
+        validator_vp_code,
     ) {
         Ok(validator_address) => {
             debug_log!("Created validator {}", validator_address.encode(),)

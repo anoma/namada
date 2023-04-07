@@ -87,15 +87,6 @@ where
         input_data: Tx,
     ) -> Result<bool, storage_api::Error>;
 
-    /// Verify a transaction signature. The signature is expected to have been
-    /// produced on the encoded transaction [`crate::proto::Tx`]
-    /// using [`crate::proto::Tx::sign`].
-    fn verify_tx_signature(
-        &self,
-        pk: &common::PublicKey,
-        sig: &common::Signature,
-    ) -> Result<bool, storage_api::Error>;
-
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error>;
 

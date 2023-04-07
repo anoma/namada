@@ -383,47 +383,19 @@ pub async fn query_transfers(mut ctx: Context, args: args::QueryTransfers) {
 
 /// Extract the payload from the given Tx object
 fn extract_payload(
-    tx: Tx,
+    mut tx: Tx,
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
 ) {
-    match process_tx(&tx).map(Tx::header) {
-        Ok(TxType::Wrapper(wrapper_tx)) => {
-            let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            extract_payload(
-                match tx.inner_tx().and_then(|inner_tx| {
-                    wrapper_tx.decrypt(privkey, inner_tx).ok()
-                }) {
-                    Some(tx) => Tx {
-                        code: tx.code.clone(),
-                        data: tx.data.clone(),
-                        extra: tx.extra.clone(),
-                        timestamp: tx.timestamp,
-                        ..Tx::from(DecryptedTx::Decrypted {
-                            tx: Hash(tx.partial_hash()),
-                            #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: false,
-                        })
-                    },
-                    _ => Tx::from(DecryptedTx::Undecryptable(wrapper_tx.clone())),
-                },
-                wrapper,
-                transfer,
-            );
-            *wrapper = Some(wrapper_tx);
-        }
-        Ok(TxType::Decrypted(DecryptedTx::Decrypted {
-            tx: _,
-            #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: _,
-        })) => {
-            let _ = tx.data().map(|signed| {
-                Transfer::try_from_slice(&signed[..])
-                    .map(|tfer| *transfer = Some(tfer))
-            });
-        }
-        _ => {}
+    let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+    tx.decrypt(privkey);
+    if let TxType::Wrapper(w) = tx.header() {
+        *wrapper = Some(w);
     }
+    let _ = tx.data().map(|signed| {
+        Transfer::try_from_slice(&signed[..])
+            .map(|tfer| *transfer = Some(tfer))
+    });
 }
 
 /// Query the raw bytes of given storage key

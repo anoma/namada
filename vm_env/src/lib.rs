@@ -178,14 +178,6 @@ pub mod vp {
         // Get the native token address
         pub fn namada_vp_get_native_token(result_ptr: u64);
 
-        // Verify a transaction signature
-        pub fn namada_vp_verify_tx_signature(
-            pk_ptr: u64,
-            pk_len: u64,
-            sig_ptr: u64,
-            sig_len: u64,
-        ) -> i64;
-
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 

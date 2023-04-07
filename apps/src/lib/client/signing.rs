@@ -3,7 +3,7 @@
 
 use borsh::BorshSerialize;
 use namada::ledger::parameters::storage as parameter_storage;
-use namada::proto::Tx;
+use namada::proto::{Data, Code, Tx, Section, Signature};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::key::*;
 use namada::types::storage::Epoch;
@@ -14,6 +14,7 @@ use namada::proto::InnerTx;
 use namada::types::transaction::TxType;
 use namada::types::transaction::decrypted::DecryptedTx;
 use namada::types::hash::Hash;
+use sha2::{Digest, Sha256};
 
 use super::rpc;
 use crate::cli::context::{WalletAddress, WalletKeypair};
@@ -150,32 +151,30 @@ pub async fn tx_signer(
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx(
     mut ctx: Context,
-    tx: InnerTx,
+    mut tx: Tx,
     args: &args::Tx,
     default: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (Context, TxBroadcastData) {
     let keypair = tx_signer(&mut ctx, args, default).await;
-    let tx = tx.sign(&keypair);
+    tx.add_section(Section::Signature(Signature::new(tx.data_hash(), &keypair)));
+    tx.add_section(Section::Signature(Signature::new(tx.code_hash(), &keypair)));
 
     let epoch = rpc::query_epoch(args::Query {
         ledger_address: args.ledger_address.clone(),
     })
     .await;
     let broadcast_data = if args.dry_run {
-        TxBroadcastData::DryRun(Tx {
-            code: tx.code.clone(),
-            data: tx.data.clone(),
-            extra: tx.extra.clone(),
-            timestamp: tx.timestamp.clone(),
-            ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                tx: Hash(tx.partial_hash()),
-                #[cfg(not(feature = "mainnet"))]
-                // To be able to dry-run testnet faucet withdrawal, pretend 
-                // that we got a valid PoW
-                has_valid_pow: true,
-            }))
-        })
+        tx.outer_data = TxType::Decrypted(DecryptedTx::Decrypted {
+            code_hash: tx.code_hash().clone(),
+            data_hash: tx.data_hash().clone(),
+            header_hash: Hash::default(),
+            #[cfg(not(feature = "mainnet"))]
+            // To be able to dry-run testnet faucet withdrawal, pretend 
+            // that we got a valid PoW
+            has_valid_pow: true,
+        });
+        TxBroadcastData::DryRun(tx)
     } else {
         sign_wrapper(
             &ctx,
@@ -198,7 +197,7 @@ pub async fn sign_wrapper(
     ctx: &Context,
     args: &args::Tx,
     epoch: Epoch,
-    tx: InnerTx,
+    mut tx: Tx,
     keypair: &common::SecretKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBroadcastData {
@@ -252,39 +251,44 @@ pub async fn sign_wrapper(
             None
         }
     };
+    // Capture the data and code hashes that will be overwritten
+    let data_hash = tx.data_hash().clone();
+    let code_hash = tx.code_hash().clone();
     // This object governs how the payload will be processed
-    let wrapper_tx = {
-        WrapperTx::new(
-            Fee {
-                amount: fee_amount,
-                token: fee_token,
-            },
-            keypair,
-            epoch,
-            args.gas_limit.clone(),
-            #[cfg(not(feature = "mainnet"))]
-            pow_solution,
-        )
-        // Bind the inner transaction to the wrapper
-        .bind(tx.clone())
-    };
+    tx.outer_data = TxType::Wrapper(WrapperTx::new(
+        Fee {
+            amount: fee_amount,
+            token: fee_token,
+        },
+        keypair,
+        epoch,
+        args.gas_limit.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        pow_solution.clone(),
+    ));
+    // Rebind the data and code hashes
+    tx.set_data_hash(data_hash.clone());
+    tx.set_code_hash(code_hash.clone());
     // Then sign over the bound wrapper
-    let mut stx = wrapper_tx
-        .sign(keypair)
-        .expect("Wrapper tx signing keypair should be correct");
-    // Then encrypt and attach the payload to the wrapper
-    stx = stx.attach_inner_tx(
-        &tx,
-        // TODO: Actually use the fetched encryption key
-        Default::default(),
-    );
+    tx.add_section(Section::Signature(Signature::new(&tx.header_hash(), keypair)));
+    // Encrypt all sections not relating to the header
+    tx.encrypt(&Default::default());
+    
     // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = hash_tx(&wrapper_tx.try_to_vec().unwrap()).to_string();
+    let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it
     // on-chain
-    let decrypted_hash = wrapper_tx.tx_hash.to_string();
+    let decrypted_header = TxType::Decrypted(DecryptedTx::Decrypted {
+        data_hash,
+        code_hash,
+        header_hash: tx.header_hash(),
+        has_valid_pow: pow_solution.is_some(),
+    });
+    let decrypted_hash = Hash(
+        decrypted_header.hash(&mut Sha256::new()).finalize_reset().into()
+    ).to_string();
     TxBroadcastData::Wrapper {
-        tx: stx,
+        tx,
         wrapper_hash,
         decrypted_hash,
     }

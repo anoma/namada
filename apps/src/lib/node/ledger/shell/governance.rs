@@ -13,7 +13,7 @@ use namada::types::address::Address;
 use namada::types::governance::TallyResult;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada::proto::SignedTxData;
+use namada::proto::{SignedTxData, Data, Code};
 use namada::types::hash::Hash;
 
 use super::*;
@@ -74,18 +74,16 @@ where
                     shell.read_storage_key_bytes(&proposal_code_key);
                 match proposal_code {
                     Some(proposal_code) => {
-                        let tx = InnerTx::new(proposal_code, Some(SignedTxData { data: Some(encode(&id)), sig: None }));
-                        let tx_type =
-                            Tx {
-                                code: tx.code.clone(),
-                                data: tx.data.clone(),
-                                timestamp: tx.timestamp,
-                                ..Tx::from(TxType::Decrypted(DecryptedTx::Decrypted {
-                                    tx: Hash(tx.partial_hash()),
-                                    #[cfg(not(feature = "mainnet"))]
-                                    has_valid_pow: false,
-                                }))
-                            };
+                        let mut tx_type = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+                            header_hash: Hash::default(),
+                            code_hash: Hash::default(),
+                            data_hash: Hash::default(),
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow: false,
+                        }));
+                        tx_type.set_code(Code::new(proposal_code));
+                        tx_type.set_data(Data::new(encode(&id)));
+                        
                         let pending_execution_key =
                             gov_storage::get_proposal_execution_key(id);
                         shell

@@ -32,11 +32,12 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{InnerTx, Tx};
+    use crate::proto::{InnerTx, Tx, Data, Code, Signature, Section};
     use crate::types::key::*;
     use crate::types::transaction::{EllipticCurve, TxError, TxType};
     use crate::proto::{SignedTxData, SignedOuterTxData};
     use crate::types::hash::Hash;
+    use crate::types::transaction::{Digest, Sha256};
 
     const TX_NEW_DKG_KP_WASM: &str = "tx_update_dkg_session_keypair.wasm";
 
@@ -47,6 +48,8 @@ mod protocol_txs {
         pub pk: common::PublicKey,
         /// The type of protocol message being sent
         pub tx: ProtocolTxType,
+        pub code_hash: Hash,
+        pub data_hash: Hash,
     }
 
     impl ProtocolTx {
@@ -64,6 +67,11 @@ mod protocol_txs {
                     ))
                 })
         }
+
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            hasher.update(self.try_to_vec().expect("unable to serialize protocol"));
+            hasher
+        }
     }
 
     /// DKG message wrapper type that adds Borsh encoding.
@@ -77,32 +85,13 @@ mod protocol_txs {
         /// Messages to be given to the DKG state machine
         DKG(DkgMessage),
         /// Tx requesting a new DKG session keypair
-        NewDkgKeypair(Hash),
+        NewDkgKeypair,
         /// Aggregation of Ethereum state changes
         /// voted on by validators in last block
-        EthereumStateUpdate(Hash),
+        EthereumStateUpdate,
     }
 
     impl ProtocolTxType {
-        /// Sign a ProtocolTxType and wrap it up in a normal Tx
-        pub fn sign(
-            self,
-            pk: &common::PublicKey,
-            signing_key: &common::SecretKey,
-        ) -> Tx {
-            Tx::new(
-                vec![],
-                SignedOuterTxData {
-                    data: TxType::Protocol(ProtocolTx {
-                        pk: pk.clone(),
-                        tx: self,
-                    }),
-                    sig: None,
-                },
-            )
-            .sign(signing_key)
-        }
-
         /// Create a new tx requesting a new DKG session keypair
         pub fn request_new_dkg_keypair<'a, F>(
             data: UpdateDkgSessionKey,
@@ -119,25 +108,21 @@ mod protocol_txs {
                     .expect("Converting path to string should not fail"),
                 TX_NEW_DKG_KP_WASM,
             );
-            let inner_tx = InnerTx::new(
-                code,
-                Some(
-                    SignedTxData {
-                        data: Some(data.try_to_vec()
-                                   .expect("Serializing request should not fail")),
-                        sig: None,
-                    }
-                ),
-            )
-                .sign(signing_key);
-            let outer_tx = TxType::Protocol(ProtocolTx {
+            let mut outer_tx = Tx::new(TxType::Protocol(ProtocolTx {
                 pk: signing_key.ref_to(),
-                tx: Self::NewDkgKeypair(Hash(inner_tx.partial_hash()))
-            });
-            Tx::new(vec![], SignedOuterTxData {
-                data: outer_tx,
-                sig: None,
-            }).sign(signing_key)
+                tx: Self::NewDkgKeypair,
+                code_hash: Hash::default(),
+                data_hash: Hash::default(),
+            }));
+            outer_tx.set_code(Code::new(code));
+            outer_tx.set_data(Data::new(
+                data.try_to_vec().expect("Serializing request should not fail"))
+            );
+            outer_tx.add_section(Section::Signature(Signature::new(
+                &outer_tx.header_hash(),
+                signing_key,
+            )));
+            outer_tx
             
         }
     }

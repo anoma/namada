@@ -30,7 +30,7 @@ fn validate_tx(
             let pk = key::get(ctx, &addr);
             match pk {
                 Ok(Some(pk)) => {
-                    tx_data.verify_signature(&pk, &tx_data.data_hash().unwrap()).is_ok()
+                    tx_data.verify_signature(&pk, &tx_data.data_hash()).is_ok()
                 }
                 _ => false,
             }

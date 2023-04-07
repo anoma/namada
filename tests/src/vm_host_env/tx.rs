@@ -8,7 +8,7 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::proto::{InnerTx, Tx, SignedOuterTxData};
-use namada::types::transaction::TxType;
+use namada::types::transaction::{RawHeader, TxType};
 use namada::types::address::Address;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
@@ -66,8 +66,7 @@ impl Default for TestTxEnv {
             wasm::compilation_cache::common::testing::cache();
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-
-        let inner_tx = InnerTx::new(vec![], None);
+        
         Self {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
@@ -80,15 +79,10 @@ impl Default for TestTxEnv {
             vp_cache_dir,
             tx_wasm_cache,
             tx_cache_dir,
-            tx: Tx {
-                code: inner_tx.code.clone(),
-                data: inner_tx.data.clone(),
-                timestamp: inner_tx.timestamp,
-                ..Tx::new(vec![], SignedOuterTxData {
-                    sig: None,
-                    data: TxType::Raw(Hash(inner_tx.partial_hash()))
-                })
-            },
+            tx: Tx::new(TxType::Raw(RawHeader {
+                code_hash: Hash::default(),
+                data_hash: Hash::default(),
+            })),
         }
     }
 }

@@ -15,6 +15,7 @@ pub mod decrypted_tx {
     use crate::types::transaction::{Hash, TxType, WrapperTx};
     use crate::proto::InnerTx;
     use crate::proto::{SignedTxData, SignedOuterTxData};
+    use sha2::{Digest, Sha256};
 
     #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, serde::Serialize, serde::Deserialize)]
     #[allow(clippy::large_enum_variant)]
@@ -28,7 +29,11 @@ pub mod decrypted_tx {
             // For some reason, we get `warning: fields `tx` and
             // `has_valid_pow` are never read` even though they are being used!
             #[allow(dead_code)]
-            tx: Hash,
+            code_hash: Hash,
+            #[allow(dead_code)]
+            data_hash: Hash,
+            #[allow(dead_code)]
+            header_hash: Hash,
             #[cfg(not(feature = "mainnet"))]
             /// A PoW solution can be used to allow zero-fee testnet
             /// transactions.
@@ -44,16 +49,46 @@ pub mod decrypted_tx {
     }
 
     impl DecryptedTx {
+        pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+            match self {
+                Self::Decrypted {
+                    code_hash,
+                    data_hash,
+                    header_hash,
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow,
+                } => {
+                    hasher.update(&[0]);
+                    hasher.update(header_hash);
+                    hasher.update(code_hash);
+                    hasher.update(data_hash);
+                    #[cfg(not(feature = "mainnet"))]
+                    hasher.update(&[if *has_valid_pow { 1 } else { 0 }]);
+                },
+                Self::Undecryptable(wrapper) => {
+                    hasher.update(&[1]);
+                    wrapper.hash(hasher);
+                }
+            }
+            hasher
+        }
+
         /// Return the hash used as a commitment to the tx's contents in the
         /// wrapper tx that includes this tx as an encrypted payload.
         pub fn hash_commitment(&self) -> Hash {
             match self {
                 DecryptedTx::Decrypted {
-                    tx,
+                    header_hash,
+                    code_hash,
+                    data_hash,
                     #[cfg(not(feature = "mainnet"))]
                         has_valid_pow: _,
-                } => tx.clone(),
-                DecryptedTx::Undecryptable(wrapper) => wrapper.tx_hash.clone(),
+                } => header_hash.clone(),
+                DecryptedTx::Undecryptable(wrapper) =>
+                    Hash(TxType::Wrapper(wrapper.clone())
+                         .hash(&mut Sha256::new())
+                         .finalize_reset()
+                         .into()),
             }
         }
     }
@@ -64,30 +99,12 @@ pub mod decrypted_tx {
     #[cfg(feature = "ferveo-tpke")]
     pub fn verify_decrypted_correctly(
         decrypted: &DecryptedTx,
+        mut otx: Tx,
         privkey: <EllipticCurve as PairingEngine>::G2Affine,
-        inner_tx: Option<InnerTx>,
     ) -> bool {
         match decrypted {
-            // A tx is decryptable if it contains the literal code inside it
             DecryptedTx::Decrypted { .. } => true,
-            // A tx is undecryptable if its inner_tx decrypts incorrectly
-            DecryptedTx::Undecryptable(tx) if inner_tx.is_some() => {
-                tx.decrypt(privkey, inner_tx.unwrap()).is_err()
-            }
-            // A tx is undecryptable if the inner_tx is not present
-            DecryptedTx::Undecryptable(_) => true,
-        }
-    }
-
-    impl From<DecryptedTx> for Tx {
-        fn from(decrypted: DecryptedTx) -> Self {
-            Tx::new(
-                vec![],
-                SignedOuterTxData {
-                    data: TxType::Decrypted(decrypted),
-                    sig: None,
-                },
-            )
+            DecryptedTx::Undecryptable(tx) => otx.decrypt(privkey).is_err(),
         }
     }
 }

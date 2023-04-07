@@ -1737,43 +1737,6 @@ where
     Ok(epoch.0)
 }
 
-/// Verify a transaction signature.
-pub fn vp_verify_tx_signature<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    pk_ptr: u64,
-    pk_len: u64,
-    sig_ptr: u64,
-    sig_len: u64,
-) -> vp_host_fns::EnvResult<i64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let (pk, gas) = env
-        .memory
-        .read_bytes(pk_ptr, pk_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let pk: common::PublicKey = BorshDeserialize::try_from_slice(&pk)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    let (sig, gas) = env
-        .memory
-        .read_bytes(sig_ptr, sig_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let sig: common::Signature = BorshDeserialize::try_from_slice(&sig)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
-    let tx = unsafe { env.ctx.tx.get() };
-    Ok(HostEnvResult::from(tx.verify_sig(&pk, &sig).is_ok()).to_i64())
-}
-
 /// Verify a ShieldedTransaction.
 pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
