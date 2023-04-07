@@ -102,9 +102,11 @@ impl AbcippShim {
                     }),
                 #[cfg(feature = "abcipp")]
                 Req::FinalizeBlock(block) => {
+                    let block_time =
+                        self.service.get_block_timestamp(block.time.clone());
                     let unprocessed_txs = block.txs.clone();
                     let (processing_results, _) =
-                        self.service.process_txs(&block.txs);
+                        self.service.process_txs(&block.txs, block_time);
                     let mut txs = Vec::with_capacity(unprocessed_txs.len());
                     for (result, tx) in processing_results
                         .into_iter()
@@ -137,8 +139,18 @@ impl AbcippShim {
                 }
                 #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
-                    let (processing_results, _) =
-                        self.service.process_txs(&self.delivered_txs);
+                    let begin_block_request =
+                        self.begin_block_request.take().unwrap();
+                    let block_time = self.service.get_block_timestamp(
+                        begin_block_request
+                            .header
+                            .as_ref()
+                            .and_then(|header| header.time.to_owned()),
+                    );
+
+                    let (processing_results, _) = self
+                        .service
+                        .process_txs(&self.delivered_txs, block_time);
                     let mut txs = Vec::with_capacity(self.delivered_txs.len());
                     let mut delivered = vec![];
                     std::mem::swap(&mut self.delivered_txs, &mut delivered);
@@ -149,7 +161,7 @@ impl AbcippShim {
                         txs.push(ProcessedTx { tx, result });
                     }
                     let mut end_block_request: FinalizeBlock =
-                        self.begin_block_request.take().unwrap().into();
+                        begin_block_request.into();
                     let hash = self.get_hash();
                     end_block_request.hash = BlockHash::from(hash.clone());
                     end_block_request.txs = txs;

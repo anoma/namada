@@ -296,11 +296,11 @@ a series of external factors (ledger state, etc.) might change the mind of the
 submitter who's now not interested in the execution of the transaction anymore.
 
 We have to introduce the concept of a lifetime (or timeout) for the
-transactions: basically, the `Tx` struct will hold an extra field called
-`expiration` stating the maximum `DateTimeUtc` up until which the submitter is
-willing to see the transaction executed. After the specified time, the
-transaction will be considered invalid and discarded regardless of all the other
-checks.
+transactions: basically, the `Tx` struct will hold an optional extra field
+called `expiration` stating the maximum `DateTimeUtc` up until which the
+submitter is willing to see the transaction executed. After the specified time,
+the transaction will be considered invalid and discarded regardless of all the
+other checks.
 
 By introducing this new field we are setting a new constraint in the
 transaction's contract, where the ledger will make sure to prevent the execution
@@ -322,60 +322,22 @@ transaction submitter commits himself to one of these three conditions:
 
 The first condition satisfied will invalidate further executions of the same tx.
 
-In anticipation of DKG implementation, the current struct `WrapperTx` holds a
-field `epoch` stating the epoch in which the tx should be executed. This is
-because Ferveo will produce a new public key each epoch, effectively limiting
-the lifetime of the transaction (see section 2.2.2 of the
-[documentation](https://eprint.iacr.org/2022/898.pdf)). Unfortunately, for
-replay protection, a resolution of 1 epoch (~ 1 day) is too low for the possible
-needs of the submitters, therefore we need the `expiration` field to hold a
-maximum `DateTimeUtc` to increase resolution down to a single block (~ 10
-seconds).
-
 ```rust
 pub struct Tx {
   pub code: Vec<u8>,
   pub data: Option<Vec<u8>>,
   pub timestamp: DateTimeUtc,
   pub chain_id: ChainId,
-  /// Lifetime of the transaction, also determines which decryption key will be used
-  pub expiration: DateTimeUtc,
-}
-
-pub struct WrapperTx {
-  /// The fee to be payed for including the tx
-  pub fee: Fee,
-  /// Used to determine an implicit account of the fee payer
-  pub pk: common::PublicKey,
-  /// Max amount of gas that can be used when executing the inner tx
-  pub gas_limit: GasLimit,
-  /// the encrypted payload
-  pub inner_tx: EncryptedTx,
-  /// sha-2 hash of the inner transaction acting as a commitment
-  /// the contents of the encrypted payload
-  pub tx_hash: Hash,
+  /// Optional lifetime of the transaction
+  pub expiration: Option<DateTimeUtc>,
 }
 ```
 
-Since we now have more detailed information about the desired lifetime of the
-transaction, we can remove the `epoch` field and rely solely on `expiration`.
-Now, the producer of the inner transaction should make sure to set a sensible
-value for this field, in the sense that it should not span more than one epoch.
-If this happens, then the transaction will be correctly decrypted only in a
-subset of the desired lifetime (the one expecting the actual key used for the
-encryption), while, in the following epochs, the transaction will fail
-decryption and won't be executed. In essence, the `expiration` parameter can
-only restrict the implicit lifetime within the current epoch, it can not surpass
-it as that would make the transaction fail in the decryption phase.
-
-The subject encrypting the inner transaction will also be responsible for using
-the appropriate public key for encryption relative to the targeted time.
-
-The wrapper transaction will match the `expiration` of the inner for correct
-execution. Note that we need this field also for the wrapper to anticipate the
-check at mempool/proposal evaluation time, but also to prevent someone from
-inserting a wrapper transaction after the corresponding inner has expired
-forcing the wrapper signer to pay for the fees.
+The wrapper transaction will match the `expiration` of the inner (if any) for a
+correct execution. Note that we need this field also for the wrapper to
+anticipate the check at mempool/proposal evaluation time, but also to prevent
+someone from inserting a wrapper transaction after the corresponding inner has
+expired forcing the wrapper signer to pay for the fees.
 
 ### Wrapper checks
 

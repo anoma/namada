@@ -107,7 +107,12 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
     let data = args.data_path.map(|data_path| {
         std::fs::read(data_path).expect("Expected a file at given data path")
     });
-    let tx = Tx::new(tx_code, data, ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        data,
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
@@ -170,7 +175,12 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let data = UpdateVp { addr, vp_code };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     process_tx(
         ctx,
         &args.tx,
@@ -203,7 +213,12 @@ pub async fn submit_init_account(mut ctx: Context, args: args::TxInitAccount) {
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let (ctx, initialized_accounts) = process_tx(
         ctx,
         &args.tx,
@@ -336,7 +351,12 @@ pub async fn submit_init_validator(
         validator_vp_code,
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        tx_args.expiration,
+    );
     let (mut ctx, initialized_accounts) = process_tx(
         ctx,
         &tx_args,
@@ -1678,7 +1698,12 @@ pub async fn submit_transfer(mut ctx: Context, args: args::TxTransfer) {
         .try_to_vec()
         .expect("Encoding tx data shouldn't fail");
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let signing_address = TxSigningKey::WalletAddress(args.source.to_address());
 
     process_tx(
@@ -1798,7 +1823,12 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     prost::Message::encode(&any_msg, &mut data)
         .expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     process_tx(
         ctx,
         &args.tx,
@@ -1943,8 +1973,12 @@ pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
             .try_to_vec()
             .expect("Encoding proposal data shouldn't fail");
         let tx_code = ctx.read_wasm(TX_INIT_PROPOSAL);
-        let tx =
-            Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+        let tx = Tx::new(
+            tx_code,
+            Some(data),
+            ctx.config.ledger.chain_id.clone(),
+            args.tx.expiration,
+        );
 
         process_tx(
             ctx,
@@ -2199,6 +2233,7 @@ pub async fn submit_vote_proposal(mut ctx: Context, args: args::VoteProposal) {
                     tx_code,
                     Some(data),
                     ctx.config.ledger.chain_id.clone(),
+                    args.tx.expiration,
                 );
 
                 process_tx(
@@ -2272,7 +2307,7 @@ pub async fn submit_reveal_pk_aux(
         .expect("Encoding a public key shouldn't fail");
     let tx_code = ctx.read_wasm(TX_REVEAL_PK);
     let chain_id = ctx.config.ledger.chain_id.clone();
-    let tx = Tx::new(tx_code, Some(tx_data), chain_id);
+    let tx = Tx::new(tx_code, Some(tx_data), chain_id, args.expiration);
 
     // submit_tx without signing the inner tx
     let keypair = if let Some(signing_key) = &args.signing_key {
@@ -2475,7 +2510,12 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     };
     let data = bond.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2530,7 +2570,12 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_UNBOND_WASM);
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     let (_ctx, _) = process_tx(
         ctx,
@@ -2595,7 +2640,12 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
     let tx_code = ctx.read_wasm(TX_WITHDRAW_WASM);
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.source.unwrap_or(args.validator);
     process_tx(
         ctx,
@@ -2681,7 +2731,12 @@ pub async fn submit_validator_commission_change(
     };
     let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
 
-    let tx = Tx::new(tx_code, Some(data), ctx.config.ledger.chain_id.clone());
+    let tx = Tx::new(
+        tx_code,
+        Some(data),
+        ctx.config.ledger.chain_id.clone(),
+        args.tx.expiration,
+    );
     let default_signer = args.validator;
     process_tx(
         ctx,

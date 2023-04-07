@@ -941,6 +941,7 @@ mod test_finalize_block {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -956,7 +957,7 @@ mod test_finalize_block {
                 None,
             );
             let tx = wrapper
-                .sign(&keypair, shell.chain_id.clone())
+                .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
             if i > 1 {
                 processed_txs.push(ProcessedTx {
@@ -1017,6 +1018,7 @@ mod test_finalize_block {
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1152,6 +1154,7 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -1190,6 +1193,7 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -1205,7 +1209,7 @@ mod test_finalize_block {
                 None,
             );
             let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone())
+                .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
             valid_txs.push(wrapper_tx);
             processed_txs.push(ProcessedTx {
@@ -1698,6 +1702,7 @@ mod test_finalize_block {
             tx_code,
             Some("Encrypted transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let wrapper_tx = WrapperTx::new(
             Fee {

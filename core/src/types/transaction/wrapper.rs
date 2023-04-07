@@ -16,6 +16,7 @@ pub mod wrapper_tx {
     use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
+    use crate::types::time::DateTimeUtc;
     use crate::types::token::Amount;
     use crate::types::transaction::encrypted::EncryptedTx;
     use crate::types::transaction::{EncryptionKey, Hash, TxError, TxType};
@@ -251,6 +252,7 @@ pub mod wrapper_tx {
             &self,
             keypair: &common::SecretKey,
             chain_id: ChainId,
+            expiration: Option<DateTimeUtc>,
         ) -> Result<Tx, WrapperTxErr> {
             if self.pk != keypair.ref_to() {
                 return Err(WrapperTxErr::InvalidKeyPair);
@@ -263,6 +265,7 @@ pub mod wrapper_tx {
                         .expect("Could not serialize WrapperTx"),
                 ),
                 chain_id,
+                expiration,
             )
             .sign(keypair))
         }
@@ -368,6 +371,7 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
                 ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
 
             let wrapper = WrapperTx::new(
@@ -397,6 +401,7 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
                 ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
 
             let mut wrapper = WrapperTx::new(
@@ -432,6 +437,7 @@ pub mod wrapper_tx {
                 "wasm code".as_bytes().to_owned(),
                 Some("transaction data".as_bytes().to_owned()),
                 ChainId::default(),
+                Some(DateTimeUtc::now()),
             );
             // the signed tx
             let mut tx = WrapperTx::new(
@@ -447,7 +453,7 @@ pub mod wrapper_tx {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             )
-            .sign(&keypair, ChainId::default())
+            .sign(&keypair, ChainId::default(), None)
             .expect("Test failed");
 
             // we now try to alter the inner tx maliciously
@@ -469,6 +475,7 @@ pub mod wrapper_tx {
                 "Give me all the money".as_bytes().to_owned(),
                 None,
                 ChainId::default(),
+                None,
             );
 
             // We replace the inner tx with a malicious one

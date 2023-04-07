@@ -43,9 +43,11 @@ use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{self};
+#[cfg(not(feature = "mainnet"))]
+use namada::types::transaction::MIN_FEE;
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, MIN_FEE,
+    EllipticCurve, PairingEngine, TxType,
 };
 use namada::types::{address, hash};
 use namada::vm::wasm::{TxCache, VpCache};
@@ -62,6 +64,7 @@ use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::crypto::public_key;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -124,16 +127,18 @@ impl From<Error> for TxResult {
 #[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ErrorCodes {
     Ok = 0,
-    InvalidTx = 1,
-    InvalidSig = 2,
+    InvalidDecryptedChainId = 1,
+    ExpiredDecryptedTx = 2,
     WasmRuntimeError = 3,
-    InvalidOrder = 4,
-    ExtraTxs = 5,
-    Undecryptable = 6,
-    AllocationError = 7,
-    ReplayTx = 8,
-    InvalidChainId = 9,
-    InvalidDecryptedChainId = 10,
+    InvalidTx = 4,
+    InvalidSig = 5,
+    InvalidOrder = 6,
+    ExtraTxs = 7,
+    Undecryptable = 8,
+    AllocationError = 9,
+    ReplayTx = 10,
+    InvalidChainId = 11,
+    ExpiredTx = 12,
 }
 
 impl ErrorCodes {
@@ -144,10 +149,13 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | InvalidDecryptedChainId => true,
-            InvalidTx | InvalidSig | WasmRuntimeError | InvalidOrder
-            | ExtraTxs | Undecryptable | AllocationError | ReplayTx
-            | InvalidChainId => false,
+            Ok
+            | InvalidDecryptedChainId
+            | ExpiredDecryptedTx
+            | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
+            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
+            | ExpiredTx => false,
         }
     }
 }
@@ -414,6 +422,25 @@ where
         response
     }
 
+    /// Takes the optional tendermint timestamp of the block: if it's Some than
+    /// converts it to a [`DateTimeUtc`], otherwise retrieve from self the
+    /// time of the last block committed
+    pub fn get_block_timestamp(
+        &self,
+        tendermint_block_time: Option<Timestamp>,
+    ) -> DateTimeUtc {
+        if let Some(t) = tendermint_block_time {
+            if let Ok(t) = t.try_into() {
+                return t;
+            }
+        }
+        // Default to last committed block time
+        self.wl_storage
+            .storage
+            .get_last_block_timestamp()
+            .expect("Failed to retrieve last block timestamp")
+    }
+
     /// Read the value for a storage key dropping any error
     pub fn read_storage_key<T>(&self, key: &Key) -> Option<T>
     where
@@ -636,6 +663,20 @@ where
                 self.chain_id, tx.chain_id
             );
             return response;
+        }
+
+        // Tx expiration
+        if let Some(exp) = tx.expiration {
+            let last_block_timestamp = self.get_block_timestamp(None);
+
+            if last_block_timestamp > exp {
+                response.code = ErrorCodes::ExpiredTx.into();
+                response.log = format!(
+                    "Tx expired at {:#?}, last committed block time: {:#?}",
+                    exp, last_block_timestamp
+                );
+                return response;
+            }
         }
 
         // Tx signature check
@@ -1115,6 +1156,7 @@ mod test_utils {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -1166,8 +1208,8 @@ mod test_utils {
 /// Test the failure cases of [`mempool_validate`]
 #[cfg(test)]
 mod test_mempool_validate {
+    use namada::proof_of_stake::Epoch;
     use namada::proto::SignedTxData;
-    use namada::types::storage::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::test_utils::TestShell;
@@ -1184,6 +1226,7 @@ mod test_mempool_validate {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
 
         let mut wrapper = WrapperTx::new(
@@ -1199,7 +1242,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair, shell.chain_id.clone())
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
 
         let unsigned_wrapper = if let Some(Ok(SignedTxData {
@@ -1210,7 +1253,7 @@ mod test_mempool_validate {
             .take()
             .map(|data| SignedTxData::try_from_slice(&data[..]))
         {
-            Tx::new(vec![], Some(data), shell.chain_id.clone())
+            Tx::new(vec![], Some(data), shell.chain_id.clone(), None)
         } else {
             panic!("Test failed")
         };
@@ -1238,6 +1281,7 @@ mod test_mempool_validate {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
 
         let mut wrapper = WrapperTx::new(
@@ -1253,7 +1297,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair, shell.chain_id.clone())
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
 
         let invalid_wrapper = if let Some(Ok(SignedTxData {
@@ -1289,6 +1333,7 @@ mod test_mempool_validate {
                     .expect("Test failed"),
                 ),
                 shell.chain_id.clone(),
+                None,
             )
         } else {
             panic!("Test failed");
@@ -1316,6 +1361,7 @@ mod test_mempool_validate {
             "wasm_code".as_bytes().to_owned(),
             None,
             shell.chain_id.clone(),
+            None,
         );
 
         let result = shell.mempool_validate(
@@ -1338,6 +1384,7 @@ mod test_mempool_validate {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
 
         let wrapper = WrapperTx::new(
@@ -1353,7 +1400,7 @@ mod test_mempool_validate {
             #[cfg(not(feature = "mainnet"))]
             None,
         )
-        .sign(&keypair, shell.chain_id.clone())
+        .sign(&keypair, shell.chain_id.clone(), None)
         .expect("Wrapper signing failed");
 
         let tx_type = match process_tx(wrapper.clone()).expect("Test failed") {
@@ -1449,6 +1496,7 @@ mod test_mempool_validate {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction data".as_bytes().to_owned()),
             wrong_chain_id.clone(),
+            None,
         )
         .sign(&keypair);
 
@@ -1464,5 +1512,27 @@ mod test_mempool_validate {
                 shell.chain_id, wrong_chain_id
             )
         )
+    }
+
+    /// Check that an expired transaction gets rejected
+    #[test]
+    fn test_expired_tx() {
+        let (shell, _) = TestShell::new();
+
+        let keypair = super::test_utils::gen_keypair();
+
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::now()),
+        )
+        .sign(&keypair);
+
+        let result = shell.mempool_validate(
+            tx.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
     }
 }

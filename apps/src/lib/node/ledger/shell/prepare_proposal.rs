@@ -5,6 +5,7 @@ use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proto::Tx;
 use namada::types::internal::WrapperTxInQueue;
+use namada::types::time::DateTimeUtc;
 use namada::types::transaction::tx_types::TxType;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve};
@@ -20,6 +21,7 @@ use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::node::ledger::shell::{process_tx, ShellMode};
 use crate::node::ledger::shims::abcipp_shim_types::shim::{response, TxBytes};
 
@@ -46,7 +48,7 @@ where
 
             // add encrypted txs
             let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs);
+                self.build_encrypted_txs(alloc, &req.txs, &req.time);
             let mut txs = encrypted_txs;
 
             // decrypt the wrapper txs included in the previous block
@@ -118,18 +120,29 @@ where
         &self,
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
+        block_time: &Option<Timestamp>,
     ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
+        let block_time = block_time.clone().and_then(|block_time| {
+            // If error in conversion, default to last block datetime, it's
+            // valid because of mempool check
+            TryInto::<DateTimeUtc>::try_into(block_time).ok()
+        });
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                if let Ok(Ok(TxType::Wrapper(_))) =
-                    Tx::try_from(tx_bytes.as_slice()).map(process_tx)
-                {
-                    Some(tx_bytes.clone())
-                } else {
-                    None
+                if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
+                    // If tx doesn't have an expiration it is valid. If time cannot be
+                    // retrieved from block default to last block datetime which has
+                    // already been checked by mempool_validate, so it's valid
+                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.expiration) {
+                        if block_time > exp { return None }
+                    }
+                    if let Ok(TxType::Wrapper(_)) = process_tx(tx) {
+                        return Some(tx_bytes.clone());
+                    }
                 }
+                None
             })
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..])
@@ -256,8 +269,9 @@ where
 
 #[cfg(test)]
 mod test_prepare_proposal {
+
     use borsh::BorshSerialize;
-    use namada::types::storage::Epoch;
+    use namada::proof_of_stake::Epoch;
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
@@ -273,6 +287,7 @@ mod test_prepare_proposal {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
@@ -292,6 +307,7 @@ mod test_prepare_proposal {
             "wasm_code".as_bytes().to_owned(),
             Some("transaction_data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         // an unsigned wrapper will cause an error in processing
         let wrapper = Tx::new(
@@ -314,6 +330,7 @@ mod test_prepare_proposal {
                 .expect("Test failed"),
             ),
             shell.chain_id.clone(),
+            None,
         )
         .to_bytes();
         #[allow(clippy::redundant_clone)]
@@ -345,6 +362,7 @@ mod test_prepare_proposal {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
                 shell.chain_id.clone(),
+                None,
             );
             expected_decrypted.push(Tx::from(DecryptedTx::Decrypted {
                 tx: tx.clone(),
@@ -365,7 +383,7 @@ mod test_prepare_proposal {
                 None,
             );
             let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone())
+                .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
             shell.enqueue_tx(wrapper_tx);
             expected_wrapper.push(wrapper.clone());
@@ -392,5 +410,59 @@ mod test_prepare_proposal {
             .collect();
         // check that the order of the txs is correct
         assert_eq!(received, expected_txs);
+    }
+
+    /// Test that expired wrapper transactions are not included in the block
+    #[test]
+    fn test_expired_wrapper_tx() {
+        let (shell, _) = TestShell::new();
+        let keypair = gen_keypair();
+        let tx_time = DateTimeUtc::now();
+        let tx = Tx::new(
+            "wasm_code".as_bytes().to_owned(),
+            Some("transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
+            None,
+        );
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            &keypair,
+            Epoch(0),
+            0.into(),
+            tx,
+            Default::default(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+        );
+        let wrapper = wrapper_tx
+            .sign(&keypair, shell.chain_id.clone(), Some(tx_time))
+            .expect("Test failed");
+
+        let time = DateTimeUtc::now();
+        let block_time =
+            namada::core::tendermint_proto::google::protobuf::Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            };
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper.to_bytes()],
+            max_tx_bytes: 0,
+            time: Some(block_time),
+            ..Default::default()
+        };
+        #[cfg(feature = "abcipp")]
+        assert_eq!(
+            shell.prepare_proposal(req).tx_records,
+            vec![record::remove(wrapper.to_bytes())]
+        );
+        #[cfg(not(feature = "abcipp"))]
+        {
+            let result = shell.prepare_proposal(req);
+            eprintln!("Proposal: {:?}", result.txs);
+            assert!(result.txs.is_empty());
+        }
     }
 }
