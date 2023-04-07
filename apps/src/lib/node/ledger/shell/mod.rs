@@ -142,9 +142,9 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | InvalidTx | InvalidSig | WasmRuntimeError => true,
-            InvalidOrder | ExtraTxs | Undecryptable | AllocationError
-            | ReplayTx => false,
+            Ok => true,
+            InvalidTx | InvalidSig | WasmRuntimeError | InvalidOrder
+            | ExtraTxs | Undecryptable | AllocationError | ReplayTx => false,
         }
     }
 }
