@@ -25,6 +25,23 @@ pub struct PGFTarget {
     amount: Amount,
 }
 
+/// An add or remove action for continuous payment
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum ContinuousPayment {
+    /// Add a new continuous target
+    Add(PGFTarget),
+    /// Remove a continuous target
+    Remove(PGFTarget),
+}
+
 /// The actions that a PGF Steward can propose to execute
 #[derive(
     Debug,
@@ -37,7 +54,7 @@ pub struct PGFTarget {
 )]
 pub enum PGFAction {
     /// A continuous payment
-    Continuous(PGFTarget),
+    Continuous(ContinuousPayment),
     /// A retro payment
     Retro(PGFTarget),
 }
