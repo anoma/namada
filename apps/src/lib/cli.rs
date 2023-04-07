@@ -1702,9 +1702,6 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
-    const PROPOSAL_ETH: ArgFlag = flag("eth");
-    const PROPOSAL_PGF_STEWARDS: ArgFlag = flag("pgf-stewards");
-    const PROPOSAL_PGF_PAYMENTS: ArgFlag = flag("pgf-payments");
     const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
@@ -2400,12 +2397,6 @@ pub mod args {
         pub proposal_data: PathBuf,
         /// Flag if proposal should run offline
         pub offline: bool,
-        /// Flag if proposal should be of type ethereum
-        pub eth: bool,
-        /// Flag if proposal should be o type pgf stewards
-        pub pgf_stewards: bool,
-        /// Flag if proposal should of type pgf payments
-        pub pgf_payments: bool,
     }
 
     impl Args for InitProposal {
@@ -2413,17 +2404,11 @@ pub mod args {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
-            let eth = PROPOSAL_ETH.parse(matches);
-            let pgf_stewards = PROPOSAL_PGF_STEWARDS.parse(matches);
-            let pgf_payments = PROPOSAL_PGF_PAYMENTS.parse(matches);
 
             Self {
                 tx,
                 proposal_data,
-                offline,
-                eth,
-                pgf_stewards,
-                pgf_payments,
+                offline
             }
         }
 
@@ -2437,17 +2422,6 @@ pub mod args {
                         .def()
                         .about("Flag if the proposal should be run offline."),
                 )
-                .arg(
-                    PROPOSAL_ETH
-                        .def()
-                        .about("Flag if the proposal should be of type eth."),
-                )
-                .arg(PROPOSAL_PGF_STEWARDS.def().about(
-                    "Flag if the proposal should be of type pgf-stewards.",
-                ))
-                .arg(PROPOSAL_PGF_PAYMENTS.def().about(
-                    "Flag if the proposal should be of type pgf-payments.",
-                ))
         }
     }
 

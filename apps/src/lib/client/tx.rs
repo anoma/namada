@@ -1949,10 +1949,7 @@ pub async fn submit_ibc_transfer(ctx: Context, args: args::TxIbcTransfer) {
     .await;
 }
 
-pub async fn submit_init_nam_proposal(
-    mut ctx: Context,
-    args: args::InitProposal,
-) {
+pub async fn submit_init_proposal(mut ctx: Context, args: args::InitProposal) {
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -2010,11 +2007,6 @@ pub async fn submit_init_nam_proposal(
             }
         }
     } else {
-        let init_proposal_data: InitProposalData = proposal
-            .clone()
-            .try_into()
-            .expect("Invalid data for init proposal transaction.");
-
         let balance = rpc::get_token_balance(
             &client,
             &ctx.native_token,
@@ -2033,6 +2025,11 @@ pub async fn submit_init_nam_proposal(
             eprintln!("{}", proposal_invariants);
             safe_exit(1)
         }
+
+        let init_proposal_data: InitProposalData = proposal
+            .clone()
+            .try_into()
+            .expect("Invalid data for init proposal transaction.");
 
         let tx = ctx.build_tx(init_proposal_data, TX_INIT_PROPOSAL);
 

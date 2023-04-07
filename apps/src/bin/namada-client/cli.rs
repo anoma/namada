@@ -31,7 +31,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_init_validator(ctx, args).await;
                 }
                 Sub::TxInitProposal(TxInitProposal(args)) => {
-                    tx::submit_init_nam_proposal(ctx, args).await;
+                    tx::submit_init_proposal(ctx, args).await;
                 }
                 Sub::TxVoteProposal(TxVoteProposal(args)) => {
                     tx::submit_vote_proposal(ctx, args).await;

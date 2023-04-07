@@ -196,7 +196,7 @@ impl Display for TallyResult {
 
 /// The type of a governance proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize, PartialEq
 )]
 pub enum ProposalType {
     /// A default proposal with the optional path to wasm code
